@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/looplj/axonhub/llm"
@@ -14,6 +15,135 @@ import (
 	"github.com/looplj/axonhub/llm/internal/pkg/xtest"
 	"github.com/looplj/axonhub/llm/streams"
 )
+
+func TestOutboundTransformer_StreamTransformation_ToolSearchServerBlocks(t *testing.T) {
+	transformer, err := NewOutboundTransformerWithConfig(&Config{
+		Type:           PlatformDirect,
+		BaseURL:        "https://example.com",
+		APIKeyProvider: auth.NewStaticKeyProvider("test-key"),
+	})
+	require.NoError(t, err)
+
+	messageStartData, err := json.Marshal(StreamEvent{
+		Type: "message_start",
+		Message: &StreamMessage{
+			ID:    "msg_tool_search",
+			Type:  "message",
+			Role:  "assistant",
+			Model: "claude-opus-4-7",
+			Usage: &Usage{},
+		},
+	})
+	require.NoError(t, err)
+
+	serverToolUseStartData, err := json.Marshal(StreamEvent{
+		Type:  "content_block_start",
+		Index: lo.ToPtr(int64(0)),
+		ContentBlock: &MessageContentBlock{
+			Type:  "server_tool_use",
+			ID:    "srvtoolu_01ABC123",
+			Name:  lo.ToPtr("tool_search_tool_regex"),
+			Input: json.RawMessage(`{}`),
+		},
+	})
+	require.NoError(t, err)
+
+	serverToolUseDeltaData, err := json.Marshal(StreamEvent{
+		Type:  "content_block_delta",
+		Index: lo.ToPtr(int64(0)),
+		Delta: &StreamDelta{
+			Type:        lo.ToPtr("input_json_delta"),
+			PartialJSON: lo.ToPtr(`{"query":"weather"}`),
+		},
+	})
+	require.NoError(t, err)
+
+	toolSearchResultStartData, err := json.Marshal(StreamEvent{
+		Type:  "content_block_start",
+		Index: lo.ToPtr(int64(1)),
+		ContentBlock: &MessageContentBlock{
+			Type:      "tool_search_tool_result",
+			ToolUseID: lo.ToPtr("srvtoolu_01ABC123"),
+		},
+	})
+	require.NoError(t, err)
+
+	toolSearchResultDeltaData, err := json.Marshal(StreamEvent{
+		Type:  "content_block_delta",
+		Index: lo.ToPtr(int64(1)),
+		Delta: &StreamDelta{
+			Type:        lo.ToPtr("input_json_delta"),
+			PartialJSON: lo.ToPtr(`{"type":"tool_search_tool_search_result","tool_references":[{"type":"tool_reference","tool_name":"get_weather"}]}`),
+		},
+	})
+	require.NoError(t, err)
+
+	messageDeltaData, err := json.Marshal(StreamEvent{
+		Type: "message_delta",
+		Delta: &StreamDelta{
+			StopReason: lo.ToPtr("tool_use"),
+		},
+	})
+	require.NoError(t, err)
+
+	messageStopData, err := json.Marshal(StreamEvent{
+		Type: "message_stop",
+	})
+	require.NoError(t, err)
+
+	mockStream := streams.SliceStream([]*httpclient.StreamEvent{
+		{Type: "message_start", Data: messageStartData},
+		{Type: "content_block_start", Data: serverToolUseStartData},
+		{Type: "content_block_delta", Data: serverToolUseDeltaData},
+		{Type: "content_block_start", Data: toolSearchResultStartData},
+		{Type: "content_block_delta", Data: toolSearchResultDeltaData},
+		{Type: "message_delta", Data: messageDeltaData},
+		{Type: "message_stop", Data: messageStopData},
+	})
+
+	transformedStream, err := transformer.TransformStream(t.Context(), nil, mockStream)
+	require.NoError(t, err)
+
+	var chunks []*llm.Response
+	for transformedStream.Next() {
+		chunks = append(chunks, transformedStream.Current())
+	}
+	require.NoError(t, transformedStream.Err())
+
+	var toolCalls []llm.ToolCall
+	var serverParts []llm.MessageContentPart
+	for _, chunk := range chunks {
+		if len(chunk.Choices) == 0 || chunk.Choices[0].Delta == nil {
+			continue
+		}
+		toolCalls = append(toolCalls, chunk.Choices[0].Delta.ToolCalls...)
+		for _, part := range chunk.Choices[0].Delta.Content.MultipleContent {
+			if part.Type == "tool_search_tool_result" {
+				serverParts = append(serverParts, part)
+			}
+		}
+	}
+
+	require.Len(t, toolCalls, 2)
+	require.Equal(t, "srvtoolu_01ABC123", toolCalls[0].ID)
+	require.Equal(t, "tool_search_tool_regex", toolCalls[0].Function.Name)
+	require.Equal(t, "server_tool_use", getAnthropicType(toolCalls[0].TransformerMetadata))
+	require.JSONEq(t, `{"query":"weather"}`, toolCalls[1].Function.Arguments)
+
+	require.Len(t, serverParts, 2)
+
+	var startResultBlock MessageContentBlock
+	err = json.Unmarshal(serverParts[0].ServerBlock, &startResultBlock)
+	require.NoError(t, err)
+	require.Equal(t, "tool_search_tool_result", startResultBlock.Type)
+	require.NotNil(t, startResultBlock.ToolUseID)
+	require.Equal(t, "srvtoolu_01ABC123", *startResultBlock.ToolUseID)
+
+	var deltaResultRaw map[string]json.RawMessage
+	err = json.Unmarshal(serverParts[1].ServerBlock, &deltaResultRaw)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"type":"tool_search_tool_search_result","tool_references":[{"type":"tool_reference","tool_name":"get_weather"}]}`, string(deltaResultRaw["content"]))
+}
 
 func TestOutboundTransformer_StreamTransformation_WithTestData(t *testing.T) {
 	tests := []struct {

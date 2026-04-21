@@ -14,6 +14,22 @@ import (
 	"github.com/looplj/axonhub/llm/transformer/shared"
 )
 
+func serverContentPartFromBlock(block *MessageContentBlock) (llm.MessageContentPart, bool) {
+	if block == nil {
+		return llm.MessageContentPart{}, false
+	}
+
+	rawBlock, err := json.Marshal(block)
+	if err != nil {
+		return llm.MessageContentPart{}, false
+	}
+
+	return llm.MessageContentPart{
+		Type:        block.Type,
+		ServerBlock: rawBlock,
+	}, true
+}
+
 func (t *OutboundTransformer) TransformStream(
 	ctx context.Context,
 	req *httpclient.Request,
@@ -55,8 +71,9 @@ type streamState struct {
 	streamUsage  *llm.Usage
 	platformType PlatformType
 	// Tool call tracking
-	toolIndex int
-	toolCalls map[int]*llm.ToolCall // index -> tool call
+	toolIndex    int
+	toolCalls    map[int]*llm.ToolCall // index -> tool call
+	serverBlocks map[int64]*MessageContentBlock
 }
 
 // outboundStream wraps a stream and maintains state during processing.
@@ -72,6 +89,7 @@ func newOutboundStream(stream streams.Stream[*httpclient.StreamEvent], platformT
 		stream: stream,
 		state: &streamState{
 			toolCalls:    make(map[int]*llm.ToolCall),
+			serverBlocks: make(map[int64]*MessageContentBlock),
 			toolIndex:    -1,
 			platformType: platformType,
 		},
@@ -178,6 +196,20 @@ func (s *outboundStream) transformStreamChunk(event *httpclient.StreamEvent) (*l
 			blockIdx = int(*streamEvent.Index)
 		}
 
+		var serverParts []llm.MessageContentPart
+		if cb.Type == "tool_search_tool_result" {
+			blockCopy := *cb
+			if streamEvent.Index != nil {
+				state.serverBlocks[*streamEvent.Index] = &blockCopy
+			}
+
+			part, ok := serverContentPartFromBlock(cb)
+			if !ok {
+				return nil, nil
+			}
+			serverParts = append(serverParts, part)
+		}
+
 		switch {
 		case isAnthropicToolUseLike(cb.Type):
 			if cb.Name == nil {
@@ -208,8 +240,27 @@ func (s *outboundStream) transformStreamChunk(event *httpclient.StreamEvent) (*l
 					ToolCalls: []llm.ToolCall{toolCall},
 				},
 			}
+			if len(serverParts) > 0 {
+				choice.Delta.Content = llm.MessageContent{
+					MultipleContent: serverParts,
+				}
+			}
 			resp.Choices = []llm.Choice{choice}
 		case isAnthropicToolResultLike(cb.Type):
+			if cb.Type == "tool_search_tool_result" {
+				resp.Choices = []llm.Choice{
+					{
+						Index: 0,
+						Delta: &llm.Message{
+							Role: "assistant",
+							Content: llm.MessageContent{
+								MultipleContent: serverParts,
+							},
+						},
+					},
+				}
+				return resp, nil
+			}
 			// Server-side tool results (web_search_tool_result,
 			// code_execution_tool_result, ...) arrive complete in
 			// content_block_start and carry no subsequent deltas. Emit them
@@ -245,6 +296,52 @@ func (s *outboundStream) transformStreamChunk(event *httpclient.StreamEvent) (*l
 			switch *streamEvent.Delta.Type {
 			case "input_json_delta":
 				if streamEvent.Delta.PartialJSON != nil {
+					var serverParts []llm.MessageContentPart
+					if streamEvent.Index != nil {
+						if block, ok := state.serverBlocks[*streamEvent.Index]; ok {
+							if block.Type == "tool_search_tool_result" {
+								var payload map[string]any
+								if len(block.ServerContent) > 0 {
+									_ = json.Unmarshal(block.ServerContent, &payload)
+								}
+								if payload == nil {
+									payload = map[string]any{
+										"type":        "tool_search_tool_result",
+										"tool_use_id": lo.FromPtr(block.ToolUseID),
+									}
+								}
+
+								payload["content"] = json.RawMessage(*streamEvent.Delta.PartialJSON)
+
+								rawPayload, err := json.Marshal(payload)
+								if err == nil {
+									block.ServerContent = rawPayload
+								}
+							}
+
+							part, ok := serverContentPartFromBlock(block)
+							if ok {
+								serverParts = append(serverParts, part)
+							}
+						}
+					}
+
+					if len(serverParts) > 0 {
+						resp.Choices = []llm.Choice{
+							{
+								Index: 0,
+								Delta: &llm.Message{
+									Role: "assistant",
+									Content: llm.MessageContent{
+										MultipleContent: serverParts,
+									},
+								},
+							},
+						}
+
+						return resp, nil
+					}
+
 					tc, ok := state.toolCalls[state.toolIndex]
 					if !ok || tc == nil {
 						// A tool_use-style delta arrived without a preceding

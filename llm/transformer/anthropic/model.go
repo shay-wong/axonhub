@@ -201,13 +201,17 @@ type ToolChoice struct {
 
 // Tool represents a tool definition for Anthropic API.
 type Tool struct {
-	// Type is used for native tools (e.g., "web_search_20250305").
+	// Type is used for native tools (e.g., "web_search_20250305", "tool_search_tool_regex_20251119").
 	// For custom/function tools, this field is omitted.
 	Type         string          `json:"type,omitempty"`
 	Name         string          `json:"name"`
 	Description  string          `json:"description,omitempty"`
 	InputSchema  json.RawMessage `json:"input_schema,omitempty"`
 	CacheControl *CacheControl   `json:"cache_control,omitempty"`
+
+	// DeferLoading marks a tool for on-demand loading with tool search.
+	// When true, the tool definition is not loaded into context upfront.
+	DeferLoading *bool `json:"defer_loading,omitempty"`
 
 	// Params for web_search_20250305 tool.
 
@@ -349,7 +353,8 @@ func (c *MessageContent) UnmarshalJSON(data []byte) error {
 
 // MessageContentBlock represents different types of content blocks.
 type MessageContentBlock struct {
-	// Any of "text", "image", "thinking", "redacted_thinking", "tool_use", "server_tool_use", "tool_result".
+	// Any of "text", "image", "thinking", "redacted_thinking", "tool_use", "server_tool_use",
+	// "tool_result", "tool_search_tool_result".
 	Type string `json:"type"`
 
 	// Text will be present if type is "text".
@@ -394,7 +399,15 @@ type MessageContentBlock struct {
 	// *_tool_result). It is kept as json.RawMessage to avoid version-matrix
 	// churn (direct / code_execution_20250825 / code_execution_20260120 / ...).
 	Caller json.RawMessage `json:"caller,omitempty"`
+
+	// ServerContent stores raw JSON for server-managed content blocks
+	// (e.g., tool_search_tool_result) where the "content" field has a
+	// non-standard shape that doesn't match MessageContent.
+	ServerContent json.RawMessage `json:"-"`
 }
+
+// messageContentBlockAlias is used to prevent infinite recursion in UnmarshalJSON/MarshalJSON.
+type messageContentBlockAlias MessageContentBlock
 
 // TextCitation represents a citation attached to an Anthropic text block.
 type TextCitation struct {
@@ -406,25 +419,75 @@ type TextCitation struct {
 	CitedText      *string `json:"cited_text,omitempty"`
 }
 
+func (b *MessageContentBlock) UnmarshalJSON(data []byte) error {
+	// Peek at the type to decide how to unmarshal
+	var peek struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(data, &peek); err != nil {
+		return err
+	}
+
+	if peek.Type == "tool_search_tool_result" {
+		// For tool_search_tool_result, the "content" field has a non-standard shape.
+		// Unmarshal shared fields manually and store the full block as raw JSON.
+		var raw struct {
+			Type      string          `json:"type"`
+			ToolUseID *string         `json:"tool_use_id,omitempty"`
+			Content   json.RawMessage `json:"content,omitempty"`
+		}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return err
+		}
+		b.Type = raw.Type
+		b.ToolUseID = raw.ToolUseID
+		b.ServerContent = data
+		return nil
+	}
+
+	// Default unmarshal for all other types
+	var alias messageContentBlockAlias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	*b = MessageContentBlock(alias)
+	return nil
+}
+
 func (b MessageContentBlock) MarshalJSON() ([]byte, error) {
-	type blockAlias MessageContentBlock
+	// For tool_search_tool_result, emit the stored raw JSON as-is.
+	if b.Type == "tool_search_tool_result" && len(b.ServerContent) > 0 {
+		return b.ServerContent, nil
+	}
 
 	if b.Type == "thinking" {
 		type thinkingBlock struct {
-			blockAlias
+			messageContentBlockAlias
 
 			Thinking  string `json:"thinking"`
 			Signature string `json:"signature"`
 		}
 
 		return json.Marshal(thinkingBlock{
-			blockAlias: blockAlias(b),
-			Thinking:   lo.FromPtr(b.Thinking),
-			Signature:  lo.FromPtr(b.Signature),
+			messageContentBlockAlias: messageContentBlockAlias(b),
+			Thinking:                 lo.FromPtr(b.Thinking),
+			Signature:                lo.FromPtr(b.Signature),
 		})
 	}
 
-	return json.Marshal(blockAlias(b))
+	return json.Marshal(messageContentBlockAlias(b))
+}
+
+// ToolSearchToolSearchResult represents the result content of a tool search.
+type ToolSearchToolSearchResult struct {
+	Type           string          `json:"type"`
+	ToolReferences []ToolReference `json:"tool_references,omitempty"`
+}
+
+// ToolReference represents a reference to a discovered tool.
+type ToolReference struct {
+	Type     string `json:"type"`
+	ToolName string `json:"tool_name"`
 }
 
 // ImageSource represents image source for Anthropic.

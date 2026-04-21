@@ -46,6 +46,8 @@ type aggregatedItem struct {
 	Namespace        string
 	Arguments        *strings.Builder
 	EncryptedContent *string
+	Execution        string
+	Tools            []Tool
 
 	// For custom_tool_call type
 	Input *string
@@ -266,6 +268,8 @@ func (a *streamAggregator) processEvent(ev *StreamEvent) {
 			item.Arguments.WriteString(ev.Item.Arguments)
 			item.EncryptedContent = ev.Item.EncryptedContent
 			item.Input = ev.Item.Input
+			item.Execution = ev.Item.Execution
+			item.Tools = ev.Item.Tools
 
 			if len(ev.Item.Summary) > 0 {
 				for idx, s := range ev.Item.Summary {
@@ -514,6 +518,14 @@ func (a *streamAggregator) processEvent(ev *StreamEvent) {
 				if ev.Item.Result != nil {
 					item.Result = ev.Item.Result
 				}
+
+				if ev.Item.Execution != "" {
+					item.Execution = ev.Item.Execution
+				}
+
+				if len(ev.Item.Tools) > 0 {
+					item.Tools = ev.Item.Tools
+				}
 			}
 		}
 
@@ -640,6 +652,26 @@ func (a *streamAggregator) buildResponse() *Response {
 					CallID: item.CallID,
 					Name:   item.Name,
 					Input:  item.Input,
+				})
+
+			case "tool_search_call":
+				output = append(output, Item{
+					ID:        item.ID,
+					Type:      item.Type,
+					Status:    lo.ToPtr(item.Status),
+					CallID:    item.CallID,
+					Execution: item.Execution,
+					Arguments: item.Arguments.String(),
+				})
+
+			case "tool_search_output":
+				output = append(output, Item{
+					ID:        item.ID,
+					Type:      item.Type,
+					Status:    lo.ToPtr(item.Status),
+					CallID:    item.CallID,
+					Execution: item.Execution,
+					Tools:     item.Tools,
 				})
 
 			case "reasoning":

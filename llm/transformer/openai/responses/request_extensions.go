@@ -72,6 +72,9 @@ func buildRepresentedToolSignatures(tools []Tool) []string {
 		if !isStructurallyRepresentedToolType(tool.Type) {
 			continue
 		}
+		if tool.Type == "tool_search" && !isStructurallyRepresentedToolSearch(tool) {
+			continue
+		}
 		signatures = append(signatures, responseToolSignature(tool))
 	}
 
@@ -85,7 +88,7 @@ func buildRawOnlyToolFragments(tools []Tool, rawTools []json.RawMessage) []llm.O
 
 	fragments := make([]llm.OpenAIResponsesRawFragment, 0, len(tools))
 	for i := range tools {
-		if i >= len(rawTools) || len(rawTools[i]) == 0 || isStructurallyRepresentedToolType(tools[i].Type) {
+		if i >= len(rawTools) || len(rawTools[i]) == 0 || isStructurallyRepresentedTool(tools[i]) {
 			continue
 		}
 
@@ -102,11 +105,19 @@ func buildRawOnlyToolFragments(tools []Tool, rawTools []json.RawMessage) []llm.O
 
 func isStructurallyRepresentedToolType(toolType string) bool {
 	switch toolType {
-	case "function", "image_generation", "web_search", "custom":
+	case "function", "image_generation", "web_search", "custom", "tool_search":
 		return true
 	default:
 		return false
 	}
+}
+
+func isStructurallyRepresentedTool(tool Tool) bool {
+	if tool.Type == "tool_search" {
+		return isStructurallyRepresentedToolSearch(tool)
+	}
+
+	return isStructurallyRepresentedToolType(tool.Type)
 }
 
 func responseToolSignature(tool Tool) string {
@@ -157,7 +168,8 @@ func buildRawOnlyInputFragments(input Input, rawItems []json.RawMessage) []llm.O
 func isStructurallyRepresentedInputItem(itemType string) bool {
 	switch itemType {
 	case "", "message", "input_text", "input_image", "function_call", "function_call_output",
-		"custom_tool_call", "custom_tool_call_output", "reasoning", "compaction", "compaction_summary":
+		"custom_tool_call", "custom_tool_call_output", "reasoning", "compaction", "compaction_summary",
+		"tool_search_call", "tool_search_output":
 		return true
 	default:
 		return false
@@ -171,6 +183,20 @@ func openAIResponsesRequestExtensions(llmReq *llm.Request) *llm.OpenAIResponsesR
 	requestExt := llmReq.ProviderExtensions.OpenAIResponses.Request
 
 	return requestExt
+}
+
+func hasRawToolFragment(requestExt *llm.OpenAIResponsesRequestExtensions, toolType string) bool {
+	if requestExt == nil {
+		return false
+	}
+
+	for _, fragment := range requestExt.RawTools {
+		if fragment.Type == toolType && len(fragment.Raw) > 0 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func marshalRequestPayload(payload Request, llmReq *llm.Request) ([]byte, error) {

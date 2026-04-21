@@ -218,6 +218,7 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	apiKey := t.config.APIKeyProvider.Get(ctx)
 
 	var tools []Tool
+	requestExt := openAIResponsesRequestExtensions(llmReq)
 	// Convert tools to Responses API format
 	for _, item := range llmReq.Tools {
 		switch item.Type {
@@ -234,6 +235,12 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 			tools = append(tools, tool)
 		case llm.ToolTypeResponsesCustomTool:
 			tool := convertCustomToTool(item)
+			tools = append(tools, tool)
+		case llm.ToolTypeToolSearch:
+			if hasRawToolFragment(requestExt, "tool_search") {
+				continue
+			}
+			tool := convertToolSearchToTool(item)
 			tools = append(tools, tool)
 		case "function":
 			tool := convertFunctionToTool(item)

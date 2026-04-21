@@ -135,6 +135,7 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 							"type": "function",
 							"name": "get_weather",
 							"description": "Get weather information",
+							"defer_loading": true,
 							"parameters": {
 								"type": "object",
 								"properties": {
@@ -151,6 +152,8 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 				require.Equal(t, "function", result.Tools[0].Type)
 				require.Equal(t, "get_weather", result.Tools[0].Function.Name)
 				require.Equal(t, "Get weather information", result.Tools[0].Function.Description)
+				require.NotNil(t, result.Tools[0].DeferLoading)
+				require.True(t, *result.Tools[0].DeferLoading)
 			},
 		},
 		{
@@ -212,6 +215,47 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 				require.NotNil(t, result.Tools[0].ImageGeneration)
 				require.Equal(t, "high", result.Tools[0].ImageGeneration.Quality)
 				require.Equal(t, "1024x1024", result.Tools[0].ImageGeneration.Size)
+			},
+		},
+		{
+			name: "request with tool search tool",
+			httpReq: &httpclient.Request{
+				Body: []byte(`{
+					"model": "gpt-5.4",
+					"input": "Find the shipping ETA tool first.",
+					"tools": [
+						{
+							"type": "tool_search",
+							"execution": "client",
+							"description": "Find the project-specific tools needed to continue the task.",
+							"parameters": {
+								"type": "object",
+								"properties": {
+									"goal": {"type": "string"}
+								},
+								"required": ["goal"],
+								"additionalProperties": false
+							}
+						}
+					]
+				}`),
+			},
+			expectError: false,
+			validate: func(t *testing.T, result *llm.Request) {
+				require.Len(t, result.Tools, 1)
+				require.Equal(t, llm.ToolTypeToolSearch, result.Tools[0].Type)
+				require.NotNil(t, result.Tools[0].ToolSearch)
+				require.Equal(t, "bm25", result.Tools[0].ToolSearch.Variant)
+				require.Equal(t, "client", result.Tools[0].ToolSearch.Execution)
+				require.Equal(t, "Find the project-specific tools needed to continue the task.", result.Tools[0].ToolSearch.Description)
+				require.JSONEq(t, `{
+					"type": "object",
+					"properties": {
+						"goal": {"type": "string"}
+					},
+					"required": ["goal"],
+					"additionalProperties": false
+				}`, string(result.Tools[0].ToolSearch.Parameters))
 			},
 		},
 		{
@@ -1489,6 +1533,105 @@ func TestConvertToMessageContent(t *testing.T) {
 			tt.validate(t, result)
 		})
 	}
+}
+
+func TestConvertToResponsesAPIResponse_PreservesToolSearchContentParts(t *testing.T) {
+	callItem := Item{
+		ID:        "search_call_1",
+		Type:      "tool_search_call",
+		CallID:    "call_1",
+		Status:    lo.ToPtr("completed"),
+		Execution: "client",
+		Arguments: `{"goal":"golang context cancellation"}`,
+	}
+	outputItem := Item{
+		ID:        "search_output_1",
+		Type:      "tool_search_output",
+		CallID:    "call_1",
+		Status:    lo.ToPtr("completed"),
+		Execution: "client",
+		Tools: []Tool{
+			{
+				Type:         "function",
+				Name:         "get_shipping_eta",
+				Description:  "Look up shipping ETA details for an order.",
+				DeferLoading: lo.ToPtr(true),
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"order_id": map[string]any{
+							"type": "string",
+						},
+					},
+					"required":             []string{"order_id"},
+					"additionalProperties": false,
+				},
+			},
+		},
+	}
+
+	callRaw, err := json.Marshal(callItem)
+	require.NoError(t, err)
+
+	outputRaw, err := json.Marshal(outputItem)
+	require.NoError(t, err)
+
+	resp := convertToResponsesAPIResponse(&llm.Response{
+		ID:      "resp_1",
+		Model:   "gpt-4.1",
+		Created: 123,
+		Choices: []llm.Choice{
+			{
+				Message: &llm.Message{
+					ID:   "msg_1",
+					Role: "assistant",
+					Content: llm.MessageContent{
+						MultipleContent: []llm.MessageContentPart{
+							{
+								Type: "text",
+								Text: lo.ToPtr("Search requested"),
+							},
+							{
+								Type:        "tool_search_call",
+								ServerBlock: callRaw,
+							},
+							{
+								Type:        "tool_search_output",
+								ServerBlock: outputRaw,
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+
+	require.NotNil(t, resp)
+	require.Len(t, resp.Output, 1)
+	require.Equal(t, "message", resp.Output[0].Type)
+	require.NotNil(t, resp.Output[0].Content)
+	require.Len(t, resp.Output[0].Content.Items, 3)
+
+	require.Equal(t, "output_text", resp.Output[0].Content.Items[0].Type)
+	require.Equal(t, "tool_search_call", resp.Output[0].Content.Items[1].Type)
+	require.Equal(t, callItem.CallID, resp.Output[0].Content.Items[1].CallID)
+	require.Equal(t, callItem.Execution, resp.Output[0].Content.Items[1].Execution)
+	require.JSONEq(t, callItem.Arguments, resp.Output[0].Content.Items[1].Arguments)
+
+	require.Equal(t, "tool_search_output", resp.Output[0].Content.Items[2].Type)
+	require.Equal(t, outputItem.CallID, resp.Output[0].Content.Items[2].CallID)
+	require.Equal(t, outputItem.Execution, resp.Output[0].Content.Items[2].Execution)
+	require.Len(t, resp.Output[0].Content.Items[2].Tools, 1)
+	require.Equal(t, outputItem.Tools[0].Name, resp.Output[0].Content.Items[2].Tools[0].Name)
+	require.Equal(t, outputItem.Tools[0].Description, resp.Output[0].Content.Items[2].Tools[0].Description)
+	require.NotNil(t, resp.Output[0].Content.Items[2].Tools[0].DeferLoading)
+	require.True(t, *resp.Output[0].Content.Items[2].Tools[0].DeferLoading)
+
+	expectedParams, err := json.Marshal(outputItem.Tools[0].Parameters)
+	require.NoError(t, err)
+	actualParams, err := json.Marshal(resp.Output[0].Content.Items[2].Tools[0].Parameters)
+	require.NoError(t, err)
+	require.JSONEq(t, string(expectedParams), string(actualParams))
 }
 
 func TestConvertItemToMessage_Reasoning(t *testing.T) {
