@@ -406,6 +406,38 @@ func (processor *TestChannelOrchestrator) TestChannelAPIKeys(
 	}, nil
 }
 
+// TestSingleAPIKey tests a single API key for a channel.
+func (processor *TestChannelOrchestrator) TestSingleAPIKey(
+	ctx context.Context,
+	channelID objects.GUID,
+	key string,
+	modelID *string,
+	proxy *httpclient.ProxyConfig,
+) (*TestAPIKeyResult, error) {
+	ch, err := processor.channelService.GetChannel(ctx, channelID.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	testModel := lo.FromPtr(modelID)
+	if testModel == "" {
+		testModel = ch.DefaultTestModel
+	}
+
+	useStream := ch.Policies.Stream == objects.CapabilityPolicyRequire
+
+	disabledSet := make(map[string]struct{}, len(ch.DisabledAPIKeys))
+	for _, dk := range ch.DisabledAPIKeys {
+		disabledSet[dk.Key] = struct{}{}
+	}
+
+	result := processor.testSingleKey(ctx, channelID, key, testModel, useStream, proxy)
+	_, isDisabled := disabledSet[key]
+	result.Disabled = isDisabled
+
+	return result, nil
+}
+
 // testSingleKey tests a single API key by forcing the use of a specific key via an override middleware.
 func (processor *TestChannelOrchestrator) testSingleKey(
 	ctx context.Context,
