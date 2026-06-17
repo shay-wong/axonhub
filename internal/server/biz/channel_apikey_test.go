@@ -16,6 +16,12 @@ import (
 	"github.com/looplj/axonhub/internal/objects"
 )
 
+func apiKeyConfigs(keys []string) []objects.ChannelAPIKeyConfig {
+	return lo.Map(keys, func(key string, _ int) objects.ChannelAPIKeyConfig {
+		return objects.ChannelAPIKeyConfig{Key: key, Weight: 100}
+	})
+}
+
 func TestTraceStickyKeyProvider_MultipleKeys_NoTrace(t *testing.T) {
 	keys := []string{"key-1", "key-2", "key-3"}
 	ch := &Channel{
@@ -24,14 +30,55 @@ func TestTraceStickyKeyProvider_MultipleKeys_NoTrace(t *testing.T) {
 				APIKeys: keys,
 			},
 		},
-		cachedEnabledAPIKeys: keys,
+		cachedAPIKeyConfigs: apiKeyConfigs(keys),
 	}
 
 	provider := NewTraceStickyKeyProvider(ch)
-	ctx := context.Background()
+	ctx := contexts.EnsureContainer(context.Background())
 
 	key := provider.Get(ctx)
 	require.Contains(t, keys, key)
+}
+
+func TestTraceStickyKeyProvider_RecordsSelectedKey(t *testing.T) {
+	keys := []string{"key-1", "key-2", "key-3"}
+	ch := &Channel{
+		Channel: &ent.Channel{
+			Credentials: objects.ChannelCredentials{
+				APIKeys: keys,
+			},
+		},
+		cachedAPIKeyConfigs: apiKeyConfigs(keys),
+	}
+
+	provider := NewTraceStickyKeyProvider(ch)
+	ctx := contexts.EnsureContainer(context.Background())
+
+	key := provider.Get(ctx)
+	recorded, ok := contexts.GetChannelAPIKey(ctx)
+	require.True(t, ok)
+	require.Equal(t, key, recorded)
+}
+
+func TestRecordingAPIKeyProvider_RecordsSingleKey(t *testing.T) {
+	ch := &Channel{
+		Channel: &ent.Channel{
+			Name: "single-key-channel",
+			Credentials: objects.ChannelCredentials{
+				APIKey: "single-key",
+			},
+		},
+		cachedAPIKeyConfigs: apiKeyConfigs([]string{"single-key"}),
+	}
+
+	provider := getAPIKeyProvider(ch)
+	ctx := contexts.EnsureContainer(context.Background())
+
+	key := provider.Get(ctx)
+	recorded, ok := contexts.GetChannelAPIKey(ctx)
+	require.True(t, ok)
+	require.Equal(t, "single-key", key)
+	require.Equal(t, key, recorded)
 }
 
 func TestTraceStickyKeyProvider_MultipleKeys_WithTrace_Sticky(t *testing.T) {
@@ -42,7 +89,7 @@ func TestTraceStickyKeyProvider_MultipleKeys_WithTrace_Sticky(t *testing.T) {
 				APIKeys: keys,
 			},
 		},
-		cachedEnabledAPIKeys: keys,
+		cachedAPIKeyConfigs: apiKeyConfigs(keys),
 	}
 
 	provider := NewTraceStickyKeyProvider(ch)
@@ -67,7 +114,7 @@ func TestTraceStickyKeyProvider_DifferentTraces_MaySelectDifferentKeys(t *testin
 				APIKeys: keys,
 			},
 		},
-		cachedEnabledAPIKeys: keys,
+		cachedAPIKeyConfigs: apiKeyConfigs(keys),
 	}
 
 	provider := NewTraceStickyKeyProvider(ch)
@@ -84,21 +131,28 @@ func TestTraceStickyKeyProvider_DifferentTraces_MaySelectDifferentKeys(t *testin
 	require.Greater(t, len(selectedKeys), 1, "different traces should select different keys")
 }
 
-func TestTraceStickyKeyProvider_EmptyEnabledKeys_FallbackToFirst(t *testing.T) {
+func TestTraceStickyKeyProvider_EmptyEnabledKeys_Panics(t *testing.T) {
 	ch := &Channel{
 		Channel: &ent.Channel{
 			Credentials: objects.ChannelCredentials{
 				APIKeys: []string{"fallback-key"},
 			},
 		},
-		cachedEnabledAPIKeys: []string{},
+		cachedAPIKeyConfigs: apiKeyConfigs([]string{}),
 	}
 
 	provider := NewTraceStickyKeyProvider(ch)
 	ctx := context.Background()
 
-	key := provider.Get(ctx)
-	require.Equal(t, "fallback-key", key)
+	require.Panics(t, func() {
+		provider.Get(ctx)
+	})
+}
+
+func TestGetAPIKeyProvider_NilChannel_PanicsWithoutNilDereference(t *testing.T) {
+	require.PanicsWithValue(t, "no enabled api key configured", func() {
+		getAPIKeyProvider(nil)
+	})
 }
 
 func TestTraceStickyKeyProvider_AddKey_MinimalRemapping(t *testing.T) {
@@ -109,7 +163,7 @@ func TestTraceStickyKeyProvider_AddKey_MinimalRemapping(t *testing.T) {
 				APIKeys: originalKeys,
 			},
 		},
-		cachedEnabledAPIKeys: originalKeys,
+		cachedAPIKeyConfigs: apiKeyConfigs(originalKeys),
 	}
 
 	provider := NewTraceStickyKeyProvider(ch)
@@ -127,7 +181,7 @@ func TestTraceStickyKeyProvider_AddKey_MinimalRemapping(t *testing.T) {
 	}
 
 	newKeys := []string{"key-1", "key-2", "key-3", "key-4"}
-	ch.cachedEnabledAPIKeys = newKeys
+	ch.cachedAPIKeyConfigs = apiKeyConfigs(newKeys)
 	ch.Credentials.APIKeys = newKeys
 
 	remappedCount := 0
@@ -153,7 +207,7 @@ func TestTraceStickyKeyProvider_RemoveKey_MinimalRemapping(t *testing.T) {
 				APIKeys: originalKeys,
 			},
 		},
-		cachedEnabledAPIKeys: originalKeys,
+		cachedAPIKeyConfigs: apiKeyConfigs(originalKeys),
 	}
 
 	provider := NewTraceStickyKeyProvider(ch)
@@ -171,7 +225,7 @@ func TestTraceStickyKeyProvider_RemoveKey_MinimalRemapping(t *testing.T) {
 	}
 
 	newKeys := []string{"key-1", "key-2", "key-4"}
-	ch.cachedEnabledAPIKeys = newKeys
+	ch.cachedAPIKeyConfigs = apiKeyConfigs(newKeys)
 	ch.Credentials.APIKeys = newKeys
 
 	unaffectedCount := 0
@@ -208,7 +262,7 @@ func TestTraceStickyKeyProvider_RemoveKey_Stable(t *testing.T) {
 				APIKeys: originalKeys,
 			},
 		},
-		cachedEnabledAPIKeys: originalKeys,
+		cachedAPIKeyConfigs: apiKeyConfigs(originalKeys),
 	}
 
 	trace := &ent.Trace{TraceID: fmt.Sprintf("trace-%d", time.Now().UnixNano())}
@@ -227,12 +281,39 @@ func TestTraceStickyKeyProvider_RemoveKey_Stable(t *testing.T) {
 		newKeys := lo.Filter(originalKeys, func(k string, _ int) bool {
 			return k != keyToRemove
 		})
-		ch.cachedEnabledAPIKeys = newKeys
+		ch.cachedAPIKeyConfigs = apiKeyConfigs(newKeys)
 		ch.Credentials.APIKeys = newKeys
 
 		selectedKey2 := provider.Get(ctx)
 		require.Equal(t, selectedKey1, selectedKey2, "removing a non-selected key should not change the selection")
 	}
+}
+
+func TestTraceStickyKeyProvider_CachedSelectionSkipsDisabledKey(t *testing.T) {
+	originalKeys := []string{"key-1", "key-2", "key-3"}
+	ch := &Channel{
+		Channel: &ent.Channel{
+			Credentials: objects.ChannelCredentials{
+				APIKeys: originalKeys,
+			},
+		},
+		cachedAPIKeyConfigs: apiKeyConfigs(originalKeys),
+	}
+
+	trace := &ent.Trace{TraceID: "trace-cached-disabled-key"}
+	ctx := contexts.WithTrace(context.Background(), trace)
+
+	provider := NewTraceStickyKeyProvider(ch)
+	selectedKey := provider.Get(ctx)
+	remainingKeys := lo.Filter(originalKeys, func(key string, _ int) bool {
+		return key != selectedKey
+	})
+	ch.cachedAPIKeyConfigs = apiKeyConfigs(remainingKeys)
+	ch.Credentials.APIKeys = remainingKeys
+
+	keyAfterDisable := provider.Get(ctx)
+	require.Contains(t, remainingKeys, keyAfterDisable)
+	require.NotEqual(t, selectedKey, keyAfterDisable, "cached sticky key must not be reused after it is disabled")
 }
 
 func TestTraceStickyKeyProvider_AddKey_Stable(t *testing.T) {
@@ -243,7 +324,7 @@ func TestTraceStickyKeyProvider_AddKey_Stable(t *testing.T) {
 				APIKeys: originalKeys,
 			},
 		},
-		cachedEnabledAPIKeys: originalKeys,
+		cachedAPIKeyConfigs: apiKeyConfigs(originalKeys),
 	}
 
 	trace := &ent.Trace{TraceID: fmt.Sprintf("trace-%d", time.Now().UnixNano())}
@@ -255,7 +336,7 @@ func TestTraceStickyKeyProvider_AddKey_Stable(t *testing.T) {
 
 	newKey := "key-new"
 	newKeys := append(originalKeys, newKey)
-	ch.cachedEnabledAPIKeys = newKeys
+	ch.cachedAPIKeyConfigs = apiKeyConfigs(newKeys)
 	ch.Credentials.APIKeys = newKeys
 
 	selectedKey2 := provider.Get(ctx)
@@ -271,7 +352,7 @@ func TestTraceStickyKeyProvider_DisableKey_SimulatedByRemoval(t *testing.T) {
 				APIKeys: allKeys,
 			},
 		},
-		cachedEnabledAPIKeys: allKeys,
+		cachedAPIKeyConfigs: apiKeyConfigs(allKeys),
 	}
 
 	provider := NewTraceStickyKeyProvider(ch)
@@ -288,7 +369,7 @@ func TestTraceStickyKeyProvider_DisableKey_SimulatedByRemoval(t *testing.T) {
 				APIKeys: allKeys,
 			},
 		},
-		cachedEnabledAPIKeys: []string{"key-1", "key-3"},
+		cachedAPIKeyConfigs: apiKeyConfigs([]string{"key-1", "key-3"}),
 	}
 	provider2 := NewTraceStickyKeyProvider(ch2)
 
@@ -310,7 +391,7 @@ func TestTraceStickyKeyProvider_EnableKey_AfterDisable(t *testing.T) {
 				APIKeys: allKeys,
 			},
 		},
-		cachedEnabledAPIKeys: []string{"key-1", "key-3"},
+		cachedAPIKeyConfigs: apiKeyConfigs([]string{"key-1", "key-3"}),
 	}
 
 	provider := NewTraceStickyKeyProvider(ch)
@@ -320,27 +401,108 @@ func TestTraceStickyKeyProvider_EnableKey_AfterDisable(t *testing.T) {
 
 	_ = provider.Get(ctx)
 
-	ch.cachedEnabledAPIKeys = allKeys
+	ch.cachedAPIKeyConfigs = apiKeyConfigs(allKeys)
 
 	keyAfterEnable := provider.Get(ctx)
 	require.Contains(t, allKeys, keyAfterEnable)
 }
 
-func TestTraceStickyKeyProvider_AllKeysDisabled_FallbackToFirst(t *testing.T) {
+func TestTraceStickyKeyProvider_AllKeysDisabled_Panics(t *testing.T) {
 	ch := &Channel{
 		Channel: &ent.Channel{
 			Credentials: objects.ChannelCredentials{
 				APIKeys: []string{"key-1", "key-2"},
 			},
 		},
-		cachedEnabledAPIKeys: []string{},
+		cachedAPIKeyConfigs: apiKeyConfigs([]string{}),
 	}
 
 	provider := NewTraceStickyKeyProvider(ch)
 	ctx := context.Background()
 
-	key := provider.Get(ctx)
-	require.Equal(t, "key-1", key, "should fallback to first key when all disabled")
+	require.Panics(t, func() {
+		provider.Get(ctx)
+	})
+}
+
+func TestWeightedTraceStickyKeyProvider_DistributionFollowsWeights(t *testing.T) {
+	configs := []objects.ChannelAPIKeyConfig{
+		{Key: "primary", Weight: 100},
+		{Key: "secondary", Weight: 50},
+		{Key: "tertiary", Weight: 50},
+	}
+	ch := &Channel{
+		Channel: &ent.Channel{
+			Credentials: objects.ChannelCredentials{
+				APIKeyConfigs: configs,
+			},
+		},
+		cachedAPIKeyConfigs: configs,
+	}
+	provider := NewWeightedTraceStickyKeyProvider(ch)
+
+	counts := map[string]int{}
+	for i := range 2000 {
+		trace := &ent.Trace{TraceID: fmt.Sprintf("weighted-trace-%d", i)}
+		ctx := contexts.WithTrace(context.Background(), trace)
+		counts[provider.Get(ctx)]++
+	}
+
+	require.InDelta(t, 0.50, float64(counts["primary"])/2000.0, 0.08)
+	require.InDelta(t, 0.25, float64(counts["secondary"])/2000.0, 0.06)
+	require.InDelta(t, 0.25, float64(counts["tertiary"])/2000.0, 0.06)
+}
+
+func TestFailoverAPIKeyProvider_UsesOnlyHighestWeightGroup(t *testing.T) {
+	configs := []objects.ChannelAPIKeyConfig{
+		{Key: "primary-a", Weight: 100},
+		{Key: "primary-b", Weight: 100},
+		{Key: "backup", Weight: 50},
+	}
+	ch := &Channel{
+		Channel: &ent.Channel{
+			Credentials: objects.ChannelCredentials{
+				APIKeyConfigs: configs,
+			},
+		},
+		cachedAPIKeyConfigs: configs,
+	}
+	provider := NewFailoverAPIKeyProvider(ch)
+
+	for i := range 200 {
+		trace := &ent.Trace{TraceID: fmt.Sprintf("failover-trace-%d", i)}
+		ctx := contexts.WithTrace(context.Background(), trace)
+		require.Contains(t, []string{"primary-a", "primary-b"}, provider.Get(ctx))
+	}
+}
+
+func TestFailoverAPIKeyProvider_FallsBackWhenHighestWeightGroupDisabled(t *testing.T) {
+	now := time.Now()
+	disabledUntil := now.Add(time.Hour)
+	configs := []objects.ChannelAPIKeyConfig{
+		{Key: "primary-a", Weight: 100},
+		{Key: "primary-b", Weight: 100},
+		{Key: "backup", Weight: 50},
+	}
+	ch := &Channel{
+		Channel: &ent.Channel{
+			Credentials: objects.ChannelCredentials{
+				APIKeyConfigs: configs,
+			},
+			DisabledAPIKeys: []objects.DisabledAPIKey{
+				{Key: "primary-a", DisabledUntil: &disabledUntil, DisableAction: DisableActionTemporary},
+				{Key: "primary-b", DisableAction: DisableActionPermanent},
+			},
+		},
+		cachedAPIKeyConfigs: configs,
+	}
+	provider := NewFailoverAPIKeyProvider(ch)
+
+	for i := range 20 {
+		trace := &ent.Trace{TraceID: fmt.Sprintf("failover-backup-trace-%d", i)}
+		ctx := contexts.WithTrace(context.Background(), trace)
+		require.Equal(t, "backup", provider.Get(ctx))
+	}
 }
 
 func TestRendezvousSelect_Deterministic(t *testing.T) {
@@ -441,7 +603,7 @@ func TestTraceStickyKeyProvider_LegacyAPIKey(t *testing.T) {
 				APIKey: "legacy-key",
 			},
 		},
-		cachedEnabledAPIKeys: []string{"legacy-key"},
+		cachedAPIKeyConfigs: apiKeyConfigs([]string{"legacy-key"}),
 	}
 
 	provider := NewTraceStickyKeyProvider(ch)
@@ -460,7 +622,7 @@ func TestTraceStickyKeyProvider_MixedLegacyAndNewKeys(t *testing.T) {
 				APIKeys: []string{"new-key-1", "new-key-2"},
 			},
 		},
-		cachedEnabledAPIKeys: keys,
+		cachedAPIKeyConfigs: apiKeyConfigs(keys),
 	}
 
 	provider := NewTraceStickyKeyProvider(ch)
@@ -480,14 +642,14 @@ func TestTraceStickyKeyProvider_KeyOrderIndependence(t *testing.T) {
 		Channel: &ent.Channel{
 			Credentials: objects.ChannelCredentials{APIKeys: keys1},
 		},
-		cachedEnabledAPIKeys: keys1,
+		cachedAPIKeyConfigs: apiKeyConfigs(keys1),
 	}
 
 	ch2 := &Channel{
 		Channel: &ent.Channel{
 			Credentials: objects.ChannelCredentials{APIKeys: keys2},
 		},
-		cachedEnabledAPIKeys: keys2,
+		cachedAPIKeyConfigs: apiKeyConfigs(keys2),
 	}
 
 	provider1 := NewTraceStickyKeyProvider(ch1)
@@ -542,6 +704,161 @@ func TestChannelService_DeleteDisabledAPIKeys_SingleKey(t *testing.T) {
 	require.NotContains(t, updatedCh.Credentials.APIKeys, "key2")
 	require.Contains(t, updatedCh.Credentials.APIKeys, "key1")
 	require.Contains(t, updatedCh.Credentials.APIKeys, "key3")
+}
+
+func TestChannelService_DisableAPIKey_KeepsConfiguredKey(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Test Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{
+			APIKeys: []string{"key1", "key2"},
+		}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	err = svc.DisableAPIKey(ctx, ch.ID, "key1", 0, "manual disable")
+	require.NoError(t, err)
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusEnabled, updatedCh.Status)
+	require.Equal(t, []string{"key1", "key2"}, updatedCh.Credentials.APIKeys)
+	require.Len(t, updatedCh.DisabledAPIKeys, 1)
+	require.Equal(t, "key1", updatedCh.DisabledAPIKeys[0].Key)
+	require.Equal(t, DisableActionPermanent, updatedCh.DisabledAPIKeys[0].DisableAction)
+
+	err = svc.EnableAPIKey(ctx, ch.ID, "key1")
+	require.NoError(t, err)
+
+	updatedCh, err = client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"key1", "key2"}, updatedCh.Credentials.APIKeys)
+	require.Empty(t, updatedCh.DisabledAPIKeys)
+}
+
+func TestChannelService_DisableAPIKey_KeepsStructuredAPIKeyConfig(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	configs := []objects.ChannelAPIKeyConfig{
+		{Key: "primary-key", Weight: 100},
+		{Key: "backup-key", Weight: 50},
+	}
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Weighted Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{
+			APIKeyConfigs: configs,
+		}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	err = svc.DisableAPIKey(ctx, ch.ID, "primary-key", 0, "manual disable")
+	require.NoError(t, err)
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, configs, updatedCh.Credentials.APIKeyConfigs)
+	require.Len(t, updatedCh.DisabledAPIKeys, 1)
+	require.Equal(t, "primary-key", updatedCh.DisabledAPIKeys[0].Key)
+}
+
+func TestChannelService_EnableAPIKey_RestoresChannelDisabledByPermanentKeyExhaustion(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Single Key Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{
+			APIKeys: []string{"only-key"},
+		}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	err = svc.DisableAPIKey(ctx, ch.ID, "only-key", 401, "manual disable")
+	require.NoError(t, err)
+
+	disabledCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusDisabled, disabledCh.Status)
+	require.NotNil(t, disabledCh.ErrorMessage)
+	require.Contains(t, *disabledCh.ErrorMessage, allAPIKeysPermanentlyDisabledMessagePrefix)
+
+	err = svc.EnableAPIKey(ctx, ch.ID, "only-key")
+	require.NoError(t, err)
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusEnabled, updatedCh.Status)
+	require.Empty(t, updatedCh.DisabledAPIKeys)
+	require.Nil(t, updatedCh.ErrorMessage)
+	require.Equal(t, []string{"only-key"}, updatedCh.Credentials.APIKeys)
+}
+
+func TestChannelService_EnableAPIKey_DoesNotRestoreManuallyDisabledChannel(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	manualReason := "disabled by operator"
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Manually Disabled Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{
+			APIKeys: []string{"key1", "key2"},
+		}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetStatus(channel.StatusDisabled).
+		SetErrorMessage(manualReason).
+		SetDisabledAPIKeys([]objects.DisabledAPIKey{
+			{Key: "key1", DisableAction: DisableActionPermanent, ErrorCode: 401, Reason: "manual key disable"},
+		}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	err = svc.EnableAPIKey(ctx, ch.ID, "key1")
+	require.NoError(t, err)
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusDisabled, updatedCh.Status)
+	require.Empty(t, updatedCh.DisabledAPIKeys)
+	require.NotNil(t, updatedCh.ErrorMessage)
+	require.Equal(t, manualReason, *updatedCh.ErrorMessage)
+	require.Equal(t, []string{"key1", "key2"}, updatedCh.Credentials.APIKeys)
 }
 
 func TestChannelService_DeleteDisabledAPIKeys_MultipleKeys(t *testing.T) {

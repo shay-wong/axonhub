@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -302,6 +303,13 @@ const (
 
 	// UpstreamErrorModeCustom replaces provider errors with an admin-defined message.
 	UpstreamErrorModeCustom = "custom"
+
+	// DisableActionNone records matching errors without disabling the channel or API key.
+	DisableActionNone = "none"
+	// DisableActionPermanent disables the channel or API key until an admin re-enables it.
+	DisableActionPermanent = "permanent"
+	// DisableActionTemporary disables the channel or API key until a calculated expiry.
+	DisableActionTemporary = "temporary"
 )
 
 const DefaultUpstreamErrorMessage = "Upstream provider request failed. Please try again later."
@@ -326,10 +334,14 @@ type RetryPolicy struct {
 	// Supported values: "adaptive", "failover", "circuit-breaker".
 	LoadBalancerStrategy string `json:"load_balancer_strategy"`
 
-	// AutoDisableChannel controls whether to auto-disable a channel or API key when it exceeds the maximum number of retries.
-	// For compatibility with legacy setting, the name is AutoDisableChannel.
-	// If the channel has more than one key, the API key will be disabled instead of the channel.
-	AutoDisableChannel AutoDisableChannel `json:"auto_disable_channel"`
+	// AutoDisableChannel is the legacy auto-disable setting kept for read/write compatibility.
+	AutoDisableChannel AutoDisablePolicy `json:"auto_disable_channel"`
+
+	// ChannelAutoDisable controls automatic channel disable rules.
+	ChannelAutoDisable AutoDisablePolicy `json:"channel_auto_disable"`
+
+	// APIKeyAutoDisable controls automatic upstream API key disable rules.
+	APIKeyAutoDisable AutoDisablePolicy `json:"api_key_auto_disable"`
 
 	// EmptyResponseDetection controls whether to detect empty streaming responses.
 	// When enabled, the pipeline pre-reads stream events to check if the response
@@ -348,21 +360,35 @@ type UpstreamErrorPolicy struct {
 	CustomMessage string `json:"custom_message"`
 }
 
-type AutoDisableChannel struct {
-	// Enabled controls whether auto-disable channel is active
+type AutoDisablePolicy struct {
+	// Enabled controls whether auto-disable is active.
 	Enabled bool `json:"enabled"`
 
-	// Statuses defines the status codes and times to auto-disable a channel
-	Statuses []AutoDisableChannelStatus `json:"statuses"`
+	// Statuses defines the status codes and thresholds to trigger the configured action.
+	Statuses []AutoDisableStatusRule `json:"statuses"`
 }
 
-type AutoDisableChannelStatus struct {
+type AutoDisableStatusRule struct {
 	// Status is the HTTP status code to trigger auto-disable.
 	Status int `json:"status"`
 
 	// Times is the number of times the status code occurs before auto-disable the channel.
 	Times int `json:"times"`
+
+	// Action controls what happens when the threshold is reached.
+	Action string `json:"action,omitempty"`
+
+	// DurationMinutes is used when Action is temporary.
+	DurationMinutes *int `json:"durationMinutes,omitempty"`
+
+	// UseRetryAfter allows 429 rules to prefer the upstream Retry-After header.
+	UseRetryAfter *bool `json:"useRetryAfter,omitempty"`
 }
+
+type AutoDisableChannel = AutoDisablePolicy
+type AutoDisableChannelStatus = AutoDisableStatusRule
+type AutoDisableAPIKey = AutoDisablePolicy
+type AutoDisableAPIKeyStatus = AutoDisableStatusRule
 
 type WebhookNotifierConfig struct {
 	Targets       []WebhookTarget       `json:"targets"`
@@ -1001,20 +1027,35 @@ func (s *SystemService) RetryPolicyOrDefault(ctx context.Context) *RetryPolicy {
 	policy, err := s.RetryPolicy(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			return lo.ToPtr(defaultRetryPolicy)
+			policy := defaultRetryPolicy
+			normalizeRetryPolicy(&policy)
+
+			return &policy
 		}
 
 		log.Warn(ctx, "failed to get retry policy", log.Cause(err))
 
-		return lo.ToPtr(defaultRetryPolicy)
+		policy := defaultRetryPolicy
+		normalizeRetryPolicy(&policy)
+
+		return &policy
 	}
 
 	return policy
 }
 
+func (s *SystemService) DefaultAutoDisableStatusRules(_ context.Context) []AutoDisableStatusRule {
+	return lo.Map(defaultAutoDisableStatusRules, func(rule AutoDisableStatusRule, _ int) AutoDisableStatusRule {
+		return rule
+	})
+}
+
 // SetRetryPolicy sets the retry policy configuration.
 func (s *SystemService) SetRetryPolicy(ctx context.Context, policy *RetryPolicy) error {
 	normalizeRetryPolicy(policy)
+	if err := validateRetryPolicy(policy); err != nil {
+		return err
+	}
 
 	jsonBytes, err := json.Marshal(policy)
 	if err != nil {
@@ -1052,9 +1093,19 @@ func normalizeRetryPolicy(policy *RetryPolicy) {
 		policy.NonStreamResponseTimeoutSeconds = maxRetryResponseTimeoutSeconds
 	}
 
-	if policy.AutoDisableChannel.Statuses == nil {
-		policy.AutoDisableChannel.Statuses = []AutoDisableChannelStatus{}
+	normalizeAutoDisablePolicy(&policy.AutoDisableChannel)
+	legacyHasRules := policy.AutoDisableChannel.Enabled || len(policy.AutoDisableChannel.Statuses) > 0
+	if legacyHasRules {
+		if !policy.ChannelAutoDisable.Enabled && len(policy.ChannelAutoDisable.Statuses) == 0 {
+			policy.ChannelAutoDisable = cloneAutoDisablePolicy(policy.AutoDisableChannel)
+		}
+		if !policy.APIKeyAutoDisable.Enabled && len(policy.APIKeyAutoDisable.Statuses) == 0 {
+			policy.APIKeyAutoDisable = cloneAutoDisablePolicy(policy.AutoDisableChannel)
+		}
 	}
+
+	normalizeAutoDisablePolicy(&policy.ChannelAutoDisable)
+	normalizeAutoDisablePolicy(&policy.APIKeyAutoDisable)
 
 	switch policy.UpstreamErrorPolicy.Mode {
 	case UpstreamErrorModePassthrough, UpstreamErrorModeHidden, UpstreamErrorModeCustom:
@@ -1066,6 +1117,74 @@ func normalizeRetryPolicy(policy *RetryPolicy) {
 		strings.TrimSpace(policy.UpstreamErrorPolicy.CustomMessage) == "" {
 		policy.UpstreamErrorPolicy.Mode = UpstreamErrorModeHidden
 	}
+}
+
+func normalizeAutoDisablePolicy(policy *AutoDisablePolicy) {
+	if policy.Statuses == nil {
+		policy.Statuses = []AutoDisableStatusRule{}
+	}
+
+	for i := range policy.Statuses {
+		if policy.Statuses[i].Action == "" {
+			policy.Statuses[i].Action = DisableActionPermanent
+		}
+	}
+}
+
+func cloneAutoDisablePolicy(policy AutoDisablePolicy) AutoDisablePolicy {
+	cloned := AutoDisablePolicy{
+		Enabled:  policy.Enabled,
+		Statuses: make([]AutoDisableStatusRule, len(policy.Statuses)),
+	}
+	copy(cloned.Statuses, policy.Statuses)
+
+	return cloned
+}
+
+func validateRetryPolicy(policy *RetryPolicy) error {
+	if policy == nil {
+		return nil
+	}
+
+	for name, autoDisablePolicy := range map[string]AutoDisablePolicy{
+		"auto_disable_channel": policy.AutoDisableChannel,
+		"channel_auto_disable": policy.ChannelAutoDisable,
+		"api_key_auto_disable": policy.APIKeyAutoDisable,
+	} {
+		if err := validateAutoDisablePolicy(name, autoDisablePolicy); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateAutoDisablePolicy(name string, policy AutoDisablePolicy) error {
+	for _, rule := range policy.Statuses {
+		if rule.Status < http.StatusBadRequest || rule.Status > 599 {
+			return fmt.Errorf("%s status must be between 400 and 599", name)
+		}
+		if rule.Times < 1 {
+			return fmt.Errorf("%s times must be at least 1", name)
+		}
+
+		switch rule.Action {
+		case DisableActionNone, DisableActionPermanent:
+		case DisableActionTemporary:
+			uses429RetryAfter := rule.Status == http.StatusTooManyRequests && rule.UseRetryAfter != nil && *rule.UseRetryAfter
+			if !uses429RetryAfter && (rule.DurationMinutes == nil || *rule.DurationMinutes <= 0) {
+				return fmt.Errorf("%s temporary action requires durationMinutes > 0", name)
+			}
+		default:
+			return fmt.Errorf("%s action must be one of none, permanent, temporary", name)
+		}
+
+		if rule.UseRetryAfter != nil && *rule.UseRetryAfter && rule.Status != http.StatusTooManyRequests {
+			return fmt.Errorf("%s useRetryAfter can only be used with status 429", name)
+		}
+	}
+
+	return nil
 }
 
 func normalizeWebhookNotifierConfig(cfg *WebhookNotifierConfig) {

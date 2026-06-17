@@ -105,9 +105,14 @@ func (s *DefaultSelector) Select(ctx context.Context, req *llm.Request) ([]*Chan
 // selectChannelCadidates performs the original channel selection logic.
 func (s *DefaultSelector) selectChannelCadidates(ctx context.Context, req *llm.Request) ([]*ChannelModelsCandidate, error) {
 	channels := s.ChannelService.GetEnabledChannels()
+	now := time.Now()
 
 	candidates := make([]*ChannelModelsCandidate, 0, len(channels))
 	for _, ch := range channels {
+		if !ch.IsSchedulableAt(now) {
+			continue
+		}
+
 		entries := ch.GetModelEntries()
 
 		entry, ok := entries[req.Model]
@@ -214,6 +219,10 @@ func (s *DefaultSelector) resolveAssociations(
 	// The inverse interleaving only causes a conservative cache miss.
 	channelCacheVersion := s.ChannelService.GetCacheVersion()
 	channels := s.ChannelService.GetEnabledChannels()
+	now := time.Now()
+	channels = lo.Filter(channels, func(ch *biz.Channel, _ int) bool {
+		return ch.IsSchedulableAt(now)
+	})
 	if len(channels) == 0 {
 		return []*resolvedAssociationCandidate{}, nil
 	}
@@ -641,6 +650,11 @@ func (s *LoadBalancedSelector) Select(ctx context.Context, req *llm.Request) ([]
 	if err != nil {
 		return nil, err
 	}
+
+	now := time.Now()
+	candidates = lo.Filter(candidates, func(candidate *ChannelModelsCandidate, _ int) bool {
+		return candidate != nil && candidate.Channel != nil && candidate.Channel.IsSchedulableAt(now)
+	})
 
 	if len(candidates) <= 1 {
 		return candidates, nil

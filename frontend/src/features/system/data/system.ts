@@ -92,6 +92,13 @@ const UPDATE_STORAGE_POLICY_MUTATION = `
 
 const RETRY_POLICY_QUERY = `
   query RetryPolicy {
+    defaultAutoDisableStatusRules {
+      status
+      times
+      action
+      durationMinutes
+      useRetryAfter
+    }
     retryPolicy {
       maxChannelRetries
       maxSingleChannelRetries
@@ -110,6 +117,29 @@ const RETRY_POLICY_QUERY = `
         statuses {
           status
           times
+          action
+          durationMinutes
+          useRetryAfter
+        }
+      }
+      channelAutoDisable {
+        enabled
+        statuses {
+          status
+          times
+          action
+          durationMinutes
+          useRetryAfter
+        }
+      }
+      apiKeyAutoDisable {
+        enabled
+        statuses {
+          status
+          times
+          action
+          durationMinutes
+          useRetryAfter
         }
       }
     }
@@ -310,6 +340,9 @@ export interface GcCleanupPreviewItem {
 export interface AutoDisableChannelStatus {
   status: number;
   times: number;
+  action?: string | null;
+  durationMinutes?: number | null;
+  useRetryAfter?: boolean | null;
 }
 
 export interface WebhookHeader {
@@ -351,6 +384,8 @@ export interface RetryPolicy {
   loadBalancerStrategy: string;
   enabled: boolean;
   autoDisableChannel: AutoDisableChannel;
+  channelAutoDisable: AutoDisableChannel;
+  apiKeyAutoDisable: AutoDisableChannel;
   emptyResponseDetection: boolean;
   upstreamErrorPolicy: UpstreamErrorPolicy;
 }
@@ -363,6 +398,9 @@ export interface UpstreamErrorPolicy {
 export interface AutoDisableChannelStatusInput {
   status: number;
   times: number;
+  action?: string | null;
+  durationMinutes?: number | null;
+  useRetryAfter?: boolean | null;
 }
 
 export interface AutoDisableChannelInput {
@@ -379,8 +417,15 @@ export interface RetryPolicyInput {
   loadBalancerStrategy?: string;
   enabled?: boolean;
   autoDisableChannel?: AutoDisableChannelInput;
+  channelAutoDisable?: AutoDisableChannelInput;
+  apiKeyAutoDisable?: AutoDisableChannelInput;
   emptyResponseDetection?: boolean;
   upstreamErrorPolicy?: Partial<UpstreamErrorPolicy>;
+}
+
+export interface RetryPolicyQueryResult {
+  retryPolicy: RetryPolicy;
+  defaultAutoDisableStatusRules: AutoDisableChannelStatus[];
 }
 
 export interface UpdateDefaultDataStorageInput {
@@ -549,8 +594,8 @@ export function useRetryPolicy() {
     queryKey: ['retryPolicy'],
     queryFn: async () => {
       try {
-        const data = await graphqlRequest<{ retryPolicy: RetryPolicy }>(RETRY_POLICY_QUERY);
-        return data.retryPolicy;
+        const data = await graphqlRequest<RetryPolicyQueryResult>(RETRY_POLICY_QUERY);
+        return data;
       } catch (error) {
         handleError(error, i18n.t('common.errors.internalServerError'));
         throw error;

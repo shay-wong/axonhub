@@ -223,6 +223,48 @@ func (_c *ChannelCreate) SetNillableErrorMessage(v *string) *ChannelCreate {
 	return _c
 }
 
+// SetTemporaryDisabledUntil sets the "temporary_disabled_until" field.
+func (_c *ChannelCreate) SetTemporaryDisabledUntil(v time.Time) *ChannelCreate {
+	_c.mutation.SetTemporaryDisabledUntil(v)
+	return _c
+}
+
+// SetNillableTemporaryDisabledUntil sets the "temporary_disabled_until" field if the given value is not nil.
+func (_c *ChannelCreate) SetNillableTemporaryDisabledUntil(v *time.Time) *ChannelCreate {
+	if v != nil {
+		_c.SetTemporaryDisabledUntil(*v)
+	}
+	return _c
+}
+
+// SetTemporaryDisabledErrorCode sets the "temporary_disabled_error_code" field.
+func (_c *ChannelCreate) SetTemporaryDisabledErrorCode(v int) *ChannelCreate {
+	_c.mutation.SetTemporaryDisabledErrorCode(v)
+	return _c
+}
+
+// SetNillableTemporaryDisabledErrorCode sets the "temporary_disabled_error_code" field if the given value is not nil.
+func (_c *ChannelCreate) SetNillableTemporaryDisabledErrorCode(v *int) *ChannelCreate {
+	if v != nil {
+		_c.SetTemporaryDisabledErrorCode(*v)
+	}
+	return _c
+}
+
+// SetTemporaryDisabledReason sets the "temporary_disabled_reason" field.
+func (_c *ChannelCreate) SetTemporaryDisabledReason(v string) *ChannelCreate {
+	_c.mutation.SetTemporaryDisabledReason(v)
+	return _c
+}
+
+// SetNillableTemporaryDisabledReason sets the "temporary_disabled_reason" field if the given value is not nil.
+func (_c *ChannelCreate) SetNillableTemporaryDisabledReason(v *string) *ChannelCreate {
+	if v != nil {
+		_c.SetTemporaryDisabledReason(*v)
+	}
+	return _c
+}
+
 // SetRemark sets the "remark" field.
 func (_c *ChannelCreate) SetRemark(v string) *ChannelCreate {
 	_c.mutation.SetRemark(v)
@@ -576,6 +618,18 @@ func (_c *ChannelCreate) createSpec() (*Channel, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ErrorMessage(); ok {
 		_spec.SetField(channel.FieldErrorMessage, field.TypeString, value)
 		_node.ErrorMessage = &value
+	}
+	if value, ok := _c.mutation.TemporaryDisabledUntil(); ok {
+		_spec.SetField(channel.FieldTemporaryDisabledUntil, field.TypeTime, value)
+		_node.TemporaryDisabledUntil = &value
+	}
+	if value, ok := _c.mutation.TemporaryDisabledErrorCode(); ok {
+		_spec.SetField(channel.FieldTemporaryDisabledErrorCode, field.TypeInt, value)
+		_node.TemporaryDisabledErrorCode = &value
+	}
+	if value, ok := _c.mutation.TemporaryDisabledReason(); ok {
+		_spec.SetField(channel.FieldTemporaryDisabledReason, field.TypeString, value)
+		_node.TemporaryDisabledReason = &value
 	}
 	if value, ok := _c.mutation.Remark(); ok {
 		_spec.SetField(channel.FieldRemark, field.TypeString, value)
@@ -1009,6 +1063,66 @@ func (u *ChannelUpsert) ClearErrorMessage() *ChannelUpsert {
 	return u
 }
 
+// SetTemporaryDisabledUntil sets the "temporary_disabled_until" field.
+func (u *ChannelUpsert) SetTemporaryDisabledUntil(v time.Time) *ChannelUpsert {
+	u.Set(channel.FieldTemporaryDisabledUntil, v)
+	return u
+}
+
+// UpdateTemporaryDisabledUntil sets the "temporary_disabled_until" field to the value that was provided on create.
+func (u *ChannelUpsert) UpdateTemporaryDisabledUntil() *ChannelUpsert {
+	u.SetExcluded(channel.FieldTemporaryDisabledUntil)
+	return u
+}
+
+// ClearTemporaryDisabledUntil clears the value of the "temporary_disabled_until" field.
+func (u *ChannelUpsert) ClearTemporaryDisabledUntil() *ChannelUpsert {
+	u.SetNull(channel.FieldTemporaryDisabledUntil)
+	return u
+}
+
+// SetTemporaryDisabledErrorCode sets the "temporary_disabled_error_code" field.
+func (u *ChannelUpsert) SetTemporaryDisabledErrorCode(v int) *ChannelUpsert {
+	u.Set(channel.FieldTemporaryDisabledErrorCode, v)
+	return u
+}
+
+// UpdateTemporaryDisabledErrorCode sets the "temporary_disabled_error_code" field to the value that was provided on create.
+func (u *ChannelUpsert) UpdateTemporaryDisabledErrorCode() *ChannelUpsert {
+	u.SetExcluded(channel.FieldTemporaryDisabledErrorCode)
+	return u
+}
+
+// AddTemporaryDisabledErrorCode adds v to the "temporary_disabled_error_code" field.
+func (u *ChannelUpsert) AddTemporaryDisabledErrorCode(v int) *ChannelUpsert {
+	u.Add(channel.FieldTemporaryDisabledErrorCode, v)
+	return u
+}
+
+// ClearTemporaryDisabledErrorCode clears the value of the "temporary_disabled_error_code" field.
+func (u *ChannelUpsert) ClearTemporaryDisabledErrorCode() *ChannelUpsert {
+	u.SetNull(channel.FieldTemporaryDisabledErrorCode)
+	return u
+}
+
+// SetTemporaryDisabledReason sets the "temporary_disabled_reason" field.
+func (u *ChannelUpsert) SetTemporaryDisabledReason(v string) *ChannelUpsert {
+	u.Set(channel.FieldTemporaryDisabledReason, v)
+	return u
+}
+
+// UpdateTemporaryDisabledReason sets the "temporary_disabled_reason" field to the value that was provided on create.
+func (u *ChannelUpsert) UpdateTemporaryDisabledReason() *ChannelUpsert {
+	u.SetExcluded(channel.FieldTemporaryDisabledReason)
+	return u
+}
+
+// ClearTemporaryDisabledReason clears the value of the "temporary_disabled_reason" field.
+func (u *ChannelUpsert) ClearTemporaryDisabledReason() *ChannelUpsert {
+	u.SetNull(channel.FieldTemporaryDisabledReason)
+	return u
+}
+
 // SetRemark sets the "remark" field.
 func (u *ChannelUpsert) SetRemark(v string) *ChannelUpsert {
 	u.Set(channel.FieldRemark, v)
@@ -1409,6 +1523,76 @@ func (u *ChannelUpsertOne) UpdateErrorMessage() *ChannelUpsertOne {
 func (u *ChannelUpsertOne) ClearErrorMessage() *ChannelUpsertOne {
 	return u.Update(func(s *ChannelUpsert) {
 		s.ClearErrorMessage()
+	})
+}
+
+// SetTemporaryDisabledUntil sets the "temporary_disabled_until" field.
+func (u *ChannelUpsertOne) SetTemporaryDisabledUntil(v time.Time) *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetTemporaryDisabledUntil(v)
+	})
+}
+
+// UpdateTemporaryDisabledUntil sets the "temporary_disabled_until" field to the value that was provided on create.
+func (u *ChannelUpsertOne) UpdateTemporaryDisabledUntil() *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdateTemporaryDisabledUntil()
+	})
+}
+
+// ClearTemporaryDisabledUntil clears the value of the "temporary_disabled_until" field.
+func (u *ChannelUpsertOne) ClearTemporaryDisabledUntil() *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.ClearTemporaryDisabledUntil()
+	})
+}
+
+// SetTemporaryDisabledErrorCode sets the "temporary_disabled_error_code" field.
+func (u *ChannelUpsertOne) SetTemporaryDisabledErrorCode(v int) *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetTemporaryDisabledErrorCode(v)
+	})
+}
+
+// AddTemporaryDisabledErrorCode adds v to the "temporary_disabled_error_code" field.
+func (u *ChannelUpsertOne) AddTemporaryDisabledErrorCode(v int) *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.AddTemporaryDisabledErrorCode(v)
+	})
+}
+
+// UpdateTemporaryDisabledErrorCode sets the "temporary_disabled_error_code" field to the value that was provided on create.
+func (u *ChannelUpsertOne) UpdateTemporaryDisabledErrorCode() *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdateTemporaryDisabledErrorCode()
+	})
+}
+
+// ClearTemporaryDisabledErrorCode clears the value of the "temporary_disabled_error_code" field.
+func (u *ChannelUpsertOne) ClearTemporaryDisabledErrorCode() *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.ClearTemporaryDisabledErrorCode()
+	})
+}
+
+// SetTemporaryDisabledReason sets the "temporary_disabled_reason" field.
+func (u *ChannelUpsertOne) SetTemporaryDisabledReason(v string) *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetTemporaryDisabledReason(v)
+	})
+}
+
+// UpdateTemporaryDisabledReason sets the "temporary_disabled_reason" field to the value that was provided on create.
+func (u *ChannelUpsertOne) UpdateTemporaryDisabledReason() *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdateTemporaryDisabledReason()
+	})
+}
+
+// ClearTemporaryDisabledReason clears the value of the "temporary_disabled_reason" field.
+func (u *ChannelUpsertOne) ClearTemporaryDisabledReason() *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.ClearTemporaryDisabledReason()
 	})
 }
 
@@ -1984,6 +2168,76 @@ func (u *ChannelUpsertBulk) UpdateErrorMessage() *ChannelUpsertBulk {
 func (u *ChannelUpsertBulk) ClearErrorMessage() *ChannelUpsertBulk {
 	return u.Update(func(s *ChannelUpsert) {
 		s.ClearErrorMessage()
+	})
+}
+
+// SetTemporaryDisabledUntil sets the "temporary_disabled_until" field.
+func (u *ChannelUpsertBulk) SetTemporaryDisabledUntil(v time.Time) *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetTemporaryDisabledUntil(v)
+	})
+}
+
+// UpdateTemporaryDisabledUntil sets the "temporary_disabled_until" field to the value that was provided on create.
+func (u *ChannelUpsertBulk) UpdateTemporaryDisabledUntil() *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdateTemporaryDisabledUntil()
+	})
+}
+
+// ClearTemporaryDisabledUntil clears the value of the "temporary_disabled_until" field.
+func (u *ChannelUpsertBulk) ClearTemporaryDisabledUntil() *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.ClearTemporaryDisabledUntil()
+	})
+}
+
+// SetTemporaryDisabledErrorCode sets the "temporary_disabled_error_code" field.
+func (u *ChannelUpsertBulk) SetTemporaryDisabledErrorCode(v int) *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetTemporaryDisabledErrorCode(v)
+	})
+}
+
+// AddTemporaryDisabledErrorCode adds v to the "temporary_disabled_error_code" field.
+func (u *ChannelUpsertBulk) AddTemporaryDisabledErrorCode(v int) *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.AddTemporaryDisabledErrorCode(v)
+	})
+}
+
+// UpdateTemporaryDisabledErrorCode sets the "temporary_disabled_error_code" field to the value that was provided on create.
+func (u *ChannelUpsertBulk) UpdateTemporaryDisabledErrorCode() *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdateTemporaryDisabledErrorCode()
+	})
+}
+
+// ClearTemporaryDisabledErrorCode clears the value of the "temporary_disabled_error_code" field.
+func (u *ChannelUpsertBulk) ClearTemporaryDisabledErrorCode() *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.ClearTemporaryDisabledErrorCode()
+	})
+}
+
+// SetTemporaryDisabledReason sets the "temporary_disabled_reason" field.
+func (u *ChannelUpsertBulk) SetTemporaryDisabledReason(v string) *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetTemporaryDisabledReason(v)
+	})
+}
+
+// UpdateTemporaryDisabledReason sets the "temporary_disabled_reason" field to the value that was provided on create.
+func (u *ChannelUpsertBulk) UpdateTemporaryDisabledReason() *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdateTemporaryDisabledReason()
+	})
+}
+
+// ClearTemporaryDisabledReason clears the value of the "temporary_disabled_reason" field.
+func (u *ChannelUpsertBulk) ClearTemporaryDisabledReason() *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.ClearTemporaryDisabledReason()
 	})
 }
 

@@ -2003,58 +2003,62 @@ func (m *APIKeyProfileTemplateMutation) ResetEdge(name string) error {
 // ChannelMutation represents an operation that mutates the Channel nodes in the graph.
 type ChannelMutation struct {
 	config
-	op                           Op
-	typ                          string
-	id                           *int
-	created_at                   *time.Time
-	updated_at                   *time.Time
-	deleted_at                   *int
-	adddeleted_at                *int
-	_type                        *channel.Type
-	base_url                     *string
-	name                         *string
-	status                       *channel.Status
-	credentials                  *objects.ChannelCredentials
-	disabled_api_keys            *[]objects.DisabledAPIKey
-	appenddisabled_api_keys      []objects.DisabledAPIKey
-	supported_models             *[]string
-	appendsupported_models       []string
-	manual_models                *[]string
-	appendmanual_models          []string
-	auto_sync_supported_models   *bool
-	auto_sync_model_pattern      *string
-	tags                         *[]string
-	appendtags                   []string
-	default_test_model           *string
-	policies                     *objects.ChannelPolicies
-	settings                     **objects.ChannelSettings
-	ordering_weight              *int
-	addordering_weight           *int
-	error_message                *string
-	remark                       *string
-	endpoints                    *[]objects.ChannelEndpoint
-	appendendpoints              []objects.ChannelEndpoint
-	clearedFields                map[string]struct{}
-	requests                     map[int]struct{}
-	removedrequests              map[int]struct{}
-	clearedrequests              bool
-	executions                   map[int]struct{}
-	removedexecutions            map[int]struct{}
-	clearedexecutions            bool
-	usage_logs                   map[int]struct{}
-	removedusage_logs            map[int]struct{}
-	clearedusage_logs            bool
-	channel_probes               map[int]struct{}
-	removedchannel_probes        map[int]struct{}
-	clearedchannel_probes        bool
-	channel_model_prices         map[int]struct{}
-	removedchannel_model_prices  map[int]struct{}
-	clearedchannel_model_prices  bool
-	provider_quota_status        *int
-	clearedprovider_quota_status bool
-	done                         bool
-	oldValue                     func(context.Context) (*Channel, error)
-	predicates                   []predicate.Channel
+	op                               Op
+	typ                              string
+	id                               *int
+	created_at                       *time.Time
+	updated_at                       *time.Time
+	deleted_at                       *int
+	adddeleted_at                    *int
+	_type                            *channel.Type
+	base_url                         *string
+	name                             *string
+	status                           *channel.Status
+	credentials                      *objects.ChannelCredentials
+	disabled_api_keys                *[]objects.DisabledAPIKey
+	appenddisabled_api_keys          []objects.DisabledAPIKey
+	supported_models                 *[]string
+	appendsupported_models           []string
+	manual_models                    *[]string
+	appendmanual_models              []string
+	auto_sync_supported_models       *bool
+	auto_sync_model_pattern          *string
+	tags                             *[]string
+	appendtags                       []string
+	default_test_model               *string
+	policies                         *objects.ChannelPolicies
+	settings                         **objects.ChannelSettings
+	ordering_weight                  *int
+	addordering_weight               *int
+	error_message                    *string
+	temporary_disabled_until         *time.Time
+	temporary_disabled_error_code    *int
+	addtemporary_disabled_error_code *int
+	temporary_disabled_reason        *string
+	remark                           *string
+	endpoints                        *[]objects.ChannelEndpoint
+	appendendpoints                  []objects.ChannelEndpoint
+	clearedFields                    map[string]struct{}
+	requests                         map[int]struct{}
+	removedrequests                  map[int]struct{}
+	clearedrequests                  bool
+	executions                       map[int]struct{}
+	removedexecutions                map[int]struct{}
+	clearedexecutions                bool
+	usage_logs                       map[int]struct{}
+	removedusage_logs                map[int]struct{}
+	clearedusage_logs                bool
+	channel_probes                   map[int]struct{}
+	removedchannel_probes            map[int]struct{}
+	clearedchannel_probes            bool
+	channel_model_prices             map[int]struct{}
+	removedchannel_model_prices      map[int]struct{}
+	clearedchannel_model_prices      bool
+	provider_quota_status            *int
+	clearedprovider_quota_status     bool
+	done                             bool
+	oldValue                         func(context.Context) (*Channel, error)
+	predicates                       []predicate.Channel
 }
 
 var _ ent.Mutation = (*ChannelMutation)(nil)
@@ -3046,6 +3050,174 @@ func (m *ChannelMutation) ResetErrorMessage() {
 	delete(m.clearedFields, channel.FieldErrorMessage)
 }
 
+// SetTemporaryDisabledUntil sets the "temporary_disabled_until" field.
+func (m *ChannelMutation) SetTemporaryDisabledUntil(t time.Time) {
+	m.temporary_disabled_until = &t
+}
+
+// TemporaryDisabledUntil returns the value of the "temporary_disabled_until" field in the mutation.
+func (m *ChannelMutation) TemporaryDisabledUntil() (r time.Time, exists bool) {
+	v := m.temporary_disabled_until
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDisabledUntil returns the old "temporary_disabled_until" field's value of the Channel entity.
+// If the Channel object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMutation) OldTemporaryDisabledUntil(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDisabledUntil is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDisabledUntil requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDisabledUntil: %w", err)
+	}
+	return oldValue.TemporaryDisabledUntil, nil
+}
+
+// ClearTemporaryDisabledUntil clears the value of the "temporary_disabled_until" field.
+func (m *ChannelMutation) ClearTemporaryDisabledUntil() {
+	m.temporary_disabled_until = nil
+	m.clearedFields[channel.FieldTemporaryDisabledUntil] = struct{}{}
+}
+
+// TemporaryDisabledUntilCleared returns if the "temporary_disabled_until" field was cleared in this mutation.
+func (m *ChannelMutation) TemporaryDisabledUntilCleared() bool {
+	_, ok := m.clearedFields[channel.FieldTemporaryDisabledUntil]
+	return ok
+}
+
+// ResetTemporaryDisabledUntil resets all changes to the "temporary_disabled_until" field.
+func (m *ChannelMutation) ResetTemporaryDisabledUntil() {
+	m.temporary_disabled_until = nil
+	delete(m.clearedFields, channel.FieldTemporaryDisabledUntil)
+}
+
+// SetTemporaryDisabledErrorCode sets the "temporary_disabled_error_code" field.
+func (m *ChannelMutation) SetTemporaryDisabledErrorCode(i int) {
+	m.temporary_disabled_error_code = &i
+	m.addtemporary_disabled_error_code = nil
+}
+
+// TemporaryDisabledErrorCode returns the value of the "temporary_disabled_error_code" field in the mutation.
+func (m *ChannelMutation) TemporaryDisabledErrorCode() (r int, exists bool) {
+	v := m.temporary_disabled_error_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDisabledErrorCode returns the old "temporary_disabled_error_code" field's value of the Channel entity.
+// If the Channel object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMutation) OldTemporaryDisabledErrorCode(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDisabledErrorCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDisabledErrorCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDisabledErrorCode: %w", err)
+	}
+	return oldValue.TemporaryDisabledErrorCode, nil
+}
+
+// AddTemporaryDisabledErrorCode adds i to the "temporary_disabled_error_code" field.
+func (m *ChannelMutation) AddTemporaryDisabledErrorCode(i int) {
+	if m.addtemporary_disabled_error_code != nil {
+		*m.addtemporary_disabled_error_code += i
+	} else {
+		m.addtemporary_disabled_error_code = &i
+	}
+}
+
+// AddedTemporaryDisabledErrorCode returns the value that was added to the "temporary_disabled_error_code" field in this mutation.
+func (m *ChannelMutation) AddedTemporaryDisabledErrorCode() (r int, exists bool) {
+	v := m.addtemporary_disabled_error_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearTemporaryDisabledErrorCode clears the value of the "temporary_disabled_error_code" field.
+func (m *ChannelMutation) ClearTemporaryDisabledErrorCode() {
+	m.temporary_disabled_error_code = nil
+	m.addtemporary_disabled_error_code = nil
+	m.clearedFields[channel.FieldTemporaryDisabledErrorCode] = struct{}{}
+}
+
+// TemporaryDisabledErrorCodeCleared returns if the "temporary_disabled_error_code" field was cleared in this mutation.
+func (m *ChannelMutation) TemporaryDisabledErrorCodeCleared() bool {
+	_, ok := m.clearedFields[channel.FieldTemporaryDisabledErrorCode]
+	return ok
+}
+
+// ResetTemporaryDisabledErrorCode resets all changes to the "temporary_disabled_error_code" field.
+func (m *ChannelMutation) ResetTemporaryDisabledErrorCode() {
+	m.temporary_disabled_error_code = nil
+	m.addtemporary_disabled_error_code = nil
+	delete(m.clearedFields, channel.FieldTemporaryDisabledErrorCode)
+}
+
+// SetTemporaryDisabledReason sets the "temporary_disabled_reason" field.
+func (m *ChannelMutation) SetTemporaryDisabledReason(s string) {
+	m.temporary_disabled_reason = &s
+}
+
+// TemporaryDisabledReason returns the value of the "temporary_disabled_reason" field in the mutation.
+func (m *ChannelMutation) TemporaryDisabledReason() (r string, exists bool) {
+	v := m.temporary_disabled_reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDisabledReason returns the old "temporary_disabled_reason" field's value of the Channel entity.
+// If the Channel object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMutation) OldTemporaryDisabledReason(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDisabledReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDisabledReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDisabledReason: %w", err)
+	}
+	return oldValue.TemporaryDisabledReason, nil
+}
+
+// ClearTemporaryDisabledReason clears the value of the "temporary_disabled_reason" field.
+func (m *ChannelMutation) ClearTemporaryDisabledReason() {
+	m.temporary_disabled_reason = nil
+	m.clearedFields[channel.FieldTemporaryDisabledReason] = struct{}{}
+}
+
+// TemporaryDisabledReasonCleared returns if the "temporary_disabled_reason" field was cleared in this mutation.
+func (m *ChannelMutation) TemporaryDisabledReasonCleared() bool {
+	_, ok := m.clearedFields[channel.FieldTemporaryDisabledReason]
+	return ok
+}
+
+// ResetTemporaryDisabledReason resets all changes to the "temporary_disabled_reason" field.
+func (m *ChannelMutation) ResetTemporaryDisabledReason() {
+	m.temporary_disabled_reason = nil
+	delete(m.clearedFields, channel.FieldTemporaryDisabledReason)
+}
+
 // SetRemark sets the "remark" field.
 func (m *ChannelMutation) SetRemark(s string) {
 	m.remark = &s
@@ -3503,7 +3675,7 @@ func (m *ChannelMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ChannelMutation) Fields() []string {
-	fields := make([]string, 0, 21)
+	fields := make([]string, 0, 24)
 	if m.created_at != nil {
 		fields = append(fields, channel.FieldCreatedAt)
 	}
@@ -3561,6 +3733,15 @@ func (m *ChannelMutation) Fields() []string {
 	if m.error_message != nil {
 		fields = append(fields, channel.FieldErrorMessage)
 	}
+	if m.temporary_disabled_until != nil {
+		fields = append(fields, channel.FieldTemporaryDisabledUntil)
+	}
+	if m.temporary_disabled_error_code != nil {
+		fields = append(fields, channel.FieldTemporaryDisabledErrorCode)
+	}
+	if m.temporary_disabled_reason != nil {
+		fields = append(fields, channel.FieldTemporaryDisabledReason)
+	}
 	if m.remark != nil {
 		fields = append(fields, channel.FieldRemark)
 	}
@@ -3613,6 +3794,12 @@ func (m *ChannelMutation) Field(name string) (ent.Value, bool) {
 		return m.OrderingWeight()
 	case channel.FieldErrorMessage:
 		return m.ErrorMessage()
+	case channel.FieldTemporaryDisabledUntil:
+		return m.TemporaryDisabledUntil()
+	case channel.FieldTemporaryDisabledErrorCode:
+		return m.TemporaryDisabledErrorCode()
+	case channel.FieldTemporaryDisabledReason:
+		return m.TemporaryDisabledReason()
 	case channel.FieldRemark:
 		return m.Remark()
 	case channel.FieldEndpoints:
@@ -3664,6 +3851,12 @@ func (m *ChannelMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldOrderingWeight(ctx)
 	case channel.FieldErrorMessage:
 		return m.OldErrorMessage(ctx)
+	case channel.FieldTemporaryDisabledUntil:
+		return m.OldTemporaryDisabledUntil(ctx)
+	case channel.FieldTemporaryDisabledErrorCode:
+		return m.OldTemporaryDisabledErrorCode(ctx)
+	case channel.FieldTemporaryDisabledReason:
+		return m.OldTemporaryDisabledReason(ctx)
 	case channel.FieldRemark:
 		return m.OldRemark(ctx)
 	case channel.FieldEndpoints:
@@ -3810,6 +4003,27 @@ func (m *ChannelMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetErrorMessage(v)
 		return nil
+	case channel.FieldTemporaryDisabledUntil:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDisabledUntil(v)
+		return nil
+	case channel.FieldTemporaryDisabledErrorCode:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDisabledErrorCode(v)
+		return nil
+	case channel.FieldTemporaryDisabledReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDisabledReason(v)
+		return nil
 	case channel.FieldRemark:
 		v, ok := value.(string)
 		if !ok {
@@ -3838,6 +4052,9 @@ func (m *ChannelMutation) AddedFields() []string {
 	if m.addordering_weight != nil {
 		fields = append(fields, channel.FieldOrderingWeight)
 	}
+	if m.addtemporary_disabled_error_code != nil {
+		fields = append(fields, channel.FieldTemporaryDisabledErrorCode)
+	}
 	return fields
 }
 
@@ -3850,6 +4067,8 @@ func (m *ChannelMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedDeletedAt()
 	case channel.FieldOrderingWeight:
 		return m.AddedOrderingWeight()
+	case channel.FieldTemporaryDisabledErrorCode:
+		return m.AddedTemporaryDisabledErrorCode()
 	}
 	return nil, false
 }
@@ -3872,6 +4091,13 @@ func (m *ChannelMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddOrderingWeight(v)
+		return nil
+	case channel.FieldTemporaryDisabledErrorCode:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTemporaryDisabledErrorCode(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Channel numeric field %s", name)
@@ -3904,6 +4130,15 @@ func (m *ChannelMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(channel.FieldErrorMessage) {
 		fields = append(fields, channel.FieldErrorMessage)
+	}
+	if m.FieldCleared(channel.FieldTemporaryDisabledUntil) {
+		fields = append(fields, channel.FieldTemporaryDisabledUntil)
+	}
+	if m.FieldCleared(channel.FieldTemporaryDisabledErrorCode) {
+		fields = append(fields, channel.FieldTemporaryDisabledErrorCode)
+	}
+	if m.FieldCleared(channel.FieldTemporaryDisabledReason) {
+		fields = append(fields, channel.FieldTemporaryDisabledReason)
 	}
 	if m.FieldCleared(channel.FieldRemark) {
 		fields = append(fields, channel.FieldRemark)
@@ -3948,6 +4183,15 @@ func (m *ChannelMutation) ClearField(name string) error {
 		return nil
 	case channel.FieldErrorMessage:
 		m.ClearErrorMessage()
+		return nil
+	case channel.FieldTemporaryDisabledUntil:
+		m.ClearTemporaryDisabledUntil()
+		return nil
+	case channel.FieldTemporaryDisabledErrorCode:
+		m.ClearTemporaryDisabledErrorCode()
+		return nil
+	case channel.FieldTemporaryDisabledReason:
+		m.ClearTemporaryDisabledReason()
 		return nil
 	case channel.FieldRemark:
 		m.ClearRemark()
@@ -4019,6 +4263,15 @@ func (m *ChannelMutation) ResetField(name string) error {
 		return nil
 	case channel.FieldErrorMessage:
 		m.ResetErrorMessage()
+		return nil
+	case channel.FieldTemporaryDisabledUntil:
+		m.ResetTemporaryDisabledUntil()
+		return nil
+	case channel.FieldTemporaryDisabledErrorCode:
+		m.ResetTemporaryDisabledErrorCode()
+		return nil
+	case channel.FieldTemporaryDisabledReason:
+		m.ResetTemporaryDisabledReason()
 		return nil
 	case channel.FieldRemark:
 		m.ResetRemark()

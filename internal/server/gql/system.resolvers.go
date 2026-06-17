@@ -414,6 +414,12 @@ func (r *queryResolver) RetryPolicy(ctx context.Context) (*biz.RetryPolicy, erro
 	return r.systemService.RetryPolicy(ctx)
 }
 
+// DefaultAutoDisableStatusRules is the resolver for the defaultAutoDisableStatusRules field.
+func (r *queryResolver) DefaultAutoDisableStatusRules(ctx context.Context) ([]*biz.AutoDisableStatusRule, error) {
+	rules := r.systemService.DefaultAutoDisableStatusRules(ctx)
+	return lo.ToSlicePtr(rules), nil
+}
+
 // WebhookNotifierConfig is the resolver for the webhookNotifierConfig field.
 func (r *queryResolver) WebhookNotifierConfig(ctx context.Context) (*biz.WebhookNotifierConfig, error) {
 	return r.systemService.WebhookNotifierConfig(ctx)

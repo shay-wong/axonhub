@@ -162,6 +162,7 @@ type ChatCompletionResult struct {
 func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, request *httpclient.Request) (ChatCompletionResult, error) {
 	// The context is system bypassed to allow the orchestrator to access the system settings.
 	ctx = authz.WithSystemBypass(ctx, "process-chat-completion")
+	ctx = contexts.EnsureContainer(ctx)
 
 	apiKey, _ := contexts.GetAPIKey(ctx)
 

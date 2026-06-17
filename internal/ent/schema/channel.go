@@ -145,6 +145,24 @@ func (Channel) Fields() []ent.Field {
 			Annotations(
 				entgql.Skip(entgql.SkipMutationCreateInput),
 			),
+		field.Time("temporary_disabled_until").
+			Optional().Nillable().
+			Comment("Temporary auto-disable expiry for channel availability").
+			Annotations(
+				entgql.Skip(entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput),
+			),
+		field.Int("temporary_disabled_error_code").
+			Optional().Nillable().
+			Comment("Error code that triggered temporary channel auto-disable").
+			Annotations(
+				entgql.Skip(entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput),
+			),
+		field.String("temporary_disabled_reason").
+			Optional().Nillable().
+			Comment("Reason that triggered temporary channel auto-disable").
+			Annotations(
+				entgql.Skip(entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput),
+			),
 		field.String("remark").
 			Optional().Nillable().
 			Comment("User-defined remark or note for the channel"),

@@ -42,7 +42,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { useChannels } from '../context/channels-context';
-import { useTestChannel, useUpdateChannel } from '../data/channels';
+import { useClearChannelTemporaryDisable, useTestChannel, useUpdateChannel } from '../data/channels';
 import { CHANNEL_CONFIGS, getProvider } from '../data/config_channels';
 import { Channel } from '../data/schema';
 import { ChannelHealthCell } from './channel-health-cell';
@@ -55,6 +55,18 @@ const MAX_WEIGHT = 100;
 
 const formatWeight = (value: number) => Number(value.toFixed(WEIGHT_PRECISION));
 const clampWeight = (value: number) => formatWeight(Math.min(MAX_WEIGHT, Math.max(MIN_WEIGHT, value)));
+
+function isChannelTemporarilyDisabled(channel: Channel): boolean {
+  if (!channel.temporaryDisabledUntil) return false;
+  const until = new Date(channel.temporaryDisabledUntil).getTime();
+  return Number.isFinite(until) && until > Date.now();
+}
+
+function getConfiguredAPIKeys(channel: Channel): string[] {
+  const keys = channel.credentials?.apiKeys?.filter((key) => key.trim().length > 0) ?? [];
+  if (keys.length > 0) return keys;
+  return channel.credentials?.apiKeyConfigs?.map((config) => config.key.trim()).filter((key) => key.length > 0) ?? [];
+}
 
 // Status Switch Cell Component to handle status toggle with confirmation dialog
 const StatusSwitchCell = memo(({ row }: { row: Row<Channel> }) => {
@@ -87,10 +99,12 @@ const ActionCell = memo(({ row }: { row: Row<Channel> }) => {
   const { setOpen, setCurrentRow } = useChannels();
   const { channelPermissions } = usePermissions();
   const testChannel = useTestChannel();
+  const clearTemporaryDisable = useClearChannelTemporaryDisable();
   const isArchived = channel.status === 'archived';
   const hasError = !!channel.errorMessage;
   const hasDisabledAPIKeys = channelPermissions.canWrite && (channel.disabledAPIKeys?.length ?? 0) > 0;
-  const apiKeysCount = channel.credentials?.apiKeys?.filter((key) => key.trim().length > 0).length ?? 0;
+  const isTemporarilyDisabled = channelPermissions.canWrite && isChannelTemporarilyDisabled(channel);
+  const apiKeysCount = getConfiguredAPIKeys(channel).length;
   const hasMultipleAPIKeys = channelPermissions.canWrite && apiKeysCount > 1;
 
   const handleDefaultTest = async () => {
@@ -238,6 +252,22 @@ const ActionCell = memo(({ row }: { row: Row<Channel> }) => {
               {t('channels.actions.disabledAPIKeys', { count: channel.disabledAPIKeys?.length ?? 0 })}
             </DropdownMenuItem>
           )}
+          {isTemporarilyDisabled && (
+            <DropdownMenuItem
+              onClick={() => {
+                clearTemporaryDisable.mutate({ channelID: channel.id });
+              }}
+              className='text-orange-500!'
+              disabled={clearTemporaryDisable.isPending}
+            >
+              {clearTemporaryDisable.isPending ? (
+                <IconLoader2 size={16} className='mr-2 animate-spin' />
+              ) : (
+                <IconHistory size={16} className='mr-2' />
+              )}
+              {t('channels.actions.clearTemporaryDisable')}
+            </DropdownMenuItem>
+          )}
           {hasError && (
             <DropdownMenuItem
               onClick={() => {
@@ -326,6 +356,7 @@ const NameCell = memo(({ row }: { row: Row<Channel> }) => {
   const hasError = !!channel.errorMessage;
   const disabledKeysCount = channel.disabledAPIKeys?.length ?? 0;
   const hasDisabledKeys = disabledKeysCount > 0;
+  const isTemporarilyDisabled = isChannelTemporarilyDisabled(channel);
   const websiteURL = getChannelWebsiteURL(channel.baseURL);
 
   const nameElement = websiteURL ? (
@@ -346,7 +377,8 @@ const NameCell = memo(({ row }: { row: Row<Channel> }) => {
     <div className='flex justify-center'>
       <div className='flex max-w-56 items-center gap-2'>
         {hasError && <IconAlertTriangle className='text-destructive h-4 w-4 shrink-0' />}
-        {!hasError && hasDisabledKeys && <IconKeyOff className='h-4 w-4 shrink-0 text-amber-500' />}
+        {!hasError && isTemporarilyDisabled && <IconHistory className='h-4 w-4 shrink-0 text-orange-500' />}
+        {!hasError && !isTemporarilyDisabled && hasDisabledKeys && <IconKeyOff className='h-4 w-4 shrink-0 text-amber-500' />}
         {nameElement}
       </div>
     </div>
@@ -363,6 +395,31 @@ const NameCell = memo(({ row }: { row: Row<Channel> }) => {
                 defaultValue: channel.errorMessage,
               })}
             </p>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (isTemporarilyDisabled) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{content}</TooltipTrigger>
+        <TooltipContent>
+          <div className='space-y-1 text-sm text-orange-500'>
+            <p>{t('channels.temporaryDisable.tooltip')}</p>
+            {channel.temporaryDisabledUntil && (
+              <p className='text-muted-foreground'>
+                {t('channels.temporaryDisable.until', {
+                  time: format(new Date(channel.temporaryDisabledUntil), 'yyyy-MM-dd HH:mm:ss'),
+                })}
+              </p>
+            )}
+            {channel.temporaryDisabledErrorCode && (
+              <p className='text-muted-foreground'>
+                {t('channels.temporaryDisable.errorCode', { code: channel.temporaryDisabledErrorCode })}
+              </p>
+            )}
           </div>
         </TooltipContent>
       </Tooltip>

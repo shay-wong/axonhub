@@ -11,12 +11,48 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { useRetryPolicy, useUpdateRetryPolicy, type RetryPolicyInput } from '../data/system';
+import {
+  useRetryPolicy,
+  useUpdateRetryPolicy,
+  type AutoDisableChannelInput,
+  type AutoDisableChannelStatusInput,
+  type RetryPolicyInput,
+} from '../data/system';
+
+type AutoDisablePolicyKey = 'channelAutoDisable' | 'apiKeyAutoDisable';
+type AutoDisableRuleField = 'status' | 'times' | 'action' | 'durationMinutes' | 'useRetryAfter';
+
+const DEFAULT_AUTO_DISABLE_RULE: AutoDisableChannelStatusInput = {
+  status: 500,
+  times: 3,
+  action: 'temporary',
+  durationMinutes: 5,
+  useRetryAfter: false,
+};
+
+function cloneStatusRules(rules?: AutoDisableChannelStatusInput[] | null): AutoDisableChannelStatusInput[] {
+  return (rules || []).map((rule) => ({
+    status: rule.status,
+    times: rule.times,
+    action: rule.action || 'permanent',
+    durationMinutes: rule.durationMinutes ?? (rule.action === 'temporary' ? 5 : null),
+    useRetryAfter: rule.status === 429 ? Boolean(rule.useRetryAfter) : false,
+  }));
+}
+
+function normalizePolicyForForm(policy?: AutoDisableChannelInput | null): AutoDisableChannelInput {
+  return {
+    enabled: policy?.enabled || false,
+    statuses: cloneStatusRules(policy?.statuses),
+  };
+}
 
 export function RetrySettings() {
   const { t } = useTranslation();
-  const { data: retryPolicy, isLoading } = useRetryPolicy();
+  const { data: retryPolicyData, isLoading } = useRetryPolicy();
   const updateRetryPolicy = useUpdateRetryPolicy();
+  const retryPolicy = retryPolicyData?.retryPolicy;
+  const defaultAutoDisableStatusRules = retryPolicyData?.defaultAutoDisableStatusRules ?? [];
 
   const [formData, setFormData] = useState<RetryPolicyInput>({
     enabled: true,
@@ -32,6 +68,14 @@ export function RetrySettings() {
       customMessage: '',
     },
     autoDisableChannel: {
+      enabled: false,
+      statuses: [],
+    },
+    channelAutoDisable: {
+      enabled: false,
+      statuses: [],
+    },
+    apiKeyAutoDisable: {
       enabled: false,
       statuses: [],
     },
@@ -52,10 +96,9 @@ export function RetrySettings() {
           mode: retryPolicy.upstreamErrorPolicy?.mode || 'passthrough',
           customMessage: retryPolicy.upstreamErrorPolicy?.customMessage || '',
         },
-        autoDisableChannel: {
-          enabled: retryPolicy.autoDisableChannel?.enabled || false,
-          statuses: retryPolicy.autoDisableChannel?.statuses || [],
-        },
+        autoDisableChannel: normalizePolicyForForm(retryPolicy.autoDisableChannel),
+        channelAutoDisable: normalizePolicyForForm(retryPolicy.channelAutoDisable),
+        apiKeyAutoDisable: normalizePolicyForForm(retryPolicy.apiKeyAutoDisable),
       });
     }
   }, [retryPolicy]);
@@ -77,52 +120,241 @@ export function RetrySettings() {
     }));
   }, []);
 
-  const handleAutoDisableChannelChange = useCallback((field: 'enabled', value: boolean) => {
-    setFormData((prev) => ({
-      ...prev,
-      autoDisableChannel: {
-        ...prev.autoDisableChannel,
-        [field]: value,
-      },
-    }));
-  }, []);
+  const updateAutoDisablePolicy = useCallback(
+    (policyKey: AutoDisablePolicyKey, updater: (policy: AutoDisableChannelInput) => AutoDisableChannelInput) => {
+      setFormData((prev) => {
+        const nextPolicy = updater(normalizePolicyForForm(prev[policyKey]));
+        return {
+          ...prev,
+          [policyKey]: nextPolicy,
+        };
+      });
+    },
+    []
+  );
 
-  const handleStatusChange = useCallback((index: number, field: 'status' | 'times', value: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      autoDisableChannel: {
-        ...prev.autoDisableChannel,
-        statuses: prev.autoDisableChannel?.statuses?.map((s, i) => (i === index ? { ...s, [field]: value } : s)) || [],
-      },
-    }));
-  }, []);
+  const handleAutoDisableEnabledChange = useCallback(
+    (policyKey: AutoDisablePolicyKey, enabled: boolean) => {
+      updateAutoDisablePolicy(policyKey, (policy) => ({
+        ...policy,
+        enabled,
+        statuses:
+          enabled && (policy.statuses?.length || 0) === 0
+            ? cloneStatusRules(defaultAutoDisableStatusRules)
+            : policy.statuses || [],
+      }));
+    },
+    [defaultAutoDisableStatusRules, updateAutoDisablePolicy]
+  );
 
-  const addStatus = useCallback(() => {
-    setFormData((prev) => ({
-      ...prev,
-      autoDisableChannel: {
-        ...prev.autoDisableChannel,
-        statuses: [...(prev.autoDisableChannel?.statuses || []), { status: 500, times: 3 }],
-      },
-    }));
-  }, []);
+  const handleStatusChange = useCallback(
+    (policyKey: AutoDisablePolicyKey, index: number, field: AutoDisableRuleField, value: string | number | boolean | null) => {
+      updateAutoDisablePolicy(policyKey, (policy) => ({
+        ...policy,
+        statuses: (policy.statuses || []).map((rule, i) => {
+          if (i !== index) return rule;
 
-  const removeStatus = useCallback((index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      autoDisableChannel: {
-        ...prev.autoDisableChannel,
-        statuses: prev.autoDisableChannel?.statuses?.filter((_, i) => i !== index) || [],
-      },
-    }));
-  }, []);
+          const nextRule = { ...rule };
+          switch (field) {
+            case 'status':
+              nextRule.status = typeof value === 'number' ? value : 0;
+              if (nextRule.status !== 429) {
+                nextRule.useRetryAfter = false;
+              }
+              break;
+            case 'times':
+              nextRule.times = typeof value === 'number' ? value : 1;
+              break;
+            case 'action':
+              nextRule.action = typeof value === 'string' ? value : 'permanent';
+              if (nextRule.action !== 'temporary') {
+                nextRule.durationMinutes = null;
+              } else if (!nextRule.durationMinutes) {
+                nextRule.durationMinutes = 5;
+              }
+              break;
+            case 'durationMinutes':
+              nextRule.durationMinutes = typeof value === 'number' ? value : null;
+              break;
+            case 'useRetryAfter':
+              nextRule.useRetryAfter = Boolean(value);
+              break;
+          }
+          return nextRule;
+        }),
+      }));
+    },
+    [updateAutoDisablePolicy]
+  );
+
+  const addStatus = useCallback(
+    (policyKey: AutoDisablePolicyKey) => {
+      updateAutoDisablePolicy(policyKey, (policy) => ({
+        ...policy,
+        statuses: [...(policy.statuses || []), { ...DEFAULT_AUTO_DISABLE_RULE }],
+      }));
+    },
+    [updateAutoDisablePolicy]
+  );
+
+  const removeStatus = useCallback(
+    (policyKey: AutoDisablePolicyKey, index: number) => {
+      updateAutoDisablePolicy(policyKey, (policy) => ({
+        ...policy,
+        statuses: policy.statuses?.filter((_, i) => i !== index) || [],
+      }));
+    },
+    [updateAutoDisablePolicy]
+  );
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      await updateRetryPolicy.mutateAsync(formData);
+      const channelAutoDisable = normalizePolicyForForm(formData.channelAutoDisable);
+      await updateRetryPolicy.mutateAsync({
+        ...formData,
+        channelAutoDisable,
+        apiKeyAutoDisable: normalizePolicyForForm(formData.apiKeyAutoDisable),
+        autoDisableChannel: channelAutoDisable,
+      });
     },
     [updateRetryPolicy, formData]
+  );
+
+  const renderAutoDisablePolicy = useCallback(
+    (policyKey: AutoDisablePolicyKey) => {
+      const policy = normalizePolicyForForm(formData[policyKey]);
+      const rules = policy.statuses || [];
+      const prefix = `system.retry.autoDisable.${policyKey}`;
+
+      return (
+        <div className='space-y-4 rounded-md border p-4'>
+          <div className='flex items-center justify-between gap-4'>
+            <div className='space-y-0.5'>
+              <Label htmlFor={`auto-disable-${policyKey}`} className='text-base'>
+                {t(`${prefix}.label`)}
+              </Label>
+              <div className='text-muted-foreground text-sm'>{t(`${prefix}.description`)}</div>
+            </div>
+            <Switch
+              id={`auto-disable-${policyKey}`}
+              checked={policy.enabled || false}
+              onCheckedChange={(checked) => handleAutoDisableEnabledChange(policyKey, checked)}
+            />
+          </div>
+
+          {policy.enabled && (
+            <div className='space-y-3'>
+              <div className='flex items-center justify-between gap-3'>
+                <Label className='text-sm font-medium'>{t('system.retry.autoDisable.statuses.label')}</Label>
+                <Button type='button' variant='outline' size='sm' onClick={() => addStatus(policyKey)}>
+                  <Plus className='mr-1 h-4 w-4' />
+                  {t('system.retry.autoDisable.statuses.add')}
+                </Button>
+              </div>
+
+              {rules.length > 0 ? (
+                <div className='space-y-2'>
+                  {rules.map((rule, index) => {
+                    const action = rule.action || 'permanent';
+                    const status = Number(rule.status) || 0;
+                    const showRetryAfter = action === 'temporary' && status === 429;
+
+                    return (
+                      <div key={`${policyKey}-${index}`} className='space-y-3 rounded-md border p-3'>
+                        <div className='grid gap-3 md:grid-cols-[96px_96px_160px_1fr_auto] md:items-end'>
+                          <div className='space-y-1'>
+                            <Label className='text-xs'>{t('system.retry.autoDisable.statuses.status')}</Label>
+                            <Input
+                              type='number'
+                              value={rule.status}
+                              onChange={(e) => handleStatusChange(policyKey, index, 'status', parseInt(e.target.value) || 0)}
+                              min='400'
+                              max='599'
+                            />
+                          </div>
+
+                          <div className='space-y-1'>
+                            <Label className='text-xs'>{t('system.retry.autoDisable.statuses.times')}</Label>
+                            <Input
+                              type='number'
+                              value={rule.times}
+                              onChange={(e) => handleStatusChange(policyKey, index, 'times', parseInt(e.target.value) || 1)}
+                              min='1'
+                              max='100'
+                            />
+                          </div>
+
+                          <div className='space-y-1'>
+                            <Label className='text-xs'>{t('system.retry.autoDisable.statuses.action')}</Label>
+                            <Select
+                              value={action}
+                              onValueChange={(value) => handleStatusChange(policyKey, index, 'action', value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value='none'>{t('system.retry.autoDisable.actions.none')}</SelectItem>
+                                <SelectItem value='permanent'>{t('system.retry.autoDisable.actions.permanent')}</SelectItem>
+                                <SelectItem value='temporary'>{t('system.retry.autoDisable.actions.temporary')}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className='space-y-1'>
+                            <Label className='text-xs'>{t('system.retry.autoDisable.statuses.duration')}</Label>
+                            <div className='flex items-center gap-2'>
+                              <Input
+                                type='number'
+                                value={action === 'temporary' ? rule.durationMinutes || 5 : ''}
+                                onChange={(e) =>
+                                  handleStatusChange(policyKey, index, 'durationMinutes', parseInt(e.target.value) || 1)
+                                }
+                                min='1'
+                                max='10080'
+                                disabled={action !== 'temporary'}
+                                className='w-28'
+                              />
+                              <span className='text-muted-foreground text-sm'>{t('system.retry.autoDisable.statuses.minutes')}</span>
+                            </div>
+                          </div>
+
+                          <Button type='button' variant='ghost' size='icon' onClick={() => removeStatus(policyKey, index)}>
+                            <Trash2 className='h-4 w-4' />
+                          </Button>
+                        </div>
+
+                        {action === 'temporary' && (
+                          <div className='flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2'>
+                            <div className='space-y-0.5'>
+                              <Label className='text-xs'>{t('system.retry.autoDisable.statuses.useRetryAfter')}</Label>
+                              <p className='text-muted-foreground text-xs'>
+                                {t('system.retry.autoDisable.statuses.useRetryAfterHint')}
+                              </p>
+                            </div>
+                            <Switch
+                              checked={showRetryAfter && Boolean(rule.useRetryAfter)}
+                              disabled={status !== 429}
+                              onCheckedChange={(checked) => handleStatusChange(policyKey, index, 'useRetryAfter', checked)}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className='rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200'>
+                  {t('system.retry.autoDisable.statuses.emptyEnabled')}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    },
+    [addStatus, formData, handleAutoDisableEnabledChange, handleStatusChange, removeStatus, t]
   );
 
   if (isLoading) {
@@ -322,66 +554,14 @@ export function RetrySettings() {
 
               <Separator />
 
-              {/* Auto Disable Channel */}
+              {/* Auto Disable */}
               <div className='space-y-4'>
-                <div className='flex items-center justify-between'>
-                  <div className='space-y-0.5'>
-                    <Label htmlFor='auto-disable-channel' className='text-base'>
-                      {t('system.retry.autoDisableChannel.label')}
-                    </Label>
-                    <div className='text-muted-foreground text-sm'>{t('system.retry.autoDisableChannel.description')}</div>
-                  </div>
-                  <Switch
-                    id='auto-disable-channel'
-                    checked={formData.autoDisableChannel?.enabled || false}
-                    onCheckedChange={(checked) => handleAutoDisableChannelChange('enabled', checked)}
-                  />
+                <div className='space-y-1'>
+                  <h3 className='text-base font-medium'>{t('system.retry.autoDisable.title')}</h3>
+                  <p className='text-muted-foreground text-sm'>{t('system.retry.autoDisable.description')}</p>
                 </div>
-
-                {formData.autoDisableChannel?.enabled && (
-                  <div className='space-y-3'>
-                    <div className='flex items-center justify-between'>
-                      <Label className='text-sm font-medium'>{t('system.retry.autoDisableChannel.statuses.label')}</Label>
-                      <Button type='button' variant='outline' size='sm' onClick={addStatus}>
-                        <Plus className='mr-1 h-4 w-4' />
-                        {t('system.retry.autoDisableChannel.statuses.add')}
-                      </Button>
-                    </div>
-
-                    {formData.autoDisableChannel?.statuses && formData.autoDisableChannel.statuses.length > 0 ? (
-                      <div className='space-y-2'>
-                        {formData.autoDisableChannel.statuses.map((statusItem, index) => (
-                          <div key={index} className='flex items-center space-x-2'>
-                            <Input
-                              type='number'
-                              placeholder={t('system.retry.autoDisableChannel.statuses.statusPlaceholder')}
-                              value={statusItem.status}
-                              onChange={(e) => handleStatusChange(index, 'status', parseInt(e.target.value) || 0)}
-                              className='w-24'
-                              min='400'
-                              max='599'
-                            />
-                            <Input
-                              type='number'
-                              placeholder={t('system.retry.autoDisableChannel.statuses.timesPlaceholder')}
-                              value={statusItem.times}
-                              onChange={(e) => handleStatusChange(index, 'times', parseInt(e.target.value) || 0)}
-                              className='w-24'
-                              min='1'
-                              max='100'
-                            />
-                            <span className='text-muted-foreground text-sm'>{t('system.retry.autoDisableChannel.statuses.times')}</span>
-                            <Button type='button' variant='ghost' size='icon' onClick={() => removeStatus(index)}>
-                              <Trash2 className='h-4 w-4' />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className='text-muted-foreground text-sm'>{t('system.retry.autoDisableChannel.statuses.empty')}</div>
-                    )}
-                  </div>
-                )}
+                {renderAutoDisablePolicy('channelAutoDisable')}
+                {renderAutoDisablePolicy('apiKeyAutoDisable')}
               </div>
             </div>
           )}

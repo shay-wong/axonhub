@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/looplj/axonhub/internal/authz"
@@ -345,6 +346,269 @@ func TestChannelService_checkAndHandleChannelError(t *testing.T) {
 	}
 }
 
+func TestChannelService_checkAndHandleAPIKeyError_NoneActionResetsCountsWithoutDisabling(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	svc := newTestChannelService(client)
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "none-action-channel", []string{"key1"})
+	policy := &RetryPolicy{
+		APIKeyAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 529, Times: 1, Action: DisableActionNone},
+			},
+		},
+	}
+
+	result := svc.checkAndHandleAPIKeyError(ctx, &PerformanceRecord{
+		ChannelID:          ch.ID,
+		APIKey:             "key1",
+		ResponseStatusCode: 529,
+		Success:            false,
+	}, policy)
+	require.True(t, result)
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Empty(t, updatedCh.DisabledAPIKeys)
+	require.Equal(t, channel.StatusEnabled, updatedCh.Status)
+
+	svc.apiKeyErrorCountsLock.Lock()
+	_, exists := svc.apiKeyErrorCounts[ch.ID]["key1"]
+	svc.apiKeyErrorCountsLock.Unlock()
+	require.False(t, exists)
+}
+
+func TestChannelService_checkAndHandleAPIKeyError_TemporaryUsesRetryAfterDuration(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	svc := newTestChannelService(client)
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "retry-after-key-channel", []string{"key1", "key2"})
+	retryAfter := 2 * time.Minute
+	policy := &RetryPolicy{
+		APIKeyAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 429, Times: 1, Action: DisableActionTemporary, UseRetryAfter: lo.ToPtr(true)},
+			},
+		},
+	}
+
+	start := time.Now()
+	result := svc.checkAndHandleAPIKeyError(ctx, &PerformanceRecord{
+		ChannelID:          ch.ID,
+		APIKey:             "key1",
+		ResponseStatusCode: 429,
+		RetryAfterDuration: &retryAfter,
+		Success:            false,
+	}, policy)
+	require.True(t, result)
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusEnabled, updatedCh.Status)
+	require.Len(t, updatedCh.DisabledAPIKeys, 1)
+	require.Equal(t, DisableActionTemporary, updatedCh.DisabledAPIKeys[0].DisableAction)
+	require.NotNil(t, updatedCh.DisabledAPIKeys[0].DisabledUntil)
+	require.WithinDuration(t, start.Add(retryAfter), *updatedCh.DisabledAPIKeys[0].DisabledUntil, 5*time.Second)
+}
+
+func TestChannelService_checkAndHandleAPIKeyError_TemporaryRetryAfterFallsBackToDefaultDuration(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	svc := newTestChannelService(client)
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "fallback-key-channel", []string{"key1", "key2"})
+	policy := &RetryPolicy{
+		APIKeyAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 429, Times: 1, Action: DisableActionTemporary, UseRetryAfter: lo.ToPtr(true)},
+			},
+		},
+	}
+
+	start := time.Now()
+	result := svc.checkAndHandleAPIKeyError(ctx, &PerformanceRecord{
+		ChannelID:          ch.ID,
+		APIKey:             "key1",
+		ResponseStatusCode: 429,
+		Success:            false,
+	}, policy)
+	require.True(t, result)
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Len(t, updatedCh.DisabledAPIKeys, 1)
+	require.NotNil(t, updatedCh.DisabledAPIKeys[0].DisabledUntil)
+	require.WithinDuration(t, start.Add(time.Duration(defaultAutoDisableFallbackDurationMinutes)*time.Minute), *updatedCh.DisabledAPIKeys[0].DisabledUntil, 5*time.Second)
+}
+
+func TestChannelService_checkAndHandleChannelError_TemporaryDisablesWithoutChangingStatus(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	svc := newTestChannelService(client)
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "temporary-channel", []string{})
+	policy := &RetryPolicy{
+		ChannelAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 503, Times: 1, Action: DisableActionTemporary, DurationMinutes: lo.ToPtr(3)},
+			},
+		},
+	}
+
+	start := time.Now()
+	result := svc.checkAndHandleChannelError(ctx, &PerformanceRecord{
+		ChannelID:          ch.ID,
+		ResponseStatusCode: 503,
+		Success:            false,
+	}, policy)
+	require.True(t, result)
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusEnabled, updatedCh.Status)
+	require.NotNil(t, updatedCh.TemporaryDisabledUntil)
+	require.Equal(t, 503, *updatedCh.TemporaryDisabledErrorCode)
+	require.NotEmpty(t, *updatedCh.TemporaryDisabledReason)
+	require.WithinDuration(t, start.Add(3*time.Minute), *updatedCh.TemporaryDisabledUntil, 5*time.Second)
+}
+
+func TestChannelService_AutoDisableLegacyPolicyAPIKeyShortCircuitsChannelFallback(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	svc := newTestChannelService(client)
+	require.NoError(t, svc.SystemService.SetRetryPolicy(ctx, &RetryPolicy{
+		AutoDisableChannel: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 401, Times: 1},
+			},
+		},
+	}))
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "legacy-short-circuit", []string{"key1", "key2"})
+
+	svc.RecordPerformance(ctx, &PerformanceRecord{
+		ChannelID:          ch.ID,
+		APIKey:             "key1",
+		ResponseStatusCode: 401,
+		Success:            false,
+		RequestCompleted:   true,
+		EndTime:            time.Now(),
+	})
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusEnabled, updatedCh.Status)
+	require.Len(t, updatedCh.DisabledAPIKeys, 1)
+}
+
+func TestChannelService_RecordPerformance_APIKeyPolicyMissFallsBackToChannelAutoDisable(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	svc := newTestChannelService(client)
+	require.NoError(t, svc.SystemService.SetRetryPolicy(ctx, &RetryPolicy{
+		ChannelAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 503, Times: 1, Action: DisableActionPermanent},
+			},
+		},
+		APIKeyAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 429, Times: 1, Action: DisableActionPermanent},
+			},
+		},
+	}))
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "api-key-miss-channel-fallback", []string{"key1", "key2"})
+
+	svc.RecordPerformance(ctx, &PerformanceRecord{
+		ChannelID:          ch.ID,
+		APIKey:             "key1",
+		ResponseStatusCode: 503,
+		Success:            false,
+		RequestCompleted:   true,
+		EndTime:            time.Now(),
+	})
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusDisabled, updatedCh.Status)
+	require.Empty(t, updatedCh.DisabledAPIKeys)
+}
+
+func TestChannelService_RecordPerformance_APIKeyPolicyHitShortCircuitsChannelAutoDisable(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	svc := newTestChannelService(client)
+	require.NoError(t, svc.SystemService.SetRetryPolicy(ctx, &RetryPolicy{
+		ChannelAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 503, Times: 1, Action: DisableActionPermanent},
+			},
+		},
+		APIKeyAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 503, Times: 1, Action: DisableActionPermanent},
+			},
+		},
+	}))
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "api-key-hit-short-circuit", []string{"key1", "key2"})
+
+	svc.RecordPerformance(ctx, &PerformanceRecord{
+		ChannelID:          ch.ID,
+		APIKey:             "key1",
+		ResponseStatusCode: 503,
+		Success:            false,
+		RequestCompleted:   true,
+		EndTime:            time.Now(),
+	})
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusEnabled, updatedCh.Status)
+	require.Len(t, updatedCh.DisabledAPIKeys, 1)
+	require.Equal(t, "key1", updatedCh.DisabledAPIKeys[0].Key)
+}
+
 func TestChannelService_markChannelUnavailable_RefreshesStaleLocalCacheWhenAlreadyDisabled(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
 	defer client.Close()
@@ -370,6 +634,108 @@ func TestChannelService_markChannelUnavailable_RefreshesStaleLocalCacheWhenAlrea
 	svc.markChannelUnavailable(ctx, ch.ID, 401, 2, 2)
 
 	require.Nil(t, svc.GetEnabledChannel(ch.ID), "local cache should be refreshed even when DB row was already disabled")
+}
+
+func TestChannelService_reloadEnabledChannels_SkipsTemporaryAPIKeyExhaustedChannelBeforeBuild(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	svc := newTestChannelService(client)
+	defer svc.enabledChannelsCache.Stop()
+
+	disabledUntil := time.Now().Add(time.Hour)
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "temporary-key-exhausted-cache", []string{"key1"})
+	_, err := client.Channel.UpdateOneID(ch.ID).
+		SetDisabledAPIKeys([]objects.DisabledAPIKey{
+			{
+				Key:           "key1",
+				DisabledAt:    time.Now(),
+				DisabledUntil: &disabledUntil,
+				DisableAction: DisableActionTemporary,
+				ErrorCode:     429,
+				Reason:        "temporary test disable",
+			},
+		}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	require.NotPanics(t, func() {
+		require.NoError(t, svc.enabledChannelsCache.Load(ctx, true))
+	})
+	require.Nil(t, svc.GetEnabledChannel(ch.ID), "temporary API key exhaustion should be filtered before provider construction")
+}
+
+func TestChannelService_reloadEnabledChannels_RestoresTemporarilyDisabledChannelAfterExpiryWithoutForce(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	svc := newTestChannelService(client)
+	defer svc.enabledChannelsCache.Stop()
+
+	disabledUntil := time.Now().Add(25 * time.Millisecond)
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "temporary-channel-restore", []string{"key1"})
+	_, err := client.Channel.UpdateOneID(ch.ID).
+		SetTemporaryDisabledUntil(disabledUntil).
+		Save(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, svc.enabledChannelsCache.Load(ctx, true))
+	require.Nil(t, svc.GetEnabledChannel(ch.ID), "precondition: temporarily disabled channel should be filtered")
+
+	require.Eventually(t, func() bool {
+		if err := svc.enabledChannelsCache.Load(ctx, false); err != nil {
+			return false
+		}
+
+		return svc.GetEnabledChannel(ch.ID) != nil
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestChannelService_reloadEnabledChannels_RestoresTemporaryAPIKeyExhaustedChannelAfterExpiryWithoutForce(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	svc := newTestChannelService(client)
+	defer svc.enabledChannelsCache.Stop()
+
+	disabledUntil := time.Now().Add(25 * time.Millisecond)
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "temporary-key-restore", []string{"key1"})
+	_, err := client.Channel.UpdateOneID(ch.ID).
+		SetDisabledAPIKeys([]objects.DisabledAPIKey{
+			{
+				Key:           "key1",
+				DisabledAt:    time.Now(),
+				DisabledUntil: &disabledUntil,
+				DisableAction: DisableActionTemporary,
+				ErrorCode:     429,
+				Reason:        "temporary test disable",
+			},
+		}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, svc.enabledChannelsCache.Load(ctx, true))
+	require.Nil(t, svc.GetEnabledChannel(ch.ID), "precondition: exhausted channel should be filtered")
+
+	require.Eventually(t, func() bool {
+		if err := svc.enabledChannelsCache.Load(ctx, false); err != nil {
+			return false
+		}
+
+		return svc.GetEnabledChannel(ch.ID) != nil
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestChannelService_DisableAllAPIKeysDisablesChannel(t *testing.T) {

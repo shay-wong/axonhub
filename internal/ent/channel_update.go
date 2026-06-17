@@ -327,6 +327,73 @@ func (_u *ChannelUpdate) ClearErrorMessage() *ChannelUpdate {
 	return _u
 }
 
+// SetTemporaryDisabledUntil sets the "temporary_disabled_until" field.
+func (_u *ChannelUpdate) SetTemporaryDisabledUntil(v time.Time) *ChannelUpdate {
+	_u.mutation.SetTemporaryDisabledUntil(v)
+	return _u
+}
+
+// SetNillableTemporaryDisabledUntil sets the "temporary_disabled_until" field if the given value is not nil.
+func (_u *ChannelUpdate) SetNillableTemporaryDisabledUntil(v *time.Time) *ChannelUpdate {
+	if v != nil {
+		_u.SetTemporaryDisabledUntil(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDisabledUntil clears the value of the "temporary_disabled_until" field.
+func (_u *ChannelUpdate) ClearTemporaryDisabledUntil() *ChannelUpdate {
+	_u.mutation.ClearTemporaryDisabledUntil()
+	return _u
+}
+
+// SetTemporaryDisabledErrorCode sets the "temporary_disabled_error_code" field.
+func (_u *ChannelUpdate) SetTemporaryDisabledErrorCode(v int) *ChannelUpdate {
+	_u.mutation.ResetTemporaryDisabledErrorCode()
+	_u.mutation.SetTemporaryDisabledErrorCode(v)
+	return _u
+}
+
+// SetNillableTemporaryDisabledErrorCode sets the "temporary_disabled_error_code" field if the given value is not nil.
+func (_u *ChannelUpdate) SetNillableTemporaryDisabledErrorCode(v *int) *ChannelUpdate {
+	if v != nil {
+		_u.SetTemporaryDisabledErrorCode(*v)
+	}
+	return _u
+}
+
+// AddTemporaryDisabledErrorCode adds value to the "temporary_disabled_error_code" field.
+func (_u *ChannelUpdate) AddTemporaryDisabledErrorCode(v int) *ChannelUpdate {
+	_u.mutation.AddTemporaryDisabledErrorCode(v)
+	return _u
+}
+
+// ClearTemporaryDisabledErrorCode clears the value of the "temporary_disabled_error_code" field.
+func (_u *ChannelUpdate) ClearTemporaryDisabledErrorCode() *ChannelUpdate {
+	_u.mutation.ClearTemporaryDisabledErrorCode()
+	return _u
+}
+
+// SetTemporaryDisabledReason sets the "temporary_disabled_reason" field.
+func (_u *ChannelUpdate) SetTemporaryDisabledReason(v string) *ChannelUpdate {
+	_u.mutation.SetTemporaryDisabledReason(v)
+	return _u
+}
+
+// SetNillableTemporaryDisabledReason sets the "temporary_disabled_reason" field if the given value is not nil.
+func (_u *ChannelUpdate) SetNillableTemporaryDisabledReason(v *string) *ChannelUpdate {
+	if v != nil {
+		_u.SetTemporaryDisabledReason(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDisabledReason clears the value of the "temporary_disabled_reason" field.
+func (_u *ChannelUpdate) ClearTemporaryDisabledReason() *ChannelUpdate {
+	_u.mutation.ClearTemporaryDisabledReason()
+	return _u
+}
+
 // SetRemark sets the "remark" field.
 func (_u *ChannelUpdate) SetRemark(v string) *ChannelUpdate {
 	_u.mutation.SetRemark(v)
@@ -753,6 +820,27 @@ func (_u *ChannelUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.ErrorMessageCleared() {
 		_spec.ClearField(channel.FieldErrorMessage, field.TypeString)
+	}
+	if value, ok := _u.mutation.TemporaryDisabledUntil(); ok {
+		_spec.SetField(channel.FieldTemporaryDisabledUntil, field.TypeTime, value)
+	}
+	if _u.mutation.TemporaryDisabledUntilCleared() {
+		_spec.ClearField(channel.FieldTemporaryDisabledUntil, field.TypeTime)
+	}
+	if value, ok := _u.mutation.TemporaryDisabledErrorCode(); ok {
+		_spec.SetField(channel.FieldTemporaryDisabledErrorCode, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedTemporaryDisabledErrorCode(); ok {
+		_spec.AddField(channel.FieldTemporaryDisabledErrorCode, field.TypeInt, value)
+	}
+	if _u.mutation.TemporaryDisabledErrorCodeCleared() {
+		_spec.ClearField(channel.FieldTemporaryDisabledErrorCode, field.TypeInt)
+	}
+	if value, ok := _u.mutation.TemporaryDisabledReason(); ok {
+		_spec.SetField(channel.FieldTemporaryDisabledReason, field.TypeString, value)
+	}
+	if _u.mutation.TemporaryDisabledReasonCleared() {
+		_spec.ClearField(channel.FieldTemporaryDisabledReason, field.TypeString)
 	}
 	if value, ok := _u.mutation.Remark(); ok {
 		_spec.SetField(channel.FieldRemark, field.TypeString, value)
@@ -1337,6 +1425,73 @@ func (_u *ChannelUpdateOne) ClearErrorMessage() *ChannelUpdateOne {
 	return _u
 }
 
+// SetTemporaryDisabledUntil sets the "temporary_disabled_until" field.
+func (_u *ChannelUpdateOne) SetTemporaryDisabledUntil(v time.Time) *ChannelUpdateOne {
+	_u.mutation.SetTemporaryDisabledUntil(v)
+	return _u
+}
+
+// SetNillableTemporaryDisabledUntil sets the "temporary_disabled_until" field if the given value is not nil.
+func (_u *ChannelUpdateOne) SetNillableTemporaryDisabledUntil(v *time.Time) *ChannelUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDisabledUntil(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDisabledUntil clears the value of the "temporary_disabled_until" field.
+func (_u *ChannelUpdateOne) ClearTemporaryDisabledUntil() *ChannelUpdateOne {
+	_u.mutation.ClearTemporaryDisabledUntil()
+	return _u
+}
+
+// SetTemporaryDisabledErrorCode sets the "temporary_disabled_error_code" field.
+func (_u *ChannelUpdateOne) SetTemporaryDisabledErrorCode(v int) *ChannelUpdateOne {
+	_u.mutation.ResetTemporaryDisabledErrorCode()
+	_u.mutation.SetTemporaryDisabledErrorCode(v)
+	return _u
+}
+
+// SetNillableTemporaryDisabledErrorCode sets the "temporary_disabled_error_code" field if the given value is not nil.
+func (_u *ChannelUpdateOne) SetNillableTemporaryDisabledErrorCode(v *int) *ChannelUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDisabledErrorCode(*v)
+	}
+	return _u
+}
+
+// AddTemporaryDisabledErrorCode adds value to the "temporary_disabled_error_code" field.
+func (_u *ChannelUpdateOne) AddTemporaryDisabledErrorCode(v int) *ChannelUpdateOne {
+	_u.mutation.AddTemporaryDisabledErrorCode(v)
+	return _u
+}
+
+// ClearTemporaryDisabledErrorCode clears the value of the "temporary_disabled_error_code" field.
+func (_u *ChannelUpdateOne) ClearTemporaryDisabledErrorCode() *ChannelUpdateOne {
+	_u.mutation.ClearTemporaryDisabledErrorCode()
+	return _u
+}
+
+// SetTemporaryDisabledReason sets the "temporary_disabled_reason" field.
+func (_u *ChannelUpdateOne) SetTemporaryDisabledReason(v string) *ChannelUpdateOne {
+	_u.mutation.SetTemporaryDisabledReason(v)
+	return _u
+}
+
+// SetNillableTemporaryDisabledReason sets the "temporary_disabled_reason" field if the given value is not nil.
+func (_u *ChannelUpdateOne) SetNillableTemporaryDisabledReason(v *string) *ChannelUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDisabledReason(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDisabledReason clears the value of the "temporary_disabled_reason" field.
+func (_u *ChannelUpdateOne) ClearTemporaryDisabledReason() *ChannelUpdateOne {
+	_u.mutation.ClearTemporaryDisabledReason()
+	return _u
+}
+
 // SetRemark sets the "remark" field.
 func (_u *ChannelUpdateOne) SetRemark(v string) *ChannelUpdateOne {
 	_u.mutation.SetRemark(v)
@@ -1793,6 +1948,27 @@ func (_u *ChannelUpdateOne) sqlSave(ctx context.Context) (_node *Channel, err er
 	}
 	if _u.mutation.ErrorMessageCleared() {
 		_spec.ClearField(channel.FieldErrorMessage, field.TypeString)
+	}
+	if value, ok := _u.mutation.TemporaryDisabledUntil(); ok {
+		_spec.SetField(channel.FieldTemporaryDisabledUntil, field.TypeTime, value)
+	}
+	if _u.mutation.TemporaryDisabledUntilCleared() {
+		_spec.ClearField(channel.FieldTemporaryDisabledUntil, field.TypeTime)
+	}
+	if value, ok := _u.mutation.TemporaryDisabledErrorCode(); ok {
+		_spec.SetField(channel.FieldTemporaryDisabledErrorCode, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedTemporaryDisabledErrorCode(); ok {
+		_spec.AddField(channel.FieldTemporaryDisabledErrorCode, field.TypeInt, value)
+	}
+	if _u.mutation.TemporaryDisabledErrorCodeCleared() {
+		_spec.ClearField(channel.FieldTemporaryDisabledErrorCode, field.TypeInt)
+	}
+	if value, ok := _u.mutation.TemporaryDisabledReason(); ok {
+		_spec.SetField(channel.FieldTemporaryDisabledReason, field.TypeString, value)
+	}
+	if _u.mutation.TemporaryDisabledReasonCleared() {
+		_spec.ClearField(channel.FieldTemporaryDisabledReason, field.TypeString)
 	}
 	if value, ok := _u.mutation.Remark(); ok {
 		_spec.SetField(channel.FieldRemark, field.TypeString, value)

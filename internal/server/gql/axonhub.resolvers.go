@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
@@ -81,7 +82,12 @@ func (r *channelResolver) DisabledAPIKeys(ctx context.Context, obj *ent.Channel)
 		return []*objects.DisabledAPIKey{}, nil
 	}
 
-	return lo.ToSlicePtr(obj.DisabledAPIKeys), nil
+	now := time.Now()
+	activeDisabledKeys := lo.Filter(obj.DisabledAPIKeys, func(dk objects.DisabledAPIKey, _ int) bool {
+		return dk.DisabledUntil == nil || dk.DisabledUntil.After(now)
+	})
+
+	return lo.ToSlicePtr(activeDisabledKeys), nil
 }
 
 // LiveLimiterStats is the resolver for the liveLimiterStats field.
@@ -233,6 +239,16 @@ func (r *mutationResolver) BulkRecoverChannels(ctx context.Context, ids []*objec
 	}
 
 	return true, nil
+}
+
+// ClearChannelTemporaryDisable is the resolver for the clearChannelTemporaryDisable field.
+func (r *mutationResolver) ClearChannelTemporaryDisable(ctx context.Context, channelID objects.GUID) (*ent.Channel, error) {
+	ch, err := r.channelService.ClearChannelTemporaryDisable(ctx, channelID.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to clear channel temporary disable: %w", err)
+	}
+
+	return ch, nil
 }
 
 // BulkDeleteChannels is the resolver for the bulkDeleteChannels field.

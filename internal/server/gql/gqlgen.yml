@@ -150,6 +150,12 @@ models:
   ChannelCredentialsInput:
     model:
       - github.com/looplj/axonhub/internal/objects.ChannelCredentials
+  ChannelAPIKeyConfig:
+    model:
+      - github.com/looplj/axonhub/internal/objects.ChannelAPIKeyConfig
+  ChannelAPIKeyConfigInput:
+    model:
+      - github.com/looplj/axonhub/internal/objects.ChannelAPIKeyConfig
   OAuthCredentials:
     model:
       - github.com/looplj/axonhub/internal/objects.OAuthCredentials
@@ -213,6 +219,18 @@ models:
   AutoDisableChannelStatusInput:
     model:
       - github.com/looplj/axonhub/internal/server/biz.AutoDisableChannelStatus
+  AutoDisableAPIKey:
+    model:
+      - github.com/looplj/axonhub/internal/server/biz.AutoDisableAPIKey
+  AutoDisableAPIKeyStatus:
+    model:
+      - github.com/looplj/axonhub/internal/server/biz.AutoDisableAPIKeyStatus
+  AutoDisableAPIKeyInput:
+    model:
+      - github.com/looplj/axonhub/internal/server/biz.AutoDisableAPIKey
+  AutoDisableAPIKeyStatusInput:
+    model:
+      - github.com/looplj/axonhub/internal/server/biz.AutoDisableAPIKeyStatus
   UpstreamErrorPolicy:
     model:
       - github.com/looplj/axonhub/internal/server/biz.UpstreamErrorPolicy

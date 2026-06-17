@@ -823,6 +823,21 @@ func (_q *ChannelQuery) collectField(ctx context.Context, oneNode bool, opCtx *g
 				selectedFields = append(selectedFields, channel.FieldErrorMessage)
 				fieldSeen[channel.FieldErrorMessage] = struct{}{}
 			}
+		case "temporaryDisabledUntil":
+			if _, ok := fieldSeen[channel.FieldTemporaryDisabledUntil]; !ok {
+				selectedFields = append(selectedFields, channel.FieldTemporaryDisabledUntil)
+				fieldSeen[channel.FieldTemporaryDisabledUntil] = struct{}{}
+			}
+		case "temporaryDisabledErrorCode":
+			if _, ok := fieldSeen[channel.FieldTemporaryDisabledErrorCode]; !ok {
+				selectedFields = append(selectedFields, channel.FieldTemporaryDisabledErrorCode)
+				fieldSeen[channel.FieldTemporaryDisabledErrorCode] = struct{}{}
+			}
+		case "temporaryDisabledReason":
+			if _, ok := fieldSeen[channel.FieldTemporaryDisabledReason]; !ok {
+				selectedFields = append(selectedFields, channel.FieldTemporaryDisabledReason)
+				fieldSeen[channel.FieldTemporaryDisabledReason] = struct{}{}
+			}
 		case "remark":
 			if _, ok := fieldSeen[channel.FieldRemark]; !ok {
 				selectedFields = append(selectedFields, channel.FieldRemark)

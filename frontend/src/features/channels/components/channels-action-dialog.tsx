@@ -34,6 +34,8 @@ import {
   useAllChannelNames,
   useAllChannelTags,
   useChannelDisabledAPIKeys,
+  useDisableChannelAPIKey,
+  useEnableChannelAPIKey,
   useSyncChannelModels,
 } from '../data/channels';
 import { claudecodeOAuthExchange, claudecodeOAuthStart } from '../data/claudecode';
@@ -53,7 +55,15 @@ import {
   getApiFormatsForProvider,
   getChannelTypeForApiFormat,
 } from '../data/config_providers';
-import { Channel, ChannelType, ApiFormat, RetryableErrorPattern, createChannelInputSchema, updateChannelInputSchema } from '../data/schema';
+import {
+  Channel,
+  ChannelType,
+  ApiFormat,
+  RetryableErrorPattern,
+  createChannelInputSchema,
+  updateChannelInputSchema,
+  type ChannelAPIKeyConfig,
+} from '../data/schema';
 import { ProxyConfig, useOAuthFlow } from '../hooks/use-oauth-flow';
 import { mergeChannelSettingsForUpdate } from '../utils/merge';
 import { isValidModelPattern, matchesModelPattern } from '../utils/pattern';
@@ -75,8 +85,10 @@ const duplicateNameRegex = /^(.*) \((\d+)\)$/;
 
 type ApiFormatOption = ApiFormat | 'openai/responses:websocket';
 type ResponsesTransport = 'http' | 'websocket';
+type APIKeySelectionStrategy = 'trace_sticky' | 'weighted_sticky' | 'failover';
 
 const OPENAI_RESPONSES_WEBSOCKET: ApiFormatOption = 'openai/responses:websocket';
+const DEFAULT_API_KEY_WEIGHT = 100;
 // A single trailing # suppresses automatic version suffix appending while still
 // allowing the Responses transformer to append /responses. Do not replace these
 // defaults with ## unless the upstream URL should be used fully raw.
@@ -160,6 +172,69 @@ function parseRetryableErrorPatternsInput(value: string): RetryableErrorPattern[
   }
 
   return patterns;
+}
+
+function normalizeAPIKeySelectionStrategy(strategy?: string | null): APIKeySelectionStrategy {
+  switch (strategy) {
+    case 'weighted_sticky':
+    case 'failover':
+      return strategy;
+    default:
+      return 'trace_sticky';
+  }
+}
+
+function normalizeAPIKeyList(keys?: string[] | null): string[] {
+  return [
+    ...new Set(
+      (keys || [])
+        .map((key) => key.trim())
+        .filter((key) => key.length > 0)
+    ),
+  ];
+}
+
+function normalizeAPIKeyWeight(weight?: number | null): number {
+  if (typeof weight !== 'number' || !Number.isFinite(weight) || weight < 1) {
+    return DEFAULT_API_KEY_WEIGHT;
+  }
+
+  return Math.floor(weight);
+}
+
+function reconcileAPIKeyConfigs(keys?: string[] | null, configs?: ChannelAPIKeyConfig[] | null): ChannelAPIKeyConfig[] {
+  const weights = new Map<string, number>();
+  for (const config of configs || []) {
+    const key = config.key?.trim();
+    if (!key || weights.has(key)) continue;
+    weights.set(key, normalizeAPIKeyWeight(config.weight));
+  }
+
+  return normalizeAPIKeyList(keys).map((key) => ({
+    key,
+    weight: weights.get(key) || DEFAULT_API_KEY_WEIGHT,
+  }));
+}
+
+function getInitialAPIKeyConfigs(channel?: Channel): ChannelAPIKeyConfig[] {
+  const structured = channel?.credentials?.apiKeyConfigs;
+  if (structured && structured.length > 0) {
+    return reconcileAPIKeyConfigs(
+      structured.map((config) => config.key),
+      structured
+    );
+  }
+
+  return reconcileAPIKeyConfigs(channel?.credentials?.apiKeys);
+}
+
+function getInitialAPIKeys(channel?: Channel): string[] {
+  const legacyKeys = normalizeAPIKeyList(channel?.credentials?.apiKeys);
+  if (legacyKeys.length > 0) {
+    return legacyKeys;
+  }
+
+  return normalizeAPIKeyList(channel?.credentials?.apiKeyConfigs?.map((config) => config.key));
 }
 
 function getResponsesTransportFromChannel(channel?: Pick<Channel, 'baseURL' | 'endpoints'>): ResponsesTransport {
@@ -352,6 +427,12 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const [selectedKeysToRemove, setSelectedKeysToRemove] = useState<Set<string>>(new Set());
   const [confirmRemoveSelectedOpen, setConfirmRemoveSelectedOpen] = useState(false);
   const [confirmRemoveKey, setConfirmRemoveKey] = useState<string | null>(null);
+  const [apiKeyConfigs, setApiKeyConfigs] = useState<ChannelAPIKeyConfig[]>(() => getInitialAPIKeyConfigs(initialRow));
+  const [apiKeyConfigsDirty, setApiKeyConfigsDirty] = useState(false);
+  const [apiKeySelectionStrategy, setApiKeySelectionStrategy] = useState<APIKeySelectionStrategy>(() =>
+    normalizeAPIKeySelectionStrategy(initialRow?.settings?.apiKeySelectionStrategy)
+  );
+  const [showGcpJsonData, setShowGcpJsonData] = useState(false);
   const [authMode, setAuthMode] = useState<'official' | 'auth-json' | 'third-party'>('official');
   const [codexAuthJSONText, setCodexAuthJSONText] = useState('');
   const [patternError, setPatternError] = useState<string | null>(null);
@@ -511,6 +592,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       setConfirmRemoveSelectedOpen(false);
       setConfirmRemoveKey(null);
       setPatternError(null);
+      setApiKeyConfigsDirty(false);
     }
   }, [open]);
 
@@ -643,7 +725,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             credentials: {
               // OAuth 类型 (codex/claudecode/antigravity) 的凭据存储在 apiKey 字段，不放入 apiKeys
               apiKey: currentRow.credentials?.apiKey || undefined,
-              apiKeys: currentRow.credentials?.apiKeys || [],
+              apiKeys: getInitialAPIKeys(currentRow),
+              apiKeyConfigs: currentRow.credentials?.apiKeyConfigs || undefined,
               gcp: {
                 region: currentRow.credentials?.gcp?.region || '',
                 projectID: currentRow.credentials?.gcp?.projectID || '',
@@ -668,7 +751,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
               credentials: {
                 // OAuth 类型 (codex/claudecode/antigravity) 的凭据存储在 apiKey 字段，不放入 apiKeys
                 apiKey: duplicateFromRow.credentials?.apiKey || undefined,
-                apiKeys: duplicateFromRow.credentials?.apiKeys || [],
+                apiKeys: getInitialAPIKeys(duplicateFromRow),
+                apiKeyConfigs: duplicateFromRow.credentials?.apiKeyConfigs || undefined,
                 gcp: {
                   region: duplicateFromRow.credentials?.gcp?.region || '',
                   projectID: duplicateFromRow.credentials?.gcp?.projectID || '',
@@ -683,6 +767,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
               policies: { stream: 'unlimited' },
               credentials: {
                 apiKeys: [],
+                apiKeyConfigs: [],
                 gcp: {
                   region: '',
                   projectID: '',
@@ -700,12 +785,30 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const apiKeys = form.watch('credentials.apiKeys');
   const apiKeysCount = useMemo(() => (apiKeys || []).filter((k) => k.trim().length > 0).length, [apiKeys]);
   const isSubmitting = createChannel.isPending || duplicateChannel.isPending || updateChannel.isPending;
+  const hasStructuredAPIKeyConfigs = (initialRow?.credentials?.apiKeyConfigs?.length || 0) > 0;
 
   const { data: disabledKeys = [] } = useChannelDisabledAPIKeys(currentRow?.id || '', {
     enabled: isEdit && !!currentRow?.id && showApiKeysPanel,
   });
+  const disableChannelAPIKey = useDisableChannelAPIKey();
+  const enableChannelAPIKey = useEnableChannelAPIKey();
+  const apiKeyStateMutationPending = disableChannelAPIKey.isPending || enableChannelAPIKey.isPending;
 
   const disabledKeySet = useMemo(() => new Set(disabledKeys.map((dk) => dk.key)), [disabledKeys]);
+  const apiKeyConfigByKey = useMemo(() => new Map(apiKeyConfigs.map((config) => [config.key, config])), [apiKeyConfigs]);
+
+  useEffect(() => {
+    if (!open) return;
+    const nextConfigs = getInitialAPIKeyConfigs(initialRow);
+    setApiKeyConfigs(nextConfigs);
+    setApiKeySelectionStrategy(normalizeAPIKeySelectionStrategy(initialRow?.settings?.apiKeySelectionStrategy));
+    setApiKeyConfigsDirty(false);
+  }, [open, initialRow]);
+
+  useEffect(() => {
+    if (!open) return;
+    setApiKeyConfigs((prev) => reconcileAPIKeyConfigs(apiKeys, prev));
+  }, [apiKeys, open]);
 
   useEffect(() => {
     if (!open || !isDuplicate || !duplicateFromRow) return;
@@ -729,6 +832,10 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const isAntigravityType = (selectedType || derivedChannelType) === 'antigravity';
   const isClaudeCodeType = (selectedType || derivedChannelType) === 'claudecode';
   const isCopilotType = (selectedType || derivedChannelType) === 'github_copilot';
+  const showRegularAPIKeyFields =
+    (!(isCodexType || isClaudeCodeType || isCopilotType) || authMode === 'third-party') &&
+    selectedProvider !== 'antigravity' &&
+    selectedType !== 'anthropic_gcp';
 
   // OAuth providers cannot have their provider/API format changed during edit.
   // Derived from currentRow credentials so it stays stable across re-renders
@@ -1114,6 +1221,13 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       if (values.credentials?.apiKeys) {
         values.credentials.apiKeys = [...new Set(values.credentials.apiKeys.filter((k) => k.trim().length > 0))];
       }
+      const normalizedAPIKeyConfigs = reconcileAPIKeyConfigs(values.credentials?.apiKeys, apiKeyConfigs);
+      const shouldSubmitAPIKeyConfigs = showRegularAPIKeyFields && (hasStructuredAPIKeyConfigs || apiKeyConfigsDirty);
+      if (values.credentials && shouldSubmitAPIKeyConfigs) {
+        values.credentials.apiKeyConfigs = normalizedAPIKeyConfigs;
+      } else if (values.credentials) {
+        delete values.credentials.apiKeyConfigs;
+      }
 
       const retryableStatusCodes = parseRetryableStatusCodesInput(retryableStatusCodesText);
       if (retryableStatusCodes === null) {
@@ -1140,6 +1254,12 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         manualModels,
         credentials: valuesForSubmit.credentials,
       };
+      const channelSettingsPatch = {
+        passThroughUserAgent,
+        passThroughBody,
+        retryableStatusCodes,
+        ...(showRegularAPIKeyFields ? { apiKeySelectionStrategy } : {}),
+      };
 
       const shouldUseProtocolDefaultBaseURL =
         (isCodexType && (!isEdit || authMode === 'official' || authMode === 'auth-json')) ||
@@ -1163,9 +1283,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
 
       if (isEdit && currentRow) {
         const nextSettings = mergeChannelSettingsForUpdate(values.settings, {
-          passThroughUserAgent,
-          passThroughBody,
-          retryableStatusCodes,
+          ...channelSettingsPatch,
           retryableErrorPatterns,
         });
 
@@ -1207,9 +1325,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
 
         const nextSettings = mergeChannelSettingsForUpdate(values.settings, {
           proxy: proxyConfig,
-          passThroughUserAgent,
-          passThroughBody,
-          retryableStatusCodes,
+          ...channelSettingsPatch,
           retryableErrorPatterns,
         });
 
@@ -1539,11 +1655,40 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         return;
       }
       form.setValue('credentials.apiKeys', nextKeys, { shouldDirty: true, shouldTouch: true });
+      setApiKeyConfigs((prev) => prev.filter((config) => !keysToRemove.includes(config.key)));
+      setApiKeyConfigsDirty(true);
       setSelectedKeysToRemove(new Set());
       setConfirmRemoveSelectedOpen(false);
       setConfirmRemoveKey(null);
     },
     [form, t]
+  );
+
+  const updateAPIKeyWeight = useCallback((key: string, weight: number) => {
+    setApiKeyConfigs((prev) =>
+      reconcileAPIKeyConfigs(
+        form.getValues('credentials.apiKeys'),
+        prev.map((config) => (config.key === key ? { ...config, weight: normalizeAPIKeyWeight(weight) } : config))
+      )
+    );
+    setApiKeyConfigsDirty(true);
+  }, [form]);
+
+  const handleAPIKeySelectionStrategyChange = useCallback((strategy: APIKeySelectionStrategy) => {
+    setApiKeySelectionStrategy(strategy);
+  }, []);
+
+  const toggleAPIKeyDisabled = useCallback(
+    async (key: string, disabled: boolean) => {
+      if (!currentRow?.id) return;
+
+      if (disabled) {
+        await enableChannelAPIKey.mutateAsync({ channelID: currentRow.id, key });
+      } else {
+        await disableChannelAPIKey.mutateAsync({ channelID: currentRow.id, key });
+      }
+    },
+    [currentRow?.id, disableChannelAPIKey, enableChannelAPIKey]
   );
 
   // Remove deprecated models (models in supportedModels but not in fetchedModels and not manual)
@@ -2117,143 +2262,173 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                         )}
                       />
 
-                      {(!(isCodexType || isClaudeCodeType || isCopilotType) || authMode === 'third-party') &&
-                        selectedProvider !== 'antigravity' &&
-                        selectedType !== 'anthropic_gcp' && (
-                          <FormField
-                            control={form.control}
-                            name='credentials.apiKeys'
-                            render={({ field, fieldState }) => (
-                              <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
-                                <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
-                                  {t('channels.dialogs.fields.apiKey.label')}
-                                </FormLabel>
-                                <div className='space-y-1 md:col-span-6'>
-                                  {isEdit ? (
-                                    <div className='relative'>
-                                      <Tooltip open={!showApiKey ? undefined : false}>
-                                        <TooltipTrigger asChild>
-                                          <Textarea
-                                            value={
-                                              showApiKey
-                                                ? field.value?.join('\n') || ''
-                                                : (field.value || [])
-                                                    .map((k) => (k.length > 8 ? k.slice(0, 4) + '****' + k.slice(-4) : '****'))
-                                                    .join('\n')
-                                            }
-                                            onChange={(e) => {
-                                              if (!showApiKey) return;
-                                              const keys = e.target.value.split('\n');
-                                              field.onChange(keys);
-                                            }}
-                                            onBlur={(e) => {
-                                              if (!showApiKey) return;
-                                              const keys = [
-                                                ...new Set(
-                                                  e.target.value
-                                                    .split('\n')
-                                                    .map((k) => k.trim())
-                                                    .filter((k) => k.length > 0)
-                                                ),
-                                              ];
-                                              field.onChange(keys);
-                                              field.onBlur();
-                                            }}
-                                            readOnly={!showApiKey}
-                                            placeholder={t('channels.dialogs.fields.apiKey.editPlaceholder')}
-                                            className='min-h-[80px] resize-y pr-10 font-mono text-sm md:col-span-6'
-                                            autoComplete='new-password'
-                                            data-form-type='other'
-                                            spellCheck={false}
-                                            aria-invalid={!!fieldState.error}
-                                            data-testid='channel-api-key-input'
-                                          />
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          <p>{t('channels.dialogs.fields.apiKey.revealToEditHint')}</p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                      <div className='absolute top-2 right-2 flex flex-col gap-1'>
-                                        <Button
-                                          type='button'
-                                          variant='ghost'
-                                          size='sm'
-                                          className='h-7 w-7 p-0'
-                                          onClick={() => {
-                                            const next = !showApiKey;
-                                            setShowApiKey(next);
-
-                                            if (!next) {
-                                              setShowApiKeysPanel(false);
-                                              return;
-                                            }
-
-                                            if (next) {
-                                              setShowApiKeysPanel(true);
-                                              setShowFetchedModelsPanel(false);
-                                              setShowSupportedModelsPanel(false);
-                                            }
+                      {showRegularAPIKeyFields && (
+                        <FormField
+                          control={form.control}
+                          name='credentials.apiKeys'
+                          render={({ field, fieldState }) => (
+                            <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
+                              <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
+                                {t('channels.dialogs.fields.apiKey.label')}
+                              </FormLabel>
+                              <div className='space-y-1 md:col-span-6'>
+                                {isEdit ? (
+                                  <div className='relative'>
+                                    <Tooltip open={!showApiKey ? undefined : false}>
+                                      <TooltipTrigger asChild>
+                                        <Textarea
+                                          value={
+                                            showApiKey
+                                              ? field.value?.join('\n') || ''
+                                              : (field.value || [])
+                                                  .map((k) => (k.length > 8 ? k.slice(0, 4) + '****' + k.slice(-4) : '****'))
+                                                  .join('\n')
+                                          }
+                                          onChange={(e) => {
+                                            if (!showApiKey) return;
+                                            const keys = e.target.value.split('\n');
+                                            field.onChange(keys);
                                           }}
-                                        >
-                                          {showApiKey ? <EyeOff className='h-4 w-4' /> : <Eye className='h-4 w-4' />}
-                                        </Button>
-                                        <Button
-                                          type='button'
-                                          variant='ghost'
-                                          size='sm'
-                                          className='h-7 w-7 p-0'
-                                          onClick={() => {
-                                            const keys = field.value || [];
-                                            if (keys.length > 0) {
-                                              navigator.clipboard.writeText(keys.join('\n'));
-                                              toast.success(t('channels.messages.credentialsCopied'));
-                                            }
+                                          onBlur={(e) => {
+                                            if (!showApiKey) return;
+                                            const keys = [
+                                              ...new Set(
+                                                e.target.value
+                                                  .split('\n')
+                                                  .map((k) => k.trim())
+                                                  .filter((k) => k.length > 0)
+                                              ),
+                                            ];
+                                            field.onChange(keys);
+                                            field.onBlur();
                                           }}
-                                        >
-                                          <Copy className='h-4 w-4' />
-                                        </Button>
-                                      </div>
-                                      <p className='text-muted-foreground mt-1 text-xs'>
-                                        {t('channels.dialogs.fields.apiKey.multiLineHint')}
-                                      </p>
+                                          readOnly={!showApiKey}
+                                          placeholder={t('channels.dialogs.fields.apiKey.editPlaceholder')}
+                                          className='min-h-[80px] resize-y pr-10 font-mono text-sm md:col-span-6'
+                                          autoComplete='new-password'
+                                          data-form-type='other'
+                                          spellCheck={false}
+                                          aria-invalid={!!fieldState.error}
+                                          data-testid='channel-api-key-input'
+                                        />
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>{t('channels.dialogs.fields.apiKey.revealToEditHint')}</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                    <div className='absolute top-2 right-2 flex flex-col gap-1'>
+                                      <Button
+                                        type='button'
+                                        variant='ghost'
+                                        size='sm'
+                                        className='h-7 w-7 p-0'
+                                        onClick={() => {
+                                          const next = !showApiKey;
+                                          setShowApiKey(next);
+
+                                          if (!next) {
+                                            setShowApiKeysPanel(false);
+                                            return;
+                                          }
+
+                                          if (next) {
+                                            setShowApiKeysPanel(true);
+                                            setShowFetchedModelsPanel(false);
+                                            setShowSupportedModelsPanel(false);
+                                          }
+                                        }}
+                                      >
+                                        {showApiKey ? <EyeOff className='h-4 w-4' /> : <Eye className='h-4 w-4' />}
+                                      </Button>
+                                      <Button
+                                        type='button'
+                                        variant='ghost'
+                                        size='sm'
+                                        className='h-7 w-7 p-0'
+                                        onClick={() => {
+                                          const keys = field.value || [];
+                                          if (keys.length > 0) {
+                                            navigator.clipboard.writeText(keys.join('\n'));
+                                            toast.success(t('channels.messages.credentialsCopied'));
+                                          }
+                                        }}
+                                      >
+                                        <Copy className='h-4 w-4' />
+                                      </Button>
                                     </div>
-                                  ) : (
-                                    <>
-                                      <Textarea
-                                        value={field.value?.join('\n') || ''}
-                                        onChange={(e) => {
-                                          const keys = e.target.value.split('\n');
-                                          field.onChange(keys);
-                                        }}
-                                        onBlur={(e) => {
-                                          const keys = [
-                                            ...new Set(
-                                              e.target.value
-                                                .split('\n')
-                                                .map((k) => k.trim())
-                                                .filter((k) => k.length > 0)
-                                            ),
-                                          ];
-                                          field.onChange(keys);
-                                          field.onBlur();
-                                        }}
-                                        placeholder={t('channels.dialogs.fields.apiKey.placeholder')}
-                                        className='min-h-[80px] resize-y font-mono text-sm md:col-span-6'
-                                        autoComplete='new-password'
-                                        data-form-type='other'
-                                        spellCheck={false}
-                                        aria-invalid={!!fieldState.error}
-                                        data-testid='channel-api-key-input'
-                                      />
-                                      <p className='text-muted-foreground text-xs'>{t('channels.dialogs.fields.apiKey.multiLineHint')}</p>
-                                    </>
-                                  )}
-                                  <FormMessage />
-                                </div>
-                              </FormItem>
-                            )}
-                          />
-                        )}
+                                    <p className='text-muted-foreground mt-1 text-xs'>
+                                      {t('channels.dialogs.fields.apiKey.multiLineHint')}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <Textarea
+                                      value={field.value?.join('\n') || ''}
+                                      onChange={(e) => {
+                                        const keys = e.target.value.split('\n');
+                                        field.onChange(keys);
+                                      }}
+                                      onBlur={(e) => {
+                                        const keys = [
+                                          ...new Set(
+                                            e.target.value
+                                              .split('\n')
+                                              .map((k) => k.trim())
+                                              .filter((k) => k.length > 0)
+                                          ),
+                                        ];
+                                        field.onChange(keys);
+                                        field.onBlur();
+                                      }}
+                                      placeholder={t('channels.dialogs.fields.apiKey.placeholder')}
+                                      className='min-h-[80px] resize-y font-mono text-sm md:col-span-6'
+                                      autoComplete='new-password'
+                                      data-form-type='other'
+                                      spellCheck={false}
+                                      aria-invalid={!!fieldState.error}
+                                      data-testid='channel-api-key-input'
+                                    />
+                                    <p className='text-muted-foreground text-xs'>{t('channels.dialogs.fields.apiKey.multiLineHint')}</p>
+                                  </>
+                                )}
+                                <FormMessage />
+                              </div>
+                            </FormItem>
+                          )}
+                        />
+                      )}
+
+                      {showRegularAPIKeyFields && (
+                        <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
+                          <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
+                            {t('channels.dialogs.fields.apiKeySelectionStrategy.label')}
+                          </FormLabel>
+                          <div className='space-y-1 md:col-span-6'>
+                            <Select
+                              value={apiKeySelectionStrategy}
+                              onValueChange={(value) => handleAPIKeySelectionStrategyChange(value as APIKeySelectionStrategy)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value='trace_sticky'>
+                                  {t('channels.dialogs.fields.apiKeySelectionStrategy.options.traceSticky')}
+                                </SelectItem>
+                                <SelectItem value='weighted_sticky'>
+                                  {t('channels.dialogs.fields.apiKeySelectionStrategy.options.weightedSticky')}
+                                </SelectItem>
+                                <SelectItem value='failover'>
+                                  {t('channels.dialogs.fields.apiKeySelectionStrategy.options.failover')}
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className='text-muted-foreground text-xs'>
+                              {t(`channels.dialogs.fields.apiKeySelectionStrategy.descriptions.${apiKeySelectionStrategy}`)}
+                            </p>
+                          </div>
+                        </FormItem>
+                      )}
 
                       <FormField
                         control={form.control}
@@ -2842,6 +3017,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                         .map((key) => {
                           const isSelected = selectedKeysToRemove.has(key);
                           const isDisabled = disabledKeySet.has(key);
+                          const weight = apiKeyConfigByKey.get(key)?.weight || DEFAULT_API_KEY_WEIGHT;
                           const masked = key.length > 8 ? `${key.slice(0, 4)}****${key.slice(-4)}` : `****${key.slice(-4)}`;
 
                           return (
@@ -2876,53 +3052,94 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                   {isDisabled && (
                                     <p className='text-muted-foreground mt-1 text-xs'>{t('channels.dialogs.fields.apiKey.disabledHint')}</p>
                                   )}
+                                  <div className='mt-2 flex items-center gap-2'>
+                                    <Label className='text-muted-foreground text-[11px]'>
+                                      {t('channels.dialogs.fields.apiKey.weight')}
+                                    </Label>
+                                    <Input
+                                      type='number'
+                                      min='1'
+                                      max='100000'
+                                      value={weight}
+                                      onChange={(e) => updateAPIKeyWeight(key, parseInt(e.target.value) || DEFAULT_API_KEY_WEIGHT)}
+                                      className='h-7 w-20 text-xs'
+                                    />
+                                  </div>
                                 </div>
                               </div>
 
-                              {isLastKey ? (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className='inline-flex'>
-                                      <Button
-                                        type='button'
-                                        variant='ghost'
-                                        size='sm'
-                                        className='text-muted-foreground h-7 w-7 p-0'
-                                        disabled
-                                      >
+                              <div className='flex shrink-0 items-center gap-1'>
+                                {isEdit && currentRow?.id && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className='inline-flex'>
+                                        <Button
+                                          type='button'
+                                          variant='ghost'
+                                          size='sm'
+                                          className='text-muted-foreground h-7 w-7 p-0'
+                                          disabled={apiKeyStateMutationPending}
+                                          onClick={() => toggleAPIKeyDisabled(key, isDisabled)}
+                                        >
+                                          {isDisabled ? <RefreshCw className='h-4 w-4' /> : <EyeOff className='h-4 w-4' />}
+                                        </Button>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>
+                                        {isDisabled
+                                          ? t('channels.dialogs.fields.apiKey.enableKey')
+                                          : t('channels.dialogs.fields.apiKey.disableKey')}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+
+                                {isLastKey ? (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className='inline-flex'>
+                                        <Button
+                                          type='button'
+                                          variant='ghost'
+                                          size='sm'
+                                          className='text-muted-foreground h-7 w-7 p-0'
+                                          disabled
+                                        >
+                                          <Trash2 className='h-4 w-4' />
+                                        </Button>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>{t('channels.dialogs.fields.apiKey.mustKeepOne')}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ) : (
+                                  <Popover
+                                    open={confirmRemoveKey === key}
+                                    onOpenChange={(isOpen) => setConfirmRemoveKey(isOpen ? key : null)}
+                                  >
+                                    <PopoverTrigger asChild>
+                                      <Button type='button' variant='ghost' size='sm' className='text-destructive h-7 w-7 p-0'>
                                         <Trash2 className='h-4 w-4' />
                                       </Button>
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>{t('channels.dialogs.fields.apiKey.mustKeepOne')}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              ) : (
-                                <Popover
-                                  open={confirmRemoveKey === key}
-                                  onOpenChange={(isOpen) => setConfirmRemoveKey(isOpen ? key : null)}
-                                >
-                                  <PopoverTrigger asChild>
-                                    <Button type='button' variant='ghost' size='sm' className='text-destructive h-7 w-7 p-0'>
-                                      <Trash2 className='h-4 w-4' />
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className='w-72'>
-                                    <div className='flex flex-col gap-3'>
-                                      <p className='text-sm'>{t('channels.dialogs.fields.apiKey.confirmRemoveSingle')}</p>
-                                      <div className='flex justify-end gap-2'>
-                                        <Button size='sm' variant='outline' onClick={() => setConfirmRemoveKey(null)}>
-                                          {t('common.buttons.cancel')}
-                                        </Button>
-                                        <Button size='sm' variant='destructive' onClick={() => removeApiKeys([key])}>
-                                          {t('common.buttons.confirm')}
-                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className='w-72'>
+                                      <div className='flex flex-col gap-3'>
+                                        <p className='text-sm'>{t('channels.dialogs.fields.apiKey.confirmRemoveSingle')}</p>
+                                        <div className='flex justify-end gap-2'>
+                                          <Button size='sm' variant='outline' onClick={() => setConfirmRemoveKey(null)}>
+                                            {t('common.buttons.cancel')}
+                                          </Button>
+                                          <Button size='sm' variant='destructive' onClick={() => removeApiKeys([key])}>
+                                            {t('common.buttons.confirm')}
+                                          </Button>
+                                        </div>
                                       </div>
-                                    </div>
-                                  </PopoverContent>
-                                </Popover>
-                              )}
+                                    </PopoverContent>
+                                  </Popover>
+                                )}
+                              </div>
                             </div>
                           );
                         });

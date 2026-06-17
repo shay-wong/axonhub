@@ -1,5 +1,9 @@
 package biz
 
+import "github.com/samber/lo"
+
+const defaultAutoDisableFallbackDurationMinutes = 5
+
 var defaultStoragePolicy = StoragePolicy{
 	StoreChunks:       false,
 	LivePreview:       false,
@@ -28,6 +32,14 @@ var defaultRetryPolicy = RetryPolicy{
 	UpstreamErrorPolicy: UpstreamErrorPolicy{
 		Mode: UpstreamErrorModePassthrough,
 	},
+}
+
+var defaultAutoDisableStatusRules = []AutoDisableStatusRule{
+	{Status: 401, Times: 1, Action: DisableActionPermanent},
+	{Status: 403, Times: 1, Action: DisableActionPermanent},
+	{Status: 429, Times: 3, Action: DisableActionTemporary, DurationMinutes: lo.ToPtr(defaultAutoDisableFallbackDurationMinutes), UseRetryAfter: lo.ToPtr(true)},
+	{Status: 503, Times: 3, Action: DisableActionTemporary, DurationMinutes: lo.ToPtr(defaultAutoDisableFallbackDurationMinutes)},
+	{Status: 529, Times: 3, Action: DisableActionTemporary, DurationMinutes: lo.ToPtr(defaultAutoDisableFallbackDurationMinutes)},
 }
 
 var defaultModelSettings = SystemModelSettings{

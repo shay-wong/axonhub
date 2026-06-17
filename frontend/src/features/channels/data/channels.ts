@@ -83,6 +83,19 @@ const CREATE_CHANNEL_MUTATION = `
       manualModels
       tags
       defaultTestModel
+      credentials {
+        apiKey
+        apiKeys
+        apiKeyConfigs {
+          key
+          weight
+        }
+        gcp {
+          region
+          projectID
+          jsonData
+        }
+      }
       settings {
         extraModelPrefix
         modelMappings {
@@ -111,8 +124,12 @@ const CREATE_CHANNEL_MUTATION = `
           pattern
           regex
         }
+        apiKeySelectionStrategy
       }
       orderingWeight
+      temporaryDisabledUntil
+      temporaryDisabledErrorCode
+      temporaryDisabledReason
       remark
       defaultEndpoints {
         apiFormat
@@ -149,6 +166,19 @@ const DUPLICATE_CHANNEL_MUTATION = `
       manualModels
       tags
       defaultTestModel
+      credentials {
+        apiKey
+        apiKeys
+        apiKeyConfigs {
+          key
+          weight
+        }
+        gcp {
+          region
+          projectID
+          jsonData
+        }
+      }
       settings {
         extraModelPrefix
         modelMappings {
@@ -177,8 +207,12 @@ const DUPLICATE_CHANNEL_MUTATION = `
           pattern
           regex
         }
+        apiKeySelectionStrategy
       }
       orderingWeight
+      temporaryDisabledUntil
+      temporaryDisabledErrorCode
+      temporaryDisabledReason
       remark
       defaultEndpoints {
         apiFormat
@@ -215,6 +249,19 @@ const BULK_CREATE_CHANNELS_MUTATION = `
       manualModels
       tags
       defaultTestModel
+      credentials {
+        apiKey
+        apiKeys
+        apiKeyConfigs {
+          key
+          weight
+        }
+        gcp {
+          region
+          projectID
+          jsonData
+        }
+      }
       settings {
         extraModelPrefix
         modelMappings {
@@ -243,8 +290,12 @@ const BULK_CREATE_CHANNELS_MUTATION = `
           pattern
           regex
         }
+        apiKeySelectionStrategy
       }
       orderingWeight
+      temporaryDisabledUntil
+      temporaryDisabledErrorCode
+      temporaryDisabledReason
       remark
       defaultEndpoints {
         apiFormat
@@ -281,6 +332,19 @@ const UPDATE_CHANNEL_MUTATION = `
       manualModels
       tags
       defaultTestModel
+      credentials {
+        apiKey
+        apiKeys
+        apiKeyConfigs {
+          key
+          weight
+        }
+        gcp {
+          region
+          projectID
+          jsonData
+        }
+      }
       settings {
         extraModelPrefix
         modelMappings {
@@ -309,9 +373,13 @@ const UPDATE_CHANNEL_MUTATION = `
           pattern
           regex
         }
+        apiKeySelectionStrategy
       }
       orderingWeight
       errorMessage
+      temporaryDisabledUntil
+      temporaryDisabledErrorCode
+      temporaryDisabledReason
       remark
       defaultEndpoints {
         apiFormat
@@ -337,6 +405,24 @@ const UPDATE_CHANNEL_STATUS_MUTATION = `
     }
   }
 `;
+
+const CLEAR_CHANNEL_TEMPORARY_DISABLE_MUTATION = `
+  mutation ClearChannelTemporaryDisable($channelID: ID!) {
+    clearChannelTemporaryDisable(channelID: $channelID) {
+      id
+      temporaryDisabledUntil
+      temporaryDisabledErrorCode
+      temporaryDisabledReason
+    }
+  }
+`;
+
+const clearChannelTemporaryDisableSchema = z.object({
+  id: z.string(),
+  temporaryDisabledUntil: z.string().optional().nullable(),
+  temporaryDisabledErrorCode: z.number().optional().nullable(),
+  temporaryDisabledReason: z.string().optional().nullable(),
+});
 
 const BULK_ARCHIVE_CHANNELS_MUTATION = `
   mutation BulkArchiveChannels($ids: [ID!]!) {
@@ -540,6 +626,8 @@ const GET_CHANNEL_DISABLED_API_KEYS_QUERY = `
         disabledAPIKeys {
           key
           disabledAt
+          disabledUntil
+          disableAction
           errorCode
           reason
         }
@@ -758,6 +846,10 @@ const QUERY_CHANNELS_QUERY = `
           credentials {
             apiKey
             apiKeys
+            apiKeyConfigs {
+              key
+              weight
+            }
             gcp {
               region
               projectID
@@ -833,9 +925,13 @@ const QUERY_CHANNELS_QUERY = `
               pattern
               regex
             }
+            apiKeySelectionStrategy
           }
           orderingWeight
           errorMessage
+          temporaryDisabledUntil
+          temporaryDisabledErrorCode
+          temporaryDisabledReason
           remark
           defaultEndpoints {
             apiFormat
@@ -852,6 +948,8 @@ const QUERY_CHANNELS_QUERY = `
           disabledAPIKeys {
             key
             disabledAt
+            disabledUntil
+            disableAction
             errorCode
             reason
           }
@@ -1201,6 +1299,34 @@ export function useUpdateChannelStatus() {
       const messageKey = variables.status === 'archived' ? 'channels.messages.archiveSuccess' : 'channels.messages.statusUpdateSuccess';
 
       toast.success(variables.status === 'archived' ? t(messageKey) : t(messageKey, { status: statusText }));
+    },
+  });
+}
+
+export function useClearChannelTemporaryDisable() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+  const { handleError } = useErrorHandler();
+
+  return useMutation({
+    mutationFn: async ({ channelID }: { channelID: string }) => {
+      try {
+        const data = await graphqlRequest<{ clearChannelTemporaryDisable: z.infer<typeof clearChannelTemporaryDisableSchema> }>(
+          CLEAR_CHANNEL_TEMPORARY_DISABLE_MUTATION,
+          {
+            channelID,
+          }
+        );
+        return clearChannelTemporaryDisableSchema.parse(data.clearChannelTemporaryDisable);
+      } catch (error) {
+        handleError(error, { context: 'Clear Channel Temporary Disable' });
+        throw error;
+      }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['channels'] });
+      queryClient.invalidateQueries({ queryKey: ['channel', data.id] });
+      toast.success(t('channels.messages.clearTemporaryDisableSuccess'));
     },
   });
 }
@@ -1727,6 +1853,8 @@ export function useChannelDisabledAPIKeys(channelId: string, options?: { enabled
             disabledAPIKeys: Array<{
               key: string;
               disabledAt: string;
+              disabledUntil?: string | null;
+              disableAction?: string | null;
               errorCode: number;
               reason?: string | null;
             }>;

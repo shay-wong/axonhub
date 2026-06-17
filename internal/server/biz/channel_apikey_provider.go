@@ -3,16 +3,26 @@ package biz
 import (
 	"context"
 	"hash/fnv"
+	"math"
 	"math/rand/v2"
+	"sort"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/log"
+	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/llm/auth"
 )
 
 // traceStickyLRUSize is the default LRU cache size for trace-to-key mappings.
 const traceStickyLRUSize = 1024
+
+const (
+	APIKeySelectionStrategyTraceSticky    = "trace_sticky"
+	APIKeySelectionStrategyWeightedSticky = "weighted_sticky"
+	APIKeySelectionStrategyFailover       = "failover"
+)
 
 // TraceStickyKeyProvider selects an API key deterministically per traceID (if present),
 // using cached enabled keys from the channel snapshot.
@@ -28,6 +38,31 @@ type TraceStickyKeyProvider struct {
 	cache   *lru.Cache[string, string]
 }
 
+type WeightedTraceStickyKeyProvider struct {
+	channel *Channel
+	cache   *lru.Cache[string, string]
+}
+
+type FailoverAPIKeyProvider struct {
+	channel *Channel
+	cache   *lru.Cache[string, string]
+}
+
+type recordingAPIKeyProvider struct {
+	provider auth.APIKeyProvider
+}
+
+func NewRecordingAPIKeyProvider(provider auth.APIKeyProvider) auth.APIKeyProvider {
+	return &recordingAPIKeyProvider{provider: provider}
+}
+
+func (p *recordingAPIKeyProvider) Get(ctx context.Context) string {
+	key := p.provider.Get(ctx)
+	recordSelectedAPIKey(ctx, key)
+
+	return key
+}
+
 func NewTraceStickyKeyProvider(channel *Channel) *TraceStickyKeyProvider {
 	cache, _ := lru.New[string, string](traceStickyLRUSize)
 
@@ -37,20 +72,48 @@ func NewTraceStickyKeyProvider(channel *Channel) *TraceStickyKeyProvider {
 	}
 }
 
+func NewWeightedTraceStickyKeyProvider(channel *Channel) *WeightedTraceStickyKeyProvider {
+	cache, _ := lru.New[string, string](traceStickyLRUSize)
+
+	return &WeightedTraceStickyKeyProvider{
+		channel: channel,
+		cache:   cache,
+	}
+}
+
+func NewFailoverAPIKeyProvider(channel *Channel) *FailoverAPIKeyProvider {
+	cache, _ := lru.New[string, string](traceStickyLRUSize)
+
+	return &FailoverAPIKeyProvider{
+		channel: channel,
+		cache:   cache,
+	}
+}
+
+func recordSelectedAPIKey(ctx context.Context, key string) {
+	if key == "" {
+		return
+	}
+
+	contexts.WithChannelAPIKey(ctx, key)
+}
+
 func (p *TraceStickyKeyProvider) Get(ctx context.Context) string {
-	enabled := p.channel.cachedEnabledAPIKeys
+	enabled := p.channel.GetEnabledAPIKeys()
 	if len(enabled) == 0 {
-		return p.channel.Credentials.APIKeys[0]
+		panicNoEnabledAPIKey(p.channel)
 	}
 
 	if len(enabled) == 1 {
+		recordSelectedAPIKey(ctx, enabled[0])
+
 		return enabled[0]
 	}
 
 	var selectedKey string
 
 	if trace, ok := contexts.GetTrace(ctx); ok && trace != nil {
-		if cached, ok := p.cache.Get(trace.TraceID); ok {
+		if cached, ok := p.cache.Get(trace.TraceID); ok && containsKey(enabled, cached) {
 			selectedKey = cached
 		} else {
 			selectedKey = rendezvousSelect(enabled, trace.TraceID)
@@ -73,7 +136,69 @@ func (p *TraceStickyKeyProvider) Get(ctx context.Context) string {
 		}
 	}
 
-	contexts.WithChannelAPIKey(ctx, selectedKey)
+	recordSelectedAPIKey(ctx, selectedKey)
+
+	return selectedKey
+}
+
+func (p *WeightedTraceStickyKeyProvider) Get(ctx context.Context) string {
+	enabled := p.channel.GetEnabledAPIKeyConfigs()
+	if len(enabled) == 0 {
+		panicNoEnabledAPIKey(p.channel)
+	}
+
+	var selectedKey string
+	if trace, ok := contexts.GetTrace(ctx); ok && trace != nil {
+		if cached, ok := p.cache.Get(trace.TraceID); ok && containsAPIKeyConfig(enabled, cached) {
+			selectedKey = cached
+		} else {
+			selectedKey = weightedRendezvousSelect(enabled, trace.TraceID)
+			p.cache.Add(trace.TraceID, selectedKey)
+		}
+	} else {
+		selectedKey = weightedRandomSelect(enabled)
+	}
+
+	recordSelectedAPIKey(ctx, selectedKey)
+
+	return selectedKey
+}
+
+func (p *FailoverAPIKeyProvider) Get(ctx context.Context) string {
+	enabled := p.channel.GetEnabledAPIKeyConfigs()
+	if len(enabled) == 0 {
+		panicNoEnabledAPIKey(p.channel)
+	}
+
+	topWeight := enabled[0].Weight
+	for _, config := range enabled[1:] {
+		if config.Weight > topWeight {
+			topWeight = config.Weight
+		}
+	}
+
+	topConfigs := make([]objects.ChannelAPIKeyConfig, 0, len(enabled))
+	for _, config := range enabled {
+		if config.Weight == topWeight {
+			topConfigs = append(topConfigs, config)
+		}
+	}
+
+	keys := apiKeyConfigKeys(topConfigs)
+	var selectedKey string
+	if trace, ok := contexts.GetTrace(ctx); ok && trace != nil {
+		if cached, ok := p.cache.Get(trace.TraceID); ok && containsKey(keys, cached) {
+			selectedKey = cached
+		} else {
+			selectedKey = rendezvousSelect(keys, trace.TraceID)
+			p.cache.Add(trace.TraceID, selectedKey)
+		}
+	} else {
+		//nolint:gosec // not a security issue, just a random selection.
+		selectedKey = keys[rand.IntN(len(keys))]
+	}
+
+	recordSelectedAPIKey(ctx, selectedKey)
 
 	return selectedKey
 }
@@ -97,11 +222,103 @@ func rendezvousSelect(keys []string, seed string) string {
 	return bestKey
 }
 
+func weightedRendezvousSelect(configs []objects.ChannelAPIKeyConfig, seed string) string {
+	bestConfig := configs[0]
+	bestScore := weightedRendezvousScore(seed, bestConfig)
+
+	for i := 1; i < len(configs); i++ {
+		score := weightedRendezvousScore(seed, configs[i])
+		if score > bestScore {
+			bestScore = score
+			bestConfig = configs[i]
+		}
+	}
+
+	return bestConfig.Key
+}
+
+func weightedRendezvousScore(seed string, config objects.ChannelAPIKeyConfig) float64 {
+	weight := config.Weight
+	if weight <= 0 {
+		weight = 100
+	}
+
+	const maxUint64Float = float64(^uint64(0))
+
+	hashValue := hashAPIKey(seed + "|" + config.Key)
+	u := (float64(hashValue) + 1) / (maxUint64Float + 1)
+	if u <= 0 {
+		u = math.SmallestNonzeroFloat64
+	}
+
+	return math.Log(u) / float64(weight)
+}
+
+func weightedRandomSelect(configs []objects.ChannelAPIKeyConfig) string {
+	total := 0
+	for _, config := range configs {
+		total += config.Weight
+	}
+	if total <= 0 {
+		//nolint:gosec // not a security issue, just a random selection.
+		return configs[rand.IntN(len(configs))].Key
+	}
+
+	//nolint:gosec // not a security issue, just a weighted random selection.
+	target := rand.IntN(total)
+	for _, config := range configs {
+		target -= config.Weight
+		if target < 0 {
+			return config.Key
+		}
+	}
+
+	return configs[len(configs)-1].Key
+}
+
+func containsAPIKeyConfig(configs []objects.ChannelAPIKeyConfig, key string) bool {
+	for _, config := range configs {
+		if config.Key == key {
+			return true
+		}
+	}
+
+	return false
+}
+
+func apiKeyConfigKeys(configs []objects.ChannelAPIKeyConfig) []string {
+	keys := make([]string, 0, len(configs))
+	for _, config := range configs {
+		keys = append(keys, config.Key)
+	}
+	sort.Strings(keys)
+
+	return keys
+}
+
+func containsKey(keys []string, key string) bool {
+	for _, current := range keys {
+		if current == key {
+			return true
+		}
+	}
+
+	return false
+}
+
 func hashAPIKey(s string) uint64 {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(s))
 
 	return h.Sum64()
+}
+
+func panicNoEnabledAPIKey(ch *Channel) {
+	if ch == nil {
+		panic("no enabled api key configured")
+	}
+
+	panic("no enabled api key configured for channel " + ch.Name)
 }
 
 func safeAPIKeyPrefix(key string) string {

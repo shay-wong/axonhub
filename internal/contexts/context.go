@@ -15,6 +15,13 @@ const (
 	containerContextKey ContextKey = "context_container"
 )
 
+// EnsureContainer returns a context with a shared mutable request container.
+// It is useful for code paths where downstream components can only mutate the
+// existing context value and cannot return a derived context to callers.
+func EnsureContainer(ctx context.Context) context.Context {
+	return withContainer(ctx, getContainer(ctx))
+}
+
 // WithAPIKey stores the API key entity in the context.
 func WithAPIKey(ctx context.Context, apiKey *ent.APIKey) context.Context {
 	container := getContainer(ctx)
@@ -110,6 +117,9 @@ func GetRequestID(ctx context.Context) (string, bool) {
 // WithChannelAPIKey stores the channel API key in the context.
 func WithChannelAPIKey(ctx context.Context, apiKey string) context.Context {
 	container := getContainer(ctx)
+	container.mu.Lock()
+	defer container.mu.Unlock()
+
 	container.ChannelAPIKey = &apiKey
 
 	return withContainer(ctx, container)
@@ -118,6 +128,9 @@ func WithChannelAPIKey(ctx context.Context, apiKey string) context.Context {
 // GetChannelAPIKey retrieves the channel API key from the context.
 func GetChannelAPIKey(ctx context.Context) (string, bool) {
 	container := getContainer(ctx)
+	container.mu.RLock()
+	defer container.mu.RUnlock()
+
 	if container.ChannelAPIKey != nil {
 		return *container.ChannelAPIKey, true
 	}

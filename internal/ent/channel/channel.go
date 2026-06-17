@@ -57,6 +57,12 @@ const (
 	FieldOrderingWeight = "ordering_weight"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
 	FieldErrorMessage = "error_message"
+	// FieldTemporaryDisabledUntil holds the string denoting the temporary_disabled_until field in the database.
+	FieldTemporaryDisabledUntil = "temporary_disabled_until"
+	// FieldTemporaryDisabledErrorCode holds the string denoting the temporary_disabled_error_code field in the database.
+	FieldTemporaryDisabledErrorCode = "temporary_disabled_error_code"
+	// FieldTemporaryDisabledReason holds the string denoting the temporary_disabled_reason field in the database.
+	FieldTemporaryDisabledReason = "temporary_disabled_reason"
 	// FieldRemark holds the string denoting the remark field in the database.
 	FieldRemark = "remark"
 	// FieldEndpoints holds the string denoting the endpoints field in the database.
@@ -141,6 +147,9 @@ var Columns = []string{
 	FieldSettings,
 	FieldOrderingWeight,
 	FieldErrorMessage,
+	FieldTemporaryDisabledUntil,
+	FieldTemporaryDisabledErrorCode,
+	FieldTemporaryDisabledReason,
 	FieldRemark,
 	FieldEndpoints,
 }
@@ -364,6 +373,21 @@ func ByOrderingWeight(opts ...sql.OrderTermOption) OrderOption {
 // ByErrorMessage orders the results by the error_message field.
 func ByErrorMessage(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldErrorMessage, opts...).ToFunc()
+}
+
+// ByTemporaryDisabledUntil orders the results by the temporary_disabled_until field.
+func ByTemporaryDisabledUntil(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDisabledUntil, opts...).ToFunc()
+}
+
+// ByTemporaryDisabledErrorCode orders the results by the temporary_disabled_error_code field.
+func ByTemporaryDisabledErrorCode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDisabledErrorCode, opts...).ToFunc()
+}
+
+// ByTemporaryDisabledReason orders the results by the temporary_disabled_reason field.
+func ByTemporaryDisabledReason(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDisabledReason, opts...).ToFunc()
 }
 
 // ByRemark orders the results by the remark field.

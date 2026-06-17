@@ -93,27 +93,30 @@ var schemaGraph = func() *sqlgraph.Schema {
 		},
 		Type: "Channel",
 		Fields: map[string]*sqlgraph.FieldSpec{
-			channel.FieldCreatedAt:               {Type: field.TypeTime, Column: channel.FieldCreatedAt},
-			channel.FieldUpdatedAt:               {Type: field.TypeTime, Column: channel.FieldUpdatedAt},
-			channel.FieldDeletedAt:               {Type: field.TypeInt, Column: channel.FieldDeletedAt},
-			channel.FieldType:                    {Type: field.TypeEnum, Column: channel.FieldType},
-			channel.FieldBaseURL:                 {Type: field.TypeString, Column: channel.FieldBaseURL},
-			channel.FieldName:                    {Type: field.TypeString, Column: channel.FieldName},
-			channel.FieldStatus:                  {Type: field.TypeEnum, Column: channel.FieldStatus},
-			channel.FieldCredentials:             {Type: field.TypeJSON, Column: channel.FieldCredentials},
-			channel.FieldDisabledAPIKeys:         {Type: field.TypeJSON, Column: channel.FieldDisabledAPIKeys},
-			channel.FieldSupportedModels:         {Type: field.TypeJSON, Column: channel.FieldSupportedModels},
-			channel.FieldManualModels:            {Type: field.TypeJSON, Column: channel.FieldManualModels},
-			channel.FieldAutoSyncSupportedModels: {Type: field.TypeBool, Column: channel.FieldAutoSyncSupportedModels},
-			channel.FieldAutoSyncModelPattern:    {Type: field.TypeString, Column: channel.FieldAutoSyncModelPattern},
-			channel.FieldTags:                    {Type: field.TypeJSON, Column: channel.FieldTags},
-			channel.FieldDefaultTestModel:        {Type: field.TypeString, Column: channel.FieldDefaultTestModel},
-			channel.FieldPolicies:                {Type: field.TypeJSON, Column: channel.FieldPolicies},
-			channel.FieldSettings:                {Type: field.TypeJSON, Column: channel.FieldSettings},
-			channel.FieldOrderingWeight:          {Type: field.TypeInt, Column: channel.FieldOrderingWeight},
-			channel.FieldErrorMessage:            {Type: field.TypeString, Column: channel.FieldErrorMessage},
-			channel.FieldRemark:                  {Type: field.TypeString, Column: channel.FieldRemark},
-			channel.FieldEndpoints:               {Type: field.TypeJSON, Column: channel.FieldEndpoints},
+			channel.FieldCreatedAt:                  {Type: field.TypeTime, Column: channel.FieldCreatedAt},
+			channel.FieldUpdatedAt:                  {Type: field.TypeTime, Column: channel.FieldUpdatedAt},
+			channel.FieldDeletedAt:                  {Type: field.TypeInt, Column: channel.FieldDeletedAt},
+			channel.FieldType:                       {Type: field.TypeEnum, Column: channel.FieldType},
+			channel.FieldBaseURL:                    {Type: field.TypeString, Column: channel.FieldBaseURL},
+			channel.FieldName:                       {Type: field.TypeString, Column: channel.FieldName},
+			channel.FieldStatus:                     {Type: field.TypeEnum, Column: channel.FieldStatus},
+			channel.FieldCredentials:                {Type: field.TypeJSON, Column: channel.FieldCredentials},
+			channel.FieldDisabledAPIKeys:            {Type: field.TypeJSON, Column: channel.FieldDisabledAPIKeys},
+			channel.FieldSupportedModels:            {Type: field.TypeJSON, Column: channel.FieldSupportedModels},
+			channel.FieldManualModels:               {Type: field.TypeJSON, Column: channel.FieldManualModels},
+			channel.FieldAutoSyncSupportedModels:    {Type: field.TypeBool, Column: channel.FieldAutoSyncSupportedModels},
+			channel.FieldAutoSyncModelPattern:       {Type: field.TypeString, Column: channel.FieldAutoSyncModelPattern},
+			channel.FieldTags:                       {Type: field.TypeJSON, Column: channel.FieldTags},
+			channel.FieldDefaultTestModel:           {Type: field.TypeString, Column: channel.FieldDefaultTestModel},
+			channel.FieldPolicies:                   {Type: field.TypeJSON, Column: channel.FieldPolicies},
+			channel.FieldSettings:                   {Type: field.TypeJSON, Column: channel.FieldSettings},
+			channel.FieldOrderingWeight:             {Type: field.TypeInt, Column: channel.FieldOrderingWeight},
+			channel.FieldErrorMessage:               {Type: field.TypeString, Column: channel.FieldErrorMessage},
+			channel.FieldTemporaryDisabledUntil:     {Type: field.TypeTime, Column: channel.FieldTemporaryDisabledUntil},
+			channel.FieldTemporaryDisabledErrorCode: {Type: field.TypeInt, Column: channel.FieldTemporaryDisabledErrorCode},
+			channel.FieldTemporaryDisabledReason:    {Type: field.TypeString, Column: channel.FieldTemporaryDisabledReason},
+			channel.FieldRemark:                     {Type: field.TypeString, Column: channel.FieldRemark},
+			channel.FieldEndpoints:                  {Type: field.TypeJSON, Column: channel.FieldEndpoints},
 		},
 	}
 	graph.Nodes[3] = &sqlgraph.Node{
@@ -1714,6 +1717,21 @@ func (f *ChannelFilter) WhereOrderingWeight(p entql.IntP) {
 // WhereErrorMessage applies the entql string predicate on the error_message field.
 func (f *ChannelFilter) WhereErrorMessage(p entql.StringP) {
 	f.Where(p.Field(channel.FieldErrorMessage))
+}
+
+// WhereTemporaryDisabledUntil applies the entql time.Time predicate on the temporary_disabled_until field.
+func (f *ChannelFilter) WhereTemporaryDisabledUntil(p entql.TimeP) {
+	f.Where(p.Field(channel.FieldTemporaryDisabledUntil))
+}
+
+// WhereTemporaryDisabledErrorCode applies the entql int predicate on the temporary_disabled_error_code field.
+func (f *ChannelFilter) WhereTemporaryDisabledErrorCode(p entql.IntP) {
+	f.Where(p.Field(channel.FieldTemporaryDisabledErrorCode))
+}
+
+// WhereTemporaryDisabledReason applies the entql string predicate on the temporary_disabled_reason field.
+func (f *ChannelFilter) WhereTemporaryDisabledReason(p entql.StringP) {
+	f.Where(p.Field(channel.FieldTemporaryDisabledReason))
 }
 
 // WhereRemark applies the entql string predicate on the remark field.

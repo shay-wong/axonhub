@@ -113,10 +113,14 @@ func (svc *ChannelService) getHttpClient(channelSettings *objects.ChannelSetting
 
 // buildChannel creates a Channel with precomputed caches (transformer is set separately).
 func buildChannel(c *ent.Channel, httpClient *httpclient.HttpClient) *Channel {
+	now := time.Now()
 	// Precompute disabled key set for O(1) lookup
 	disabledKeySet := make(map[string]struct{}, len(c.DisabledAPIKeys))
 	for _, dk := range c.DisabledAPIKeys {
 		if dk.Key != "" {
+			if dk.DisabledUntil != nil && !dk.DisabledUntil.After(now) {
+				continue
+			}
 			disabledKeySet[dk.Key] = struct{}{}
 		}
 	}
@@ -125,7 +129,7 @@ func buildChannel(c *ent.Channel, httpClient *httpclient.HttpClient) *Channel {
 		Channel:              c,
 		HTTPClient:           httpClient,
 		cachedDisabledKeySet: disabledKeySet,
-		cachedEnabledAPIKeys: c.Credentials.GetEnabledAPIKeys(c.DisabledAPIKeys),
+		cachedAPIKeyConfigs:  c.Credentials.GetAllAPIKeyConfigs(),
 	}
 
 	// Precompute other caches
@@ -152,16 +156,18 @@ func buildChannel(c *ent.Channel, httpClient *httpclient.HttpClient) *Channel {
 // NOTE: This function panics when there is no enabled API key. This is intended as an assertion:
 // buildChannelWithTransformer should validate channel credentials before constructing transformers.
 func getAPIKeyProvider(ch *Channel) auth.APIKeyProvider {
-	enabled := ch.cachedEnabledAPIKeys
-	if len(enabled) > 1 {
+	if ch == nil || !ch.HasConfiguredAPIKeys() {
+		panicNoEnabledAPIKey(ch)
+	}
+
+	switch ch.APIKeySelectionStrategy() {
+	case APIKeySelectionStrategyWeightedSticky:
+		return NewWeightedTraceStickyKeyProvider(ch)
+	case APIKeySelectionStrategyFailover:
+		return NewFailoverAPIKeyProvider(ch)
+	default:
 		return NewTraceStickyKeyProvider(ch)
 	}
-
-	if len(enabled) == 1 {
-		return auth.NewStaticKeyProvider(enabled[0])
-	}
-
-	panic(fmt.Errorf("no enabled api key configured for channel %s", ch.Name))
 }
 
 // BuildOutboundByAPIFormat returns the outbound transformer for a resolved endpoint API format.
@@ -439,12 +445,12 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel) (*Channel
 	// Validate credentials early so we can fail fast without constructing HTTP clients/transformers.
 	//
 	// NOTE: "enabled" keys excludes keys that were explicitly disabled for this channel.
-	enabledKeys := c.Credentials.GetEnabledAPIKeys(c.DisabledAPIKeys)
+	configuredKeys := c.Credentials.GetAllAPIKeys()
 
 	//nolint:exhaustive // Checked.
 	switch c.Type {
 	case channel.TypeCodex, channel.TypeClaudecode:
-		if !c.Credentials.IsOAuth() && len(enabledKeys) == 0 {
+		if !c.Credentials.IsOAuth() && len(configuredKeys) == 0 {
 			return nil, fmt.Errorf("missing credentials: oauth or api key required for channel %s", c.Name)
 		}
 	case channel.TypeGithubCopilot:
@@ -462,7 +468,7 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel) (*Channel
 		// - anthropic_gcp uses GCP credentials JSON
 		// - *_fake are test-only
 	default:
-		if len(enabledKeys) == 0 {
+		if len(configuredKeys) == 0 {
 			return nil, fmt.Errorf("missing api key for channel %s", c.Name)
 		}
 	}
@@ -1019,7 +1025,7 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel) (*Channel
 	case channel.TypeOllama:
 		// Ollama is often used locally without API key, but may also be configured with one
 		var apiKeyProvider auth.APIKeyProvider
-		if len(ch.cachedEnabledAPIKeys) > 0 {
+		if ch.HasConfiguredAPIKeys() {
 			apiKeyProvider = getAPIKeyProvider(ch)
 		}
 

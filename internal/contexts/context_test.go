@@ -77,6 +77,21 @@ func TestGetAPIKey(t *testing.T) {
 	}
 }
 
+func TestEnsureContainer_AllowsInPlaceMutation(t *testing.T) {
+	ctx := EnsureContainer(t.Context())
+
+	_ = WithChannelAPIKey(ctx, "upstream-key")
+
+	apiKey, ok := GetChannelAPIKey(ctx)
+	if !ok {
+		t.Error("GetChannelAPIKey should return true after in-place mutation")
+	}
+
+	if apiKey != "upstream-key" {
+		t.Errorf("expected channel API key %s, got %s", "upstream-key", apiKey)
+	}
+}
+
 func TestWithUser(t *testing.T) {
 	ctx := t.Context()
 	user := &ent.User{

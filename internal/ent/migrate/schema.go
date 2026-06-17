@@ -114,6 +114,9 @@ var (
 		{Name: "settings", Type: field.TypeJSON, Nullable: true},
 		{Name: "ordering_weight", Type: field.TypeInt, Default: 0},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
+		{Name: "temporary_disabled_until", Type: field.TypeTime, Nullable: true},
+		{Name: "temporary_disabled_error_code", Type: field.TypeInt, Nullable: true},
+		{Name: "temporary_disabled_reason", Type: field.TypeString, Nullable: true},
 		{Name: "remark", Type: field.TypeString, Nullable: true},
 		{Name: "endpoints", Type: field.TypeJSON, Nullable: true},
 	}

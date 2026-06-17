@@ -58,6 +58,12 @@ type Channel struct {
 	OrderingWeight int `json:"ordering_weight,omitempty"`
 	// ErrorMessage holds the value of the "error_message" field.
 	ErrorMessage *string `json:"error_message,omitempty"`
+	// Temporary auto-disable expiry for channel availability
+	TemporaryDisabledUntil *time.Time `json:"temporary_disabled_until,omitempty"`
+	// Error code that triggered temporary channel auto-disable
+	TemporaryDisabledErrorCode *int `json:"temporary_disabled_error_code,omitempty"`
+	// Reason that triggered temporary channel auto-disable
+	TemporaryDisabledReason *string `json:"temporary_disabled_reason,omitempty"`
 	// User-defined remark or note for the channel
 	Remark *string `json:"remark,omitempty"`
 	// Outbound API endpoints for this channel. Each endpoint specifies api_format and optional path. When empty, defaults are derived from channel type.
@@ -160,11 +166,11 @@ func (*Channel) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case channel.FieldAutoSyncSupportedModels:
 			values[i] = new(sql.NullBool)
-		case channel.FieldID, channel.FieldDeletedAt, channel.FieldOrderingWeight:
+		case channel.FieldID, channel.FieldDeletedAt, channel.FieldOrderingWeight, channel.FieldTemporaryDisabledErrorCode:
 			values[i] = new(sql.NullInt64)
-		case channel.FieldType, channel.FieldBaseURL, channel.FieldName, channel.FieldStatus, channel.FieldAutoSyncModelPattern, channel.FieldDefaultTestModel, channel.FieldErrorMessage, channel.FieldRemark:
+		case channel.FieldType, channel.FieldBaseURL, channel.FieldName, channel.FieldStatus, channel.FieldAutoSyncModelPattern, channel.FieldDefaultTestModel, channel.FieldErrorMessage, channel.FieldTemporaryDisabledReason, channel.FieldRemark:
 			values[i] = new(sql.NullString)
-		case channel.FieldCreatedAt, channel.FieldUpdatedAt:
+		case channel.FieldCreatedAt, channel.FieldUpdatedAt, channel.FieldTemporaryDisabledUntil:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -316,6 +322,27 @@ func (_m *Channel) assignValues(columns []string, values []any) error {
 				_m.ErrorMessage = new(string)
 				*_m.ErrorMessage = value.String
 			}
+		case channel.FieldTemporaryDisabledUntil:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_disabled_until", values[i])
+			} else if value.Valid {
+				_m.TemporaryDisabledUntil = new(time.Time)
+				*_m.TemporaryDisabledUntil = value.Time
+			}
+		case channel.FieldTemporaryDisabledErrorCode:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_disabled_error_code", values[i])
+			} else if value.Valid {
+				_m.TemporaryDisabledErrorCode = new(int)
+				*_m.TemporaryDisabledErrorCode = int(value.Int64)
+			}
+		case channel.FieldTemporaryDisabledReason:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_disabled_reason", values[i])
+			} else if value.Valid {
+				_m.TemporaryDisabledReason = new(string)
+				*_m.TemporaryDisabledReason = value.String
+			}
 		case channel.FieldRemark:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field remark", values[i])
@@ -451,6 +478,21 @@ func (_m *Channel) String() string {
 	builder.WriteString(", ")
 	if v := _m.ErrorMessage; v != nil {
 		builder.WriteString("error_message=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.TemporaryDisabledUntil; v != nil {
+		builder.WriteString("temporary_disabled_until=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.TemporaryDisabledErrorCode; v != nil {
+		builder.WriteString("temporary_disabled_error_code=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.TemporaryDisabledReason; v != nil {
+		builder.WriteString("temporary_disabled_reason=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")

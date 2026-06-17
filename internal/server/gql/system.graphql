@@ -61,6 +61,9 @@ input CleanupOptionInput {
 type AutoDisableChannelStatus {
   status: Int!
   times: Int!
+  action: String
+  durationMinutes: Int
+  useRetryAfter: Boolean
 }
 
 type AutoDisableChannel {
@@ -71,6 +74,9 @@ type AutoDisableChannel {
 type AutoDisableAPIKeyStatus {
   status: Int!
   times: Int!
+  action: String
+  durationMinutes: Int
+  useRetryAfter: Boolean
 }
 
 type AutoDisableAPIKey {
@@ -127,6 +133,8 @@ type RetryPolicy {
   loadBalancerStrategy: String!
   enabled: Boolean!
   autoDisableChannel: AutoDisableChannel!
+  channelAutoDisable: AutoDisableChannel!
+  apiKeyAutoDisable: AutoDisableAPIKey!
   emptyResponseDetection: Boolean!
   upstreamErrorPolicy: UpstreamErrorPolicy!
 }
@@ -144,11 +152,27 @@ input UpstreamErrorPolicyInput {
 input AutoDisableChannelStatusInput {
   status: Int!
   times: Int!
+  action: String
+  durationMinutes: Int
+  useRetryAfter: Boolean
 }
 
 input AutoDisableChannelInput {
   enabled: Boolean
   statuses: [AutoDisableChannelStatusInput!]
+}
+
+input AutoDisableAPIKeyStatusInput {
+  status: Int!
+  times: Int!
+  action: String
+  durationMinutes: Int
+  useRetryAfter: Boolean
+}
+
+input AutoDisableAPIKeyInput {
+  enabled: Boolean
+  statuses: [AutoDisableAPIKeyStatusInput!]
 }
 
 input UpdateRetryPolicyInput {
@@ -160,6 +184,8 @@ input UpdateRetryPolicyInput {
   loadBalancerStrategy: String
   enabled: Boolean
   autoDisableChannel: AutoDisableChannelInput
+  channelAutoDisable: AutoDisableChannelInput
+  apiKeyAutoDisable: AutoDisableAPIKeyInput
   emptyResponseDetection: Boolean
   upstreamErrorPolicy: UpstreamErrorPolicyInput
 }
@@ -430,6 +456,7 @@ extend type Query {
   brandSettings: BrandSettings!
   storagePolicy: StoragePolicy!
   retryPolicy: RetryPolicy!
+  defaultAutoDisableStatusRules: [AutoDisableChannelStatus!]!
   webhookNotifierConfig: WebhookNotifierConfig!
   systemModelSettings: SystemModelSettings!
   defaultDataStorageID: ID

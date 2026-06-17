@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/looplj/axonhub/internal/authz"
@@ -1070,4 +1071,51 @@ func TestSystemService_UserAgentPassThrough_WithCache(t *testing.T) {
 	uaPassThrough3, err := service.UserAgentPassThrough(ctx)
 	require.NoError(t, err)
 	require.False(t, uaPassThrough3)
+}
+
+func TestValidateRetryPolicy_Temporary429UseRetryAfterAllowsMissingDuration(t *testing.T) {
+	policy := &RetryPolicy{
+		APIKeyAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{
+					Status:        429,
+					Times:         1,
+					Action:        DisableActionTemporary,
+					UseRetryAfter: lo.ToPtr(true),
+				},
+			},
+		},
+	}
+
+	require.NoError(t, validateRetryPolicy(policy))
+}
+
+func TestValidateRetryPolicy_TemporaryRequiresDurationWithout429RetryAfter(t *testing.T) {
+	tests := []struct {
+		name string
+		rule AutoDisableStatusRule
+	}{
+		{
+			name: "non 429 useRetryAfter is invalid before duration exemption",
+			rule: AutoDisableStatusRule{Status: 503, Times: 1, Action: DisableActionTemporary, UseRetryAfter: lo.ToPtr(true)},
+		},
+		{
+			name: "429 without useRetryAfter still needs duration",
+			rule: AutoDisableStatusRule{Status: 429, Times: 1, Action: DisableActionTemporary},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy := &RetryPolicy{
+				APIKeyAutoDisable: AutoDisablePolicy{
+					Enabled:  true,
+					Statuses: []AutoDisableStatusRule{tt.rule},
+				},
+			}
+
+			require.Error(t, validateRetryPolicy(policy))
+		})
+	}
 }

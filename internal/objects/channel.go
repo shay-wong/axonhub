@@ -197,6 +197,9 @@ type ChannelSettings struct {
 	// trigger retry for this channel. When Regex is false, Pattern is matched as a
 	// case-sensitive substring of the error text.
 	RetryableErrorPatterns []RetryableErrorPattern `json:"retryableErrorPatterns,omitempty"`
+
+	// APIKeySelectionStrategy controls how a channel selects among upstream API keys.
+	APIKeySelectionStrategy string `json:"apiKeySelectionStrategy,omitempty"`
 }
 
 type RetryableErrorPattern struct {
@@ -225,10 +228,17 @@ type ChannelRateLimit struct {
 // DisabledAPIKey 记录被禁用的 API key 信息（敏感，按 credentials 同级保护）
 // 注意：禁用判断以 Key 明文为主键。
 type DisabledAPIKey struct {
-	Key        string    `json:"key"`
-	DisabledAt time.Time `json:"disabledAt"`
-	ErrorCode  int       `json:"errorCode"`
-	Reason     string    `json:"reason,omitempty"`
+	Key           string     `json:"key"`
+	DisabledAt    time.Time  `json:"disabledAt"`
+	DisabledUntil *time.Time `json:"disabledUntil,omitempty"`
+	DisableAction string     `json:"disableAction,omitempty"`
+	ErrorCode     int        `json:"errorCode"`
+	Reason        string     `json:"reason,omitempty"`
+}
+
+type ChannelAPIKeyConfig struct {
+	Key    string `json:"key"`
+	Weight int    `json:"weight,omitempty"`
 }
 
 type ChannelCredentials struct {
@@ -240,8 +250,12 @@ type ChannelCredentials struct {
 	OAuth *OAuthCredentials `json:"oauth,omitempty"`
 
 	// APIKeys is a list of API keys for the channel.
-	// When multiple keys are provided, they will be used in a round-robin fashion.
+	// When multiple keys are provided, the channel's API key selection strategy
+	// controls how traffic is assigned among enabled keys.
 	APIKeys []string `json:"apiKeys,omitempty"`
+
+	// APIKeyConfigs is a structured API key list with per-key routing weight.
+	APIKeyConfigs []ChannelAPIKeyConfig `json:"apiKeyConfigs,omitempty"`
 
 	// Azure configuration for the channel.
 	Azure *AzureCredential `json:"azure,omitempty"`
@@ -250,31 +264,76 @@ type ChannelCredentials struct {
 	GCP *GCPCredential `json:"gcp,omitempty"`
 }
 
-// GetAllAPIKeys returns all API keys for the channel, combining APIKey and APIKeys fields.
-// This ensures backward compatibility with old data that only has APIKey set.
+// GetAllAPIKeys returns all API keys for the channel.
 func (c *ChannelCredentials) GetAllAPIKeys() []string {
-	if c == nil {
+	configs := c.GetAllAPIKeyConfigs()
+	if len(configs) == 0 {
 		return nil
 	}
 
-	var keys []string
-
-	// Add legacy APIKey if present (only if not OAuth credential)
-	if c.APIKey != "" && !c.IsOAuth() {
-		keys = append(keys, c.APIKey)
+	keys := make([]string, 0, len(configs))
+	for _, config := range configs {
+		keys = append(keys, config.Key)
 	}
-
-	// Add new APIKeys
-	keys = append(keys, c.APIKeys...)
 
 	return keys
 }
 
+// GetAllAPIKeyConfigs returns structured API key configs, preferring apiKeyConfigs
+// and falling back to legacy apiKey/apiKeys with default weight.
+func (c *ChannelCredentials) GetAllAPIKeyConfigs() []ChannelAPIKeyConfig {
+	if c == nil {
+		return nil
+	}
+
+	if len(c.APIKeyConfigs) > 0 {
+		return normalizeAPIKeyConfigs(c.APIKeyConfigs)
+	}
+
+	var configs []ChannelAPIKeyConfig
+
+	// Add legacy APIKey if present (only if not OAuth credential)
+	if c.APIKey != "" && !c.IsOAuth() {
+		configs = append(configs, ChannelAPIKeyConfig{Key: c.APIKey, Weight: 100})
+	}
+
+	// Add new APIKeys
+	for _, key := range c.APIKeys {
+		configs = append(configs, ChannelAPIKeyConfig{Key: key, Weight: 100})
+	}
+
+	return normalizeAPIKeyConfigs(configs)
+}
+
 // GetEnabledAPIKeys returns API keys that are not disabled.
 func (c *ChannelCredentials) GetEnabledAPIKeys(disabledKeys []DisabledAPIKey) []string {
-	allKeys := c.GetAllAPIKeys()
+	return c.GetEnabledAPIKeysAt(disabledKeys, time.Now())
+}
+
+// GetEnabledAPIKeysAt returns API keys that are not disabled at the provided time.
+func (c *ChannelCredentials) GetEnabledAPIKeysAt(disabledKeys []DisabledAPIKey, now time.Time) []string {
+	configs := c.GetEnabledAPIKeyConfigsAt(disabledKeys, now)
+	if len(configs) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(configs))
+	for _, config := range configs {
+		keys = append(keys, config.Key)
+	}
+
+	return keys
+}
+
+// GetEnabledAPIKeyConfigsAt returns API key configs that are not disabled at the provided time.
+func (c *ChannelCredentials) GetEnabledAPIKeyConfigsAt(disabledKeys []DisabledAPIKey, now time.Time) []ChannelAPIKeyConfig {
+	allConfigs := c.GetAllAPIKeyConfigs()
+	if len(allConfigs) == 0 {
+		return nil
+	}
+
 	if len(disabledKeys) == 0 {
-		return allKeys
+		return allConfigs
 	}
 
 	disabledSet := make(map[string]struct{}, len(disabledKeys))
@@ -282,20 +341,55 @@ func (c *ChannelCredentials) GetEnabledAPIKeys(disabledKeys []DisabledAPIKey) []
 		if dk.Key == "" {
 			continue
 		}
+		if dk.DisabledUntil != nil && !dk.DisabledUntil.After(now) {
+			continue
+		}
 
 		disabledSet[dk.Key] = struct{}{}
 	}
 
-	enabled := make([]string, 0, len(allKeys))
-	for _, key := range allKeys {
-		if _, ok := disabledSet[key]; ok {
+	enabled := make([]ChannelAPIKeyConfig, 0, len(allConfigs))
+	for _, config := range allConfigs {
+		if _, ok := disabledSet[config.Key]; ok {
 			continue
 		}
 
-		enabled = append(enabled, key)
+		enabled = append(enabled, config)
 	}
 
 	return enabled
+}
+
+func normalizeAPIKeyConfigs(configs []ChannelAPIKeyConfig) []ChannelAPIKeyConfig {
+	if len(configs) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(configs))
+	normalized := make([]ChannelAPIKeyConfig, 0, len(configs))
+
+	for _, config := range configs {
+		key := strings.TrimSpace(config.Key)
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		weight := config.Weight
+		if weight <= 0 {
+			weight = 100
+		}
+
+		normalized = append(normalized, ChannelAPIKeyConfig{
+			Key:    key,
+			Weight: weight,
+		})
+	}
+
+	return normalized
 }
 
 // IsOAuth returns true if OAuth credentials are configured and valid.

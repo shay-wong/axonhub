@@ -423,6 +423,18 @@ type Channel implements Node {
   orderingWeight: Int!
   errorMessage: String
   """
+  Temporary auto-disable expiry for channel availability
+  """
+  temporaryDisabledUntil: Time
+  """
+  Error code that triggered temporary channel auto-disable
+  """
+  temporaryDisabledErrorCode: Int
+  """
+  Reason that triggered temporary channel auto-disable
+  """
+  temporaryDisabledReason: String
+  """
   User-defined remark or note for the channel
   """
   remark: String
@@ -1469,6 +1481,50 @@ input ChannelWhereInput {
   errorMessageNotNil: Boolean
   errorMessageEqualFold: String
   errorMessageContainsFold: String
+  """
+  temporary_disabled_until field predicates
+  """
+  temporaryDisabledUntil: Time
+  temporaryDisabledUntilNEQ: Time
+  temporaryDisabledUntilIn: [Time!]
+  temporaryDisabledUntilNotIn: [Time!]
+  temporaryDisabledUntilGT: Time
+  temporaryDisabledUntilGTE: Time
+  temporaryDisabledUntilLT: Time
+  temporaryDisabledUntilLTE: Time
+  temporaryDisabledUntilIsNil: Boolean
+  temporaryDisabledUntilNotNil: Boolean
+  """
+  temporary_disabled_error_code field predicates
+  """
+  temporaryDisabledErrorCode: Int
+  temporaryDisabledErrorCodeNEQ: Int
+  temporaryDisabledErrorCodeIn: [Int!]
+  temporaryDisabledErrorCodeNotIn: [Int!]
+  temporaryDisabledErrorCodeGT: Int
+  temporaryDisabledErrorCodeGTE: Int
+  temporaryDisabledErrorCodeLT: Int
+  temporaryDisabledErrorCodeLTE: Int
+  temporaryDisabledErrorCodeIsNil: Boolean
+  temporaryDisabledErrorCodeNotNil: Boolean
+  """
+  temporary_disabled_reason field predicates
+  """
+  temporaryDisabledReason: String
+  temporaryDisabledReasonNEQ: String
+  temporaryDisabledReasonIn: [String!]
+  temporaryDisabledReasonNotIn: [String!]
+  temporaryDisabledReasonGT: String
+  temporaryDisabledReasonGTE: String
+  temporaryDisabledReasonLT: String
+  temporaryDisabledReasonLTE: String
+  temporaryDisabledReasonContains: String
+  temporaryDisabledReasonHasPrefix: String
+  temporaryDisabledReasonHasSuffix: String
+  temporaryDisabledReasonIsNil: Boolean
+  temporaryDisabledReasonNotNil: Boolean
+  temporaryDisabledReasonEqualFold: String
+  temporaryDisabledReasonContainsFold: String
   """
   remark field predicates
   """

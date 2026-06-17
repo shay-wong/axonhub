@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
 	"github.com/looplj/axonhub/internal/contexts"
@@ -128,6 +129,11 @@ func (m *performanceRecording) OnOutboundRawError(ctx context.Context, err error
 	} else {
 		errorCode := ExtractErrorCode(err)
 		perf.MarkFailed(errorCode)
+		if errorCode == http.StatusTooManyRequests {
+			if duration, ok := httpclient.ParseRetryAfter(err); ok {
+				perf.RetryAfterDuration = &duration
+			}
+		}
 	}
 
 	m.outbound.state.ChannelService.AsyncRecordPerformance(ctx, perf)

@@ -71,10 +71,10 @@ type Channel struct {
 	// RequestModel -> ChannelModelPrice entity (contains Price and ReferenceID)
 	cachedModelPrices map[string]*ent.ChannelModelPrice
 
-	// cachedEnabledAPIKeys caches enabled API keys (computed once when channel is loaded)
-	cachedEnabledAPIKeys []string
+	// cachedAPIKeyConfigs caches all configured upstream API key configs.
+	cachedAPIKeyConfigs []objects.ChannelAPIKeyConfig
 
-	// cachedDisabledKeySet caches disabled key lookup set for O(1) check
+	// cachedDisabledKeySet caches active disabled key lookup set for O(1) check.
 	cachedDisabledKeySet map[string]struct{}
 }
 
@@ -188,6 +188,11 @@ type ChannelService struct {
 	// Used by external caches (e.g., association cache) to detect cache refreshes.
 	cacheVersion atomic.Int64
 
+	// nextTemporaryDisableExpiry is the nearest time a currently-filtered
+	// temporary channel/API key disable expires. It lets periodic cache refreshes
+	// rebuild even when no row's updated_at changes at expiry time.
+	nextTemporaryDisableExpiry atomic.Pointer[time.Time]
+
 	// perfCh is the channel for performance records for async processing.
 	perfCh chan *PerformanceRecord
 }
@@ -210,13 +215,18 @@ func (svc *ChannelService) reloadEnabledChannels(ctx context.Context, current []
 		return current, lastUpdate, false, err
 	}
 
+	now := time.Now()
 	if latestUpdatedChannel == nil {
 		if lastUpdate.IsZero() && len(current) == 0 {
 			return current, time.Time{}, false, nil
 		}
 	} else if !latestUpdatedChannel.UpdatedAt.After(lastUpdate) {
+		if !svc.hasTemporaryDisableExpired(now) {
+			log.Debug(ctx, "no new channels updated")
+			return current, lastUpdate, false, nil
+		}
+
 		log.Debug(ctx, "no new channels updated")
-		return current, lastUpdate, false, nil
 	}
 
 	entities, err := svc.entFromContext(ctx).Channel.Query().
@@ -228,8 +238,17 @@ func (svc *ChannelService) reloadEnabledChannels(ctx context.Context, current []
 	}
 
 	var channels []*Channel
+	nextExpiry := nearestTemporaryDisableExpiry(entities, now)
 
 	for _, c := range entities {
+		snapshot := &Channel{
+			Channel:             c,
+			cachedAPIKeyConfigs: c.Credentials.GetAllAPIKeyConfigs(),
+		}
+		if !snapshot.IsSchedulableAt(now) {
+			continue
+		}
+
 		channel, err := svc.buildChannelWithOutbounds(c)
 		if err != nil {
 			log.Warn(ctx, "failed to build channel",
@@ -258,6 +277,7 @@ func (svc *ChannelService) reloadEnabledChannels(ctx context.Context, current []
 	}
 
 	log.Info(ctx, "loaded channels", log.Int("count", len(channels)))
+	svc.setNextTemporaryDisableExpiry(nextExpiry)
 
 	updateTime := time.Time{}
 	if latestUpdatedChannel != nil {
@@ -265,6 +285,51 @@ func (svc *ChannelService) reloadEnabledChannels(ctx context.Context, current []
 	}
 
 	return channels, updateTime, true, nil
+}
+
+func (svc *ChannelService) hasTemporaryDisableExpired(now time.Time) bool {
+	next := svc.nextTemporaryDisableExpiry.Load()
+	if next == nil {
+		return false
+	}
+
+	return !next.After(now)
+}
+
+func (svc *ChannelService) setNextTemporaryDisableExpiry(next *time.Time) {
+	if next == nil {
+		svc.nextTemporaryDisableExpiry.Store(nil)
+		return
+	}
+
+	nextCopy := *next
+	svc.nextTemporaryDisableExpiry.Store(&nextCopy)
+}
+
+func nearestTemporaryDisableExpiry(channels []*ent.Channel, now time.Time) *time.Time {
+	var nearest *time.Time
+	track := func(until *time.Time) {
+		if until == nil || !until.After(now) {
+			return
+		}
+		if nearest == nil || until.Before(*nearest) {
+			copy := *until
+			nearest = &copy
+		}
+	}
+
+	for _, ch := range channels {
+		if ch == nil {
+			continue
+		}
+
+		track(ch.TemporaryDisabledUntil)
+		for _, disabledKey := range ch.DisabledAPIKeys {
+			track(disabledKey.DisabledUntil)
+		}
+	}
+
+	return nearest
 }
 
 func (svc *ChannelService) onEnabledChannelsSwap(old, new []*Channel) {
@@ -818,11 +883,115 @@ func (svc *ChannelService) DeleteChannel(ctx context.Context, id int) error {
 
 // GetEnabledAPIKeys returns cached enabled API keys.
 func (c *Channel) GetEnabledAPIKeys() []string {
-	return c.cachedEnabledAPIKeys
+	return c.GetEnabledAPIKeysAt(time.Now())
+}
+
+func (c *Channel) GetEnabledAPIKeysAt(now time.Time) []string {
+	configs := c.GetEnabledAPIKeyConfigsAt(now)
+	if len(configs) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(configs))
+	for _, config := range configs {
+		keys = append(keys, config.Key)
+	}
+
+	return keys
+}
+
+func (c *Channel) GetEnabledAPIKeyConfigs() []objects.ChannelAPIKeyConfig {
+	return c.GetEnabledAPIKeyConfigsAt(time.Now())
+}
+
+func (c *Channel) GetEnabledAPIKeyConfigsAt(now time.Time) []objects.ChannelAPIKeyConfig {
+	if c == nil {
+		return nil
+	}
+
+	configs := c.apiKeyConfigs()
+	if len(configs) == 0 {
+		return nil
+	}
+
+	credentials := objects.ChannelCredentials{APIKeyConfigs: configs}
+
+	return credentials.GetEnabledAPIKeyConfigsAt(c.DisabledAPIKeys, now)
+}
+
+func (c *Channel) HasConfiguredAPIKeys() bool {
+	return c != nil && len(c.apiKeyConfigs()) > 0
+}
+
+func (c *Channel) apiKeyConfigs() []objects.ChannelAPIKeyConfig {
+	if c == nil {
+		return nil
+	}
+	if c.cachedAPIKeyConfigs != nil {
+		return c.cachedAPIKeyConfigs
+	}
+	if c.Channel == nil {
+		return nil
+	}
+
+	return c.Credentials.GetAllAPIKeyConfigs()
+}
+
+func (c *Channel) HasEnabledAPIKeysAt(now time.Time) bool {
+	if !c.HasConfiguredAPIKeys() {
+		return true
+	}
+
+	return len(c.GetEnabledAPIKeysAt(now)) > 0
+}
+
+func (c *Channel) IsTemporaryDisabledAt(now time.Time) bool {
+	return c != nil && c.TemporaryDisabledUntil != nil && c.TemporaryDisabledUntil.After(now)
+}
+
+func (c *Channel) APIKeySelectionStrategy() string {
+	if c == nil || c.Settings == nil || c.Settings.APIKeySelectionStrategy == "" {
+		return APIKeySelectionStrategyTraceSticky
+	}
+
+	switch c.Settings.APIKeySelectionStrategy {
+	case APIKeySelectionStrategyTraceSticky, APIKeySelectionStrategyWeightedSticky, APIKeySelectionStrategyFailover:
+		return c.Settings.APIKeySelectionStrategy
+	default:
+		return APIKeySelectionStrategyTraceSticky
+	}
+}
+
+func (c *Channel) IsSchedulableAt(now time.Time) bool {
+	if c == nil {
+		return false
+	}
+	if c.IsTemporaryDisabledAt(now) {
+		return false
+	}
+	if !c.HasEnabledAPIKeysAt(now) {
+		return false
+	}
+
+	return true
 }
 
 // IsAPIKeyDisabled checks if a key is disabled (O(1) lookup).
 func (c *Channel) IsAPIKeyDisabled(key string) bool {
-	_, ok := c.cachedDisabledKeySet[key]
-	return ok
+	return c.IsAPIKeyDisabledAt(key, time.Now())
+}
+
+func (c *Channel) IsAPIKeyDisabledAt(key string, now time.Time) bool {
+	if c == nil || key == "" {
+		return false
+	}
+
+	for _, disabledKey := range c.DisabledAPIKeys {
+		if disabledKey.Key != key {
+			continue
+		}
+		return disabledKey.DisabledUntil == nil || disabledKey.DisabledUntil.After(now)
+	}
+
+	return false
 }

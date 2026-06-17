@@ -2,11 +2,13 @@ package orchestrator
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
 )
 
@@ -72,6 +74,116 @@ func TestDefaultSelector_Select(t *testing.T) {
 	require.Contains(t, channelIDs, channels[0].ID, "High weight channel should be included")
 	require.Contains(t, channelIDs, channels[1].ID, "Medium weight channel should be included")
 	require.Contains(t, channelIDs, channels[2].ID, "Low weight channel should be included")
+}
+
+func TestDefaultSelector_Select_SkipsTemporarilyDisabledChannel(t *testing.T) {
+	ctx, client := setupTest(t)
+
+	temporaryUntil := time.Now().Add(time.Hour)
+	skipped, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Temporary Disabled Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "temporary-key"}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetStatus(channel.StatusEnabled).
+		SetTemporaryDisabledUntil(temporaryUntil).
+		Save(ctx)
+	require.NoError(t, err)
+
+	active, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Active Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "active-key"}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	channelService := newTestChannelServiceForChannels(client)
+	modelService := newTestModelService(client)
+	systemService := newTestSystemService(client)
+	selector := NewDefaultSelector(channelService, modelService, systemService)
+
+	result, err := selector.selectChannelCadidates(ctx, &llm.Request{Model: "gpt-4"})
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.Equal(t, active.ID, result[0].Channel.ID)
+	require.NotEqual(t, skipped.ID, result[0].Channel.ID)
+}
+
+func TestDefaultSelector_Select_SkipsChannelWhenAllAPIKeysTemporarilyDisabled(t *testing.T) {
+	ctx, client := setupTest(t)
+
+	disabledUntil := time.Now().Add(time.Hour)
+	skipped, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Temporary Key Exhausted Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKeys: []string{"key-a", "key-b"}}).
+		SetDisabledAPIKeys([]objects.DisabledAPIKey{
+			{Key: "key-a", DisabledUntil: &disabledUntil, DisableAction: biz.DisableActionTemporary},
+			{Key: "key-b", DisabledUntil: &disabledUntil, DisableAction: biz.DisableActionTemporary},
+		}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	active, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Active Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "active-key"}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	channelService := newTestChannelServiceForChannels(client)
+	modelService := newTestModelService(client)
+	systemService := newTestSystemService(client)
+	selector := NewDefaultSelector(channelService, modelService, systemService)
+
+	result, err := selector.selectChannelCadidates(ctx, &llm.Request{Model: "gpt-4"})
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.Equal(t, active.ID, result[0].Channel.ID)
+	require.NotEqual(t, skipped.ID, result[0].Channel.ID)
+}
+
+func TestDefaultSelector_Select_RestoresChannelAfterTemporaryAPIKeyDisableExpires(t *testing.T) {
+	ctx, client := setupTest(t)
+
+	expiredUntil := time.Now().Add(-time.Minute)
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Expired Temporary Key Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKeys: []string{"key-a"}}).
+		SetDisabledAPIKeys([]objects.DisabledAPIKey{
+			{Key: "key-a", DisabledUntil: &expiredUntil, DisableAction: biz.DisableActionTemporary},
+		}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	channelService := newTestChannelServiceForChannels(client)
+	modelService := newTestModelService(client)
+	systemService := newTestSystemService(client)
+	selector := NewDefaultSelector(channelService, modelService, systemService)
+
+	result, err := selector.selectChannelCadidates(ctx, &llm.Request{Model: "gpt-4"})
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.Equal(t, ch.ID, result[0].Channel.ID)
 }
 
 // TestDefaultChannelSelector_Select_NoChannelsAvailable tests error when no channels are available.

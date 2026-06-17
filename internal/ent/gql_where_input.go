@@ -964,6 +964,47 @@ type ChannelWhereInput struct {
 	ErrorMessageEqualFold    *string  `json:"errorMessageEqualFold,omitempty"`
 	ErrorMessageContainsFold *string  `json:"errorMessageContainsFold,omitempty"`
 
+	// "temporary_disabled_until" field predicates.
+	TemporaryDisabledUntil       *time.Time  `json:"temporaryDisabledUntil,omitempty"`
+	TemporaryDisabledUntilNEQ    *time.Time  `json:"temporaryDisabledUntilNEQ,omitempty"`
+	TemporaryDisabledUntilIn     []time.Time `json:"temporaryDisabledUntilIn,omitempty"`
+	TemporaryDisabledUntilNotIn  []time.Time `json:"temporaryDisabledUntilNotIn,omitempty"`
+	TemporaryDisabledUntilGT     *time.Time  `json:"temporaryDisabledUntilGT,omitempty"`
+	TemporaryDisabledUntilGTE    *time.Time  `json:"temporaryDisabledUntilGTE,omitempty"`
+	TemporaryDisabledUntilLT     *time.Time  `json:"temporaryDisabledUntilLT,omitempty"`
+	TemporaryDisabledUntilLTE    *time.Time  `json:"temporaryDisabledUntilLTE,omitempty"`
+	TemporaryDisabledUntilIsNil  bool        `json:"temporaryDisabledUntilIsNil,omitempty"`
+	TemporaryDisabledUntilNotNil bool        `json:"temporaryDisabledUntilNotNil,omitempty"`
+
+	// "temporary_disabled_error_code" field predicates.
+	TemporaryDisabledErrorCode       *int  `json:"temporaryDisabledErrorCode,omitempty"`
+	TemporaryDisabledErrorCodeNEQ    *int  `json:"temporaryDisabledErrorCodeNEQ,omitempty"`
+	TemporaryDisabledErrorCodeIn     []int `json:"temporaryDisabledErrorCodeIn,omitempty"`
+	TemporaryDisabledErrorCodeNotIn  []int `json:"temporaryDisabledErrorCodeNotIn,omitempty"`
+	TemporaryDisabledErrorCodeGT     *int  `json:"temporaryDisabledErrorCodeGT,omitempty"`
+	TemporaryDisabledErrorCodeGTE    *int  `json:"temporaryDisabledErrorCodeGTE,omitempty"`
+	TemporaryDisabledErrorCodeLT     *int  `json:"temporaryDisabledErrorCodeLT,omitempty"`
+	TemporaryDisabledErrorCodeLTE    *int  `json:"temporaryDisabledErrorCodeLTE,omitempty"`
+	TemporaryDisabledErrorCodeIsNil  bool  `json:"temporaryDisabledErrorCodeIsNil,omitempty"`
+	TemporaryDisabledErrorCodeNotNil bool  `json:"temporaryDisabledErrorCodeNotNil,omitempty"`
+
+	// "temporary_disabled_reason" field predicates.
+	TemporaryDisabledReason             *string  `json:"temporaryDisabledReason,omitempty"`
+	TemporaryDisabledReasonNEQ          *string  `json:"temporaryDisabledReasonNEQ,omitempty"`
+	TemporaryDisabledReasonIn           []string `json:"temporaryDisabledReasonIn,omitempty"`
+	TemporaryDisabledReasonNotIn        []string `json:"temporaryDisabledReasonNotIn,omitempty"`
+	TemporaryDisabledReasonGT           *string  `json:"temporaryDisabledReasonGT,omitempty"`
+	TemporaryDisabledReasonGTE          *string  `json:"temporaryDisabledReasonGTE,omitempty"`
+	TemporaryDisabledReasonLT           *string  `json:"temporaryDisabledReasonLT,omitempty"`
+	TemporaryDisabledReasonLTE          *string  `json:"temporaryDisabledReasonLTE,omitempty"`
+	TemporaryDisabledReasonContains     *string  `json:"temporaryDisabledReasonContains,omitempty"`
+	TemporaryDisabledReasonHasPrefix    *string  `json:"temporaryDisabledReasonHasPrefix,omitempty"`
+	TemporaryDisabledReasonHasSuffix    *string  `json:"temporaryDisabledReasonHasSuffix,omitempty"`
+	TemporaryDisabledReasonIsNil        bool     `json:"temporaryDisabledReasonIsNil,omitempty"`
+	TemporaryDisabledReasonNotNil       bool     `json:"temporaryDisabledReasonNotNil,omitempty"`
+	TemporaryDisabledReasonEqualFold    *string  `json:"temporaryDisabledReasonEqualFold,omitempty"`
+	TemporaryDisabledReasonContainsFold *string  `json:"temporaryDisabledReasonContainsFold,omitempty"`
+
 	// "remark" field predicates.
 	Remark             *string  `json:"remark,omitempty"`
 	RemarkNEQ          *string  `json:"remarkNEQ,omitempty"`
@@ -1415,6 +1456,111 @@ func (i *ChannelWhereInput) P() (predicate.Channel, error) {
 	}
 	if i.ErrorMessageContainsFold != nil {
 		predicates = append(predicates, channel.ErrorMessageContainsFold(*i.ErrorMessageContainsFold))
+	}
+	if i.TemporaryDisabledUntil != nil {
+		predicates = append(predicates, channel.TemporaryDisabledUntilEQ(*i.TemporaryDisabledUntil))
+	}
+	if i.TemporaryDisabledUntilNEQ != nil {
+		predicates = append(predicates, channel.TemporaryDisabledUntilNEQ(*i.TemporaryDisabledUntilNEQ))
+	}
+	if len(i.TemporaryDisabledUntilIn) > 0 {
+		predicates = append(predicates, channel.TemporaryDisabledUntilIn(i.TemporaryDisabledUntilIn...))
+	}
+	if len(i.TemporaryDisabledUntilNotIn) > 0 {
+		predicates = append(predicates, channel.TemporaryDisabledUntilNotIn(i.TemporaryDisabledUntilNotIn...))
+	}
+	if i.TemporaryDisabledUntilGT != nil {
+		predicates = append(predicates, channel.TemporaryDisabledUntilGT(*i.TemporaryDisabledUntilGT))
+	}
+	if i.TemporaryDisabledUntilGTE != nil {
+		predicates = append(predicates, channel.TemporaryDisabledUntilGTE(*i.TemporaryDisabledUntilGTE))
+	}
+	if i.TemporaryDisabledUntilLT != nil {
+		predicates = append(predicates, channel.TemporaryDisabledUntilLT(*i.TemporaryDisabledUntilLT))
+	}
+	if i.TemporaryDisabledUntilLTE != nil {
+		predicates = append(predicates, channel.TemporaryDisabledUntilLTE(*i.TemporaryDisabledUntilLTE))
+	}
+	if i.TemporaryDisabledUntilIsNil {
+		predicates = append(predicates, channel.TemporaryDisabledUntilIsNil())
+	}
+	if i.TemporaryDisabledUntilNotNil {
+		predicates = append(predicates, channel.TemporaryDisabledUntilNotNil())
+	}
+	if i.TemporaryDisabledErrorCode != nil {
+		predicates = append(predicates, channel.TemporaryDisabledErrorCodeEQ(*i.TemporaryDisabledErrorCode))
+	}
+	if i.TemporaryDisabledErrorCodeNEQ != nil {
+		predicates = append(predicates, channel.TemporaryDisabledErrorCodeNEQ(*i.TemporaryDisabledErrorCodeNEQ))
+	}
+	if len(i.TemporaryDisabledErrorCodeIn) > 0 {
+		predicates = append(predicates, channel.TemporaryDisabledErrorCodeIn(i.TemporaryDisabledErrorCodeIn...))
+	}
+	if len(i.TemporaryDisabledErrorCodeNotIn) > 0 {
+		predicates = append(predicates, channel.TemporaryDisabledErrorCodeNotIn(i.TemporaryDisabledErrorCodeNotIn...))
+	}
+	if i.TemporaryDisabledErrorCodeGT != nil {
+		predicates = append(predicates, channel.TemporaryDisabledErrorCodeGT(*i.TemporaryDisabledErrorCodeGT))
+	}
+	if i.TemporaryDisabledErrorCodeGTE != nil {
+		predicates = append(predicates, channel.TemporaryDisabledErrorCodeGTE(*i.TemporaryDisabledErrorCodeGTE))
+	}
+	if i.TemporaryDisabledErrorCodeLT != nil {
+		predicates = append(predicates, channel.TemporaryDisabledErrorCodeLT(*i.TemporaryDisabledErrorCodeLT))
+	}
+	if i.TemporaryDisabledErrorCodeLTE != nil {
+		predicates = append(predicates, channel.TemporaryDisabledErrorCodeLTE(*i.TemporaryDisabledErrorCodeLTE))
+	}
+	if i.TemporaryDisabledErrorCodeIsNil {
+		predicates = append(predicates, channel.TemporaryDisabledErrorCodeIsNil())
+	}
+	if i.TemporaryDisabledErrorCodeNotNil {
+		predicates = append(predicates, channel.TemporaryDisabledErrorCodeNotNil())
+	}
+	if i.TemporaryDisabledReason != nil {
+		predicates = append(predicates, channel.TemporaryDisabledReasonEQ(*i.TemporaryDisabledReason))
+	}
+	if i.TemporaryDisabledReasonNEQ != nil {
+		predicates = append(predicates, channel.TemporaryDisabledReasonNEQ(*i.TemporaryDisabledReasonNEQ))
+	}
+	if len(i.TemporaryDisabledReasonIn) > 0 {
+		predicates = append(predicates, channel.TemporaryDisabledReasonIn(i.TemporaryDisabledReasonIn...))
+	}
+	if len(i.TemporaryDisabledReasonNotIn) > 0 {
+		predicates = append(predicates, channel.TemporaryDisabledReasonNotIn(i.TemporaryDisabledReasonNotIn...))
+	}
+	if i.TemporaryDisabledReasonGT != nil {
+		predicates = append(predicates, channel.TemporaryDisabledReasonGT(*i.TemporaryDisabledReasonGT))
+	}
+	if i.TemporaryDisabledReasonGTE != nil {
+		predicates = append(predicates, channel.TemporaryDisabledReasonGTE(*i.TemporaryDisabledReasonGTE))
+	}
+	if i.TemporaryDisabledReasonLT != nil {
+		predicates = append(predicates, channel.TemporaryDisabledReasonLT(*i.TemporaryDisabledReasonLT))
+	}
+	if i.TemporaryDisabledReasonLTE != nil {
+		predicates = append(predicates, channel.TemporaryDisabledReasonLTE(*i.TemporaryDisabledReasonLTE))
+	}
+	if i.TemporaryDisabledReasonContains != nil {
+		predicates = append(predicates, channel.TemporaryDisabledReasonContains(*i.TemporaryDisabledReasonContains))
+	}
+	if i.TemporaryDisabledReasonHasPrefix != nil {
+		predicates = append(predicates, channel.TemporaryDisabledReasonHasPrefix(*i.TemporaryDisabledReasonHasPrefix))
+	}
+	if i.TemporaryDisabledReasonHasSuffix != nil {
+		predicates = append(predicates, channel.TemporaryDisabledReasonHasSuffix(*i.TemporaryDisabledReasonHasSuffix))
+	}
+	if i.TemporaryDisabledReasonIsNil {
+		predicates = append(predicates, channel.TemporaryDisabledReasonIsNil())
+	}
+	if i.TemporaryDisabledReasonNotNil {
+		predicates = append(predicates, channel.TemporaryDisabledReasonNotNil())
+	}
+	if i.TemporaryDisabledReasonEqualFold != nil {
+		predicates = append(predicates, channel.TemporaryDisabledReasonEqualFold(*i.TemporaryDisabledReasonEqualFold))
+	}
+	if i.TemporaryDisabledReasonContainsFold != nil {
+		predicates = append(predicates, channel.TemporaryDisabledReasonContainsFold(*i.TemporaryDisabledReasonContainsFold))
 	}
 	if i.Remark != nil {
 		predicates = append(predicates, channel.RemarkEQ(*i.Remark))

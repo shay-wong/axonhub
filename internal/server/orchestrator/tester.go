@@ -60,7 +60,7 @@ func NewTestChannelOrchestrator(
 		modelCircuitBreaker:         biz.NewModelCircuitBreaker(),
 		modelMapper:                 NewModelMapper(),
 		loadBalancer:                NewLoadBalancer(systemService, channelService, NewWeightStrategy()),
-		channelLimiterManager:      NewChannelLimiterManager(),
+		channelLimiterManager:       NewChannelLimiterManager(),
 	}
 }
 
@@ -334,9 +334,13 @@ func (processor *TestChannelOrchestrator) TestChannelAPIKeys(
 		return nil, fmt.Errorf("no API keys configured for channel")
 	}
 
-	// Build disabled set
+	// Build active disabled set.
+	now := time.Now()
 	disabledSet := make(map[string]struct{}, len(ch.DisabledAPIKeys))
 	for _, dk := range ch.DisabledAPIKeys {
+		if dk.DisabledUntil != nil && !dk.DisabledUntil.After(now) {
+			continue
+		}
 		disabledSet[dk.Key] = struct{}{}
 	}
 

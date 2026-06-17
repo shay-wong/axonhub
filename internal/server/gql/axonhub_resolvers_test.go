@@ -3,6 +3,7 @@ package gql
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
@@ -13,6 +14,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/enttest"
 	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/internal/scopes"
 )
 
 func setupTestQueryResolver(t *testing.T) (*queryResolver, context.Context, *ent.Client) {
@@ -26,6 +28,29 @@ func setupTestQueryResolver(t *testing.T) (*queryResolver, context.Context, *ent
 	resolver := &queryResolver{&Resolver{client: client}}
 
 	return resolver, ctx, client
+}
+
+func TestChannelResolver_DisabledAPIKeys_FiltersExpiredTemporaryKeys(t *testing.T) {
+	_, ctx, client := setupTestQueryResolver(t)
+	defer client.Close()
+
+	resolver := &channelResolver{&Resolver{client: client}}
+	ctx = contexts.WithUser(ctx, &ent.User{Scopes: []string{string(scopes.ScopeWriteChannels)}})
+
+	expiredUntil := time.Now().Add(-time.Minute)
+	activeUntil := time.Now().Add(time.Minute)
+	ch := &ent.Channel{
+		DisabledAPIKeys: []objects.DisabledAPIKey{
+			{Key: "permanent-key"},
+			{Key: "expired-temporary-key", DisabledUntil: &expiredUntil},
+			{Key: "active-temporary-key", DisabledUntil: &activeUntil},
+		},
+	}
+
+	keys, err := resolver.DisabledAPIKeys(ctx, ch)
+	require.NoError(t, err)
+	require.Len(t, keys, 2)
+	require.ElementsMatch(t, []string{"permanent-key", "active-temporary-key"}, []string{keys[0].Key, keys[1].Key})
 }
 
 func TestQueryResolver_AllChannelSummarys_ProjectProfileUsesIntersection(t *testing.T) {

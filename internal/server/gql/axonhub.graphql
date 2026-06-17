@@ -134,6 +134,7 @@ type ChannelSettings {
   rateLimit: ChannelRateLimit
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPattern!]
+  apiKeySelectionStrategy: String
 }
 
 enum CapabilityPolicy {
@@ -171,6 +172,7 @@ input ChannelSettingsInput {
   rateLimit: ChannelRateLimitInput
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPatternInput!]
+  apiKeySelectionStrategy: String
 }
 
 input ChannelRateLimitInput {
@@ -192,6 +194,7 @@ type ChannelRateLimit {
 type ChannelCredentials {
   apiKey: String
   apiKeys: [String!]
+  apiKeyConfigs: [ChannelAPIKeyConfig!]
   gcp: GCPCredential
   oauth: OAuthCredentials
 }
@@ -199,8 +202,15 @@ type ChannelCredentials {
 type DisabledAPIKey {
   key: String!
   disabledAt: Time!
+  disabledUntil: Time
+  disableAction: String
   errorCode: Int!
   reason: String
+}
+
+type ChannelAPIKeyConfig {
+  key: String!
+  weight: Int
 }
 
 type OAuthCredentials {
@@ -221,8 +231,14 @@ type GCPCredential {
 input ChannelCredentialsInput {
   apiKey: String
   apiKeys: [String!]
+  apiKeyConfigs: [ChannelAPIKeyConfigInput!]
   gcp: GCPCredentialInput
   oauth: OAuthCredentialsInput
+}
+
+input ChannelAPIKeyConfigInput {
+  key: String!
+  weight: Int
 }
 
 input OAuthCredentialsInput {
@@ -792,6 +808,7 @@ type Mutation {
   bulkDisableChannels(ids: [ID!]!): Boolean!
   bulkEnableChannels(ids: [ID!]!): Boolean!
   bulkRecoverChannels(ids: [ID!]!): Boolean!
+  clearChannelTemporaryDisable(channelID: ID!): Channel!
   bulkDeleteChannels(ids: [ID!]!): Boolean!
   testChannel(input: TestChannelInput!): TestChannelPayload!
   testChannelAPIKeys(channelID: ID!, modelID: String): TestChannelAPIKeysPayload!

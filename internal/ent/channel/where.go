@@ -105,6 +105,21 @@ func ErrorMessage(v string) predicate.Channel {
 	return predicate.Channel(sql.FieldEQ(FieldErrorMessage, v))
 }
 
+// TemporaryDisabledUntil applies equality check predicate on the "temporary_disabled_until" field. It's identical to TemporaryDisabledUntilEQ.
+func TemporaryDisabledUntil(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldEQ(FieldTemporaryDisabledUntil, v))
+}
+
+// TemporaryDisabledErrorCode applies equality check predicate on the "temporary_disabled_error_code" field. It's identical to TemporaryDisabledErrorCodeEQ.
+func TemporaryDisabledErrorCode(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldEQ(FieldTemporaryDisabledErrorCode, v))
+}
+
+// TemporaryDisabledReason applies equality check predicate on the "temporary_disabled_reason" field. It's identical to TemporaryDisabledReasonEQ.
+func TemporaryDisabledReason(v string) predicate.Channel {
+	return predicate.Channel(sql.FieldEQ(FieldTemporaryDisabledReason, v))
+}
+
 // Remark applies equality check predicate on the "remark" field. It's identical to RemarkEQ.
 func Remark(v string) predicate.Channel {
 	return predicate.Channel(sql.FieldEQ(FieldRemark, v))
@@ -723,6 +738,181 @@ func ErrorMessageEqualFold(v string) predicate.Channel {
 // ErrorMessageContainsFold applies the ContainsFold predicate on the "error_message" field.
 func ErrorMessageContainsFold(v string) predicate.Channel {
 	return predicate.Channel(sql.FieldContainsFold(FieldErrorMessage, v))
+}
+
+// TemporaryDisabledUntilEQ applies the EQ predicate on the "temporary_disabled_until" field.
+func TemporaryDisabledUntilEQ(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldEQ(FieldTemporaryDisabledUntil, v))
+}
+
+// TemporaryDisabledUntilNEQ applies the NEQ predicate on the "temporary_disabled_until" field.
+func TemporaryDisabledUntilNEQ(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldNEQ(FieldTemporaryDisabledUntil, v))
+}
+
+// TemporaryDisabledUntilIn applies the In predicate on the "temporary_disabled_until" field.
+func TemporaryDisabledUntilIn(vs ...time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldIn(FieldTemporaryDisabledUntil, vs...))
+}
+
+// TemporaryDisabledUntilNotIn applies the NotIn predicate on the "temporary_disabled_until" field.
+func TemporaryDisabledUntilNotIn(vs ...time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldNotIn(FieldTemporaryDisabledUntil, vs...))
+}
+
+// TemporaryDisabledUntilGT applies the GT predicate on the "temporary_disabled_until" field.
+func TemporaryDisabledUntilGT(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldGT(FieldTemporaryDisabledUntil, v))
+}
+
+// TemporaryDisabledUntilGTE applies the GTE predicate on the "temporary_disabled_until" field.
+func TemporaryDisabledUntilGTE(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldGTE(FieldTemporaryDisabledUntil, v))
+}
+
+// TemporaryDisabledUntilLT applies the LT predicate on the "temporary_disabled_until" field.
+func TemporaryDisabledUntilLT(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldLT(FieldTemporaryDisabledUntil, v))
+}
+
+// TemporaryDisabledUntilLTE applies the LTE predicate on the "temporary_disabled_until" field.
+func TemporaryDisabledUntilLTE(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldLTE(FieldTemporaryDisabledUntil, v))
+}
+
+// TemporaryDisabledUntilIsNil applies the IsNil predicate on the "temporary_disabled_until" field.
+func TemporaryDisabledUntilIsNil() predicate.Channel {
+	return predicate.Channel(sql.FieldIsNull(FieldTemporaryDisabledUntil))
+}
+
+// TemporaryDisabledUntilNotNil applies the NotNil predicate on the "temporary_disabled_until" field.
+func TemporaryDisabledUntilNotNil() predicate.Channel {
+	return predicate.Channel(sql.FieldNotNull(FieldTemporaryDisabledUntil))
+}
+
+// TemporaryDisabledErrorCodeEQ applies the EQ predicate on the "temporary_disabled_error_code" field.
+func TemporaryDisabledErrorCodeEQ(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldEQ(FieldTemporaryDisabledErrorCode, v))
+}
+
+// TemporaryDisabledErrorCodeNEQ applies the NEQ predicate on the "temporary_disabled_error_code" field.
+func TemporaryDisabledErrorCodeNEQ(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldNEQ(FieldTemporaryDisabledErrorCode, v))
+}
+
+// TemporaryDisabledErrorCodeIn applies the In predicate on the "temporary_disabled_error_code" field.
+func TemporaryDisabledErrorCodeIn(vs ...int) predicate.Channel {
+	return predicate.Channel(sql.FieldIn(FieldTemporaryDisabledErrorCode, vs...))
+}
+
+// TemporaryDisabledErrorCodeNotIn applies the NotIn predicate on the "temporary_disabled_error_code" field.
+func TemporaryDisabledErrorCodeNotIn(vs ...int) predicate.Channel {
+	return predicate.Channel(sql.FieldNotIn(FieldTemporaryDisabledErrorCode, vs...))
+}
+
+// TemporaryDisabledErrorCodeGT applies the GT predicate on the "temporary_disabled_error_code" field.
+func TemporaryDisabledErrorCodeGT(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldGT(FieldTemporaryDisabledErrorCode, v))
+}
+
+// TemporaryDisabledErrorCodeGTE applies the GTE predicate on the "temporary_disabled_error_code" field.
+func TemporaryDisabledErrorCodeGTE(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldGTE(FieldTemporaryDisabledErrorCode, v))
+}
+
+// TemporaryDisabledErrorCodeLT applies the LT predicate on the "temporary_disabled_error_code" field.
+func TemporaryDisabledErrorCodeLT(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldLT(FieldTemporaryDisabledErrorCode, v))
+}
+
+// TemporaryDisabledErrorCodeLTE applies the LTE predicate on the "temporary_disabled_error_code" field.
+func TemporaryDisabledErrorCodeLTE(v int) predicate.Channel {
+	return predicate.Channel(sql.FieldLTE(FieldTemporaryDisabledErrorCode, v))
+}
+
+// TemporaryDisabledErrorCodeIsNil applies the IsNil predicate on the "temporary_disabled_error_code" field.
+func TemporaryDisabledErrorCodeIsNil() predicate.Channel {
+	return predicate.Channel(sql.FieldIsNull(FieldTemporaryDisabledErrorCode))
+}
+
+// TemporaryDisabledErrorCodeNotNil applies the NotNil predicate on the "temporary_disabled_error_code" field.
+func TemporaryDisabledErrorCodeNotNil() predicate.Channel {
+	return predicate.Channel(sql.FieldNotNull(FieldTemporaryDisabledErrorCode))
+}
+
+// TemporaryDisabledReasonEQ applies the EQ predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonEQ(v string) predicate.Channel {
+	return predicate.Channel(sql.FieldEQ(FieldTemporaryDisabledReason, v))
+}
+
+// TemporaryDisabledReasonNEQ applies the NEQ predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonNEQ(v string) predicate.Channel {
+	return predicate.Channel(sql.FieldNEQ(FieldTemporaryDisabledReason, v))
+}
+
+// TemporaryDisabledReasonIn applies the In predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonIn(vs ...string) predicate.Channel {
+	return predicate.Channel(sql.FieldIn(FieldTemporaryDisabledReason, vs...))
+}
+
+// TemporaryDisabledReasonNotIn applies the NotIn predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonNotIn(vs ...string) predicate.Channel {
+	return predicate.Channel(sql.FieldNotIn(FieldTemporaryDisabledReason, vs...))
+}
+
+// TemporaryDisabledReasonGT applies the GT predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonGT(v string) predicate.Channel {
+	return predicate.Channel(sql.FieldGT(FieldTemporaryDisabledReason, v))
+}
+
+// TemporaryDisabledReasonGTE applies the GTE predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonGTE(v string) predicate.Channel {
+	return predicate.Channel(sql.FieldGTE(FieldTemporaryDisabledReason, v))
+}
+
+// TemporaryDisabledReasonLT applies the LT predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonLT(v string) predicate.Channel {
+	return predicate.Channel(sql.FieldLT(FieldTemporaryDisabledReason, v))
+}
+
+// TemporaryDisabledReasonLTE applies the LTE predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonLTE(v string) predicate.Channel {
+	return predicate.Channel(sql.FieldLTE(FieldTemporaryDisabledReason, v))
+}
+
+// TemporaryDisabledReasonContains applies the Contains predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonContains(v string) predicate.Channel {
+	return predicate.Channel(sql.FieldContains(FieldTemporaryDisabledReason, v))
+}
+
+// TemporaryDisabledReasonHasPrefix applies the HasPrefix predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonHasPrefix(v string) predicate.Channel {
+	return predicate.Channel(sql.FieldHasPrefix(FieldTemporaryDisabledReason, v))
+}
+
+// TemporaryDisabledReasonHasSuffix applies the HasSuffix predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonHasSuffix(v string) predicate.Channel {
+	return predicate.Channel(sql.FieldHasSuffix(FieldTemporaryDisabledReason, v))
+}
+
+// TemporaryDisabledReasonIsNil applies the IsNil predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonIsNil() predicate.Channel {
+	return predicate.Channel(sql.FieldIsNull(FieldTemporaryDisabledReason))
+}
+
+// TemporaryDisabledReasonNotNil applies the NotNil predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonNotNil() predicate.Channel {
+	return predicate.Channel(sql.FieldNotNull(FieldTemporaryDisabledReason))
+}
+
+// TemporaryDisabledReasonEqualFold applies the EqualFold predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonEqualFold(v string) predicate.Channel {
+	return predicate.Channel(sql.FieldEqualFold(FieldTemporaryDisabledReason, v))
+}
+
+// TemporaryDisabledReasonContainsFold applies the ContainsFold predicate on the "temporary_disabled_reason" field.
+func TemporaryDisabledReasonContainsFold(v string) predicate.Channel {
+	return predicate.Channel(sql.FieldContainsFold(FieldTemporaryDisabledReason, v))
 }
 
 // RemarkEQ applies the EQ predicate on the "remark" field.
