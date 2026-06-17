@@ -8,6 +8,18 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish (e.g. v1.0.0)'
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Tag to publish (e.g. v1.0.0)'
+        required: true
+        type: string
 
 jobs:
   build_single_arch:
@@ -33,14 +45,67 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Resolve tag & write VERSION
+        id: version
+        env:
+          RELEASE_TAG: ${{ inputs.tag || '' }}
         run: |
-          git fetch --tags --force --depth=1
-          TAG=${GITHUB_REF#refs/tags/}
-          echo "TAG=$TAG" >> $GITHUB_ENV
+          set -euo pipefail
+
+          if [ -n "$RELEASE_TAG" ]; then
+            TAG="${RELEASE_TAG#refs/tags/}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            echo "A tag is required for Docker publishing." >&2
+            exit 1
+          fi
+
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "$TAG" > internal/build/VERSION
           echo "Building tag: $TAG for ${{ matrix.arch }}"
+
+      - name: Resolve Docker Hub image
+        id: dockerhub
+        env:
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || vars.DOCKERHUB_NAME || vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_IMAGE || secrets.DOCKERHUB_NAME || secrets.DOCKERHUB_NAMESPACE }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          image="${DOCKERHUB_IMAGE:-}"
+          if [ -z "$image" ]; then
+            image="${DOCKERHUB_USERNAME:-looplj}/axonhub"
+          fi
+
+          image="${image#docker.io/}"
+          image="${image%/}"
+
+          if [ -z "$image" ]; then
+            image="looplj/axonhub"
+          fi
+
+          if [[ "$image" == *:* ]] || [[ "$image" =~ [[:space:]] ]]; then
+            echo "DOCKERHUB_IMAGE/DOCKERHUB_NAME must be a Docker Hub namespace or repository path without tag." >&2
+            exit 1
+          fi
+
+          if [[ "$image" != */* ]]; then
+            image="${image}/axonhub"
+          fi
+
+          if [ -z "${DOCKERHUB_USERNAME:-}" ] || [ -z "${DOCKERHUB_TOKEN:-}" ]; then
+            echo "DOCKERHUB_USERNAME and DOCKERHUB_TOKEN are required for Docker Hub publishing." >&2
+            exit 1
+          fi
+
+          image="$(echo "$image" | tr '[:upper:]' '[:lower:]')"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "Docker Hub image: $image"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -48,7 +113,7 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract metadata (labels)
@@ -56,17 +121,17 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            looplj/axonhub
+            ${{ steps.dockerhub.outputs.image }}
 
-      - name: Build & push single-arch (to both registries)
+      - name: Build & push single-arch image
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            looplj/axonhub:${{ env.TAG }}-${{ matrix.arch }}
-            looplj/axonhub:latest-${{ matrix.arch }}
+            ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.tag }}-${{ matrix.arch }}
+            ${{ steps.dockerhub.outputs.image }}:latest-${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -77,27 +142,82 @@ jobs:
     name: Create multi-arch manifests (Docker Hub)
     needs: [build_single_arch]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
     steps:
       - name: Extract tag
-        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        id: version
+        env:
+          RELEASE_TAG: ${{ inputs.tag || '' }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$RELEASE_TAG" ]; then
+            TAG="${RELEASE_TAG#refs/tags/}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            echo "A tag is required for Docker manifest publishing." >&2
+            exit 1
+          fi
+
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Docker Hub image
+        id: dockerhub
+        env:
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || vars.DOCKERHUB_NAME || vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_IMAGE || secrets.DOCKERHUB_NAME || secrets.DOCKERHUB_NAMESPACE }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          image="${DOCKERHUB_IMAGE:-}"
+          if [ -z "$image" ]; then
+            image="${DOCKERHUB_USERNAME:-looplj}/axonhub"
+          fi
+
+          image="${image#docker.io/}"
+          image="${image%/}"
+
+          if [ -z "$image" ]; then
+            image="looplj/axonhub"
+          fi
+
+          if [[ "$image" == *:* ]] || [[ "$image" =~ [[:space:]] ]]; then
+            echo "DOCKERHUB_IMAGE/DOCKERHUB_NAME must be a Docker Hub namespace or repository path without tag." >&2
+            exit 1
+          fi
+
+          if [[ "$image" != */* ]]; then
+            image="${image}/axonhub"
+          fi
+
+          if [ -z "${DOCKERHUB_USERNAME:-}" ] || [ -z "${DOCKERHUB_TOKEN:-}" ]; then
+            echo "DOCKERHUB_USERNAME and DOCKERHUB_TOKEN are required for Docker Hub publishing." >&2
+            exit 1
+          fi
+
+          image="$(echo "$image" | tr '[:upper:]' '[:lower:]')"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "Docker Hub image: $image"
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Create & push manifest (Docker Hub - version)
         run: |
           docker buildx imagetools create \
-            -t looplj/axonhub:${TAG} \
-            looplj/axonhub:${TAG}-amd64 \
-            looplj/axonhub:${TAG}-arm64
+            -t ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.tag }} \
+            ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.tag }}-amd64 \
+            ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.tag }}-arm64
 
       - name: Create & push manifest (Docker Hub - latest)
         run: |
           docker buildx imagetools create \
-            -t looplj/axonhub:latest \
-            looplj/axonhub:latest-amd64 \
-            looplj/axonhub:latest-arm64
+            -t ${{ steps.dockerhub.outputs.image }}:latest \
+            ${{ steps.dockerhub.outputs.image }}:latest-amd64 \
+            ${{ steps.dockerhub.outputs.image }}:latest-arm64

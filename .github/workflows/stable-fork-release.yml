@@ -1,0 +1,92 @@
+name: Publish stable fork release
+
+on:
+  push:
+    branches:
+      - stable
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stable-fork-release
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPOSITORY: ${{ vars.UPSTREAM_REPOSITORY || 'looplj/axonhub' }}
+
+jobs:
+  create-fork-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_name: ${{ steps.version.outputs.release_name }}
+    steps:
+      - name: Checkout stable branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: stable
+
+      - name: Resolve next fork release tag
+        id: version
+        run: |
+          set -euo pipefail
+
+          upstream_url="https://github.com/${UPSTREAM_REPOSITORY}.git"
+          upstream_tags=$(git ls-remote --tags --refs "$upstream_url" \
+            | awk '{print $2}' \
+            | sed 's#refs/tags/##' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+
+          if [[ -z "$upstream_tags" ]]; then
+            echo "No stable upstream version tags found in ${UPSTREAM_REPOSITORY}." >&2
+            exit 1
+          fi
+
+          upstream_tag=$(printf '%s\n' "$upstream_tags" | sort -V | tail -n 1)
+          existing_fork_tags=$(git ls-remote --tags --refs origin "refs/tags/${upstream_tag}-fork.*" \
+            | awk '{print $2}' \
+            | sed 's#refs/tags/##' || true)
+
+          latest_fork=0
+          fork_prefix="${upstream_tag}-fork."
+          while IFS= read -r fork_tag; do
+            [[ -n "$fork_tag" ]] || continue
+            fork_number="${fork_tag#"$fork_prefix"}"
+            if [[ "$fork_number" =~ ^[0-9]+$ ]] && (( fork_number > latest_fork )); then
+              latest_fork="$fork_number"
+            fi
+          done <<< "$existing_fork_tags"
+
+          release_name="${upstream_tag}-fork.$((latest_fork + 1))"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${release_name}" >/dev/null 2>&1; then
+            echo "Release tag already exists: ${release_name}" >&2
+            exit 1
+          fi
+
+          echo "release_name=${release_name}" >> "$GITHUB_OUTPUT"
+          echo "Next fork release tag: ${release_name}"
+
+      - name: Push fork release tag
+        env:
+          RELEASE_NAME: ${{ steps.version.outputs.release_name }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$RELEASE_NAME" "$GITHUB_SHA" -m "Release ${RELEASE_NAME}"
+          git push origin "refs/tags/${RELEASE_NAME}"
+
+  publish-docker:
+    needs: create-fork-tag
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      tag: ${{ needs.create-fork-tag.outputs.release_name }}
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit
