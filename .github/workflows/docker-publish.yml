@@ -140,6 +140,8 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           push: true
+          build-args: |
+            AXONHUB_UPDATE_REPOSITORY=${{ github.repository }}
           tags: |
             ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.tag }}-${{ matrix.arch }}
             ${{ steps.dockerhub.outputs.image }}:latest-${{ matrix.arch }}

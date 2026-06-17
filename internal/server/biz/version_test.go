@@ -3,6 +3,7 @@ package biz
 import (
 	"testing"
 
+	"github.com/looplj/axonhub/internal/build"
 	"github.com/stretchr/testify/require"
 )
 
@@ -139,12 +140,145 @@ func TestIsNewerVersion(t *testing.T) {
 			latest:  "v1.2.3.4",
 			want:    false, // semver only supports 3-part versions
 		},
+		{
+			name:    "fork build is not older than same upstream version",
+			current: "v0.9.43-fork.1",
+			latest:  "v0.9.43",
+			want:    false,
+		},
+		{
+			name:    "same fork version",
+			current: "v0.9.43-fork.1",
+			latest:  "v0.9.43-fork.1",
+			want:    false,
+		},
+		{
+			name:    "newer fork version",
+			current: "v0.9.43-fork.1",
+			latest:  "v0.9.43-fork.2",
+			want:    true,
+		},
+		{
+			name:    "newer upstream base version",
+			current: "v0.9.43-fork.1",
+			latest:  "v0.9.44",
+			want:    true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := IsNewerVersion(tt.current, tt.latest)
 			require.Equal(t, tt.want, got, "IsNewerVersion(%q, %q) = %v, want %v", tt.current, tt.latest, got, tt.want)
+		})
+	}
+}
+
+func TestNormalizeGitHubRepository(t *testing.T) {
+	tests := []struct {
+		name       string
+		repository string
+		want       string
+	}{
+		{
+			name:       "owner repo",
+			repository: "shay-wong/axonhub",
+			want:       "shay-wong/axonhub",
+		},
+		{
+			name:       "https url",
+			repository: "https://github.com/shay-wong/axonhub",
+			want:       "shay-wong/axonhub",
+		},
+		{
+			name:       "ssh url",
+			repository: "git@github.com:shay-wong/axonhub.git",
+			want:       "shay-wong/axonhub",
+		},
+		{
+			name:       "invalid repo falls back",
+			repository: "axonhub",
+			want:       "shay-wong/axonhub",
+		},
+		{
+			name:       "empty repo falls back",
+			repository: "",
+			want:       "shay-wong/axonhub",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeGitHubRepository(tt.repository)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestUpdateRepositoryUsesEnvironment(t *testing.T) {
+	t.Setenv("AXONHUB_UPDATE_REPOSITORY", "https://github.com/shay-wong/axonhub")
+
+	require.Equal(t, "shay-wong/axonhub", updateRepository())
+}
+
+func TestUpdateRepositoryUsesBuildRepository(t *testing.T) {
+	t.Setenv("AXONHUB_UPDATE_REPOSITORY", "")
+
+	previousRepository := build.Repository
+	build.Repository = "git@github.com:shay-wong/axonhub.git"
+	t.Cleanup(func() {
+		build.Repository = previousRepository
+	})
+
+	require.Equal(t, "shay-wong/axonhub", updateRepository())
+}
+
+func TestSelectLatestUpdateTag(t *testing.T) {
+	tests := []struct {
+		name string
+		tags []string
+		want string
+	}{
+		{
+			name: "fork tag wins over same upstream base",
+			tags: []string{
+				"v0.9.43",
+				"v0.9.43-fork.1",
+			},
+			want: "v0.9.43-fork.1",
+		},
+		{
+			name: "newer fork tag wins",
+			tags: []string{
+				"v0.9.43-fork.1",
+				"v0.9.43-fork.2",
+			},
+			want: "v0.9.43-fork.2",
+		},
+		{
+			name: "newer base wins over older fork base",
+			tags: []string{
+				"v0.9.43-fork.2",
+				"v0.9.44",
+			},
+			want: "v0.9.44",
+		},
+		{
+			name: "skip prerelease and service tags",
+			tags: []string{
+				"axonclaw/v9.9.9",
+				"v0.9.44-beta",
+				"v0.9.43-fork.1",
+			},
+			want: "v0.9.43-fork.1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := selectLatestUpdateTag(tt.tags)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -166,6 +300,11 @@ func TestIsAxonHubTag(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "fork release tag",
+			tag:  "v0.9.43-fork.1",
+			want: true,
+		},
+		{
 			name: "axonclaw prefixed tag",
 			tag:  "axonclaw/v1.0.0",
 			want: false,
@@ -182,7 +321,7 @@ func TestIsAxonHubTag(t *testing.T) {
 		},
 		{
 			name: "non-version tag",
-			tag:  "release-2024",
+			tag:  "vrelease-2024",
 			want: false,
 		},
 	}

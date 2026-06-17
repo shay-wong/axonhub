@@ -14,12 +14,13 @@ var rawVersion []byte
 
 // Build information.
 var (
-	Version   = ""
-	Commit    = ""
-	BuildTime = ""
-	GoVersion = runtime.Version()
-	Platform  = fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
-	StartTime = time.Now()
+	Version    = ""
+	Commit     = ""
+	BuildTime  = ""
+	Repository = "shay-wong/axonhub"
+	GoVersion  = runtime.Version()
+	Platform   = fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
+	StartTime  = time.Now()
 )
 
 //nolint:gochecknoinits // init version.
