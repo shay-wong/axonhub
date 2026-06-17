@@ -242,6 +242,23 @@ jobs:
             docker buildx imagetools inspect "$target" >/dev/null 2>&1
           }
 
+          tag_digest() {
+            local target="$1"
+            docker buildx imagetools inspect "$target" | awk '/^Digest:/ {print $2; exit}'
+          }
+
+          manifest_arch_digest() {
+            local target="$1"
+            local arch="$2"
+            docker buildx imagetools inspect --raw "$target" \
+              | jq -r --arg arch "$arch" '
+                (.manifests // [])
+                | map(select(.platform.os == "linux" and .platform.architecture == $arch))
+                | first
+                | .digest // empty
+              '
+          }
+
           require_source_tag "${IMAGE}:${TAG}-amd64"
           require_source_tag "${IMAGE}:${TAG}-arm64"
           require_source_tag "${IMAGE}:latest-amd64"
@@ -254,11 +271,26 @@ jobs:
             echo "version_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+          latest_amd64_digest="$(tag_digest "${IMAGE}:latest-amd64")"
+          latest_arm64_digest="$(tag_digest "${IMAGE}:latest-arm64")"
+
           if tag_exists "${IMAGE}:latest"; then
-            echo "latest_exists=true" >> "$GITHUB_OUTPUT"
-            echo "Latest manifest already exists: ${IMAGE}:latest"
+            current_amd64_digest="$(manifest_arch_digest "${IMAGE}:latest" amd64)"
+            current_arm64_digest="$(manifest_arch_digest "${IMAGE}:latest" arm64)"
+
+            if [[ "$current_amd64_digest" == "$latest_amd64_digest" && "$current_arm64_digest" == "$latest_arm64_digest" ]]; then
+              echo "latest_current=true" >> "$GITHUB_OUTPUT"
+              echo "Latest manifest already points to current arch tags: ${IMAGE}:latest"
+            else
+              echo "latest_current=false" >> "$GITHUB_OUTPUT"
+              echo "Latest manifest exists but points to old arch digests; it will be updated."
+              echo "current amd64: ${current_amd64_digest:-missing}"
+              echo "source  amd64: ${latest_amd64_digest}"
+              echo "current arm64: ${current_arm64_digest:-missing}"
+              echo "source  arm64: ${latest_arm64_digest}"
+            fi
           else
-            echo "latest_exists=false" >> "$GITHUB_OUTPUT"
+            echo "latest_current=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create & push manifest (Docker Hub - version)
@@ -270,7 +302,7 @@ jobs:
             ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.tag }}-arm64
 
       - name: Create & push manifest (Docker Hub - latest)
-        if: ${{ steps.manifest.outputs.latest_exists != 'true' }}
+        if: ${{ steps.manifest.outputs.latest_current != 'true' }}
         run: |
           docker buildx imagetools create \
             -t ${{ steps.dockerhub.outputs.image }}:latest \
