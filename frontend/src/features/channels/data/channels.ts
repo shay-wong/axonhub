@@ -88,6 +88,7 @@ const CREATE_CHANNEL_MUTATION = `
         apiKeys
         apiKeyConfigs {
           key
+          name
           weight
         }
         gcp {
@@ -171,6 +172,7 @@ const DUPLICATE_CHANNEL_MUTATION = `
         apiKeys
         apiKeyConfigs {
           key
+          name
           weight
         }
         gcp {
@@ -254,6 +256,7 @@ const BULK_CREATE_CHANNELS_MUTATION = `
         apiKeys
         apiKeyConfigs {
           key
+          name
           weight
         }
         gcp {
@@ -337,6 +340,7 @@ const UPDATE_CHANNEL_MUTATION = `
         apiKeys
         apiKeyConfigs {
           key
+          name
           weight
         }
         gcp {
@@ -848,6 +852,7 @@ const QUERY_CHANNELS_QUERY = `
             apiKeys
             apiKeyConfigs {
               key
+              name
               weight
             }
             gcp {

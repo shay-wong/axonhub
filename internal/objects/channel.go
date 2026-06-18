@@ -238,6 +238,7 @@ type DisabledAPIKey struct {
 
 type ChannelAPIKeyConfig struct {
 	Key    string `json:"key"`
+	Name   string `json:"name,omitempty"`
 	Weight int    `json:"weight,omitempty"`
 }
 
@@ -385,6 +386,7 @@ func normalizeAPIKeyConfigs(configs []ChannelAPIKeyConfig) []ChannelAPIKeyConfig
 
 		normalized = append(normalized, ChannelAPIKeyConfig{
 			Key:    key,
+			Name:   strings.TrimSpace(config.Name),
 			Weight: weight,
 		})
 	}

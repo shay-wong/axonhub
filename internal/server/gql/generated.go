@@ -330,6 +330,7 @@ type ComplexityRoot struct {
 
 	ChannelAPIKeyConfig struct {
 		Key    func(childComplexity int) int
+		Name   func(childComplexity int) int
 		Weight func(childComplexity int) int
 	}
 
@@ -3299,6 +3300,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelAPIKeyConfig.Key(childComplexity), true
+	case "ChannelAPIKeyConfig.name":
+		if e.complexity.ChannelAPIKeyConfig.Name == nil {
+			break
+		}
+
+		return e.complexity.ChannelAPIKeyConfig.Name(childComplexity), true
 	case "ChannelAPIKeyConfig.weight":
 		if e.complexity.ChannelAPIKeyConfig.Weight == nil {
 			break
@@ -19386,6 +19393,35 @@ func (ec *executionContext) fieldContext_ChannelAPIKeyConfig_key(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _ChannelAPIKeyConfig_name(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelAPIKeyConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelAPIKeyConfig_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelAPIKeyConfig_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelAPIKeyConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ChannelAPIKeyConfig_weight(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelAPIKeyConfig) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19602,6 +19638,8 @@ func (ec *executionContext) fieldContext_ChannelCredentials_apiKeyConfigs(_ cont
 			switch field.Name {
 			case "key":
 				return ec.fieldContext_ChannelAPIKeyConfig_key(ctx, field)
+			case "name":
+				return ec.fieldContext_ChannelAPIKeyConfig_name(ctx, field)
 			case "weight":
 				return ec.fieldContext_ChannelAPIKeyConfig_weight(ctx, field)
 			}
@@ -61553,7 +61591,7 @@ func (ec *executionContext) unmarshalInputChannelAPIKeyConfigInput(ctx context.C
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"key", "weight"}
+	fieldsInOrder := [...]string{"key", "name", "weight"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -61567,6 +61605,13 @@ func (ec *executionContext) unmarshalInputChannelAPIKeyConfigInput(ctx context.C
 				return it, err
 			}
 			it.Key = data
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
 		case "weight":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("weight"))
 			data, err := ec.unmarshalOInt2int(ctx, v)
@@ -87720,6 +87765,8 @@ func (ec *executionContext) _ChannelAPIKeyConfig(ctx context.Context, sel ast.Se
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "name":
+			out.Values[i] = ec._ChannelAPIKeyConfig_name(ctx, field, obj)
 		case "weight":
 			out.Values[i] = ec._ChannelAPIKeyConfig_weight(ctx, field, obj)
 		default:

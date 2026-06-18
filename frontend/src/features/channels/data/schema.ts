@@ -210,6 +210,7 @@ export type ChannelRateLimit = z.infer<typeof channelRateLimitSchema>;
 
 export const channelAPIKeyConfigSchema = z.object({
   key: z.string(),
+  name: z.string().optional().nullable(),
   weight: z.number().int().optional().nullable(),
 });
 export type ChannelAPIKeyConfig = z.infer<typeof channelAPIKeyConfigSchema>;

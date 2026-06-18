@@ -210,6 +210,7 @@ type DisabledAPIKey {
 
 type ChannelAPIKeyConfig {
   key: String!
+  name: String
   weight: Int
 }
 
@@ -238,6 +239,7 @@ input ChannelCredentialsInput {
 
 input ChannelAPIKeyConfigInput {
   key: String!
+  name: String
   weight: Int
 }
 

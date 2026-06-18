@@ -203,18 +203,30 @@ function normalizeAPIKeyWeight(weight?: number | null): number {
   return Math.floor(weight);
 }
 
+function normalizeAPIKeyName(name?: string | null): string {
+  return name?.trim() || '';
+}
+
 function reconcileAPIKeyConfigs(keys?: string[] | null, configs?: ChannelAPIKeyConfig[] | null): ChannelAPIKeyConfig[] {
-  const weights = new Map<string, number>();
+  const configsByKey = new Map<string, ChannelAPIKeyConfig>();
   for (const config of configs || []) {
     const key = config.key?.trim();
-    if (!key || weights.has(key)) continue;
-    weights.set(key, normalizeAPIKeyWeight(config.weight));
+    if (!key || configsByKey.has(key)) continue;
+    configsByKey.set(key, {
+      key,
+      name: normalizeAPIKeyName(config.name),
+      weight: normalizeAPIKeyWeight(config.weight),
+    });
   }
 
-  return normalizeAPIKeyList(keys).map((key) => ({
-    key,
-    weight: weights.get(key) || DEFAULT_API_KEY_WEIGHT,
-  }));
+  return normalizeAPIKeyList(keys).map((key) => {
+    const config = configsByKey.get(key);
+    return {
+      key,
+      name: config?.name || '',
+      weight: config?.weight || DEFAULT_API_KEY_WEIGHT,
+    };
+  });
 }
 
 function getInitialAPIKeyConfigs(channel?: Channel): ChannelAPIKeyConfig[] {
@@ -1675,6 +1687,16 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     setApiKeyConfigsDirty(true);
   }, [form]);
 
+  const updateAPIKeyName = useCallback((key: string, name: string) => {
+    setApiKeyConfigs((prev) =>
+      reconcileAPIKeyConfigs(
+        form.getValues('credentials.apiKeys'),
+        prev.map((config) => (config.key === key ? { ...config, name } : config))
+      )
+    );
+    setApiKeyConfigsDirty(true);
+  }, [form]);
+
   const handleAPIKeySelectionStrategyChange = useCallback((strategy: APIKeySelectionStrategy) => {
     setApiKeySelectionStrategy(strategy);
   }, []);
@@ -3018,7 +3040,9 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                         .map((key) => {
                           const isSelected = selectedKeysToRemove.has(key);
                           const isDisabled = disabledKeySet.has(key);
-                          const weight = apiKeyConfigByKey.get(key)?.weight || DEFAULT_API_KEY_WEIGHT;
+                          const config = apiKeyConfigByKey.get(key);
+                          const keyName = config?.name || '';
+                          const weight = config?.weight || DEFAULT_API_KEY_WEIGHT;
                           const masked = key.length > 8 ? `${key.slice(0, 4)}****${key.slice(-4)}` : `****${key.slice(-4)}`;
 
                           return (
@@ -3053,18 +3077,31 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                   {isDisabled && (
                                     <p className='text-muted-foreground mt-1 text-xs'>{t('channels.dialogs.fields.apiKey.disabledHint')}</p>
                                   )}
-                                  <div className='mt-2 flex items-center gap-2'>
-                                    <Label className='text-muted-foreground text-[11px]'>
-                                      {t('channels.dialogs.fields.apiKey.weight')}
-                                    </Label>
-                                    <Input
-                                      type='number'
-                                      min='1'
-                                      max='100000'
-                                      value={weight}
-                                      onChange={(e) => updateAPIKeyWeight(key, parseInt(e.target.value) || DEFAULT_API_KEY_WEIGHT)}
-                                      className='h-7 w-20 text-xs'
-                                    />
+                                  <div className='mt-2 grid grid-cols-[minmax(0,1fr)_80px] gap-2'>
+                                    <div className='min-w-0 space-y-1'>
+                                      <Label className='text-muted-foreground text-[11px]'>
+                                        {t('channels.dialogs.fields.apiKey.name')}
+                                      </Label>
+                                      <Input
+                                        value={keyName}
+                                        onChange={(e) => updateAPIKeyName(key, e.target.value)}
+                                        placeholder={t('channels.dialogs.fields.apiKey.namePlaceholder')}
+                                        className='h-7 text-xs'
+                                      />
+                                    </div>
+                                    <div className='space-y-1'>
+                                      <Label className='text-muted-foreground text-[11px]'>
+                                        {t('channels.dialogs.fields.apiKey.weight')}
+                                      </Label>
+                                      <Input
+                                        type='number'
+                                        min='1'
+                                        max='100000'
+                                        value={weight}
+                                        onChange={(e) => updateAPIKeyWeight(key, parseInt(e.target.value) || DEFAULT_API_KEY_WEIGHT)}
+                                        className='h-7 text-xs'
+                                      />
+                                    </div>
                                   </div>
                                 </div>
                               </div>
