@@ -658,6 +658,7 @@
   "channels.dialogs.testAPIKeys.confirmDisableFailed": "Are you sure you want to disable {{count}} failed API key(s)?",
   "channels.dialogs.testAPIKeys.confirmDeleteFailed": "Are you sure you want to delete {{count}} failed API key(s)? This will permanently remove them from the channel.",
   "channels.dialogs.testAPIKeys.successSummary": "{{success}} / {{total}} keys passed",
+  "channels.dialogs.testAPIKeys.requestFailed": "Request failed",
   "channels.dialogs.test.requestIdLabel": "Request ID",
   "channels.dialogs.test.requestExecutionIdLabel": "Execution ID",
   "channels.dialogs.testHistory.empty": "No test requests yet",

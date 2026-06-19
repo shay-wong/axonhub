@@ -655,6 +655,7 @@
   "channels.dialogs.testAPIKeys.confirmDisableFailed": "确定要禁用 {{count}} 个失败的 API 密钥吗？",
   "channels.dialogs.testAPIKeys.confirmDeleteFailed": "确定要删除 {{count}} 个失败的 API 密钥吗？此操作将从渠道中永久移除这些密钥。",
   "channels.dialogs.testAPIKeys.successSummary": "{{success}} / {{total}} 个密钥通过",
+  "channels.dialogs.testAPIKeys.requestFailed": "请求失败",
   "channels.dialogs.test.requestIdLabel": "请求 ID",
   "channels.dialogs.test.requestExecutionIdLabel": "执行 ID",
   "channels.dialogs.testHistory.empty": "暂无测试请求",

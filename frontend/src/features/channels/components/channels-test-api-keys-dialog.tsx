@@ -59,7 +59,8 @@ export function ChannelsTestAPIKeysDialog({ open, onOpenChange }: ChannelsTestAP
       setTestingKey(null);
       abortRef.current = false;
     }
-  }, [open, allKeys]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, currentRow?.id]);
 
   const failedKeys = useMemo(() => {
     if (!isTested) {
@@ -159,8 +160,8 @@ export function ChannelsTestAPIKeysDialog({ open, onOpenChange }: ChannelsTestAP
           keyPrefix: maskAPIKey(key),
           success: false,
           latency: 0,
-          error: 'Request failed',
-          disabled: false,
+          error: t('channels.dialogs.testAPIKeys.requestFailed'),
+          disabled: disabledKeySet.has(key),
         });
         setResults([...newResults]);
       }
@@ -310,12 +311,13 @@ export function ChannelsTestAPIKeysDialog({ open, onOpenChange }: ChannelsTestAP
                       </TableCell>
                     </TableRow>
                   ) : isTested ? (
-                    results.map((result, index) => {
-                      const key = testedKeys[index];
+                    testedKeys.map((key, index) => {
+                      const result = results[index];
+                      const isCurrentlyTesting = isTesting && testingKey === key;
                       return (
                         <TableRow key={index}>
                           <TableCell>
-                            {!result.success && key && (
+                            {result && !result.success && key && (
                               <Checkbox
                                 checked={selectedKeys.has(key)}
                                 onCheckedChange={(checked) => handleToggle(key, checked === true)}
@@ -324,15 +326,21 @@ export function ChannelsTestAPIKeysDialog({ open, onOpenChange }: ChannelsTestAP
                           </TableCell>
                           {renderKeyCell(key, result)}
                           <TableCell>
-                            {result.success ? (
-                              <Badge variant='default' className='border-green-200 bg-green-100 text-green-800'>
-                                {t('channels.dialogs.testAPIKeys.success')}
-                              </Badge>
+                            {isCurrentlyTesting ? (
+                              <IconLoader2 className='h-4 w-4 animate-spin text-muted-foreground' />
+                            ) : result ? (
+                              result.success ? (
+                                <Badge variant='default' className='border-green-200 bg-green-100 text-green-800'>
+                                  {t('channels.dialogs.testAPIKeys.success')}
+                                </Badge>
+                              ) : (
+                                <Badge variant='destructive'>{t('channels.dialogs.testAPIKeys.failed')}</Badge>
+                              )
                             ) : (
-                              <Badge variant='destructive'>{t('channels.dialogs.testAPIKeys.failed')}</Badge>
+                              <span className='text-muted-foreground'>-</span>
                             )}
                           </TableCell>
-                          <TableCell>{result.latency > 0 ? `${result.latency.toFixed(2)}s` : '-'}</TableCell>
+                          <TableCell>{result && result.latency > 0 ? `${result.latency.toFixed(2)}s` : '-'}</TableCell>
                         </TableRow>
                       );
                     })

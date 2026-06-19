@@ -113,14 +113,10 @@ func (svc *ChannelService) getHttpClient(channelSettings *objects.ChannelSetting
 
 // buildChannel creates a Channel with precomputed caches (transformer is set separately).
 func buildChannel(c *ent.Channel, httpClient *httpclient.HttpClient) *Channel {
-	now := time.Now()
 	// Precompute disabled key set for O(1) lookup
 	disabledKeySet := make(map[string]struct{}, len(c.DisabledAPIKeys))
 	for _, dk := range c.DisabledAPIKeys {
 		if dk.Key != "" {
-			if dk.DisabledUntil != nil && !dk.DisabledUntil.After(now) {
-				continue
-			}
 			disabledKeySet[dk.Key] = struct{}{}
 		}
 	}
@@ -129,7 +125,7 @@ func buildChannel(c *ent.Channel, httpClient *httpclient.HttpClient) *Channel {
 		Channel:              c,
 		HTTPClient:           httpClient,
 		cachedDisabledKeySet: disabledKeySet,
-		cachedAPIKeyConfigs:  c.Credentials.GetAllAPIKeyConfigs(),
+		cachedEnabledAPIKeys: c.Credentials.GetEnabledAPIKeys(c.DisabledAPIKeys),
 	}
 
 	// Precompute other caches
@@ -156,8 +152,25 @@ func buildChannel(c *ent.Channel, httpClient *httpclient.HttpClient) *Channel {
 // NOTE: This function panics when there is no enabled API key. This is intended as an assertion:
 // buildChannelWithTransformer should validate channel credentials before constructing transformers.
 func getAPIKeyProvider(ch *Channel) auth.APIKeyProvider {
-	if ch == nil || !ch.HasConfiguredAPIKeys() {
+	if ch == nil {
 		panicNoEnabledAPIKey(ch)
+	}
+
+	if ch.apiKeyOverride != "" {
+		return NewRecordingAPIKeyProvider(auth.NewStaticKeyProvider(ch.apiKeyOverride))
+	}
+
+	enabled := ch.cachedEnabledAPIKeys
+	if len(enabled) == 0 {
+		enabled = ch.GetEnabledAPIKeys()
+	}
+
+	if len(enabled) == 0 {
+		panic(fmt.Errorf("no enabled api key configured for channel %s", ch.Name))
+	}
+
+	if len(enabled) == 1 {
+		return NewRecordingAPIKeyProvider(auth.NewStaticKeyProvider(enabled[0]))
 	}
 
 	switch ch.APIKeySelectionStrategy() {
@@ -192,8 +205,8 @@ func BuildOutboundByAPIFormat(ch *Channel, apiFormat string) (transformer.Outbou
 // the resolved default endpoint list and backs Channel.Outbound for backward
 // compatibility. Additional default endpoints are peer capability surfaces for
 // the same channel type, each bound to exactly one API format.
-func (svc *ChannelService) buildChannelWithOutbounds(c *ent.Channel) (*Channel, error) {
-	ch, err := svc.buildChannelWithTransformer(c)
+func (svc *ChannelService) buildChannelWithOutbounds(c *ent.Channel, apiKeyOverride ...string) (*Channel, error) {
+	ch, err := svc.buildChannelWithTransformer(c, apiKeyOverride...)
 	if err != nil {
 		return nil, err
 	}
@@ -441,16 +454,16 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 }
 
 //nolint:maintidx // Checked.
-func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel) (*Channel, error) {
+func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel, apiKeyOverride ...string) (*Channel, error) {
 	// Validate credentials early so we can fail fast without constructing HTTP clients/transformers.
 	//
 	// NOTE: "enabled" keys excludes keys that were explicitly disabled for this channel.
-	configuredKeys := c.Credentials.GetAllAPIKeys()
+	enabledKeys := c.Credentials.GetEnabledAPIKeys(c.DisabledAPIKeys)
 
 	//nolint:exhaustive // Checked.
 	switch c.Type {
 	case channel.TypeCodex, channel.TypeClaudecode:
-		if !c.Credentials.IsOAuth() && len(configuredKeys) == 0 {
+		if !c.Credentials.IsOAuth() && len(enabledKeys) == 0 {
 			return nil, fmt.Errorf("missing credentials: oauth or api key required for channel %s", c.Name)
 		}
 	case channel.TypeGithubCopilot:
@@ -468,13 +481,16 @@ func (svc *ChannelService) buildChannelWithTransformer(c *ent.Channel) (*Channel
 		// - anthropic_gcp uses GCP credentials JSON
 		// - *_fake are test-only
 	default:
-		if len(configuredKeys) == 0 {
+		if len(enabledKeys) == 0 {
 			return nil, fmt.Errorf("missing api key for channel %s", c.Name)
 		}
 	}
 
 	httpClient := svc.getHttpClient(c.Settings)
 	ch := buildChannel(c, httpClient)
+	if len(apiKeyOverride) > 0 {
+		ch.apiKeyOverride = apiKeyOverride[0]
+	}
 
 	switch c.Type {
 	case channel.TypeDoubao, channel.TypeVolcengine:

@@ -334,13 +334,9 @@ func (processor *TestChannelOrchestrator) TestChannelAPIKeys(
 		return nil, fmt.Errorf("no API keys configured for channel")
 	}
 
-	// Build active disabled set.
-	now := time.Now()
+	// Build disabled set
 	disabledSet := make(map[string]struct{}, len(ch.DisabledAPIKeys))
 	for _, dk := range ch.DisabledAPIKeys {
-		if dk.DisabledUntil != nil && !dk.DisabledUntil.After(now) {
-			continue
-		}
 		disabledSet[dk.Key] = struct{}{}
 	}
 
@@ -411,6 +407,7 @@ func (processor *TestChannelOrchestrator) TestChannelAPIKeys(
 }
 
 // TestSingleAPIKey tests a single API key for a channel.
+// It verifies that the provided key belongs to the channel before testing.
 func (processor *TestChannelOrchestrator) TestSingleAPIKey(
 	ctx context.Context,
 	channelID objects.GUID,
@@ -421,6 +418,17 @@ func (processor *TestChannelOrchestrator) TestSingleAPIKey(
 	ch, err := processor.channelService.GetChannel(ctx, channelID.ID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Verify the provided key is actually configured for this channel.
+	channelKeys := ch.Credentials.GetAllAPIKeys()
+	if len(channelKeys) == 0 {
+		return nil, fmt.Errorf("no API keys configured for channel")
+	}
+
+	keyBelongsToChannel := lo.Contains(channelKeys, key)
+	if !keyBelongsToChannel {
+		return nil, fmt.Errorf("the provided API key is not configured for this channel")
 	}
 
 	testModel := lo.FromPtr(modelID)
@@ -442,7 +450,7 @@ func (processor *TestChannelOrchestrator) TestSingleAPIKey(
 	return result, nil
 }
 
-// testSingleKey tests a single API key by forcing the use of a specific key via an override middleware.
+// testSingleKey tests a single API key by forcing the use of a specific key via SetAPIKey.
 func (processor *TestChannelOrchestrator) testSingleKey(
 	ctx context.Context,
 	channelID objects.GUID,
@@ -456,7 +464,11 @@ func (processor *TestChannelOrchestrator) testSingleKey(
 	inbound := openai.NewInboundTransformer()
 
 	chatProcessor := &ChatCompletionOrchestrator{
-		channelSelector: NewSpecifiedChannelSelector(processor.channelService, channelID),
+		channelSelector: &SpecifiedChannelSelector{
+			ChannelService: processor.channelService,
+			ChannelID:      channelID,
+			SelectedAPIKey: key,
+		},
 		RequestService:  processor.requestService,
 		ChannelService:  processor.channelService,
 		PromptProvider:  &stubPromptProvider{},
