@@ -100,16 +100,22 @@ func userHasScope(ctx context.Context, requiredScope scopes.ScopeSlug) bool {
 	}
 
 	// Check project membership scopes
+	hasProjectMembership := false
 	for _, up := range user.Edges.ProjectUsers {
 		if up.ProjectID != projectID {
 			continue
 		}
 
+		hasProjectMembership = true
 		if up.IsOwner || slices.Contains(up.Scopes, string(requiredScope)) {
 			return true
 		}
 
 		break
+	}
+
+	if !hasProjectMembership {
+		return false
 	}
 
 	// Check project-level role scopes

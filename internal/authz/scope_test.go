@@ -125,6 +125,11 @@ func TestHasScope_UserPrincipal_ProjectRoleScope(t *testing.T) {
 		ID:     1,
 		Scopes: []string{},
 		Edges: ent.UserEdges{
+			ProjectUsers: []*ent.UserProject{
+				{
+					ProjectID: 100,
+				},
+			},
 			Roles: []*ent.Role{
 				{
 					ProjectID: lo.ToPtr(100),
@@ -137,6 +142,27 @@ func TestHasScope_UserPrincipal_ProjectRoleScope(t *testing.T) {
 
 	if !HasScope(ctx, scopes.ScopeReadAPIKeys) {
 		t.Error("user with project role scope should have it")
+	}
+}
+
+func TestHasScope_UserPrincipal_ProjectRoleScopeRequiresMembership(t *testing.T) {
+	ctx := NewUserContext(context.Background(), 1)
+	ctx = contexts.WithUser(ctx, &ent.User{
+		ID:     1,
+		Scopes: []string{},
+		Edges: ent.UserEdges{
+			Roles: []*ent.Role{
+				{
+					ProjectID: lo.ToPtr(100),
+					Scopes:    []string{"read_api_keys"},
+				},
+			},
+		},
+	})
+	ctx = contexts.WithProjectID(ctx, 100)
+
+	if HasScope(ctx, scopes.ScopeReadAPIKeys) {
+		t.Error("user with project role but no project membership should not have it")
 	}
 }
 
