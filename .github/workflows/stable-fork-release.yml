@@ -1,16 +1,17 @@
-name: Publish stable fork release
+name: Publish fork release
 
 on:
   push:
     branches:
       - stable
+      - beta
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: stable-fork-release
+  group: stable-fork-release-${{ github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -24,11 +25,11 @@ jobs:
     outputs:
       release_name: ${{ steps.version.outputs.release_name }}
     steps:
-      - name: Checkout stable branch
+      - name: Checkout release branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: stable
+          ref: ${{ github.ref_name }}
 
       - name: Resolve next fork release tag
         id: version
@@ -36,13 +37,22 @@ jobs:
           set -euo pipefail
 
           upstream_url="https://github.com/${UPSTREAM_REPOSITORY}.git"
+          channel="${GITHUB_REF_NAME:-stable}"
+          tag_pattern='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          if [[ "$channel" == "beta" ]]; then
+            tag_pattern='^v[0-9]+\.[0-9]+\.[0-9]+-(beta|rc)(\.?[0-9]+)?$'
+          elif [[ "$channel" != "stable" ]]; then
+            echo "Unsupported fork release branch: ${channel}" >&2
+            exit 1
+          fi
+
           upstream_tags=$(git ls-remote --tags --refs "$upstream_url" \
             | awk '{print $2}' \
             | sed 's#refs/tags/##' \
-            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+            | grep -E "$tag_pattern" || true)
 
           if [[ -z "$upstream_tags" ]]; then
-            echo "No stable upstream version tags found in ${UPSTREAM_REPOSITORY}." >&2
+            echo "No ${channel} upstream version tags found in ${UPSTREAM_REPOSITORY}." >&2
             exit 1
           fi
 

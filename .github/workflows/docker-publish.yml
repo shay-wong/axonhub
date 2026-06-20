@@ -74,8 +74,21 @@ jobs:
             exit 1
           fi
 
+          CHANNEL="stable"
+          if [[ "$TAG" == *beta* || "$TAG" == *rc* ]]; then
+            CHANNEL="beta"
+          fi
+          FLOATING_TAG="latest"
+          if [[ "$CHANNEL" == "beta" ]]; then
+            FLOATING_TAG="beta"
+          fi
+
           echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "CHANNEL=$CHANNEL" >> "$GITHUB_ENV"
+          echo "FLOATING_TAG=$FLOATING_TAG" >> "$GITHUB_ENV"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "floating_tag=$FLOATING_TAG" >> "$GITHUB_OUTPUT"
           echo "$TAG" > internal/build/VERSION
           echo "Building tag: $TAG for ${{ matrix.arch }}"
 
@@ -141,10 +154,11 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           build-args: |
-            AXONHUB_UPDATE_REPOSITORY=${{ github.repository }}
+            AXONHUB_UPDATE_REPOSITORY=${{ vars.UPSTREAM_REPOSITORY || 'looplj/axonhub' }}
+            AXONHUB_UPDATE_CHANNEL=${{ steps.version.outputs.channel }}
           tags: |
             ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.tag }}-${{ matrix.arch }}
-            ${{ steps.dockerhub.outputs.image }}:latest-${{ matrix.arch }}
+            ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.floating_tag }}-${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -173,8 +187,21 @@ jobs:
             exit 1
           fi
 
+          CHANNEL="stable"
+          if [[ "$TAG" == *beta* || "$TAG" == *rc* ]]; then
+            CHANNEL="beta"
+          fi
+          FLOATING_TAG="latest"
+          if [[ "$CHANNEL" == "beta" ]]; then
+            FLOATING_TAG="beta"
+          fi
+
           echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "CHANNEL=$CHANNEL" >> "$GITHUB_ENV"
+          echo "FLOATING_TAG=$FLOATING_TAG" >> "$GITHUB_ENV"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "floating_tag=$FLOATING_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Resolve Docker Hub image
         id: dockerhub
@@ -226,6 +253,7 @@ jobs:
         env:
           IMAGE: ${{ steps.dockerhub.outputs.image }}
           TAG: ${{ steps.version.outputs.tag }}
+          FLOATING_TAG: ${{ steps.version.outputs.floating_tag }}
         run: |
           set -euo pipefail
 
@@ -261,8 +289,8 @@ jobs:
 
           require_source_tag "${IMAGE}:${TAG}-amd64"
           require_source_tag "${IMAGE}:${TAG}-arm64"
-          require_source_tag "${IMAGE}:latest-amd64"
-          require_source_tag "${IMAGE}:latest-arm64"
+          require_source_tag "${IMAGE}:${FLOATING_TAG}-amd64"
+          require_source_tag "${IMAGE}:${FLOATING_TAG}-arm64"
 
           if tag_exists "${IMAGE}:${TAG}"; then
             echo "version_exists=true" >> "$GITHUB_OUTPUT"
@@ -271,26 +299,26 @@ jobs:
             echo "version_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-          latest_amd64_digest="$(tag_digest "${IMAGE}:latest-amd64")"
-          latest_arm64_digest="$(tag_digest "${IMAGE}:latest-arm64")"
+          floating_amd64_digest="$(tag_digest "${IMAGE}:${FLOATING_TAG}-amd64")"
+          floating_arm64_digest="$(tag_digest "${IMAGE}:${FLOATING_TAG}-arm64")"
 
-          if tag_exists "${IMAGE}:latest"; then
-            current_amd64_digest="$(manifest_arch_digest "${IMAGE}:latest" amd64)"
-            current_arm64_digest="$(manifest_arch_digest "${IMAGE}:latest" arm64)"
+          if tag_exists "${IMAGE}:${FLOATING_TAG}"; then
+            current_amd64_digest="$(manifest_arch_digest "${IMAGE}:${FLOATING_TAG}" amd64)"
+            current_arm64_digest="$(manifest_arch_digest "${IMAGE}:${FLOATING_TAG}" arm64)"
 
-            if [[ "$current_amd64_digest" == "$latest_amd64_digest" && "$current_arm64_digest" == "$latest_arm64_digest" ]]; then
-              echo "latest_current=true" >> "$GITHUB_OUTPUT"
-              echo "Latest manifest already points to current arch tags: ${IMAGE}:latest"
+            if [[ "$current_amd64_digest" == "$floating_amd64_digest" && "$current_arm64_digest" == "$floating_arm64_digest" ]]; then
+              echo "floating_current=true" >> "$GITHUB_OUTPUT"
+              echo "Floating manifest already points to current arch tags: ${IMAGE}:${FLOATING_TAG}"
             else
-              echo "latest_current=false" >> "$GITHUB_OUTPUT"
-              echo "Latest manifest exists but points to old arch digests; it will be updated."
+              echo "floating_current=false" >> "$GITHUB_OUTPUT"
+              echo "Floating manifest exists but points to old arch digests; it will be updated."
               echo "current amd64: ${current_amd64_digest:-missing}"
-              echo "source  amd64: ${latest_amd64_digest}"
+              echo "source  amd64: ${floating_amd64_digest}"
               echo "current arm64: ${current_arm64_digest:-missing}"
-              echo "source  arm64: ${latest_arm64_digest}"
+              echo "source  arm64: ${floating_arm64_digest}"
             fi
           else
-            echo "latest_current=false" >> "$GITHUB_OUTPUT"
+            echo "floating_current=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create & push manifest (Docker Hub - version)
@@ -301,10 +329,10 @@ jobs:
             ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.tag }}-amd64 \
             ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.tag }}-arm64
 
-      - name: Create & push manifest (Docker Hub - latest)
-        if: ${{ steps.manifest.outputs.latest_current != 'true' }}
+      - name: Create & push manifest (Docker Hub - floating)
+        if: ${{ steps.manifest.outputs.floating_current != 'true' }}
         run: |
           docker buildx imagetools create \
-            -t ${{ steps.dockerhub.outputs.image }}:latest \
-            ${{ steps.dockerhub.outputs.image }}:latest-amd64 \
-            ${{ steps.dockerhub.outputs.image }}:latest-arm64
+            -t ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.floating_tag }} \
+            ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.floating_tag }}-amd64 \
+            ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.floating_tag }}-arm64

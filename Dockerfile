@@ -17,7 +17,8 @@ COPY --from=frontend-builder /build/dist /dist
 FROM golang:alpine AS backend-builder
 
 WORKDIR /build
-ARG AXONHUB_UPDATE_REPOSITORY=shay-wong/axonhub
+ARG AXONHUB_UPDATE_REPOSITORY=looplj/axonhub
+ARG AXONHUB_UPDATE_CHANNEL=stable
 
 RUN apk add --no-cache git ca-certificates tzdata
 
@@ -38,7 +39,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOTOOLCHAIN=auto go build \
     -tags=nomsgpack \
-    -ldflags "-s -w -X 'github.com/looplj/axonhub/internal/build.Version=$(cat internal/build/VERSION 2>/dev/null || echo dev)' -X 'github.com/looplj/axonhub/internal/build.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)' -X 'github.com/looplj/axonhub/internal/build.Repository=${AXONHUB_UPDATE_REPOSITORY}'" \
+    -ldflags "-s -w -X 'github.com/looplj/axonhub/internal/build.Version=$(cat internal/build/VERSION 2>/dev/null || echo dev)' -X 'github.com/looplj/axonhub/internal/build.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)' -X 'github.com/looplj/axonhub/internal/build.Repository=${AXONHUB_UPDATE_REPOSITORY}' -X 'github.com/looplj/axonhub/internal/build.UpdateChannel=${AXONHUB_UPDATE_CHANNEL}'" \
     -o axonhub \
     ./cmd/axonhub
 

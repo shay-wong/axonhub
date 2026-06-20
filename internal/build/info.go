@@ -17,10 +17,12 @@ var (
 	Version    = ""
 	Commit     = ""
 	BuildTime  = ""
-	Repository = "shay-wong/axonhub"
-	GoVersion  = runtime.Version()
-	Platform   = fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
-	StartTime  = time.Now()
+	Repository = "looplj/axonhub"
+	// UpdateChannel controls which release stream version checks follow.
+	UpdateChannel = ""
+	GoVersion     = runtime.Version()
+	Platform      = fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
+	StartTime     = time.Now()
 )
 
 //nolint:gochecknoinits // init version.
