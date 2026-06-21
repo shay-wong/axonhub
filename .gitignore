@@ -167,4 +167,6 @@ config.schema.json
 *.agent/summary
 .factory
 .omo/
+.omc/
 .playwright-mcp/
+.ace-tool/
