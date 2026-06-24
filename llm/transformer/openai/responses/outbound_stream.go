@@ -67,8 +67,7 @@ type outboundStreamState struct {
 	serverItems   map[string]bool          // server-managed item key -> emitted
 
 	// Reasoning signature tracking
-	encryptedContentEmitted map[string]bool
-	hasEncryptedReasoning   bool
+	pendingReasoningEncryptedContent map[string]*string
 
 	// Transformer metadata tracking
 	transformerMetadata        map[string]any
@@ -79,12 +78,12 @@ func newResponsesOutboundStream(stream streams.Stream[*httpclient.StreamEvent]) 
 	return &responsesOutboundStream{
 		stream: stream,
 		state: &outboundStreamState{
-			toolCalls:               make(map[string]*llm.ToolCall),
-			itemToCallID:            make(map[string]string),
-			toolCallIndex:           make(map[string]int),
-			serverItems:             make(map[string]bool),
-			encryptedContentEmitted: make(map[string]bool),
-			transformerMetadata:     make(map[string]any),
+			toolCalls:                        make(map[string]*llm.ToolCall),
+			itemToCallID:                     make(map[string]string),
+			toolCallIndex:                    make(map[string]int),
+			serverItems:                      make(map[string]bool),
+			pendingReasoningEncryptedContent: make(map[string]*string),
+			transformerMetadata:              make(map[string]any),
 		},
 	}
 }
@@ -283,22 +282,15 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		item := streamEvent.Item
 		switch item.Type {
 		case "reasoning":
-			if item.EncryptedContent == nil || *item.EncryptedContent == "" {
+			if item.ID == "" || item.EncryptedContent == nil || *item.EncryptedContent == "" {
 				return nil // Intentionally skip this event
 			}
 
-			if !s.state.encryptedContentEmitted[item.ID] {
-				s.state.encryptedContentEmitted[item.ID] = true
-				s.state.hasEncryptedReasoning = true
-				resp.Choices = []llm.Choice{
-					{
-						Index: 0,
-						Delta: &llm.Message{
-							ReasoningSignature: shared.EncodeOpenAIEncryptedContent(item.EncryptedContent),
-						},
-					},
-				}
-			}
+			// Responses streams may send a provisional encrypted_content on item.added
+			// and the final blob on item.done. Hold the value until item.done so the
+			// final blob replaces the provisional one instead of being concatenated.
+			s.state.pendingReasoningEncryptedContent[item.ID] = shared.EncodeOpenAIEncryptedContent(item.EncryptedContent)
+			return nil
 
 		case "function_call":
 			// Initialize tool call tracking
@@ -542,6 +534,37 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 			}
 			if !emitted {
 				return nil
+			}
+
+			break
+		}
+		if streamEvent.Item.Type == "reasoning" {
+			if streamEvent.Item.ID == "" {
+				return nil // Intentionally skip this event
+			}
+
+			encryptedContent := shared.EncodeOpenAIEncryptedContent(streamEvent.Item.EncryptedContent)
+			if encryptedContent == nil || *encryptedContent == "" {
+				encryptedContent = s.state.pendingReasoningEncryptedContent[streamEvent.Item.ID]
+			}
+			delete(s.state.pendingReasoningEncryptedContent, streamEvent.Item.ID)
+			if encryptedContent == nil || *encryptedContent == "" {
+				return nil // Intentionally skip this event
+			}
+
+			resp.TransformerMetadata = map[string]any{
+				responsesReasoningItemTransformerMetadataKey: map[string]any{
+					"id":   streamEvent.Item.ID,
+					"done": true,
+				},
+			}
+			resp.Choices = []llm.Choice{
+				{
+					Index: 0,
+					Delta: &llm.Message{
+						ReasoningSignature: encryptedContent,
+					},
+				},
 			}
 
 			break
