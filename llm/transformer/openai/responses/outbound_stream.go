@@ -64,6 +64,7 @@ type outboundStreamState struct {
 	toolCalls     map[string]*llm.ToolCall // callID -> tool call
 	itemToCallID  map[string]string        // item.id -> call_id mapping
 	toolCallIndex map[string]int           // callID -> index in the output
+	serverItems   map[string]bool          // server-managed item key -> emitted
 
 	// Reasoning signature tracking
 	encryptedContentEmitted map[string]bool
@@ -81,6 +82,7 @@ func newResponsesOutboundStream(stream streams.Stream[*httpclient.StreamEvent]) 
 			toolCalls:               make(map[string]*llm.ToolCall),
 			itemToCallID:            make(map[string]string),
 			toolCallIndex:           make(map[string]int),
+			serverItems:             make(map[string]bool),
 			encryptedContentEmitted: make(map[string]bool),
 			transformerMetadata:     make(map[string]any),
 		},
@@ -89,6 +91,71 @@ func newResponsesOutboundStream(stream streams.Stream[*httpclient.StreamEvent]) 
 
 func (s *responsesOutboundStream) enqueue(resp *llm.Response) {
 	s.eventQueue = append(s.eventQueue, resp)
+}
+
+func (s *responsesOutboundStream) setServerItemContent(resp *llm.Response, item *Item) (bool, error) {
+	key := serverItemKey(item)
+	if key != "" {
+		if s.state.serverItems[key] {
+			return false, nil
+		}
+		s.state.serverItems[key] = true
+	}
+
+	rawItem, err := json.Marshal(item)
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal %s item: %w", item.Type, err)
+	}
+
+	resp.Choices = []llm.Choice{
+		{
+			Index: 0,
+			Delta: &llm.Message{
+				Content: llm.MessageContent{
+					MultipleContent: []llm.MessageContentPart{
+						{
+							Type:        item.Type,
+							ServerBlock: rawItem,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return true, nil
+}
+
+func shouldEmitServerItemFromAdded(item *Item) bool {
+	if item.Type != "tool_search_call" {
+		return true
+	}
+
+	return hasToolSearchArguments(item)
+}
+
+func shouldEmitServerItemFromDone(item *Item) bool {
+	if item.Type != "tool_search_call" {
+		return true
+	}
+
+	return hasToolSearchArguments(item)
+}
+
+func hasToolSearchArguments(item *Item) bool {
+	args := strings.TrimSpace(item.Arguments)
+	return args != "" && args != "{}" && args != "null"
+}
+
+func serverItemKey(item *Item) string {
+	if item.ID != "" {
+		return item.Type + ":" + item.ID
+	}
+	if item.CallID != "" {
+		return item.Type + ":" + item.CallID
+	}
+
+	return ""
 }
 
 func (s *responsesOutboundStream) Next() bool {
@@ -303,25 +370,16 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 			}
 
 		case "tool_search_call", "tool_search_output":
-			rawItem, err := json.Marshal(item)
-			if err != nil {
-				return fmt.Errorf("failed to marshal %s item: %w", item.Type, err)
+			if !shouldEmitServerItemFromAdded(item) {
+				return nil
 			}
 
-			resp.Choices = []llm.Choice{
-				{
-					Index: 0,
-					Delta: &llm.Message{
-						Content: llm.MessageContent{
-							MultipleContent: []llm.MessageContentPart{
-								{
-									Type:        item.Type,
-									ServerBlock: rawItem,
-								},
-							},
-						},
-					},
-				},
+			emitted, err := s.setServerItemContent(resp, item)
+			if err != nil {
+				return err
+			}
+			if !emitted {
+				return nil
 			}
 
 		default:
@@ -472,6 +530,21 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		if streamEvent.Item.Type == "web_search_call" {
 			appendResponseWebSearchCallMetadata(s.state.transformerMetadata, *streamEvent.Item)
 			return nil // Intentionally skip this event
+		}
+		if streamEvent.Item.Type == "tool_search_call" || streamEvent.Item.Type == "tool_search_output" {
+			if !shouldEmitServerItemFromDone(streamEvent.Item) {
+				return nil
+			}
+
+			emitted, err := s.setServerItemContent(resp, streamEvent.Item)
+			if err != nil {
+				return err
+			}
+			if !emitted {
+				return nil
+			}
+
+			break
 		}
 		if streamEvent.Item.Type != "message" {
 			return nil // Intentionally skip this event

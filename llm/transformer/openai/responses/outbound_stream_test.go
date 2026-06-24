@@ -668,3 +668,98 @@ func TestOutboundTransformer_TransformStream_PreservesToolSearchItems(t *testing
 	require.Len(t, outputItem.Tools, 1)
 	require.Equal(t, "get_shipping_eta", outputItem.Tools[0].Name)
 }
+
+func TestOutboundTransformer_TransformStream_EmitsToolSearchCallWhenDoneHasArguments(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{
+			Type: "response.created",
+			Data: []byte(`{
+				"type":"response.created",
+				"response":{
+					"id":"resp_tool_search_done",
+					"object":"response",
+					"created_at":1700000000,
+					"model":"gpt-5.5",
+					"status":"in_progress",
+					"output":[]
+				}
+			}`),
+		},
+		{
+			Type: "response.output_item.added",
+			Data: []byte(`{
+				"type":"response.output_item.added",
+				"output_index":0,
+				"item":{
+					"id":"tsc_done_123",
+					"type":"tool_search_call",
+					"call_id":"call_done_123",
+					"execution":"client",
+					"status":"in_progress",
+					"arguments":{}
+				}
+			}`),
+		},
+		{
+			Type: "response.output_item.done",
+			Data: []byte(`{
+				"type":"response.output_item.done",
+				"output_index":0,
+				"item":{
+					"id":"tsc_done_123",
+					"type":"tool_search_call",
+					"call_id":"call_done_123",
+					"execution":"client",
+					"status":"completed",
+					"arguments":{"limit":20,"query":"apifox"}
+				}
+			}`),
+		},
+		{
+			Type: "response.completed",
+			Data: []byte(`{
+				"type":"response.completed",
+				"response":{
+					"id":"resp_tool_search_done",
+					"object":"response",
+					"created_at":1700000000,
+					"model":"gpt-5.5",
+					"status":"completed",
+					"output":[],
+					"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}
+				}
+			}`),
+		},
+	}
+
+	stream, err := trans.TransformStream(context.Background(), nil, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	actual, err := streams.All(stream)
+	require.NoError(t, err)
+
+	var toolSearchChunks []*llm.Response
+	for _, resp := range actual {
+		if resp == nil || resp == llm.DoneResponse || len(resp.Choices) == 0 || resp.Choices[0].Delta == nil {
+			continue
+		}
+
+		parts := resp.Choices[0].Delta.Content.MultipleContent
+		if len(parts) == 1 && parts[0].Type == "tool_search_call" {
+			toolSearchChunks = append(toolSearchChunks, resp)
+		}
+	}
+
+	require.Len(t, toolSearchChunks, 1)
+
+	var callItem Item
+	err = json.Unmarshal(toolSearchChunks[0].Choices[0].Delta.Content.MultipleContent[0].ServerBlock, &callItem)
+	require.NoError(t, err)
+	require.Equal(t, "tool_search_call", callItem.Type)
+	require.Equal(t, "completed", *callItem.Status)
+	require.Equal(t, "call_done_123", callItem.CallID)
+	require.JSONEq(t, `{"limit":20,"query":"apifox"}`, callItem.Arguments)
+}
