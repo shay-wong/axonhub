@@ -654,6 +654,23 @@ func (item Item) MarshalJSON() ([]byte, error) {
 		})
 	}
 
+	if item.Type == "tool_search_output" {
+		type toolSearchOutputItem struct {
+			itemAlias
+			Tools []Tool `json:"tools"`
+		}
+
+		tools := item.Tools
+		if tools == nil {
+			tools = []Tool{}
+		}
+
+		return json.Marshal(toolSearchOutputItem{
+			itemAlias: itemAlias(item),
+			Tools:     tools,
+		})
+	}
+
 	if item.Type == "custom_tool_call" {
 		type customToolCallItem struct {
 			itemAlias

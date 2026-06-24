@@ -337,3 +337,22 @@ func TestItemUnmarshalJSON_ToolSearchCallArgumentsObject(t *testing.T) {
 		"arguments":{"goal":"Find the shipping ETA tool for order_42."}
 	}`, string(data))
 }
+
+func TestItemMarshalJSON_ToolSearchOutputIncludesEmptyTools(t *testing.T) {
+	item := Item{
+		Type:      "tool_search_output",
+		CallID:    "call_abc123",
+		Execution: "client",
+		Status:    lo.ToPtr("completed"),
+	}
+
+	data, err := json.Marshal(item)
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"type": "tool_search_output",
+		"status": "completed",
+		"call_id": "call_abc123",
+		"execution": "client",
+		"tools": []
+	}`, string(data))
+}
