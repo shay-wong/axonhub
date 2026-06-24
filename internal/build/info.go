@@ -17,7 +17,7 @@ var (
 	Version    = ""
 	Commit     = ""
 	BuildTime  = ""
-	Repository = "looplj/axonhub"
+	Repository = "shay-wong/axonhub"
 	// UpdateChannel controls which release stream version checks follow.
 	UpdateChannel = ""
 	GoVersion     = runtime.Version()

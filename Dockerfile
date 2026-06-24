@@ -17,7 +17,7 @@ COPY --from=frontend-builder /build/dist /dist
 FROM golang:alpine AS backend-builder
 
 WORKDIR /build
-ARG AXONHUB_UPDATE_REPOSITORY=looplj/axonhub
+ARG AXONHUB_UPDATE_REPOSITORY=shay-wong/axonhub
 ARG AXONHUB_UPDATE_CHANNEL=stable
 
 RUN apk add --no-cache git ca-certificates tzdata

@@ -93,7 +93,7 @@ type GitHubTag struct {
 // This accounts for build and upload time.
 const releaseCooldownDuration = 30 * time.Minute
 
-const defaultUpdateRepository = "looplj/axonhub"
+const defaultUpdateRepository = "shay-wong/axonhub"
 
 const (
 	updateChannelStable = "stable"

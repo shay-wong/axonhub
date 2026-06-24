@@ -210,12 +210,12 @@ func TestNormalizeGitHubRepository(t *testing.T) {
 		{
 			name:       "invalid repo falls back",
 			repository: "axonhub",
-			want:       "looplj/axonhub",
+			want:       "shay-wong/axonhub",
 		},
 		{
 			name:       "empty repo falls back",
 			repository: "",
-			want:       "looplj/axonhub",
+			want:       "shay-wong/axonhub",
 		},
 	}
 
