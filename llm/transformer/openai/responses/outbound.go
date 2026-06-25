@@ -178,11 +178,23 @@ func (t *OutboundTransformer) TransformError(ctx context.Context, rawErr *httpcl
 		}
 	}
 
-	// If JSON parsing fails, use the upstream status text
+	message := strings.TrimSpace(string(rawErr.Body))
+	if message == "" {
+		message = http.StatusText(rawErr.StatusCode)
+	}
+	if message == "" && rawErr.Status != "" {
+		message = rawErr.Status
+	}
+	if message == "" {
+		message = "upstream request failed"
+	}
+
+	// If JSON parsing fails, keep the upstream body when present and otherwise
+	// fall back to the HTTP status so callers never receive an empty error.
 	return &llm.ResponseError{
 		StatusCode: rawErr.StatusCode,
 		Detail: llm.ErrorDetail{
-			Message: strings.TrimSpace(string(rawErr.Body)),
+			Message: message,
 			Type:    "api_error",
 		},
 	}

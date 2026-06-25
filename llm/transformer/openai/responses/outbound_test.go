@@ -157,6 +157,71 @@ func TestOutboundTransformer_APIFormat(t *testing.T) {
 	require.Equal(t, llm.APIFormatOpenAIResponse, transformer.APIFormat())
 }
 
+func TestOutboundTransformer_TransformError(t *testing.T) {
+	transformer, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		rawErr      *httpclient.Error
+		wantMessage string
+		wantType    string
+		wantError   string
+	}{
+		{
+			name: "openai error body",
+			rawErr: &httpclient.Error{
+				StatusCode: http.StatusBadRequest,
+				Body:       []byte(`{"error":{"message":"bad request","type":"invalid_request_error","code":"invalid_request_error"}}`),
+			},
+			wantMessage: "bad request",
+			wantType:    "invalid_request_error",
+			wantError:   "Request failed: Bad Request, error: bad request, code: invalid_request_error, type: invalid_request_error",
+		},
+		{
+			name: "plain text body",
+			rawErr: &httpclient.Error{
+				StatusCode: http.StatusBadGateway,
+				Body:       []byte("upstream overloaded"),
+			},
+			wantMessage: "upstream overloaded",
+			wantType:    "api_error",
+			wantError:   "Request failed: Bad Gateway, error: upstream overloaded, type: api_error",
+		},
+		{
+			name: "empty body falls back to status text",
+			rawErr: &httpclient.Error{
+				StatusCode: http.StatusBadGateway,
+				Status:     "502 Bad Gateway",
+			},
+			wantMessage: "Bad Gateway",
+			wantType:    "api_error",
+			wantError:   "Request failed: Bad Gateway, error: Bad Gateway, type: api_error",
+		},
+		{
+			name: "unknown status falls back to raw status",
+			rawErr: &httpclient.Error{
+				StatusCode: 599,
+				Status:     "599 Network Connect Timeout Error",
+			},
+			wantMessage: "599 Network Connect Timeout Error",
+			wantType:    "api_error",
+			wantError:   "Request failed: , error: 599 Network Connect Timeout Error, type: api_error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := transformer.TransformError(context.Background(), tt.rawErr)
+
+			require.Equal(t, tt.rawErr.StatusCode, result.StatusCode)
+			require.Equal(t, tt.wantMessage, result.Detail.Message)
+			require.Equal(t, tt.wantType, result.Detail.Type)
+			require.Equal(t, tt.wantError, result.Error())
+		})
+	}
+}
+
 func TestOutboundTransformer_TransformRequest_AccountIdentity(t *testing.T) {
 	transformer, err := NewOutboundTransformerWithConfig(&Config{
 		BaseURL:        "https://api.openai.com",
