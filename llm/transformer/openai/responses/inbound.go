@@ -325,7 +325,7 @@ func convertToolChoiceToLLM(src *ToolChoice) *llm.ToolChoice {
 }
 
 // convertInputToMessages converts Responses API input to llm.Message slice.
-// It handles merging reasoning items with subsequent function_call items into a single assistant message.
+// It handles merging assistant-side items that Chat Completions expects in one message.
 func convertInputToMessages(input *Input) ([]llm.Message, error) {
 	if input == nil {
 		return nil, nil
@@ -366,6 +366,16 @@ func convertInputToMessages(input *Input) ([]llm.Message, error) {
 			continue
 		}
 
+		if isToolCallItem(item) {
+			msg, consumed := convertToolCallItemsToMessage(input.Items, i)
+			if msg != nil {
+				messages = append(messages, *msg)
+			}
+			i += consumed
+
+			continue
+		}
+
 		// Handle regular items
 		msg, err := convertItemToMessage(item)
 		if err != nil {
@@ -380,6 +390,62 @@ func convertInputToMessages(input *Input) ([]llm.Message, error) {
 	}
 
 	return messages, nil
+}
+
+func convertToolCallItemsToMessage(items []Item, startIdx int) (*llm.Message, int) {
+	msg := &llm.Message{
+		Role: "assistant",
+	}
+	consumed := 0
+
+	for i := startIdx; i < len(items); i++ {
+		item := &items[i]
+		if !isToolCallItem(item) {
+			break
+		}
+
+		msg.ToolCalls = append(msg.ToolCalls, toolCallFromItem(item))
+		consumed++
+	}
+
+	if consumed == 0 {
+		return nil, 0
+	}
+
+	return msg, consumed
+}
+
+func isToolCallItem(item *Item) bool {
+	return item != nil && (item.Type == "function_call" || item.Type == "custom_tool_call")
+}
+
+func toolCallFromItem(item *Item) llm.ToolCall {
+	if item.Type == "custom_tool_call" {
+		inputStr := ""
+		if item.Input != nil {
+			inputStr = *item.Input
+		}
+
+		return llm.ToolCall{
+			ID:   item.CallID,
+			Type: llm.ToolTypeResponsesCustomTool,
+			ResponseCustomToolCall: &llm.ResponseCustomToolCall{
+				CallID: item.CallID,
+				Name:   item.Name,
+				Input:  inputStr,
+			},
+		}
+	}
+
+	return llm.ToolCall{
+		ID:   item.CallID,
+		Type: "function",
+		Function: llm.FunctionCall{
+			Name:      item.Name,
+			Namespace: item.Namespace,
+			Arguments: item.Arguments,
+		},
+	}
 }
 
 // convertReasoningWithFollowing converts a reasoning item and merges it with subsequent
@@ -416,33 +482,12 @@ func convertReasoningWithFollowing(items []Item, startIdx int) (*llm.Message, in
 		switch nextItem.Type {
 		case "function_call":
 			// Merge function_call into the same assistant message
-			msg.ToolCalls = append(msg.ToolCalls, llm.ToolCall{
-				ID:   nextItem.CallID,
-				Type: "function",
-				Function: llm.FunctionCall{
-					Name:      nextItem.Name,
-					Namespace: nextItem.Namespace,
-					Arguments: nextItem.Arguments,
-				},
-			})
+			msg.ToolCalls = append(msg.ToolCalls, toolCallFromItem(nextItem))
 			consumed++
 
 		case "custom_tool_call":
 			// Merge custom_tool_call into the same assistant message
-			inputStr := ""
-			if nextItem.Input != nil {
-				inputStr = *nextItem.Input
-			}
-
-			msg.ToolCalls = append(msg.ToolCalls, llm.ToolCall{
-				ID:   nextItem.CallID,
-				Type: llm.ToolTypeResponsesCustomTool,
-				ResponseCustomToolCall: &llm.ResponseCustomToolCall{
-					CallID: nextItem.CallID,
-					Name:   nextItem.Name,
-					Input:  inputStr,
-				},
-			})
+			msg.ToolCalls = append(msg.ToolCalls, toolCallFromItem(nextItem))
 			consumed++
 
 		case "message", "input_text", "":

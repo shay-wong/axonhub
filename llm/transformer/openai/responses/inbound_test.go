@@ -1915,6 +1915,66 @@ func TestInboundTransformer_TransformRequest_WithReasoningInput(t *testing.T) {
 				require.Equal(t, int64(10000), *result.ReasoningBudget)
 			},
 		},
+		{
+			name: "parallel function calls are merged before tool outputs",
+			httpReq: &httpclient.Request{
+				Body: []byte(`{
+						"model": "gpt-5.1",
+						"input": [
+							{
+								"type": "message",
+								"role": "user",
+								"content": "Read the file and list files."
+							},
+							{
+								"type": "function_call",
+								"call_id": "call_read",
+								"name": "read_file",
+								"arguments": "{\"path\":\"README.md\"}"
+							},
+							{
+								"type": "function_call",
+								"call_id": "call_search",
+								"name": "search_files",
+								"arguments": "{\"pattern\":\"*.go\"}"
+							},
+							{
+								"type": "function_call_output",
+								"call_id": "call_read",
+								"output": "file contents"
+							},
+							{
+								"type": "function_call_output",
+								"call_id": "call_search",
+								"output": "file list"
+							}
+						]
+					}`),
+			},
+			expectError: false,
+			validate: func(t *testing.T, result *llm.Request) {
+				require.Len(t, result.Messages, 4)
+
+				require.Equal(t, "user", result.Messages[0].Role)
+
+				require.Equal(t, "assistant", result.Messages[1].Role)
+				require.Len(t, result.Messages[1].ToolCalls, 2)
+				require.Equal(t, "call_read", result.Messages[1].ToolCalls[0].ID)
+				require.Equal(t, "read_file", result.Messages[1].ToolCalls[0].Function.Name)
+				require.Equal(t, `{"path":"README.md"}`, result.Messages[1].ToolCalls[0].Function.Arguments)
+				require.Equal(t, "call_search", result.Messages[1].ToolCalls[1].ID)
+				require.Equal(t, "search_files", result.Messages[1].ToolCalls[1].Function.Name)
+				require.Equal(t, `{"pattern":"*.go"}`, result.Messages[1].ToolCalls[1].Function.Arguments)
+
+				require.Equal(t, "tool", result.Messages[2].Role)
+				require.Equal(t, "call_read", lo.FromPtr(result.Messages[2].ToolCallID))
+				require.Equal(t, "file contents", lo.FromPtr(result.Messages[2].Content.Content))
+
+				require.Equal(t, "tool", result.Messages[3].Role)
+				require.Equal(t, "call_search", lo.FromPtr(result.Messages[3].ToolCallID))
+				require.Equal(t, "file list", lo.FromPtr(result.Messages[3].Content.Content))
+			},
+		},
 	}
 
 	for _, tt := range tests {
