@@ -116,6 +116,20 @@ func (_c *RequestExecutionCreate) SetNillableExternalID(v *string) *RequestExecu
 	return _c
 }
 
+// SetSource sets the "source" field.
+func (_c *RequestExecutionCreate) SetSource(v requestexecution.Source) *RequestExecutionCreate {
+	_c.mutation.SetSource(v)
+	return _c
+}
+
+// SetNillableSource sets the "source" field if the given value is not nil.
+func (_c *RequestExecutionCreate) SetNillableSource(v *requestexecution.Source) *RequestExecutionCreate {
+	if v != nil {
+		_c.SetSource(*v)
+	}
+	return _c
+}
+
 // SetModelID sets the "model_id" field.
 func (_c *RequestExecutionCreate) SetModelID(v string) *RequestExecutionCreate {
 	_c.mutation.SetModelID(v)
@@ -340,6 +354,10 @@ func (_c *RequestExecutionCreate) defaults() {
 		v := requestexecution.DefaultProjectID
 		_c.mutation.SetProjectID(v)
 	}
+	if _, ok := _c.mutation.Source(); !ok {
+		v := requestexecution.DefaultSource
+		_c.mutation.SetSource(v)
+	}
 	if _, ok := _c.mutation.Format(); !ok {
 		v := requestexecution.DefaultFormat
 		_c.mutation.SetFormat(v)
@@ -365,6 +383,14 @@ func (_c *RequestExecutionCreate) check() error {
 	if v, ok := _c.mutation.ExternalID(); ok {
 		if err := requestexecution.ExternalIDValidator(v); err != nil {
 			return &ValidationError{Name: "external_id", err: fmt.Errorf(`ent: validator failed for field "RequestExecution.external_id": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.Source(); !ok {
+		return &ValidationError{Name: "source", err: errors.New(`ent: missing required field "RequestExecution.source"`)}
+	}
+	if v, ok := _c.mutation.Source(); ok {
+		if err := requestexecution.SourceValidator(v); err != nil {
+			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "RequestExecution.source": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.ModelID(); !ok {
@@ -435,6 +461,10 @@ func (_c *RequestExecutionCreate) createSpec() (*RequestExecution, *sqlgraph.Cre
 	if value, ok := _c.mutation.ExternalID(); ok {
 		_spec.SetField(requestexecution.FieldExternalID, field.TypeString, value)
 		_node.ExternalID = value
+	}
+	if value, ok := _c.mutation.Source(); ok {
+		_spec.SetField(requestexecution.FieldSource, field.TypeEnum, value)
+		_node.Source = value
 	}
 	if value, ok := _c.mutation.ModelID(); ok {
 		_spec.SetField(requestexecution.FieldModelID, field.TypeString, value)
@@ -864,6 +894,9 @@ func (u *RequestExecutionUpsertOne) UpdateNewValues() *RequestExecutionUpsertOne
 		}
 		if _, exists := u.create.mutation.DataStorageID(); exists {
 			s.SetIgnore(requestexecution.FieldDataStorageID)
+		}
+		if _, exists := u.create.mutation.Source(); exists {
+			s.SetIgnore(requestexecution.FieldSource)
 		}
 		if _, exists := u.create.mutation.ModelID(); exists {
 			s.SetIgnore(requestexecution.FieldModelID)
@@ -1378,6 +1411,9 @@ func (u *RequestExecutionUpsertBulk) UpdateNewValues() *RequestExecutionUpsertBu
 			}
 			if _, exists := b.mutation.DataStorageID(); exists {
 				s.SetIgnore(requestexecution.FieldDataStorageID)
+			}
+			if _, exists := b.mutation.Source(); exists {
+				s.SetIgnore(requestexecution.FieldSource)
 			}
 			if _, exists := b.mutation.ModelID(); exists {
 				s.SetIgnore(requestexecution.FieldModelID)

@@ -17,7 +17,7 @@ const (
 	// Uses channels table for channel metadata.
 	ThroughputQueryByChannel ThroughputQueryType = iota
 	// ThroughputQueryByModel groups throughput statistics by model.
-	// Uses requests and models tables for model metadata.
+	// Uses request_executions and models tables for model metadata.
 	ThroughputQueryByModel
 )
 
@@ -50,9 +50,9 @@ var AllowedQueryConfigs = map[ThroughputQueryType]QueryFragmentConfig{
 		GroupBy:       "se.channel_id, c.name, c.type",
 	},
 	ThroughputQueryByModel: {
-		SelectColumns: "r.model_id,\n    m.name as model_name,",
-		JoinClause:    "JOIN requests r ON se.request_id = r.id\nJOIN models m ON r.model_id = m.model_id",
-		GroupBy:       "r.model_id, m.name",
+		SelectColumns: "se.model_id,\n    m.name as model_name,",
+		JoinClause:    "JOIN models m ON se.model_id = m.model_id",
+		GroupBy:       "se.model_id, m.name",
 	},
 }
 
@@ -110,6 +110,8 @@ WITH successful_execs AS (
     SELECT
         request_id,
         channel_id,
+        source,
+        model_id,
         metrics_latency_ms,
         metrics_first_token_latency_ms,
         stream,
@@ -140,6 +142,8 @@ FROM successful_execs se
 JOIN usage_logs ul ON se.request_id = ul.request_id
 ` + config.JoinClause + `
 WHERE se.rn = 1
+    AND se.source <> 'test'
+    AND ul.source <> 'test'
 GROUP BY ` + config.GroupBy + `
 ORDER BY throughput DESC
 LIMIT ` + fmt.Sprintf("%d", limit)
@@ -177,6 +181,8 @@ JOIN usage_logs ul ON se.request_id = ul.request_id
 WHERE se.status = 'completed'
     AND se.metrics_latency_ms > 0
     AND se.created_at >= ` + placeholder + `
+    AND se.source <> 'test'
+    AND ul.source <> 'test'
     AND se.id = (
         SELECT MAX(re2.id)
         FROM request_executions re2
@@ -284,12 +290,14 @@ LEFT JOIN (
         SUM(COALESCE(completion_tokens, 0) + COALESCE(completion_reasoning_tokens, 0) + COALESCE(completion_audio_tokens, 0)) as total_completion_tokens
     FROM usage_logs
     WHERE created_at >= %s
+        AND source <> 'test'
     GROUP BY request_id, channel_id
 ) ul ON se.status = 'completed'
     AND se.request_id = ul.request_id
     AND se.channel_id = ul.channel_id
 WHERE se.created_at >= %s
     AND se.created_at < %s
+    AND se.source <> 'test'
     AND se.status IN ('completed', 'failed')
     %s
 GROUP BY se.channel_id

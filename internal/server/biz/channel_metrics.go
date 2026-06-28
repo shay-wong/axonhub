@@ -109,6 +109,7 @@ func (svc *ChannelService) loadAllChannelMetricsFromExecutions(ctx context.Conte
 		Where(
 			requestexecution.CreatedAtGTE(since),
 			requestexecution.ChannelIDNotNil(),
+			requestexecution.SourceNEQ(requestexecution.SourceTest),
 			requestexecution.StatusNotIn(requestexecution.StatusPending, requestexecution.StatusProcessing),
 		).
 		Modify(func(s *sql.Selector) {
@@ -305,6 +306,10 @@ func (svc *ChannelService) RecordPerformance(ctx context.Context, perf *Performa
 			log.Error(ctx, "panic in record performance", log.Any("panic", r))
 		}
 	}()
+
+	if perf.SkipHealthStateTracking {
+		return
+	}
 
 	if perf.Success {
 		svc.channelErrorCountsLock.Lock()
@@ -503,6 +508,10 @@ type PerformanceRecord struct {
 	Success            bool
 	Canceled           bool
 	RequestCompleted   bool
+	// SkipHealthStateTracking prevents diagnostic requests from mutating
+	// in-memory routing health state such as auto-disable counters and
+	// adaptive load-balancer metrics.
+	SkipHealthStateTracking bool
 
 	// If response status code is 0, it means the request is successful.
 	ResponseStatusCode int

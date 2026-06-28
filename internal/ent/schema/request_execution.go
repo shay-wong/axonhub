@@ -47,6 +47,11 @@ func (RequestExecution) Fields() []ent.Field {
 		field.String("external_id").
 			Optional().
 			MaxLen(512),
+		field.Enum("source").
+			Values("api", "playground", "test").
+			Default("api").
+			Immutable().
+			Comment("Source of the parent request at execution creation time"),
 		field.String("model_id").Immutable(),
 		//  The format of the request, e.g: openai/chat_completions, claude/messages, openai/response.
 		field.String("format").Immutable().Default("openai/chat_completions"),

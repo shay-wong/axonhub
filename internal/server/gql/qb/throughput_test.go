@@ -194,8 +194,8 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryByChannel,
 			limit:                 10,
 			mode:                  ThroughputModeRowNumber,
-			wantContains:          []string{"$1", "JOIN channels c ON", "se.channel_id", "channel_name", "channel_type", "ROW_NUMBER()", "LIMIT 10"},
-			wantNotContains:       []string{},
+			wantContains:          []string{"$1", "JOIN channels c ON", "se.channel_id", "channel_name", "channel_type", "ROW_NUMBER()", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
+			wantNotContains:       []string{"JOIN requests r ON", "r.source", "r.model_id"},
 		},
 		{
 			name:                  "by channel with question mark placeholders and ROW_NUMBER",
@@ -203,8 +203,8 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryByChannel,
 			limit:                 10,
 			mode:                  ThroughputModeRowNumber,
-			wantContains:          []string{"?", "JOIN channels c ON", "se.channel_id", "channel_name", "channel_type", "ROW_NUMBER()", "LIMIT 10"},
-			wantNotContains:       []string{"$1"},
+			wantContains:          []string{"?", "JOIN channels c ON", "se.channel_id", "channel_name", "channel_type", "ROW_NUMBER()", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
+			wantNotContains:       []string{"$1", "JOIN requests r ON", "r.source", "r.model_id"},
 		},
 		{
 			name:                  "by channel with dollar placeholders and MAX_ID",
@@ -212,8 +212,8 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryByChannel,
 			limit:                 10,
 			mode:                  ThroughputModeMaxID,
-			wantContains:          []string{"$1", "JOIN channels c ON", "se.channel_id", "channel_name", "channel_type", "MAX(re2.id)", "LIMIT 10"},
-			wantNotContains:       []string{"ROW_NUMBER()"},
+			wantContains:          []string{"$1", "JOIN channels c ON", "se.channel_id", "channel_name", "channel_type", "MAX(re2.id)", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
+			wantNotContains:       []string{"ROW_NUMBER()", "JOIN requests r ON", "r.source", "r.model_id"},
 		},
 		{
 			name:                  "by channel with question mark placeholders and MAX_ID",
@@ -221,8 +221,8 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryByChannel,
 			limit:                 10,
 			mode:                  ThroughputModeMaxID,
-			wantContains:          []string{"?", "JOIN channels c ON", "se.channel_id", "channel_name", "channel_type", "MAX(re2.id)", "LIMIT 10"},
-			wantNotContains:       []string{"$1", "ROW_NUMBER()"},
+			wantContains:          []string{"?", "JOIN channels c ON", "se.channel_id", "channel_name", "channel_type", "MAX(re2.id)", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
+			wantNotContains:       []string{"$1", "ROW_NUMBER()", "JOIN requests r ON", "r.source", "r.model_id"},
 		},
 
 		// ThroughputQueryByModel tests
@@ -232,8 +232,8 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryByModel,
 			limit:                 10,
 			mode:                  ThroughputModeRowNumber,
-			wantContains:          []string{"$1", "JOIN requests r ON", "JOIN models m ON", "r.model_id", "model_name", "ROW_NUMBER()", "LIMIT 10"},
-			wantNotContains:       []string{},
+			wantContains:          []string{"$1", "JOIN models m ON", "se.model_id", "model_name", "ROW_NUMBER()", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
+			wantNotContains:       []string{"JOIN requests r ON", "r.source", "r.model_id"},
 		},
 		{
 			name:                  "by model with question mark placeholders and ROW_NUMBER",
@@ -241,8 +241,8 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryByModel,
 			limit:                 10,
 			mode:                  ThroughputModeRowNumber,
-			wantContains:          []string{"?", "JOIN requests r ON", "JOIN models m ON", "r.model_id", "model_name", "ROW_NUMBER()", "LIMIT 10"},
-			wantNotContains:       []string{"$1"},
+			wantContains:          []string{"?", "JOIN models m ON", "se.model_id", "model_name", "ROW_NUMBER()", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
+			wantNotContains:       []string{"$1", "JOIN requests r ON", "r.source", "r.model_id"},
 		},
 		{
 			name:                  "by model with dollar placeholders and MAX_ID",
@@ -250,8 +250,8 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryByModel,
 			limit:                 10,
 			mode:                  ThroughputModeMaxID,
-			wantContains:          []string{"$1", "JOIN requests r ON", "JOIN models m ON", "r.model_id", "model_name", "MAX(re2.id)", "LIMIT 10"},
-			wantNotContains:       []string{"ROW_NUMBER()"},
+			wantContains:          []string{"$1", "JOIN models m ON", "se.model_id", "model_name", "MAX(re2.id)", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
+			wantNotContains:       []string{"ROW_NUMBER()", "JOIN requests r ON", "r.source", "r.model_id"},
 		},
 		{
 			name:                  "by model with question mark placeholders and MAX_ID",
@@ -259,8 +259,8 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryByModel,
 			limit:                 10,
 			mode:                  ThroughputModeMaxID,
-			wantContains:          []string{"?", "JOIN requests r ON", "JOIN models m ON", "r.model_id", "model_name", "MAX(re2.id)", "LIMIT 10"},
-			wantNotContains:       []string{"$1", "ROW_NUMBER()"},
+			wantContains:          []string{"?", "JOIN models m ON", "se.model_id", "model_name", "MAX(re2.id)", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
+			wantNotContains:       []string{"$1", "ROW_NUMBER()", "JOIN requests r ON", "r.source", "r.model_id"},
 		},
 
 		// Limit edge cases
@@ -299,8 +299,8 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryType(999),
 			limit:                 10,
 			mode:                  ThroughputModeRowNumber,
-			wantContains:          []string{"JOIN channels c ON", "se.channel_id", "channel_name"},
-			wantNotContains:       []string{},
+			wantContains:          []string{"JOIN channels c ON", "se.channel_id", "channel_name", "se.source <> 'test'"},
+			wantNotContains:       []string{"JOIN requests r ON", "r.source", "r.model_id"},
 		},
 	}
 
@@ -351,6 +351,10 @@ func TestBuildThroughputQuery_SQLStructure(t *testing.T) {
 			// Both modes should have these common elements
 			assert.Contains(t, got, "request_executions", "should reference request_executions table")
 			assert.Contains(t, got, "usage_logs", "should reference usage_logs table")
+			assert.NotContains(t, got, "JOIN requests r ON se.request_id = r.id", "should not depend on retained requests rows")
+			assert.NotContains(t, got, "r.source", "should not read source from retained requests rows")
+			assert.Contains(t, got, "se.source <> 'test'", "should exclude test-source executions")
+			assert.Contains(t, got, "ul.source <> 'test'", "should exclude test-source usage logs")
 			assert.Contains(t, got, "throughput", "should calculate throughput")
 			assert.Contains(t, got, "ORDER BY throughput DESC", "should order by throughput")
 		})
@@ -377,6 +381,8 @@ func TestBuildProbeStatsQuery(t *testing.T) {
 				"$1", "$2",
 				"AND se.channel_id IN ($3, $4)",
 				"FROM request_executions se",
+				"se.source <> 'test'",
+				"source <> 'test'",
 				"se.status IN ('completed', 'failed')",
 				"COUNT(*) as total_count",
 				"se.status = 'completed'",
@@ -385,7 +391,7 @@ func TestBuildProbeStatsQuery(t *testing.T) {
 				"total_first_token_latency",
 				"request_count",
 			},
-			wantNotContains: []string{"ROW_NUMBER()", "WITH latest_execs AS", "MAX(re2.id)"},
+			wantNotContains: []string{"ROW_NUMBER()", "WITH latest_execs AS", "MAX(re2.id)", "JOIN requests r ON", "r.source", "r.model_id"},
 		},
 		{
 			name:                  "ROW_NUMBER mode uses attempt-based aggregation with question mark placeholders",
@@ -396,10 +402,12 @@ func TestBuildProbeStatsQuery(t *testing.T) {
 				"?", "?",
 				"AND se.channel_id IN (?, ?)",
 				"FROM request_executions se",
+				"se.source <> 'test'",
+				"source <> 'test'",
 				"se.status IN ('completed', 'failed')",
 				"COUNT(*) as total_count",
 			},
-			wantNotContains: []string{"$1", "$2", "ROW_NUMBER()", "WITH latest_execs AS", "MAX(re2.id)"},
+			wantNotContains: []string{"$1", "$2", "ROW_NUMBER()", "WITH latest_execs AS", "MAX(re2.id)", "JOIN requests r ON", "r.source", "r.model_id"},
 		},
 
 		// MAX_ID mode tests
@@ -412,6 +420,8 @@ func TestBuildProbeStatsQuery(t *testing.T) {
 				"$1", "$2",
 				"AND se.channel_id IN ($3, $4)",
 				"FROM request_executions se",
+				"se.source <> 'test'",
+				"source <> 'test'",
 				"se.status IN ('completed', 'failed')",
 				"COUNT(*) as total_count",
 				"se.channel_id",
@@ -419,7 +429,7 @@ func TestBuildProbeStatsQuery(t *testing.T) {
 				"total_first_token_latency",
 				"request_count",
 			},
-			wantNotContains: []string{"ROW_NUMBER()", "WITH latest_execs AS", "MAX(re2.id)"},
+			wantNotContains: []string{"ROW_NUMBER()", "WITH latest_execs AS", "MAX(re2.id)", "JOIN requests r ON", "r.source", "r.model_id"},
 		},
 		{
 			name:                  "MAX_ID mode uses attempt-based aggregation with question mark placeholders",
@@ -430,10 +440,12 @@ func TestBuildProbeStatsQuery(t *testing.T) {
 				"?", "?",
 				"AND se.channel_id IN (?, ?)",
 				"FROM request_executions se",
+				"se.source <> 'test'",
+				"source <> 'test'",
 				"se.status IN ('completed', 'failed')",
 				"COUNT(*) as total_count",
 			},
-			wantNotContains: []string{"$1", "$2", "ROW_NUMBER()", "WITH latest_execs AS", "MAX(re2.id)"},
+			wantNotContains: []string{"$1", "$2", "ROW_NUMBER()", "WITH latest_execs AS", "MAX(re2.id)", "JOIN requests r ON", "r.source", "r.model_id"},
 		},
 
 		// Empty filter test
@@ -501,6 +513,9 @@ func TestBuildProbeStatsQuery_SQLStructure(t *testing.T) {
 			// Both modes should have these common elements
 			assert.Contains(t, got, "request_executions", "should reference request_executions table")
 			assert.Contains(t, got, "usage_logs", "should reference usage_logs table")
+			assert.NotContains(t, got, "JOIN requests r ON se.request_id = r.id", "should not depend on retained requests rows")
+			assert.NotContains(t, got, "r.source", "should not read source from retained requests rows")
+			assert.Contains(t, got, "se.source <> 'test'", "should exclude test-source executions")
 			assert.Contains(t, got, "se.status IN ('completed', 'failed')", "should count strict dashboard-style attempts")
 			assert.Contains(t, got, "GROUP BY se.channel_id", "should group by channel_id")
 			assert.Contains(t, got, "ORDER BY se.channel_id", "should order by channel_id")
@@ -522,6 +537,7 @@ func TestBuildProbeStatsQuery_BoundsUsageLogsAggregationByTime(t *testing.T) {
 			useDollarPlaceholders: true,
 			wantUsageLogWindow: "FROM usage_logs\n" +
 				"    WHERE created_at >= $1\n" +
+				"        AND source <> 'test'\n" +
 				"    GROUP BY request_id, channel_id",
 		},
 		{
@@ -529,6 +545,7 @@ func TestBuildProbeStatsQuery_BoundsUsageLogsAggregationByTime(t *testing.T) {
 			useDollarPlaceholders: false,
 			wantUsageLogWindow: "FROM usage_logs\n" +
 				"    WHERE created_at >= ?\n" +
+				"        AND source <> 'test'\n" +
 				"    GROUP BY request_id, channel_id",
 		},
 	}
@@ -605,6 +622,7 @@ func TestAllowedQueryConfigs(t *testing.T) {
 	channelConfig := AllowedQueryConfigs[ThroughputQueryByChannel]
 	assert.Contains(t, channelConfig.SelectColumns, "channel_id", "should include channel_id")
 	assert.Contains(t, channelConfig.SelectColumns, "channel_name", "should include channel_name")
+	assert.NotContains(t, channelConfig.JoinClause, "requests r ON", "should not join requests table")
 	assert.Contains(t, channelConfig.JoinClause, "channels c ON", "should join channels table")
 	assert.Contains(t, channelConfig.GroupBy, "channel_id", "should group by channel_id")
 
@@ -612,7 +630,7 @@ func TestAllowedQueryConfigs(t *testing.T) {
 	modelConfig := AllowedQueryConfigs[ThroughputQueryByModel]
 	assert.Contains(t, modelConfig.SelectColumns, "model_id", "should include model_id")
 	assert.Contains(t, modelConfig.SelectColumns, "model_name", "should include model_name")
-	assert.Contains(t, modelConfig.JoinClause, "requests r ON", "should join requests table")
+	assert.NotContains(t, modelConfig.JoinClause, "requests r ON", "should not join requests table")
 	assert.Contains(t, modelConfig.JoinClause, "models m ON", "should join models table")
 	assert.Contains(t, modelConfig.GroupBy, "model_id", "should group by model_id")
 }

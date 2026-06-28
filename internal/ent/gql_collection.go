@@ -4108,6 +4108,11 @@ func (_q *RequestExecutionQuery) collectField(ctx context.Context, oneNode bool,
 				selectedFields = append(selectedFields, requestexecution.FieldExternalID)
 				fieldSeen[requestexecution.FieldExternalID] = struct{}{}
 			}
+		case "source":
+			if _, ok := fieldSeen[requestexecution.FieldSource]; !ok {
+				selectedFields = append(selectedFields, requestexecution.FieldSource)
+				fieldSeen[requestexecution.FieldSource] = struct{}{}
+			}
 		case "modelID":
 			if _, ok := fieldSeen[requestexecution.FieldModelID]; !ok {
 				selectedFields = append(selectedFields, requestexecution.FieldModelID)

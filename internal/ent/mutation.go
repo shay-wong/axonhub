@@ -17900,6 +17900,7 @@ type RequestExecutionMutation struct {
 	project_id                        *int
 	addproject_id                     *int
 	external_id                       *string
+	source                            *requestexecution.Source
 	model_id                          *string
 	format                            *string
 	request_body                      *objects.JSONRawMessage
@@ -18342,6 +18343,42 @@ func (m *RequestExecutionMutation) ExternalIDCleared() bool {
 func (m *RequestExecutionMutation) ResetExternalID() {
 	m.external_id = nil
 	delete(m.clearedFields, requestexecution.FieldExternalID)
+}
+
+// SetSource sets the "source" field.
+func (m *RequestExecutionMutation) SetSource(r requestexecution.Source) {
+	m.source = &r
+}
+
+// Source returns the value of the "source" field in the mutation.
+func (m *RequestExecutionMutation) Source() (r requestexecution.Source, exists bool) {
+	v := m.source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSource returns the old "source" field's value of the RequestExecution entity.
+// If the RequestExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestExecutionMutation) OldSource(ctx context.Context) (v requestexecution.Source, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSource: %w", err)
+	}
+	return oldValue.Source, nil
+}
+
+// ResetSource resets all changes to the "source" field.
+func (m *RequestExecutionMutation) ResetSource() {
+	m.source = nil
 }
 
 // SetModelID sets the "model_id" field.
@@ -19263,7 +19300,7 @@ func (m *RequestExecutionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RequestExecutionMutation) Fields() []string {
-	fields := make([]string, 0, 22)
+	fields := make([]string, 0, 23)
 	if m.created_at != nil {
 		fields = append(fields, requestexecution.FieldCreatedAt)
 	}
@@ -19284,6 +19321,9 @@ func (m *RequestExecutionMutation) Fields() []string {
 	}
 	if m.external_id != nil {
 		fields = append(fields, requestexecution.FieldExternalID)
+	}
+	if m.source != nil {
+		fields = append(fields, requestexecution.FieldSource)
 	}
 	if m.model_id != nil {
 		fields = append(fields, requestexecution.FieldModelID)
@@ -19352,6 +19392,8 @@ func (m *RequestExecutionMutation) Field(name string) (ent.Value, bool) {
 		return m.DataStorageID()
 	case requestexecution.FieldExternalID:
 		return m.ExternalID()
+	case requestexecution.FieldSource:
+		return m.Source()
 	case requestexecution.FieldModelID:
 		return m.ModelID()
 	case requestexecution.FieldFormat:
@@ -19405,6 +19447,8 @@ func (m *RequestExecutionMutation) OldField(ctx context.Context, name string) (e
 		return m.OldDataStorageID(ctx)
 	case requestexecution.FieldExternalID:
 		return m.OldExternalID(ctx)
+	case requestexecution.FieldSource:
+		return m.OldSource(ctx)
 	case requestexecution.FieldModelID:
 		return m.OldModelID(ctx)
 	case requestexecution.FieldFormat:
@@ -19492,6 +19536,13 @@ func (m *RequestExecutionMutation) SetField(name string, value ent.Value) error 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetExternalID(v)
+		return nil
+	case requestexecution.FieldSource:
+		v, ok := value.(requestexecution.Source)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSource(v)
 		return nil
 	case requestexecution.FieldModelID:
 		v, ok := value.(string)
@@ -19805,6 +19856,9 @@ func (m *RequestExecutionMutation) ResetField(name string) error {
 		return nil
 	case requestexecution.FieldExternalID:
 		m.ResetExternalID()
+		return nil
+	case requestexecution.FieldSource:
+		m.ResetSource()
 		return nil
 	case requestexecution.FieldModelID:
 		m.ResetModelID()

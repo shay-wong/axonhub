@@ -40,6 +40,9 @@ func (m *modelCircuitBreakerTracker) OnOutboundRawRequest(ctx context.Context, r
 	if m.strategy != biz.LoadBalancerStrategyCircuitBreaker || m.modelCircuitBreaker == nil {
 		return request, nil
 	}
+	if shouldSkipHealthStateTrackingForState(ctx, m.outbound.state) {
+		return request, nil
+	}
 
 	channel := m.outbound.GetCurrentChannel()
 	modelID := m.outbound.GetRequestedModel()
@@ -72,6 +75,9 @@ func (m *modelCircuitBreakerTracker) OnOutboundLlmResponse(ctx context.Context, 
 	if m.outbound == nil || m.outbound.state == nil || m.modelCircuitBreaker == nil {
 		return response, nil
 	}
+	if shouldSkipHealthStateTrackingForState(ctx, m.outbound.state) {
+		return response, nil
+	}
 
 	m.releaseProbeLease()
 
@@ -84,6 +90,9 @@ func (m *modelCircuitBreakerTracker) OnOutboundLlmResponse(ctx context.Context, 
 
 func (m *modelCircuitBreakerTracker) OnOutboundRawError(ctx context.Context, err error) {
 	if m.outbound == nil || m.outbound.state == nil || m.modelCircuitBreaker == nil {
+		return
+	}
+	if shouldSkipHealthStateTrackingForState(ctx, m.outbound.state) {
 		return
 	}
 
@@ -108,6 +117,9 @@ func (m *modelCircuitBreakerTracker) OnOutboundRawError(ctx context.Context, err
 
 func (m *modelCircuitBreakerTracker) OnOutboundLlmStream(ctx context.Context, stream streams.Stream[*llm.Response]) (streams.Stream[*llm.Response], error) {
 	if m.outbound == nil || m.outbound.state == nil || m.modelCircuitBreaker == nil {
+		return stream, nil
+	}
+	if shouldSkipHealthStateTrackingForState(ctx, m.outbound.state) {
 		return stream, nil
 	}
 	return &probeReleasingStream{

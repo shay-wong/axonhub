@@ -220,7 +220,7 @@ func (lb *LoadBalancer) sortProduction(ctx context.Context, candidates []*Channe
 
 	// Increment selection count for the top candidate to ensure subsequent
 	// concurrent requests see the updated count and select different channels
-	if len(result) > 0 && result[0] != nil && result[0].Channel != nil && lb.selectionTracker != nil {
+	if len(result) > 0 && result[0] != nil && result[0].Channel != nil && lb.selectionTracker != nil && !shouldSkipHealthStateTracking(ctx) {
 		lb.selectionTracker.IncrementChannelSelection(result[0].Channel.ID)
 	}
 
@@ -299,7 +299,7 @@ func (lb *LoadBalancer) sortWithDebug(ctx context.Context, candidates []*Channel
 
 	// Increment selection count for the top candidate to ensure subsequent
 	// concurrent requests see the updated count and select different channels
-	if len(result) > 0 && result[0] != nil && result[0].Channel != nil && lb.selectionTracker != nil {
+	if len(result) > 0 && result[0] != nil && result[0].Channel != nil && lb.selectionTracker != nil && !shouldSkipHealthStateTracking(ctx) {
 		lb.selectionTracker.IncrementChannelSelection(result[0].Channel.ID)
 	}
 

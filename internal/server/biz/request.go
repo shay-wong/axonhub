@@ -325,6 +325,7 @@ func (s *RequestService) CreateRequestExecution(
 		SetRequestID(request.ID).
 		SetProjectID(request.ProjectID).
 		SetChannelID(channel.ID).
+		SetSource(requestexecution.Source(request.Source)).
 		SetModelID(modelID).
 		SetRequestBody(requestBodyForDB).
 		SetStatus(requestexecution.StatusProcessing).

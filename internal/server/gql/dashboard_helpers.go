@@ -7,12 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"github.com/samber/lo"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/looplj/axonhub/internal/ent/channelprobe"
+	"github.com/looplj/axonhub/internal/ent"
+	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/pkg/xtime"
@@ -32,6 +32,16 @@ var (
 type cacheResult struct {
 	stats *TokenStats
 	time  time.Time
+}
+
+func (r *queryResolver) productionRequestQuery() *ent.RequestQuery {
+	return r.client.Request.Query().
+		Where(request.SourceNEQ(request.SourceTest))
+}
+
+func (r *queryResolver) productionUsageLogQuery() *ent.UsageLogQuery {
+	return r.client.UsageLog.Query().
+		Where(usagelog.SourceNEQ(usagelog.SourceTest))
 }
 
 // SetTokenStatsCacheTTL sets the cache TTL values for all-time token stats.
@@ -71,44 +81,6 @@ func safeIntFromInt64(v int64) int {
 	}
 
 	return int(v)
-}
-
-func buildDateExpression(dialectName string, timestampCol string, offsetSeconds int, locName string) string {
-	switch dialectName {
-	case dialect.SQLite:
-		return fmt.Sprintf("strftime('%%Y-%%m-%%d', datetime(%s, 'unixepoch', '%+d seconds'))", timestampCol, offsetSeconds)
-	case dialect.MySQL:
-		offsetStr := xtime.FormatUTCOffset(offsetSeconds)
-		return fmt.Sprintf("DATE_FORMAT(CONVERT_TZ(FROM_UNIXTIME(%s), '+00:00', '%s'), '%%Y-%%m-%%d')", timestampCol, offsetStr)
-	case dialect.Postgres:
-		return fmt.Sprintf("to_char(to_timestamp(%s) AT TIME ZONE '%s', 'YYYY-MM-DD')", timestampCol, locName)
-	default:
-		return fmt.Sprintf("DATE(%s)", timestampCol)
-	}
-}
-
-func buildProbeQuerySelects(s *sql.Selector, dateExpr string) []string {
-	avgTokensCol := s.C(channelprobe.FieldAvgTokensPerSecond)
-	totalRequestsCol := s.C(channelprobe.FieldTotalRequestCount)
-	avgTTFTCol := s.C(channelprobe.FieldAvgTimeToFirstTokenMs)
-	channelIDCol := s.C(channelprobe.FieldChannelID)
-
-	throughputExpr := fmt.Sprintf(
-		"SUM(CASE WHEN %s IS NOT NULL THEN %s * %s ELSE 0 END) / NULLIF(SUM(CASE WHEN %s IS NOT NULL THEN %s ELSE 0 END), 0)",
-		avgTokensCol, avgTokensCol, totalRequestsCol, avgTokensCol, totalRequestsCol,
-	)
-	ttftExpr := fmt.Sprintf(
-		"SUM(CASE WHEN %s IS NOT NULL THEN %s * %s ELSE 0 END) / NULLIF(SUM(CASE WHEN %s IS NOT NULL THEN %s ELSE 0 END), 0)",
-		avgTTFTCol, avgTTFTCol, totalRequestsCol, avgTTFTCol, totalRequestsCol,
-	)
-
-	return []string{
-		sql.As(dateExpr, "date"),
-		sql.As(channelIDCol, "channel_id"),
-		sql.As(sql.Sum(totalRequestsCol), "request_count"),
-		sql.As(throughputExpr, "throughput"),
-		sql.As(ttftExpr, "ttft_ms"),
-	}
 }
 
 func calculateConfidenceAndSort[T any](
@@ -185,7 +157,7 @@ func (r *queryResolver) getTopModelsForAPIKeys(ctx context.Context, apiKeyIDs []
 		return make(map[int][]*ModelTokenUsageStats)
 	}
 
-	query := r.client.UsageLog.Query().
+	query := r.productionUsageLogQuery().
 		Where(usagelog.APIKeyIDIn(apiKeyIDs...))
 
 	if input != nil {

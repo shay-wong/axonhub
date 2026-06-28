@@ -4629,6 +4629,10 @@ type RequestExecution implements Node {
   """
   dataStorageID: ID
   externalID: String
+  """
+  Source of the parent request at execution creation time
+  """
+  source: RequestExecutionSource!
   modelID: String!
   format: String!
   requestBody: JSONRawMessage! @goField(forceResolver: true)
@@ -4712,6 +4716,14 @@ Properties by which RequestExecution connections can be ordered.
 enum RequestExecutionOrderField {
   CREATED_AT
   UPDATED_AT
+}
+"""
+RequestExecutionSource is enum for the field source
+"""
+enum RequestExecutionSource @goModel(model: "github.com/looplj/axonhub/internal/ent/requestexecution.Source") {
+  api
+  playground
+  test
 }
 """
 RequestExecutionStatus is enum for the field status
@@ -4818,6 +4830,13 @@ input RequestExecutionWhereInput {
   externalIDNotNil: Boolean
   externalIDEqualFold: String
   externalIDContainsFold: String
+  """
+  source field predicates
+  """
+  source: RequestExecutionSource
+  sourceNEQ: RequestExecutionSource
+  sourceIn: [RequestExecutionSource!]
+  sourceNotIn: [RequestExecutionSource!]
   """
   model_id field predicates
   """

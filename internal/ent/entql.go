@@ -419,6 +419,7 @@ var schemaGraph = func() *sqlgraph.Schema {
 			requestexecution.FieldChannelID:                  {Type: field.TypeInt, Column: requestexecution.FieldChannelID},
 			requestexecution.FieldDataStorageID:              {Type: field.TypeInt, Column: requestexecution.FieldDataStorageID},
 			requestexecution.FieldExternalID:                 {Type: field.TypeString, Column: requestexecution.FieldExternalID},
+			requestexecution.FieldSource:                     {Type: field.TypeEnum, Column: requestexecution.FieldSource},
 			requestexecution.FieldModelID:                    {Type: field.TypeString, Column: requestexecution.FieldModelID},
 			requestexecution.FieldFormat:                     {Type: field.TypeString, Column: requestexecution.FieldFormat},
 			requestexecution.FieldRequestBody:                {Type: field.TypeJSON, Column: requestexecution.FieldRequestBody},
@@ -3391,6 +3392,11 @@ func (f *RequestExecutionFilter) WhereDataStorageID(p entql.IntP) {
 // WhereExternalID applies the entql string predicate on the external_id field.
 func (f *RequestExecutionFilter) WhereExternalID(p entql.StringP) {
 	f.Where(p.Field(requestexecution.FieldExternalID))
+}
+
+// WhereSource applies the entql string predicate on the source field.
+func (f *RequestExecutionFilter) WhereSource(p entql.StringP) {
+	f.Where(p.Field(requestexecution.FieldSource))
 }
 
 // WhereModelID applies the entql string predicate on the model_id field.

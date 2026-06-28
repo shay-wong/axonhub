@@ -7720,6 +7720,12 @@ type RequestExecutionWhereInput struct {
 	ExternalIDEqualFold    *string  `json:"externalIDEqualFold,omitempty"`
 	ExternalIDContainsFold *string  `json:"externalIDContainsFold,omitempty"`
 
+	// "source" field predicates.
+	Source      *requestexecution.Source  `json:"source,omitempty"`
+	SourceNEQ   *requestexecution.Source  `json:"sourceNEQ,omitempty"`
+	SourceIn    []requestexecution.Source `json:"sourceIn,omitempty"`
+	SourceNotIn []requestexecution.Source `json:"sourceNotIn,omitempty"`
+
 	// "model_id" field predicates.
 	ModelID             *string  `json:"modelID,omitempty"`
 	ModelIDNEQ          *string  `json:"modelIDNEQ,omitempty"`
@@ -8118,6 +8124,18 @@ func (i *RequestExecutionWhereInput) P() (predicate.RequestExecution, error) {
 	}
 	if i.ExternalIDContainsFold != nil {
 		predicates = append(predicates, requestexecution.ExternalIDContainsFold(*i.ExternalIDContainsFold))
+	}
+	if i.Source != nil {
+		predicates = append(predicates, requestexecution.SourceEQ(*i.Source))
+	}
+	if i.SourceNEQ != nil {
+		predicates = append(predicates, requestexecution.SourceNEQ(*i.SourceNEQ))
+	}
+	if len(i.SourceIn) > 0 {
+		predicates = append(predicates, requestexecution.SourceIn(i.SourceIn...))
+	}
+	if len(i.SourceNotIn) > 0 {
+		predicates = append(predicates, requestexecution.SourceNotIn(i.SourceNotIn...))
 	}
 	if i.ModelID != nil {
 		predicates = append(predicates, requestexecution.ModelIDEQ(*i.ModelID))

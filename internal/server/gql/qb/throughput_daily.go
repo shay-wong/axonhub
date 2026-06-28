@@ -36,11 +36,11 @@ var AllowedDailyQueryConfigs = map[DailyThroughputQueryType]DailyQueryFragmentCo
 		GroupByFields: "se.channel_id, c.name",
 	},
 	DailyThroughputByModel: {
-		IDColumn:      "r.model_id",
+		IDColumn:      "se.model_id",
 		NameColumn:    "m.name as model_name",
 		NameAlias:     "model_name",
-		JoinClause:    "JOIN requests r ON se.request_id = r.id\nJOIN models m ON r.model_id = m.model_id",
-		GroupByFields: "r.model_id, m.name",
+		JoinClause:    "JOIN models m ON se.model_id = m.model_id",
+		GroupByFields: "se.model_id, m.name",
 	},
 }
 
@@ -159,6 +159,8 @@ func buildDailyRowNumberQuery(dateExpr string, config DailyQueryFragmentConfig, 
 		"    SELECT\n" +
 		"        request_id,\n" +
 		"        channel_id,\n" +
+		"        source,\n" +
+		"        model_id,\n" +
 		"        metrics_latency_ms,\n" +
 		"        metrics_first_token_latency_ms,\n" +
 		"        stream,\n" +
@@ -180,6 +182,8 @@ func buildDailyRowNumberQuery(dateExpr string, config DailyQueryFragmentConfig, 
 		"    JOIN usage_logs ul ON se.request_id = ul.request_id\n" +
 		"    " + config.JoinClause + "\n" +
 		"    WHERE se.rn = 1\n" +
+		"        AND se.source <> 'test'\n" +
+		"        AND ul.source <> 'test'\n" +
 		"    GROUP BY " + dateExpr + ", " + config.GroupByFields + "\n" +
 		")\n" +
 		"SELECT date, id, " + config.NameAlias + ", tokens_count, request_count, throughput\n" +
@@ -207,6 +211,8 @@ func buildDailyMaxIDQuery(dateExpr string, config DailyQueryFragmentConfig, limi
 		"    WHERE se.status = 'completed'\n" +
 		"        AND se.metrics_latency_ms > 0\n" +
 		"        AND se.created_at >= " + startDatePlaceholder + "\n" +
+		"        AND se.source <> 'test'\n" +
+		"        AND ul.source <> 'test'\n" +
 		"        AND se.id = (\n" +
 		"            SELECT MAX(re2.id)\n" +
 		"            FROM request_executions re2\n" +
@@ -244,21 +250,15 @@ func BuildDailyPerformanceStatsQuery(dialect string, timezone string, offsetSeco
 	dateExpr := getDateExpression(dialect, "se.created_at", timezone, offsetSeconds)
 	throughputSQL := throughputCalculationSQL("se")
 
-	// Only add the requests join for model queries (channel_id is already in request_executions)
-	var joinRequests string
-	if queryType == DailyThroughputByModel {
-		joinRequests = "    JOIN requests r ON se.request_id = r.id\n"
-	}
-
 	if mode == ThroughputModeMaxID {
-		return buildDailyPerformanceStatsMaxIDQuery(dateExpr, config, queryType, placeholder, joinRequests, throughputSQL)
+		return buildDailyPerformanceStatsMaxIDQuery(dateExpr, config, queryType, placeholder, throughputSQL)
 	}
 
-	return buildDailyPerformanceStatsRowNumberQuery(dateExpr, config, queryType, placeholder, joinRequests, throughputSQL)
+	return buildDailyPerformanceStatsRowNumberQuery(dateExpr, config, queryType, placeholder, throughputSQL)
 }
 
 // buildDailyPerformanceStatsRowNumberQuery constructs the ROW_NUMBER() version of the daily performance stats query.
-func buildDailyPerformanceStatsRowNumberQuery(dateExpr string, config DailyQueryFragmentConfig, queryType DailyThroughputQueryType, placeholder string, joinRequests string, throughputSQL string) string {
+func buildDailyPerformanceStatsRowNumberQuery(dateExpr string, config DailyQueryFragmentConfig, queryType DailyThroughputQueryType, placeholder string, throughputSQL string) string {
 	return "WITH successful_execs AS (\n" +
 		"    SELECT\n" +
 		"        se.request_id,\n" +
@@ -269,10 +269,10 @@ func buildDailyPerformanceStatsRowNumberQuery(dateExpr string, config DailyQuery
 		"        " + dateExpr + " as exec_date,\n" +
 		"        ROW_NUMBER() OVER (PARTITION BY se.request_id ORDER BY se.created_at DESC) as rn\n" +
 		"    FROM request_executions se\n" +
-		joinRequests +
 		"    WHERE se.status = 'completed'\n" +
 		"        AND se.metrics_latency_ms > 0\n" +
 		"        AND se.created_at >= " + placeholder + "\n" +
+		"        AND se.source <> 'test'\n" +
 		"),\n" +
 		"daily AS (\n" +
 		"    SELECT\n" +
@@ -294,6 +294,7 @@ func buildDailyPerformanceStatsRowNumberQuery(dateExpr string, config DailyQuery
 		"    FROM successful_execs se\n" +
 		"    JOIN usage_logs ul ON se.request_id = ul.request_id\n" +
 		"    WHERE se.rn = 1\n" +
+		"        AND ul.source <> 'test'\n" +
 		"    GROUP BY exec_date, se." + getIDColumnName(queryType) + "\n" +
 		")\n" +
 		"SELECT date, id, tokens_count, latency_ms, ttft_ms, request_count, throughput\n" +
@@ -304,7 +305,7 @@ func buildDailyPerformanceStatsRowNumberQuery(dateExpr string, config DailyQuery
 }
 
 // buildDailyPerformanceStatsMaxIDQuery constructs the MAX(id) fallback version for older databases.
-func buildDailyPerformanceStatsMaxIDQuery(dateExpr string, config DailyQueryFragmentConfig, queryType DailyThroughputQueryType, placeholder string, joinRequests string, throughputSQL string) string {
+func buildDailyPerformanceStatsMaxIDQuery(dateExpr string, config DailyQueryFragmentConfig, queryType DailyThroughputQueryType, placeholder string, throughputSQL string) string {
 	return "WITH latest_execs AS (\n" +
 		"    SELECT\n" +
 		"        se.request_id,\n" +
@@ -314,10 +315,10 @@ func buildDailyPerformanceStatsMaxIDQuery(dateExpr string, config DailyQueryFrag
 		"        se.stream,\n" +
 		"        " + dateExpr + " as exec_date\n" +
 		"    FROM request_executions se\n" +
-		joinRequests +
 		"    WHERE se.status = 'completed'\n" +
 		"        AND se.metrics_latency_ms > 0\n" +
 		"        AND se.created_at >= " + placeholder + "\n" +
+		"        AND se.source <> 'test'\n" +
 		"        AND se.id = (\n" +
 		"            SELECT MAX(se2.id)\n" +
 		"            FROM request_executions se2\n" +
@@ -345,6 +346,7 @@ func buildDailyPerformanceStatsMaxIDQuery(dateExpr string, config DailyQueryFrag
 		"        " + throughputSQL + " as throughput\n" +
 		"    FROM latest_execs se\n" +
 		"    JOIN usage_logs ul ON se.request_id = ul.request_id\n" +
+		"    WHERE ul.source <> 'test'\n" +
 		"    GROUP BY exec_date, se." + getIDColumnName(queryType) + "\n" +
 		")\n" +
 		"SELECT date, id, tokens_count, latency_ms, ttft_ms, request_count, throughput\n" +

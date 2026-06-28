@@ -2,12 +2,22 @@ package orchestrator
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/looplj/axonhub/internal/authz"
+	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
+	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/enttest"
+	"github.com/looplj/axonhub/internal/ent/request"
+	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/internal/pkg/xcache"
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
@@ -146,6 +156,202 @@ func TestPerformanceRecording_OnOutboundRawRequest_PreservesStreamFlag(t *testin
 					"If this fails, the bug has been reverted!")
 		})
 	}
+}
+
+func TestPerformanceRecording_OnOutboundRawRequest_SkipsHealthStateTrackingForTestSource(t *testing.T) {
+	channel := &biz.Channel{
+		Channel: &ent.Channel{
+			ID:   1,
+			Name: "test-channel",
+		},
+		Outbound: &mockTransformer{},
+	}
+
+	state := &PersistenceState{
+		CurrentCandidate: &ChannelModelsCandidate{
+			Channel: channel,
+		},
+	}
+	outbound := &PersistentOutboundTransformer{
+		state: state,
+	}
+	middleware := &performanceRecording{
+		outbound: outbound,
+	}
+
+	ctx := contexts.WithSource(context.Background(), request.SourceTest)
+	req := &httpclient.Request{
+		Method: "POST",
+		URL:    "https://api.example.com/v1/chat/completions",
+	}
+
+	result, err := middleware.OnOutboundRawRequest(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, req, result)
+	require.NotNil(t, state.Perf)
+	require.True(t, state.Perf.SkipHealthStateTracking)
+}
+
+func TestPerformanceRecording_OnOutboundRawRequest_SkipsHealthStateTrackingForPersistedTestRequest(t *testing.T) {
+	channel := &biz.Channel{
+		Channel: &ent.Channel{
+			ID:   1,
+			Name: "test-channel",
+		},
+		Outbound: &mockTransformer{},
+	}
+
+	state := &PersistenceState{
+		Request: &ent.Request{
+			Source: request.SourceTest,
+		},
+		CurrentCandidate: &ChannelModelsCandidate{
+			Channel: channel,
+		},
+	}
+	outbound := &PersistentOutboundTransformer{
+		state: state,
+	}
+	middleware := &performanceRecording{
+		outbound: outbound,
+	}
+
+	req := &httpclient.Request{
+		Method: "POST",
+		URL:    "https://api.example.com/v1/chat/completions",
+	}
+
+	result, err := middleware.OnOutboundRawRequest(context.Background(), req)
+	require.NoError(t, err)
+	require.Equal(t, req, result)
+	require.NotNil(t, state.Perf)
+	require.True(t, state.Perf.SkipHealthStateTracking)
+}
+
+func TestModelCircuitBreakerTracker_OnOutboundRawError_SkipsHealthStateTrackingForPersistedTestRequest(t *testing.T) {
+	channel := &biz.Channel{
+		Channel: &ent.Channel{
+			ID:   1,
+			Name: "test-channel",
+		},
+		Outbound: &mockTransformer{},
+	}
+	modelCircuitBreaker := biz.NewModelCircuitBreaker()
+	modelID := "gpt-4"
+	state := &PersistenceState{
+		Request: &ent.Request{
+			Source: request.SourceTest,
+		},
+		CurrentCandidate: &ChannelModelsCandidate{
+			Channel: channel,
+			Models: []biz.ChannelModelEntry{
+				{RequestModel: modelID, ActualModel: modelID},
+			},
+		},
+		CurrentModelIndex: 0,
+	}
+	tracker := &modelCircuitBreakerTracker{
+		outbound: &PersistentOutboundTransformer{
+			state: state,
+		},
+		modelCircuitBreaker: modelCircuitBreaker,
+		strategy:            biz.LoadBalancerStrategyCircuitBreaker,
+	}
+
+	tracker.OnOutboundRawError(context.Background(), &httpclient.Error{StatusCode: http.StatusServiceUnavailable})
+
+	stats := modelCircuitBreaker.GetModelCircuitBreakerStats(context.Background(), channel.ID, modelID)
+	require.NotNil(t, stats)
+	require.Equal(t, biz.StateClosed, stats.State)
+	require.Equal(t, 0, stats.ConsecutiveFailures)
+	require.True(t, stats.LastFailureAt.IsZero())
+}
+
+func TestTestChannelOrchestrator_TestChannel_SourceTestSkipsHealthStateTracking(t *testing.T) {
+	ctx := context.Background()
+	ctx = authz.WithTestBypass(ctx)
+
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx = ent.NewContext(ctx, client)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/chat/completions", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":{"message":"upstream unavailable"}}`))
+	}))
+	defer upstream.Close()
+
+	channelRow, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Test Source Channel").
+		SetBaseURL(upstream.URL).
+		SetCredentials(objects.ChannelCredentials{APIKey: "test-api-key"}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	channelService, requestService, systemService, usageLogService := setupTestServices(t, client)
+	require.NoError(t, systemService.SetRetryPolicy(ctx, &biz.RetryPolicy{
+		Enabled: false,
+		ChannelAutoDisable: biz.AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []biz.AutoDisableStatusRule{
+				{Status: http.StatusServiceUnavailable, Times: 1, Action: biz.DisableActionPermanent},
+			},
+		},
+		APIKeyAutoDisable: biz.AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []biz.AutoDisableStatusRule{
+				{Status: http.StatusServiceUnavailable, Times: 1, Action: biz.DisableActionPermanent},
+			},
+		},
+	}))
+
+	promptProtectionRuleService := biz.NewPromptProtectionRuleService(biz.PromptProtectionRuleServiceParams{
+		CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+		Ent:         client,
+	})
+	defer promptProtectionRuleService.Stop()
+
+	tester := NewTestChannelOrchestrator(
+		channelService,
+		requestService,
+		systemService,
+		usageLogService,
+		promptProtectionRuleService,
+		httpclient.NewHttpClientWithClient(upstream.Client()),
+	)
+
+	result, err := tester.TestChannel(contexts.WithSource(ctx, request.SourceTest), objects.GUID{ID: channelRow.ID}, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.False(t, result.Success)
+
+	require.Eventually(t, func() bool {
+		count, err := client.RequestExecution.Query().Count(ctx)
+		if err != nil {
+			return false
+		}
+
+		return count == 1
+	}, time.Second, 10*time.Millisecond)
+
+	metrics, err := channelService.GetChannelMetrics(ctx, channelRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), metrics.RequestCount)
+	require.Equal(t, int64(0), metrics.FailureCount)
+	require.Equal(t, int64(0), metrics.ConsecutiveFailures)
+	require.Nil(t, metrics.LastFailureAt)
+
+	updatedCh, err := client.Channel.Get(ctx, channelRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusEnabled, updatedCh.Status)
+	require.Empty(t, updatedCh.DisabledAPIKeys)
 }
 
 // TestPerformanceRecording_FullLifecycle_StreamFlagPreserved tests the complete

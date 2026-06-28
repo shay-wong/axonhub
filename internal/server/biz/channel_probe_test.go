@@ -528,6 +528,115 @@ func TestComputeAllChannelProbeStats_Integration(t *testing.T) {
 	assert.InDelta(t, 500.0, *channelStats.avgTimeToFirstTokenMs, 0.01)
 }
 
+func TestComputeAllChannelProbeStats_ExcludesTestSource(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := ent.NewContext(t.Context(), client)
+	ctx = authz.WithTestBypass(ctx)
+
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpenaiFake).
+		SetName("test-source-channel").
+		SetStatus(channel.StatusEnabled).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetCredentials(objects.ChannelCredentials{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	endTime := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	startTime := endTime.Add(-time.Minute)
+	now := startTime.Add(30 * time.Second)
+
+	prodReq, err := client.Request.Create().
+		SetModelID("gpt-4").
+		SetRequestBody(objects.JSONRawMessage(`{}`)).
+		SetStatus(request.StatusCompleted).
+		SetSource(request.SourceAPI).
+		SetChannelID(ch.ID).
+		SetStream(true).
+		SetMetricsLatencyMs(1000).
+		SetMetricsFirstTokenLatencyMs(100).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.RequestExecution.Create().
+		SetRequestID(prodReq.ID).
+		SetChannelID(ch.ID).
+		SetSource(requestexecution.SourceAPI).
+		SetModelID("gpt-4").
+		SetRequestBody(objects.JSONRawMessage(`{}`)).
+		SetStatus(requestexecution.StatusCompleted).
+		SetStream(true).
+		SetMetricsLatencyMs(1000).
+		SetMetricsFirstTokenLatencyMs(100).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.UsageLog.Create().
+		SetRequestID(prodReq.ID).
+		SetChannelID(ch.ID).
+		SetModelID("gpt-4").
+		SetSource(usagelog.SourceAPI).
+		SetCompletionTokens(90).
+		SetTotalTokens(90).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		Save(ctx)
+	require.NoError(t, err)
+
+	testReq, err := client.Request.Create().
+		SetModelID("gpt-4").
+		SetRequestBody(objects.JSONRawMessage(`{}`)).
+		SetStatus(request.StatusFailed).
+		SetSource(request.SourceTest).
+		SetChannelID(ch.ID).
+		SetStream(true).
+		SetMetricsLatencyMs(1000).
+		SetMetricsFirstTokenLatencyMs(100).
+		SetCreatedAt(now.Add(10 * time.Second)).
+		SetUpdatedAt(now.Add(10 * time.Second)).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.RequestExecution.Create().
+		SetRequestID(testReq.ID).
+		SetChannelID(ch.ID).
+		SetSource(requestexecution.SourceTest).
+		SetModelID("gpt-4").
+		SetRequestBody(objects.JSONRawMessage(`{}`)).
+		SetStatus(requestexecution.StatusFailed).
+		SetStream(true).
+		SetMetricsLatencyMs(1000).
+		SetMetricsFirstTokenLatencyMs(100).
+		SetCreatedAt(now.Add(10 * time.Second)).
+		SetUpdatedAt(now.Add(10 * time.Second)).
+		Save(ctx)
+	require.NoError(t, err)
+
+	svc := &ChannelProbeService{
+		AbstractService: &AbstractService{
+			db: client,
+		},
+	}
+
+	stats, err := svc.computeAllChannelProbeStats(ctx, []int{ch.ID}, startTime, endTime)
+	require.NoError(t, err)
+	require.Contains(t, stats, ch.ID)
+
+	channelStats := stats[ch.ID]
+	require.NotNil(t, channelStats)
+	assert.Equal(t, 1, channelStats.total)
+	assert.Equal(t, 1, channelStats.success)
+	require.NotNil(t, channelStats.avgTokensPerSecond)
+	assert.InDelta(t, 100.0, *channelStats.avgTokensPerSecond, 0.01)
+}
+
 // TestComputeAllChannelProbeStats_MultipleRequests tests with multiple requests
 func TestComputeAllChannelProbeStats_MultipleRequests(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")

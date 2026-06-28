@@ -82,7 +82,113 @@ func NewEntClient(cfg Config) *ent.Client {
 		}
 	}
 
+	if err := backfillRequestExecutionSource(context.Background(), client); err != nil {
+		panic(err)
+	}
+
 	return client
+}
+
+func backfillRequestExecutionSource(ctx context.Context, client *ent.Client) error {
+	hasSourceColumn, err := requestExecutionsSourceColumnExists(ctx, client)
+	if err != nil {
+		return err
+	}
+	if !hasSourceColumn {
+		return nil
+	}
+
+	if client.Driver().Dialect() == dialect.MySQL {
+		return client.Driver().Exec(ctx, `
+UPDATE request_executions re
+JOIN requests r ON re.request_id = r.id
+SET re.source = r.source
+WHERE re.source <> r.source`, []any{}, nil)
+	}
+
+	return client.Driver().Exec(ctx, `
+UPDATE request_executions
+SET source = requests.source
+FROM requests
+WHERE request_executions.request_id = requests.id
+    AND request_executions.source <> requests.source`, []any{}, nil)
+}
+
+func requestExecutionsSourceColumnExists(ctx context.Context, client *ent.Client) (bool, error) {
+	sqlDB, ok := unwrapSQLDriver(client.Driver())
+	if !ok {
+		return true, nil
+	}
+
+	switch client.Driver().Dialect() {
+	case dialect.MySQL:
+		var count int
+		err := sqlDB.DB().QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+    AND table_name = 'request_executions'
+    AND column_name = 'source'`).Scan(&count)
+		if err != nil {
+			return false, fmt.Errorf("failed to inspect request_executions source column: %w", err)
+		}
+
+		return count > 0, nil
+	case dialect.Postgres:
+		var count int
+		err := sqlDB.DB().QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM information_schema.columns
+WHERE table_schema = ANY (current_schemas(false))
+    AND table_name = 'request_executions'
+    AND column_name = 'source'`).Scan(&count)
+		if err != nil {
+			return false, fmt.Errorf("failed to inspect request_executions source column: %w", err)
+		}
+
+		return count > 0, nil
+	default:
+		rows, err := sqlDB.DB().QueryContext(ctx, `PRAGMA table_info(request_executions)`)
+		if err != nil {
+			return false, fmt.Errorf("failed to inspect request_executions columns: %w", err)
+		}
+		defer func() { _ = rows.Close() }()
+
+		for rows.Next() {
+			var (
+				cid        int
+				name       string
+				columnType string
+				notNull    int
+				defaultVal any
+				pk         int
+			)
+			if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultVal, &pk); err != nil {
+				return false, fmt.Errorf("failed to scan request_executions column metadata: %w", err)
+			}
+			if name == "source" {
+				return true, nil
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return false, fmt.Errorf("failed to iterate request_executions columns: %w", err)
+		}
+
+		return false, nil
+	}
+}
+
+func unwrapSQLDriver(driver dialect.Driver) (*entsql.Driver, bool) {
+	switch drv := driver.(type) {
+	case *entsql.Driver:
+		return drv, true
+	case *dialect.DebugDriver:
+		return unwrapSQLDriver(drv.Driver)
+	case *routerDriver:
+		return unwrapSQLDriver(drv.master)
+	default:
+		return nil, false
+	}
 }
 
 // ensureSQLiteDSN appends SQLite PRAGMA DSN parameters for modernc.org/sqlite when absent.

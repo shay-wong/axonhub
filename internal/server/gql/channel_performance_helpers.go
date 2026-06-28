@@ -12,6 +12,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/channelprobe"
 	"github.com/looplj/axonhub/internal/log"
+	"github.com/looplj/axonhub/internal/pkg/xtime"
 	"github.com/looplj/axonhub/internal/server/gql/qb"
 )
 
@@ -41,9 +42,10 @@ func (r *queryResolver) queryChannelProbeStats(ctx context.Context, startTimesta
 		).
 		Modify(func(s *sql.Selector) {
 			timestampCol := s.C(channelprobe.FieldTimestamp)
-			dateExpr := buildDateExpression(s.Dialect(), timestampCol, offsetSeconds, locName)
+			dateExpr := buildProbeDateExpression(s.Dialect(), timestampCol, offsetSeconds, locName)
 			selects := buildProbeQuerySelects(s, dateExpr)
-			s.Select(selects...).
+			s.Where(sql.ExprP(fmt.Sprintf("%s %% 60 = 0", timestampCol))).
+				Select(selects...).
 				GroupBy(dateExpr, s.C(channelprobe.FieldChannelID)).
 				OrderBy(dateExpr, s.C(channelprobe.FieldChannelID))
 		}).
@@ -53,6 +55,44 @@ func (r *queryResolver) queryChannelProbeStats(ctx context.Context, startTimesta
 	}
 
 	return probeResults, nil
+}
+
+func buildProbeDateExpression(dialectName string, timestampCol string, offsetSeconds int, locName string) string {
+	switch dialectName {
+	case dialect.SQLite:
+		return fmt.Sprintf("strftime('%%Y-%%m-%%d', datetime(%s, 'unixepoch', '%+d seconds'))", timestampCol, offsetSeconds)
+	case dialect.MySQL:
+		offsetStr := xtime.FormatUTCOffset(offsetSeconds)
+		return fmt.Sprintf("DATE_FORMAT(CONVERT_TZ(FROM_UNIXTIME(%s), '+00:00', '%s'), '%%Y-%%m-%%d')", timestampCol, offsetStr)
+	case dialect.Postgres:
+		return fmt.Sprintf("to_char(to_timestamp(%s) AT TIME ZONE '%s', 'YYYY-MM-DD')", timestampCol, locName)
+	default:
+		return fmt.Sprintf("DATE(%s)", timestampCol)
+	}
+}
+
+func buildProbeQuerySelects(s *sql.Selector, dateExpr string) []string {
+	avgTokensCol := s.C(channelprobe.FieldAvgTokensPerSecond)
+	totalRequestsCol := s.C(channelprobe.FieldTotalRequestCount)
+	avgTTFTCol := s.C(channelprobe.FieldAvgTimeToFirstTokenMs)
+	channelIDCol := s.C(channelprobe.FieldChannelID)
+
+	throughputExpr := fmt.Sprintf(
+		"SUM(CASE WHEN %s IS NOT NULL THEN %s * %s ELSE 0 END) / NULLIF(SUM(CASE WHEN %s IS NOT NULL THEN %s ELSE 0 END), 0)",
+		avgTokensCol, avgTokensCol, totalRequestsCol, avgTokensCol, totalRequestsCol,
+	)
+	ttftExpr := fmt.Sprintf(
+		"SUM(CASE WHEN %s IS NOT NULL THEN %s * %s ELSE 0 END) / NULLIF(SUM(CASE WHEN %s IS NOT NULL THEN %s ELSE 0 END), 0)",
+		avgTTFTCol, avgTTFTCol, totalRequestsCol, avgTTFTCol, totalRequestsCol,
+	)
+
+	return []string{
+		sql.As(dateExpr, "date"),
+		sql.As(channelIDCol, "channel_id"),
+		sql.As(sql.Sum(totalRequestsCol), "request_count"),
+		sql.As(throughputExpr, "throughput"),
+		sql.As(ttftExpr, "ttft_ms"),
+	}
 }
 
 func aggregateProbeStats(probeResults []probeStats) map[string]map[int]*probeStats {

@@ -668,6 +668,130 @@ func TestChannelService_RecordPerformance_APIKeyPolicyMatchDoesNotTripChannelTem
 	require.False(t, hasChannelCounts)
 }
 
+func TestChannelService_RecordPerformance_SkipHealthStateTrackingDoesNotDisableAPIKeyOrChannel(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	svc := newTestChannelService(client)
+	require.NoError(t, svc.SystemService.SetRetryPolicy(ctx, &RetryPolicy{
+		ChannelAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 503, Times: 1, Action: DisableActionPermanent},
+			},
+		},
+		APIKeyAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 503, Times: 1, Action: DisableActionPermanent},
+			},
+		},
+	}))
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "test-source-skip-auto-disable", []string{"key1", "key2"})
+
+	svc.RecordPerformance(ctx, &PerformanceRecord{
+		ChannelID:               ch.ID,
+		APIKey:                  "key1",
+		ResponseStatusCode:      503,
+		Success:                 false,
+		RequestCompleted:        true,
+		EndTime:                 time.Now(),
+		SkipHealthStateTracking: true,
+	})
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusEnabled, updatedCh.Status)
+	require.Empty(t, updatedCh.DisabledAPIKeys)
+
+	svc.apiKeyErrorCountsLock.Lock()
+	_, hasAPIKeyCounts := svc.apiKeyErrorCounts[ch.ID]["key1"]
+	svc.apiKeyErrorCountsLock.Unlock()
+	require.False(t, hasAPIKeyCounts)
+
+	svc.channelErrorCountsLock.Lock()
+	_, hasChannelCounts := svc.channelErrorCounts[ch.ID]
+	svc.channelErrorCountsLock.Unlock()
+	require.False(t, hasChannelCounts)
+
+	metrics, err := svc.GetChannelMetrics(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), metrics.RequestCount)
+	require.Equal(t, int64(0), metrics.FailureCount)
+	require.Equal(t, int64(0), metrics.ConsecutiveFailures)
+	require.Nil(t, metrics.LastFailureAt)
+}
+
+func TestChannelService_RecordPerformance_SkipHealthStateTrackingSuccessDoesNotClearPolicyCounts(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	svc := newTestChannelService(client)
+	require.NoError(t, svc.SystemService.SetRetryPolicy(ctx, &RetryPolicy{
+		ChannelAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 503, Times: 3, Action: DisableActionPermanent},
+			},
+		},
+		APIKeyAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 503, Times: 3, Action: DisableActionPermanent},
+			},
+		},
+	}))
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "test-success-preserves-auto-disable-counts", []string{"key1", "key2"})
+
+	// 生产流量已累计到阈值前一位，测试成功不应清空这些策略状态。
+	svc.channelErrorCounts = map[int]map[int]int{
+		ch.ID: {503: 2},
+	}
+	svc.apiKeyErrorCounts = map[int]map[string]map[int]int{
+		ch.ID: {"key1": {503: 2}},
+	}
+
+	svc.RecordPerformance(ctx, &PerformanceRecord{
+		ChannelID:               ch.ID,
+		APIKey:                  "key1",
+		Success:                 true,
+		RequestCompleted:        true,
+		EndTime:                 time.Now(),
+		SkipHealthStateTracking: true,
+	})
+
+	svc.channelErrorCountsLock.Lock()
+	require.Equal(t, 2, svc.channelErrorCounts[ch.ID][503])
+	svc.channelErrorCountsLock.Unlock()
+
+	svc.apiKeyErrorCountsLock.Lock()
+	require.Equal(t, 2, svc.apiKeyErrorCounts[ch.ID]["key1"][503])
+	svc.apiKeyErrorCountsLock.Unlock()
+
+	svc.RecordPerformance(ctx, &PerformanceRecord{
+		ChannelID:          ch.ID,
+		APIKey:             "key1",
+		ResponseStatusCode: 503,
+		Success:            false,
+		RequestCompleted:   true,
+		EndTime:            time.Now(),
+	})
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusEnabled, updatedCh.Status)
+	require.Len(t, updatedCh.DisabledAPIKeys, 1)
+	require.Equal(t, "key1", updatedCh.DisabledAPIKeys[0].Key)
+}
+
 func TestChannelService_markChannelUnavailable_RefreshesStaleLocalCacheWhenAlreadyDisabled(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
 	defer client.Close()

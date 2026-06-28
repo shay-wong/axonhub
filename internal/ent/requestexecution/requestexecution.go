@@ -31,6 +31,8 @@ const (
 	FieldDataStorageID = "data_storage_id"
 	// FieldExternalID holds the string denoting the external_id field in the database.
 	FieldExternalID = "external_id"
+	// FieldSource holds the string denoting the source field in the database.
+	FieldSource = "source"
 	// FieldModelID holds the string denoting the model_id field in the database.
 	FieldModelID = "model_id"
 	// FieldFormat holds the string denoting the format field in the database.
@@ -102,6 +104,7 @@ var Columns = []string{
 	FieldChannelID,
 	FieldDataStorageID,
 	FieldExternalID,
+	FieldSource,
 	FieldModelID,
 	FieldFormat,
 	FieldRequestBody,
@@ -147,6 +150,33 @@ var (
 	// DefaultPassThroughApplied holds the default value on creation for the "pass_through_applied" field.
 	DefaultPassThroughApplied bool
 )
+
+// Source defines the type for the "source" enum field.
+type Source string
+
+// SourceAPI is the default value of the Source enum.
+const DefaultSource = SourceAPI
+
+// Source values.
+const (
+	SourceAPI        Source = "api"
+	SourcePlayground Source = "playground"
+	SourceTest       Source = "test"
+)
+
+func (s Source) String() string {
+	return string(s)
+}
+
+// SourceValidator is a validator for the "source" field enum values. It is called by the builders before save.
+func SourceValidator(s Source) error {
+	switch s {
+	case SourceAPI, SourcePlayground, SourceTest:
+		return nil
+	default:
+		return fmt.Errorf("requestexecution: invalid enum value for source field: %q", s)
+	}
+}
 
 // Status defines the type for the "status" enum field.
 type Status string
@@ -215,6 +245,11 @@ func ByDataStorageID(opts ...sql.OrderTermOption) OrderOption {
 // ByExternalID orders the results by the external_id field.
 func ByExternalID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldExternalID, opts...).ToFunc()
+}
+
+// BySource orders the results by the source field.
+func BySource(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSource, opts...).ToFunc()
 }
 
 // ByModelID orders the results by the model_id field.
@@ -312,6 +347,24 @@ func newDataStorageStep() *sqlgraph.Step {
 		sqlgraph.To(DataStorageInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, DataStorageTable, DataStorageColumn),
 	)
+}
+
+// MarshalGQL implements graphql.Marshaler interface.
+func (e Source) MarshalGQL(w io.Writer) {
+	io.WriteString(w, strconv.Quote(e.String()))
+}
+
+// UnmarshalGQL implements graphql.Unmarshaler interface.
+func (e *Source) UnmarshalGQL(val interface{}) error {
+	str, ok := val.(string)
+	if !ok {
+		return fmt.Errorf("enum %T must be a string", val)
+	}
+	*e = Source(str)
+	if err := SourceValidator(*e); err != nil {
+		return fmt.Errorf("%s is not a valid Source", str)
+	}
+	return nil
 }
 
 // MarshalGQL implements graphql.Marshaler interface.

@@ -11,6 +11,8 @@ import (
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/enttest"
+	"github.com/looplj/axonhub/internal/ent/request"
+	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/pkg/xcache"
 )
@@ -460,6 +462,75 @@ func TestChannelService_RecordPerformance(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestChannelService_LoadChannelPerformances_ExcludesTestSource(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	ch, err := client.Channel.Create().
+		SetName("load-metrics-channel").
+		SetType(channel.TypeOpenai).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetCredentials(objects.ChannelCredentials{}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	now := time.Now()
+	prodReq, err := client.Request.Create().
+		SetModelID("gpt-4").
+		SetRequestBody(objects.JSONRawMessage(`{}`)).
+		SetStatus(request.StatusCompleted).
+		SetSource(request.SourceAPI).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		Save(ctx)
+	require.NoError(t, err)
+	testReq, err := client.Request.Create().
+		SetModelID("gpt-4").
+		SetRequestBody(objects.JSONRawMessage(`{}`)).
+		SetStatus(request.StatusFailed).
+		SetSource(request.SourceTest).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.RequestExecution.Create().
+		SetRequestID(prodReq.ID).
+		SetChannelID(ch.ID).
+		SetSource(requestexecution.SourceAPI).
+		SetModelID("gpt-4").
+		SetRequestBody(objects.JSONRawMessage(`{}`)).
+		SetStatus(requestexecution.StatusCompleted).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.RequestExecution.Create().
+		SetRequestID(testReq.ID).
+		SetChannelID(ch.ID).
+		SetSource(requestexecution.SourceTest).
+		SetModelID("gpt-4").
+		SetRequestBody(objects.JSONRawMessage(`{}`)).
+		SetStatus(requestexecution.StatusFailed).
+		SetCreatedAt(now.Add(time.Second)).
+		SetUpdatedAt(now.Add(time.Second)).
+		Save(ctx)
+	require.NoError(t, err)
+
+	svc := NewChannelServiceForTest(client)
+	require.NoError(t, svc.loadChannelPerformances(ctx))
+
+	metrics, err := svc.GetChannelMetrics(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), metrics.RequestCount)
+	require.Nil(t, metrics.LastFailureAt)
 }
 
 func TestPerformanceRecord_Methods(t *testing.T) {

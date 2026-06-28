@@ -12,6 +12,7 @@ import (
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/enttest"
+	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/server/biz"
 )
@@ -48,6 +49,14 @@ func (c *channelBasedStrategy) Name() string {
 type noopSelectionTracker struct{}
 
 func (n *noopSelectionTracker) IncrementChannelSelection(channelID int) {}
+
+type recordingSelectionTracker struct {
+	channelIDs []int
+}
+
+func (r *recordingSelectionTracker) IncrementChannelSelection(channelID int) {
+	r.channelIDs = append(r.channelIDs, channelID)
+}
 
 // newTestLoadBalancer creates a LoadBalancer with mock system service for testing.
 func newTestLoadBalancer(t *testing.T, retryPolicy *biz.RetryPolicy, strategies ...LoadBalanceStrategy) *LoadBalancer {
@@ -128,6 +137,33 @@ func TestLoadBalancer_Sort_SingleStrategy(t *testing.T) {
 	assert.Equal(t, 2, result[0].Channel.ID, "First should be ch2 with score 200")
 	assert.Equal(t, 3, result[1].Channel.ID, "Second should be ch3 with score 150")
 	assert.Equal(t, 1, result[2].Channel.ID, "Third should be ch1 with score 100")
+}
+
+func TestLoadBalancer_Sort_TestSourceSkipsSelectionTracking(t *testing.T) {
+	strategy := &channelBasedStrategy{
+		name: "test",
+		scores: map[int]float64{
+			1: 200,
+			2: 100,
+		},
+	}
+
+	candidates := []*ChannelModelsCandidate{
+		{Channel: &biz.Channel{Channel: &ent.Channel{ID: 1, Name: "ch1"}}},
+		{Channel: &biz.Channel{Channel: &ent.Channel{ID: 2, Name: "ch2"}}},
+	}
+
+	normalTracker := &recordingSelectionTracker{}
+	normalLB := NewLoadBalancer(&mockSystemService{}, normalTracker, strategy)
+	normalResult := normalLB.Sort(context.Background(), candidates, "", false)
+	require.Len(t, normalResult, 1)
+	require.Equal(t, []int{1}, normalTracker.channelIDs)
+
+	testTracker := &recordingSelectionTracker{}
+	testLB := NewLoadBalancer(&mockSystemService{}, testTracker, strategy)
+	testResult := testLB.Sort(contexts.WithSource(context.Background(), request.SourceTest), candidates, "", false)
+	require.Len(t, testResult, 1)
+	require.Empty(t, testTracker.channelIDs)
 }
 
 func TestLoadBalancer_Sort_MultipleStrategies(t *testing.T) {
@@ -289,12 +325,12 @@ func TestLoadBalancer_ErrorAware_ChannelWithErrorsRankedLower(t *testing.T) {
 	// Record consecutive failures for ch2
 	for range 3 {
 		perf := &biz.PerformanceRecord{
-			ChannelID:        ch2.ID,
-			StartTime:        time.Now().Add(-time.Minute),
-			EndTime:          time.Now(),
-			Success:          false,
-			RequestCompleted: true,
-			ResponseStatusCode:  500,
+			ChannelID:          ch2.ID,
+			StartTime:          time.Now().Add(-time.Minute),
+			EndTime:            time.Now(),
+			Success:            false,
+			RequestCompleted:   true,
+			ResponseStatusCode: 500,
 		}
 		channelService.RecordPerformance(ctx, perf)
 	}
@@ -368,12 +404,12 @@ func TestLoadBalancer_ErrorAware_ShortTermErrorPenalty(t *testing.T) {
 
 	// Record a recent failure for ch1 (within cooldown period)
 	perf := &biz.PerformanceRecord{
-		ChannelID:        ch1.ID,
-		StartTime:        time.Now().Add(-30 * time.Second),
-		EndTime:          time.Now(),
-		Success:          false,
-		RequestCompleted: true,
-		ResponseStatusCode:  500,
+		ChannelID:          ch1.ID,
+		StartTime:          time.Now().Add(-30 * time.Second),
+		EndTime:            time.Now(),
+		Success:            false,
+		RequestCompleted:   true,
+		ResponseStatusCode: 500,
 	}
 	channelService.RecordPerformance(ctx, perf)
 
@@ -543,12 +579,12 @@ func TestLoadBalancer_Combined_ErrorAndTrace(t *testing.T) {
 	// Record consecutive failures for ch2
 	for range 2 {
 		perf := &biz.PerformanceRecord{
-			ChannelID:        ch2.ID,
-			StartTime:        time.Now().Add(-time.Minute),
-			EndTime:          time.Now(),
-			Success:          false,
-			RequestCompleted: true,
-			ResponseStatusCode:  500,
+			ChannelID:          ch2.ID,
+			StartTime:          time.Now().Add(-time.Minute),
+			EndTime:            time.Now(),
+			Success:            false,
+			RequestCompleted:   true,
+			ResponseStatusCode: 500,
 		}
 		channelService.RecordPerformance(ctx, perf)
 	}
