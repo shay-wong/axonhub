@@ -606,6 +606,17 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       setConfirmRemoveKey(null);
       setPatternError(null);
       setApiKeyConfigsDirty(false);
+      setFetchedModels([]);
+      setUseFetchedModels(false);
+      setShowFetchedModelsPanel(false);
+      setShowSupportedModelsPanel(false);
+      setSelectedDefaultModels([]);
+      setFetchedModelsSearch('');
+      setSupportedModelsSearch('');
+      setSelectedFetchedModels([]);
+      setShowNotAddedModelsOnly(false);
+      setApplyPatternFilter(false);
+      setSupportedModelsExpanded(false);
     }
   }, [open]);
 
@@ -1158,6 +1169,20 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     antigravityOAuth,
     responsesTransport,
   ]);
+
+  const watchedDefaultTestModel = form.watch('defaultTestModel');
+  useEffect(() => {
+    if (supportedModels.length === 0) return;
+    if (!isEdit && !isDuplicate) {
+      if (!watchedDefaultTestModel || !supportedModels.includes(watchedDefaultTestModel)) {
+        form.setValue('defaultTestModel', supportedModels[0]);
+      }
+      return;
+    }
+    if (watchedDefaultTestModel && !supportedModels.includes(watchedDefaultTestModel)) {
+      form.setValue('defaultTestModel', supportedModels[0]);
+    }
+  }, [supportedModels, watchedDefaultTestModel, isEdit, isDuplicate, form]);
 
   const renderOAuthSection = useCallback(
     (oauth: ReturnType<typeof useOAuthFlow>, description: string) => (
