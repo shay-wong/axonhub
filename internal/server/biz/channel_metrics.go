@@ -324,15 +324,17 @@ func (svc *ChannelService) RecordPerformance(ctx context.Context, perf *Performa
 	} else if !perf.Canceled {
 		policy := svc.SystemService.RetryPolicyOrDefault(ctx)
 
-		// API key auto-disable has priority, but if it does not match this
-		// failure the channel-level rule still gets a chance to handle it.
+		// API key auto-disable owns keyed failures for matching statuses. This
+		// keeps one bad upstream key from also tripping channel-level rules.
+		apiKeyPolicyMatched := false
 		if perf.APIKey != "" {
+			apiKeyPolicyMatched = apiKeyAutoDisableMatchesStatus(policy, perf.ResponseStatusCode)
 			if svc.checkAndHandleAPIKeyError(ctx, perf, policy) {
 				return
 			}
 		}
 
-		if svc.checkAndHandleChannelError(ctx, perf, policy) {
+		if !apiKeyPolicyMatched && svc.checkAndHandleChannelError(ctx, perf, policy) {
 			return
 		}
 	}

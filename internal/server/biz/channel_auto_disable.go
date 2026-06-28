@@ -235,6 +235,21 @@ func (svc *ChannelService) checkAndHandleChannelError(ctx context.Context, perf 
 	return false
 }
 
+func apiKeyAutoDisableMatchesStatus(policy *RetryPolicy, statusCode int) bool {
+	policy = normalizedRetryPolicyForAutoDisable(policy)
+	if policy == nil || !policy.APIKeyAutoDisable.Enabled {
+		return false
+	}
+
+	for _, statusConfig := range policy.APIKeyAutoDisable.Statuses {
+		if statusConfig.Status == statusCode {
+			return true
+		}
+	}
+
+	return false
+}
+
 // checkAndHandleAPIKeyError checks if the API key should be disabled based on the error status code.
 // Returns true if the API key was disabled.
 func (svc *ChannelService) checkAndHandleAPIKeyError(ctx context.Context, perf *PerformanceRecord, policy *RetryPolicy) bool {

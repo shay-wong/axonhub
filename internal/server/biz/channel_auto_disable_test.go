@@ -609,6 +609,65 @@ func TestChannelService_RecordPerformance_APIKeyPolicyHitShortCircuitsChannelAut
 	require.Equal(t, "key1", updatedCh.DisabledAPIKeys[0].Key)
 }
 
+func TestChannelService_RecordPerformance_APIKeyPolicyMatchDoesNotTripChannelTemporaryDisable(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	svc := newTestChannelService(client)
+	require.NoError(t, svc.SystemService.SetRetryPolicy(ctx, &RetryPolicy{
+		ChannelAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 429, Times: 3, Action: DisableActionTemporary, DurationMinutes: lo.ToPtr(10)},
+			},
+		},
+		APIKeyAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 429, Times: 3, Action: DisableActionTemporary, DurationMinutes: lo.ToPtr(10)},
+			},
+		},
+	}))
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "api-key-policy-match-no-channel-temp-disable", []string{"key1", "key2"})
+
+	for range 3 {
+		svc.RecordPerformance(ctx, &PerformanceRecord{
+			ChannelID:          ch.ID,
+			APIKey:             "key1",
+			ResponseStatusCode: 429,
+			Success:            false,
+			RequestCompleted:   true,
+			EndTime:            time.Now(),
+		})
+	}
+
+	for range 3 {
+		svc.RecordPerformance(ctx, &PerformanceRecord{
+			ChannelID:          ch.ID,
+			APIKey:             "key2",
+			ResponseStatusCode: 429,
+			Success:            false,
+			RequestCompleted:   true,
+			EndTime:            time.Now(),
+		})
+	}
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusEnabled, updatedCh.Status)
+	require.Nil(t, updatedCh.TemporaryDisabledUntil)
+	require.Len(t, updatedCh.DisabledAPIKeys, 2)
+
+	svc.channelErrorCountsLock.Lock()
+	_, hasChannelCounts := svc.channelErrorCounts[ch.ID]
+	svc.channelErrorCountsLock.Unlock()
+	require.False(t, hasChannelCounts)
+}
+
 func TestChannelService_markChannelUnavailable_RefreshesStaleLocalCacheWhenAlreadyDisabled(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
 	defer client.Close()
