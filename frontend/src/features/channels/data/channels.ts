@@ -126,6 +126,12 @@ const CREATE_CHANNEL_MUTATION = `
           regex
         }
         apiKeySelectionStrategy
+        providerQuota {
+          opencodeGo {
+            workspaceId
+            authCookie
+          }
+        }
       }
       orderingWeight
       temporaryDisabledUntil
@@ -210,6 +216,12 @@ const DUPLICATE_CHANNEL_MUTATION = `
           regex
         }
         apiKeySelectionStrategy
+        providerQuota {
+          opencodeGo {
+            workspaceId
+            authCookie
+          }
+        }
       }
       orderingWeight
       temporaryDisabledUntil
@@ -294,6 +306,12 @@ const BULK_CREATE_CHANNELS_MUTATION = `
           regex
         }
         apiKeySelectionStrategy
+        providerQuota {
+          opencodeGo {
+            workspaceId
+            authCookie
+          }
+        }
       }
       orderingWeight
       temporaryDisabledUntil
@@ -378,6 +396,12 @@ const UPDATE_CHANNEL_MUTATION = `
           regex
         }
         apiKeySelectionStrategy
+        providerQuota {
+          opencodeGo {
+            workspaceId
+            authCookie
+          }
+        }
       }
       orderingWeight
       errorMessage
@@ -582,6 +606,12 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
             pattern
             regex
           }
+          providerQuota {
+            opencodeGo {
+              workspaceId
+              authCookie
+            }
+          }
         }
       }
     }
@@ -775,6 +805,12 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
             pattern
             regex
           }
+          providerQuota {
+            opencodeGo {
+              workspaceId
+              authCookie
+            }
+          }
         }
       }
     }
@@ -931,6 +967,12 @@ const QUERY_CHANNELS_QUERY = `
               regex
             }
             apiKeySelectionStrategy
+            providerQuota {
+              opencodeGo {
+                workspaceId
+                authCookie
+              }
+            }
           }
           orderingWeight
           errorMessage
