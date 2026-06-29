@@ -572,6 +572,8 @@ func (svc *ChannelService) ListModels(ctx context.Context, input ListModelsInput
 // This is useful for batch operations where reload should happen once at the end.
 func (svc *ChannelService) createChannel(ctx context.Context, input ent.CreateChannelInput) (*ent.Channel, error) {
 	if input.Settings != nil {
+		normalizeOpenCodeGoQuotaAuthCookieCommand(input.Settings)
+
 		if input.Settings.BodyOverrideOperations != nil {
 			if err := ValidateBodyOverrideOperations(input.Settings.BodyOverrideOperations); err != nil {
 				return nil, fmt.Errorf("invalid body override operations: %w", err)
@@ -716,9 +718,70 @@ func NormalizeRetryableErrorPatterns(settings *objects.ChannelSettings) error {
 	return nil
 }
 
+func normalizeOpenCodeGoQuotaAuthCookieCommand(settings *objects.ChannelSettings) {
+	if settings == nil || settings.ProviderQuota == nil || settings.ProviderQuota.OpencodeGo == nil {
+		return
+	}
+
+	if settings.ProviderQuota.OpencodeGo.ClearAuthCookie {
+		settings.ProviderQuota.OpencodeGo.AuthCookie = ""
+	}
+
+	settings.ProviderQuota.OpencodeGo.ClearAuthCookie = false
+}
+
+func preserveOpenCodeGoQuotaAuthCookie(settings *objects.ChannelSettings, existingSettings *objects.ChannelSettings) {
+	if settings == nil || settings.ProviderQuota == nil || settings.ProviderQuota.OpencodeGo == nil {
+		return
+	}
+
+	if settings.ProviderQuota.OpencodeGo.ClearAuthCookie {
+		settings.ProviderQuota.OpencodeGo.AuthCookie = ""
+		settings.ProviderQuota.OpencodeGo.ClearAuthCookie = false
+		return
+	}
+
+	if strings.TrimSpace(settings.ProviderQuota.OpencodeGo.AuthCookie) != "" {
+		settings.ProviderQuota.OpencodeGo.ClearAuthCookie = false
+		return
+	}
+
+	if existingSettings == nil || existingSettings.ProviderQuota == nil || existingSettings.ProviderQuota.OpencodeGo == nil {
+		return
+	}
+
+	existingCookie := existingSettings.ProviderQuota.OpencodeGo.AuthCookie
+	if strings.TrimSpace(existingCookie) == "" {
+		return
+	}
+
+	settings.ProviderQuota.OpencodeGo.AuthCookie = existingCookie
+	settings.ProviderQuota.OpencodeGo.ClearAuthCookie = false
+}
+
+func (svc *ChannelService) preserveOpenCodeGoQuotaAuthCookieForUpdate(ctx context.Context, id int, settings *objects.ChannelSettings) error {
+	if settings == nil || settings.ProviderQuota == nil || settings.ProviderQuota.OpencodeGo == nil {
+		return nil
+	}
+
+	if settings.ProviderQuota.OpencodeGo.ClearAuthCookie || strings.TrimSpace(settings.ProviderQuota.OpencodeGo.AuthCookie) != "" {
+		normalizeOpenCodeGoQuotaAuthCookieCommand(settings)
+		return nil
+	}
+
+	existing, err := svc.entFromContext(ctx).Channel.Get(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get existing channel settings: %w", err)
+	}
+
+	preserveOpenCodeGoQuotaAuthCookie(settings, existing.Settings)
+
+	return nil
+}
+
 // UpdateChannel updates an existing channel with the provided input.
 func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent.UpdateChannelInput) (*ent.Channel, error) {
-	log.Debug(ctx, "UpdateChannel", log.Int("id", id), log.Any("input", input))
+	log.Debug(ctx, "UpdateChannel", log.Int("id", id))
 
 	// Check if name is being updated and if it conflicts with existing channels
 	if input.Name != nil {
@@ -780,6 +843,10 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 		}
 
 		if err := NormalizeRetryableErrorPatterns(input.Settings); err != nil {
+			return nil, err
+		}
+
+		if err := svc.preserveOpenCodeGoQuotaAuthCookieForUpdate(ctx, id, input.Settings); err != nil {
 			return nil, err
 		}
 

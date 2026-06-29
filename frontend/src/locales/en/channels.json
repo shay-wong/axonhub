@@ -345,6 +345,8 @@
   "channels.dialogs.fields.opencodeGoQuota.authCookie.placeholder": "auth=...",
   "channels.dialogs.fields.opencodeGoQuota.authCookie.description": "Paste the auth cookie or a full Cookie header for quota polling.",
   "channels.dialogs.fields.opencodeGoQuota.authCookie.toggleVisibility": "Show or hide OpenCode Go auth cookie",
+  "channels.dialogs.fields.opencodeGoQuota.clearAuthCookie.label": "Clear saved auth cookie",
+  "channels.dialogs.fields.opencodeGoQuota.clearAuthCookie.description": "Leave unchecked to keep the existing hidden cookie when this field is empty.",
   "channels.dialogs.fields.supportedModels.label": "Models",
   "channels.dialogs.fields.supportedModels.description": "Model ID",
   "channels.dialogs.fields.supportedModels.required": "Please add at least one supported model",

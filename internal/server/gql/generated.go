@@ -76,6 +76,7 @@ type ResolverRoot interface {
 	Model() ModelResolver
 	Mutation() MutationResolver
 	OIDCIdentity() OIDCIdentityResolver
+	OpenCodeGoQuotaSettings() OpenCodeGoQuotaSettingsResolver
 	Project() ProjectResolver
 	Prompt() PromptResolver
 	PromptProtectionRule() PromptProtectionRuleResolver
@@ -1051,8 +1052,8 @@ type ComplexityRoot struct {
 	}
 
 	OpenCodeGoQuotaSettings struct {
-		AuthCookie  func(childComplexity int) int
-		WorkspaceID func(childComplexity int) int
+		AuthCookieConfigured func(childComplexity int) int
+		WorkspaceID          func(childComplexity int) int
 	}
 
 	OverrideMatch struct {
@@ -2183,6 +2184,9 @@ type OIDCIdentityResolver interface {
 	ID(ctx context.Context, obj *ent.OIDCIdentity) (*objects.GUID, error)
 
 	UserID(ctx context.Context, obj *ent.OIDCIdentity) (*objects.GUID, error)
+}
+type OpenCodeGoQuotaSettingsResolver interface {
+	AuthCookieConfigured(ctx context.Context, obj *objects.OpenCodeGoQuotaSettings) (bool, error)
 }
 type ProjectResolver interface {
 	ID(ctx context.Context, obj *ent.Project) (*objects.GUID, error)
@@ -6725,12 +6729,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.OnboardingInfo.SystemModelSetting(childComplexity), true
 
-	case "OpenCodeGoQuotaSettings.authCookie":
-		if e.complexity.OpenCodeGoQuotaSettings.AuthCookie == nil {
+	case "OpenCodeGoQuotaSettings.authCookieConfigured":
+		if e.complexity.OpenCodeGoQuotaSettings.AuthCookieConfigured == nil {
 			break
 		}
 
-		return e.complexity.OpenCodeGoQuotaSettings.AuthCookie(childComplexity), true
+		return e.complexity.OpenCodeGoQuotaSettings.AuthCookieConfigured(childComplexity), true
 	case "OpenCodeGoQuotaSettings.workspaceId":
 		if e.complexity.OpenCodeGoQuotaSettings.WorkspaceID == nil {
 			break
@@ -22811,8 +22815,8 @@ func (ec *executionContext) fieldContext_ChannelProviderQuotaSettings_opencodeGo
 			switch field.Name {
 			case "workspaceId":
 				return ec.fieldContext_OpenCodeGoQuotaSettings_workspaceId(ctx, field)
-			case "authCookie":
-				return ec.fieldContext_OpenCodeGoQuotaSettings_authCookie(ctx, field)
+			case "authCookieConfigured":
+				return ec.fieldContext_OpenCodeGoQuotaSettings_authCookieConfigured(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type OpenCodeGoQuotaSettings", field.Name)
 		},
@@ -36923,30 +36927,30 @@ func (ec *executionContext) fieldContext_OpenCodeGoQuotaSettings_workspaceId(_ c
 	return fc, nil
 }
 
-func (ec *executionContext) _OpenCodeGoQuotaSettings_authCookie(ctx context.Context, field graphql.CollectedField, obj *objects.OpenCodeGoQuotaSettings) (ret graphql.Marshaler) {
+func (ec *executionContext) _OpenCodeGoQuotaSettings_authCookieConfigured(ctx context.Context, field graphql.CollectedField, obj *objects.OpenCodeGoQuotaSettings) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_OpenCodeGoQuotaSettings_authCookie,
+		ec.fieldContext_OpenCodeGoQuotaSettings_authCookieConfigured,
 		func(ctx context.Context) (any, error) {
-			return obj.AuthCookie, nil
+			return ec.resolvers.OpenCodeGoQuotaSettings().AuthCookieConfigured(ctx, obj)
 		},
 		nil,
-		ec.marshalOString2string,
+		ec.marshalNBoolean2bool,
 		true,
-		false,
+		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_OpenCodeGoQuotaSettings_authCookie(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_OpenCodeGoQuotaSettings_authCookieConfigured(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "OpenCodeGoQuotaSettings",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -71132,7 +71136,7 @@ func (ec *executionContext) unmarshalInputOpenCodeGoQuotaSettingsInput(ctx conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"workspaceId", "authCookie"}
+	fieldsInOrder := [...]string{"workspaceId", "authCookie", "clearAuthCookie"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -71153,6 +71157,13 @@ func (ec *executionContext) unmarshalInputOpenCodeGoQuotaSettingsInput(ctx conte
 				return it, err
 			}
 			it.AuthCookie = data
+		case "clearAuthCookie":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clearAuthCookie"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClearAuthCookie = data
 		}
 	}
 
@@ -94230,8 +94241,42 @@ func (ec *executionContext) _OpenCodeGoQuotaSettings(ctx context.Context, sel as
 			out.Values[i] = graphql.MarshalString("OpenCodeGoQuotaSettings")
 		case "workspaceId":
 			out.Values[i] = ec._OpenCodeGoQuotaSettings_workspaceId(ctx, field, obj)
-		case "authCookie":
-			out.Values[i] = ec._OpenCodeGoQuotaSettings_authCookie(ctx, field, obj)
+		case "authCookieConfigured":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._OpenCodeGoQuotaSettings_authCookieConfigured(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

@@ -6,6 +6,12 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useErrorHandler } from '@/hooks/use-error-handler';
 import {
+  buildBulkCreateChannelsVariables,
+  buildCreateChannelVariables,
+  buildDuplicateChannelVariables,
+  buildUpdateChannelVariables,
+} from './channel-input';
+import {
   Channel,
   ChannelConnection,
   ChannelSummaryConnection,
@@ -129,7 +135,7 @@ const CREATE_CHANNEL_MUTATION = `
         providerQuota {
           opencodeGo {
             workspaceId
-            authCookie
+            authCookieConfigured
           }
         }
       }
@@ -219,7 +225,7 @@ const DUPLICATE_CHANNEL_MUTATION = `
         providerQuota {
           opencodeGo {
             workspaceId
-            authCookie
+            authCookieConfigured
           }
         }
       }
@@ -309,7 +315,7 @@ const BULK_CREATE_CHANNELS_MUTATION = `
         providerQuota {
           opencodeGo {
             workspaceId
-            authCookie
+            authCookieConfigured
           }
         }
       }
@@ -399,7 +405,7 @@ const UPDATE_CHANNEL_MUTATION = `
         providerQuota {
           opencodeGo {
             workspaceId
-            authCookie
+            authCookieConfigured
           }
         }
       }
@@ -609,7 +615,7 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
           providerQuota {
             opencodeGo {
               workspaceId
-              authCookie
+              authCookieConfigured
             }
           }
         }
@@ -808,7 +814,7 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
           providerQuota {
             opencodeGo {
               workspaceId
-              authCookie
+              authCookieConfigured
             }
           }
         }
@@ -970,7 +976,7 @@ const QUERY_CHANNELS_QUERY = `
             providerQuota {
               opencodeGo {
                 workspaceId
-                authCookie
+                authCookieConfigured
               }
             }
           }
@@ -1172,7 +1178,7 @@ export function useCreateChannel() {
 
   return useMutation({
     mutationFn: async (input: CreateChannelInput) => {
-      const data = await graphqlRequest<{ createChannel: Channel }>(CREATE_CHANNEL_MUTATION, { input });
+      const data = await graphqlRequest<{ createChannel: Channel }>(CREATE_CHANNEL_MUTATION, buildCreateChannelVariables(input));
       return channelSchema.parse(data.createChannel);
     },
     onSuccess: () => {
@@ -1192,7 +1198,10 @@ export function useDuplicateChannel() {
 
   return useMutation({
     mutationFn: async ({ sourceID, input }: { sourceID: string; input: CreateChannelInput }) => {
-      const data = await graphqlRequest<{ duplicateChannel: Channel }>(DUPLICATE_CHANNEL_MUTATION, { sourceID, input });
+      const data = await graphqlRequest<{ duplicateChannel: Channel }>(
+        DUPLICATE_CHANNEL_MUTATION,
+        buildDuplicateChannelVariables(sourceID, input)
+      );
       return channelSchema.parse(data.duplicateChannel);
     },
     onSuccess: () => {
@@ -1228,7 +1237,10 @@ export function useBulkCreateChannels() {
   return useMutation({
     mutationFn: async (input: BulkCreateChannelsInput) => {
       try {
-        const data = await graphqlRequest<{ bulkCreateChannels: Channel[] }>(BULK_CREATE_CHANNELS_MUTATION, { input });
+        const data = await graphqlRequest<{ bulkCreateChannels: Channel[] }>(
+          BULK_CREATE_CHANNELS_MUTATION,
+          buildBulkCreateChannelsVariables(input)
+        );
         return data.bulkCreateChannels.map((ch) => channelSchema.parse(ch));
       } catch (error) {
         handleError(error, { context: 'Batch Create Channels' });
@@ -1249,7 +1261,7 @@ export function useUpdateChannel() {
 
   return useMutation({
     mutationFn: async ({ id, input }: { id: string; input: UpdateChannelInput }) => {
-      const data = await graphqlRequest<{ updateChannel: Channel }>(UPDATE_CHANNEL_MUTATION, { id, input });
+      const data = await graphqlRequest<{ updateChannel: Channel }>(UPDATE_CHANNEL_MUTATION, buildUpdateChannelVariables(id, input));
       return channelSchema.parse(data.updateChannel);
     },
     onSuccess: (data) => {

@@ -1,14 +1,22 @@
 package biz
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/samber/lo"
+	"github.com/looplj/axonhub/internal/authz"
+	"github.com/looplj/axonhub/internal/ent"
+	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/enttest"
 	"github.com/looplj/axonhub/internal/ent/providerquotastatus"
+	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/server/biz/provider_quota"
+	"github.com/looplj/axonhub/llm/httpclient"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProviderQuotaService_GetQuotaStatus_ReturnsCorrectData(t *testing.T) {
@@ -181,6 +189,102 @@ func TestProviderQuotaService_UpdateQuotaCache_WithLimits(t *testing.T) {
 	effectiveStatus, ready = status.EffectiveStatus(provider_quota.QuotaLimitTypeToken)
 	assert.Equal(t, providerquotastatus.StatusAvailable, effectiveStatus)
 	assert.True(t, ready)
+}
+
+func TestHasOpenCodeGoQuotaCredentialsRequiresCookie(t *testing.T) {
+	tests := []struct {
+		name        string
+		workspaceID string
+		authCookie  string
+		want        bool
+	}{
+		{
+			name:        "complete quota credentials",
+			workspaceID: "wk_123",
+			authCookie:  "cookie",
+			want:        true,
+		},
+		{
+			name:        "missing workspace id still enters checker",
+			workspaceID: "",
+			authCookie:  "cookie",
+			want:        true,
+		},
+		{
+			name:        "missing auth cookie",
+			workspaceID: "wk_123",
+			authCookie:  "",
+			want:        false,
+		},
+		{
+			name:        "blank values",
+			workspaceID: " ",
+			authCookie:  " ",
+			want:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := hasOpenCodeGoQuotaCredentials(&ent.Channel{
+				Settings: &objects.ChannelSettings{
+					ProviderQuota: &objects.ChannelProviderQuotaSettings{
+						OpencodeGo: &objects.OpenCodeGoQuotaSettings{
+							WorkspaceID: tt.workspaceID,
+							AuthCookie:  tt.authCookie,
+						},
+					},
+				},
+			})
+
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestProviderQuotaService_CheckChannelQuotaSavesOpenCodeGoMissingWorkspaceError(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(context.Background())
+	now := time.Date(2026, 6, 30, 1, 0, 0, 0, time.UTC)
+	svc := &ProviderQuotaService{
+		AbstractService: &AbstractService{db: client},
+		checkers: map[string]provider_quota.QuotaChecker{
+			"opencode_go": provider_quota.NewOpenCodeGoQuotaChecker(httpclient.NewHttpClient()),
+		},
+		checkInterval: time.Hour,
+		quotaCache:    sync.Map{},
+	}
+
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpencodeGo).
+		SetName("OpenCode Go Missing Workspace").
+		SetBaseURL("https://opencode.ai/zen/go/v1").
+		SetCredentials(objects.ChannelCredentials{}).
+		SetSettings(&objects.ChannelSettings{
+			ProviderQuota: &objects.ChannelProviderQuotaSettings{
+				OpencodeGo: &objects.OpenCodeGoQuotaSettings{
+					AuthCookie: "cookie",
+				},
+			},
+		}).
+		SetSupportedModels([]string{"opencode/go"}).
+		SetDefaultTestModel("opencode/go").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	svc.checkChannelQuota(ctx, ch, now)
+
+	status, err := client.ProviderQuotaStatus.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, ch.ID, status.ChannelID)
+	require.Equal(t, providerquotastatus.ProviderType("opencode_go"), status.ProviderType)
+	require.Equal(t, providerquotastatus.StatusUnknown, status.Status)
+	require.False(t, status.Ready)
+	require.Equal(t, "missing OpenCode Go workspace id", status.QuotaData["error"])
+	require.EqualValues(t, 1, status.QuotaData["error_count"])
 }
 
 func TestMergeAndExtractLimitsRoundTrip(t *testing.T) {

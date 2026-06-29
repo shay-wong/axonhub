@@ -795,16 +795,16 @@ func hasCredentialsForProvider(ch *ent.Channel) bool {
 		strings.TrimSpace(ch.Credentials.APIKey) != "" || len(ch.Credentials.APIKeys) > 0
 }
 
-// hasOpenCodeGoQuotaCredentials reports whether the channel has the auth cookie
-// configured for OpenCode Go quota polling. The quota check scrapes the dashboard
-// using this cookie (not the upstream request credentials), so gate on it directly
-// to avoid repeatedly running checks that can only fail with "missing auth cookie".
+// hasOpenCodeGoQuotaCredentials reports whether the channel has enough secret
+// material to enter OpenCode Go quota polling. The checker still validates
+// workspace ID separately so configuration errors are saved and visible.
 func hasOpenCodeGoQuotaCredentials(ch *ent.Channel) bool {
 	if ch.Settings == nil || ch.Settings.ProviderQuota == nil || ch.Settings.ProviderQuota.OpencodeGo == nil {
 		return false
 	}
 
-	return strings.TrimSpace(ch.Settings.ProviderQuota.OpencodeGo.AuthCookie) != ""
+	cfg := ch.Settings.ProviderQuota.OpencodeGo
+	return strings.TrimSpace(cfg.AuthCookie) != ""
 }
 
 func (svc *ProviderQuotaService) mergeLimitsIntoQuotaData(quotaData provider_quota.QuotaData) map[string]any {

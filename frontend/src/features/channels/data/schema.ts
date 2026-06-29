@@ -234,6 +234,8 @@ export type RetryableErrorPattern = z.infer<typeof retryableErrorPatternSchema>;
 export const openCodeGoQuotaSettingsSchema = z.object({
   workspaceId: z.string().optional().nullable(),
   authCookie: z.string().optional().nullable(),
+  authCookieConfigured: z.boolean().optional().nullable(),
+  clearAuthCookie: z.boolean().optional().nullable(),
 });
 export type OpenCodeGoQuotaSettings = z.infer<typeof openCodeGoQuotaSettingsSchema>;
 

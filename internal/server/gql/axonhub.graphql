@@ -119,13 +119,17 @@ input RetryableErrorPatternInput {
 }
 
 type OpenCodeGoQuotaSettings {
+  "OpenCode Go auth cookie is write-only and is never returned by GraphQL."
   workspaceId: String
-  authCookie: String
+  authCookieConfigured: Boolean! @goField(forceResolver: true)
 }
 
 input OpenCodeGoQuotaSettingsInput {
   workspaceId: String
+  "Write a non-empty value to replace the stored cookie. Omit or pass an empty value on update to keep the existing cookie."
   authCookie: String
+  "Set true on update or duplicate to clear the stored cookie instead of preserving it."
+  clearAuthCookie: Boolean
 }
 
 type ChannelProviderQuotaSettings {

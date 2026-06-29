@@ -216,8 +216,9 @@ type ChannelProviderQuotaSettings struct {
 }
 
 type OpenCodeGoQuotaSettings struct {
-	WorkspaceID string `json:"workspaceId,omitempty"`
-	AuthCookie  string `json:"authCookie,omitempty"`
+	WorkspaceID     string `json:"workspaceId,omitempty"`
+	AuthCookie      string `json:"authCookie,omitempty"`
+	ClearAuthCookie bool   `json:"clearAuthCookie,omitempty"`
 }
 
 type ChannelRateLimit struct {

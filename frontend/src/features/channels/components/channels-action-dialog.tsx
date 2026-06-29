@@ -864,6 +864,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const isClaudeCodeType = activeChannelType === 'claudecode';
   const isCopilotType = activeChannelType === 'github_copilot';
   const isOpenCodeGoType = isOpenCodeGoChannelType(activeChannelType);
+  const openCodeGoAuthCookieConfigured = !!initialRow?.settings?.providerQuota?.opencodeGo?.authCookieConfigured;
   const showRegularAPIKeyFields =
     (!(isCodexType || isClaudeCodeType || isCopilotType) || authMode === 'third-party') &&
     selectedProvider !== 'antigravity' &&
@@ -2541,6 +2542,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                       className='pr-10 font-mono text-sm'
                                       aria-invalid={!!fieldState.error}
                                       data-testid='channel-opencode-go-auth-cookie-input'
+                                      disabled={form.watch('settings.providerQuota.opencodeGo.clearAuthCookie') === true}
                                       {...field}
                                       value={field.value ?? ''}
                                     />
@@ -2563,6 +2565,42 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                               </FormItem>
                             )}
                           />
+
+                          {openCodeGoAuthCookieConfigured && (
+                            <FormField
+                              control={form.control}
+                              name='settings.providerQuota.opencodeGo.clearAuthCookie'
+                              render={({ field }) => (
+                                <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
+                                  <div className='md:col-span-2' />
+                                  <div className='flex items-start gap-2 md:col-span-6'>
+                                    <Checkbox
+                                      checked={field.value === true}
+                                      onCheckedChange={(checked) => {
+                                        const shouldClear = checked === true;
+                                        field.onChange(shouldClear);
+                                        if (shouldClear) {
+                                          form.setValue('settings.providerQuota.opencodeGo.authCookie', '', {
+                                            shouldDirty: true,
+                                            shouldTouch: true,
+                                            shouldValidate: true,
+                                          });
+                                        }
+                                      }}
+                                    />
+                                    <div className='space-y-1'>
+                                      <FormLabel className='font-normal'>
+                                        {t('channels.dialogs.fields.opencodeGoQuota.clearAuthCookie.label')}
+                                      </FormLabel>
+                                      <p className='text-muted-foreground text-xs'>
+                                        {t('channels.dialogs.fields.opencodeGoQuota.clearAuthCookie.description')}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </FormItem>
+                              )}
+                            />
+                          )}
                         </>
                       )}
 

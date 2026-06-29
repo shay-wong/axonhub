@@ -464,6 +464,98 @@ func TestChannelService_UpdateChannel(t *testing.T) {
 	}
 }
 
+func TestChannelService_UpdateChannelPreservesOpenCodeGoQuotaAuthCookie(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpencodeGo).
+		SetName("OpenCode Go").
+		SetBaseURL("https://opencode.ai/zen/go/v1").
+		SetCredentials(objects.ChannelCredentials{}).
+		SetSupportedModels([]string{"openai/gpt-5"}).
+		SetDefaultTestModel("openai/gpt-5").
+		SetSettings(&objects.ChannelSettings{
+			ProviderQuota: &objects.ChannelProviderQuotaSettings{
+				OpencodeGo: &objects.OpenCodeGoQuotaSettings{
+					WorkspaceID: "wk_old",
+					AuthCookie:  "old-cookie",
+				},
+			},
+		}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	updated, err := svc.UpdateChannel(ctx, ch.ID, &ent.UpdateChannelInput{
+		Settings: &objects.ChannelSettings{
+			APIKeySelectionStrategy: "weighted_sticky",
+			ProviderQuota: &objects.ChannelProviderQuotaSettings{
+				OpencodeGo: &objects.OpenCodeGoQuotaSettings{
+					WorkspaceID: "wk_new",
+					AuthCookie:  "",
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Settings)
+	require.NotNil(t, updated.Settings.ProviderQuota)
+	require.NotNil(t, updated.Settings.ProviderQuota.OpencodeGo)
+	require.Equal(t, "wk_new", updated.Settings.ProviderQuota.OpencodeGo.WorkspaceID)
+	require.Equal(t, "old-cookie", updated.Settings.ProviderQuota.OpencodeGo.AuthCookie)
+	require.False(t, updated.Settings.ProviderQuota.OpencodeGo.ClearAuthCookie)
+	require.Equal(t, "weighted_sticky", updated.Settings.APIKeySelectionStrategy)
+}
+
+func TestChannelService_UpdateChannelClearsOpenCodeGoQuotaAuthCookie(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpencodeGo).
+		SetName("OpenCode Go Clear").
+		SetBaseURL("https://opencode.ai/zen/go/v1").
+		SetCredentials(objects.ChannelCredentials{}).
+		SetSupportedModels([]string{"openai/gpt-5"}).
+		SetDefaultTestModel("openai/gpt-5").
+		SetSettings(&objects.ChannelSettings{
+			ProviderQuota: &objects.ChannelProviderQuotaSettings{
+				OpencodeGo: &objects.OpenCodeGoQuotaSettings{
+					WorkspaceID: "wk_old",
+					AuthCookie:  "old-cookie",
+				},
+			},
+		}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	updated, err := svc.UpdateChannel(ctx, ch.ID, &ent.UpdateChannelInput{
+		Settings: &objects.ChannelSettings{
+			ProviderQuota: &objects.ChannelProviderQuotaSettings{
+				OpencodeGo: &objects.OpenCodeGoQuotaSettings{
+					WorkspaceID:     "wk_new",
+					ClearAuthCookie: true,
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Settings)
+	require.NotNil(t, updated.Settings.ProviderQuota)
+	require.NotNil(t, updated.Settings.ProviderQuota.OpencodeGo)
+	require.Equal(t, "wk_new", updated.Settings.ProviderQuota.OpencodeGo.WorkspaceID)
+	require.Empty(t, updated.Settings.ProviderQuota.OpencodeGo.AuthCookie)
+	require.False(t, updated.Settings.ProviderQuota.OpencodeGo.ClearAuthCookie)
+}
+
 func TestChannelService_UpdateChannelStatus(t *testing.T) {
 	svc, client := setupTestChannelService(t)
 	defer client.Close()
