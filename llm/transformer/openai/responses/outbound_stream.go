@@ -31,7 +31,7 @@ func (t *OutboundTransformer) TransformStream(
 	doneEvent := lo.ToPtr(llm.DoneStreamEvent)
 	streamWithDone := streams.AppendStream(stream, doneEvent)
 
-	return streams.NoNil(newResponsesOutboundStream(streamWithDone)), nil
+	return streams.NoNil(newResponsesOutboundStream(streamWithDone, req)), nil
 }
 
 // responsesOutboundStream wraps a stream and maintains state during processing.
@@ -74,7 +74,14 @@ type outboundStreamState struct {
 	transformerMetadataEmitted bool
 }
 
-func newResponsesOutboundStream(stream streams.Stream[*httpclient.StreamEvent]) *responsesOutboundStream {
+func newResponsesOutboundStream(stream streams.Stream[*httpclient.StreamEvent], req *httpclient.Request) *responsesOutboundStream {
+	transformerMetadata := map[string]any{}
+	if req != nil && req.TransformerMetadata != nil {
+		for key, value := range req.TransformerMetadata {
+			transformerMetadata[key] = value
+		}
+	}
+
 	return &responsesOutboundStream{
 		stream: stream,
 		state: &outboundStreamState{
@@ -83,7 +90,7 @@ func newResponsesOutboundStream(stream streams.Stream[*httpclient.StreamEvent]) 
 			toolCallIndex:                    make(map[string]int),
 			serverItems:                      make(map[string]bool),
 			pendingReasoningEncryptedContent: make(map[string]*string),
-			transformerMetadata:              make(map[string]any),
+			transformerMetadata:              transformerMetadata,
 		},
 	}
 }
@@ -123,6 +130,66 @@ func (s *responsesOutboundStream) setServerItemContent(resp *llm.Response, item 
 	}
 
 	return true, nil
+}
+
+func (s *responsesOutboundStream) setToolSearchBridgeContent(resp *llm.Response, item *Item) (bool, error) {
+	if anthropicFunctionToolSearchName(s.state.transformerMetadata) == "" {
+		return false, nil
+	}
+
+	key := serverItemKey(item)
+	if key != "" {
+		if s.state.serverItems[key] {
+			return false, nil
+		}
+		s.state.serverItems[key] = true
+	}
+
+	msg, err := convertOutputToMessageWithError([]Item{*item}, s.state.transformerMetadata)
+	if err != nil {
+		return false, err
+	}
+
+	if len(msg.ToolCalls) > 0 {
+		for _, tc := range msg.ToolCalls {
+			toolCallIdx, ok := s.state.toolCallIndex[tc.ID]
+			if !ok {
+				toolCallIdx = len(s.state.toolCalls)
+				s.state.toolCallIndex[tc.ID] = toolCallIdx
+			}
+
+			toolCall := tc
+			toolCall.Index = toolCallIdx
+			s.state.toolCalls[tc.ID] = &toolCall
+			if item.ID != "" {
+				s.state.itemToCallID[item.ID] = tc.ID
+			}
+
+			resp.Choices = []llm.Choice{
+				{
+					Index: 0,
+					Delta: &llm.Message{
+						ToolCalls: []llm.ToolCall{toolCall},
+					},
+				},
+			}
+			return true, nil
+		}
+	}
+
+	if len(msg.InlineToolResults) > 0 {
+		resp.Choices = []llm.Choice{
+			{
+				Index: 0,
+				Delta: &llm.Message{
+					InlineToolResults: msg.InlineToolResults,
+				},
+			},
+		}
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func shouldEmitServerItemFromAdded(item *Item) bool {
@@ -366,7 +433,15 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 				return nil
 			}
 
-			emitted, err := s.setServerItemContent(resp, item)
+			emitted, err := s.setToolSearchBridgeContent(resp, item)
+			if err != nil {
+				return err
+			}
+			if emitted {
+				break
+			}
+
+			emitted, err = s.setServerItemContent(resp, item)
 			if err != nil {
 				return err
 			}
@@ -528,7 +603,15 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 				return nil
 			}
 
-			emitted, err := s.setServerItemContent(resp, streamEvent.Item)
+			emitted, err := s.setToolSearchBridgeContent(resp, streamEvent.Item)
+			if err != nil {
+				return err
+			}
+			if emitted {
+				break
+			}
+
+			emitted, err = s.setServerItemContent(resp, streamEvent.Item)
 			if err != nil {
 				return err
 			}
@@ -573,7 +656,10 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 			return nil // Intentionally skip this event
 		}
 
-		msg := convertOutputToMessage([]Item{*streamEvent.Item}, s.state.transformerMetadata)
+		msg, err := convertOutputToMessageWithError([]Item{*streamEvent.Item}, s.state.transformerMetadata)
+		if err != nil {
+			return err
+		}
 		if len(msg.Annotations) == 0 {
 			return nil // Intentionally skip this event
 		}

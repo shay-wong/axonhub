@@ -1218,7 +1218,7 @@ func toolUseBlockFromLLM(toolCall llm.ToolCall) MessageContentBlock {
 // toolResultBlockFromInline converts an assistant-inlined tool result back to
 // an Anthropic *_tool_result MessageContentBlock. Returns false when the
 // inline result lacks an anthropic_type metadata tag (i.e. it did not
-// originate from an Anthropic special tool result).
+// originate from an Anthropic tool result that must be emitted inline).
 func toolResultBlockFromInline(ir llm.InlineToolResult) (MessageContentBlock, bool) {
 	blockType := getAnthropicType(ir.TransformerMetadata)
 	if blockType == "" {

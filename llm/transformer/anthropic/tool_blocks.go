@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+
+	"github.com/looplj/axonhub/llm"
 )
 
 // TransformerMetadata keys used to round-trip Anthropic server-side tool blocks
@@ -15,24 +17,24 @@ const (
 	// TransformerMetadataKeyAnthropicType stores the original Anthropic block
 	// type (e.g. "server_tool_use", "web_search_tool_result") for special
 	// (non-vanilla) tool blocks.
-	TransformerMetadataKeyAnthropicType = "anthropic_type"
+	TransformerMetadataKeyAnthropicType = llm.TransformerMetadataKeyAnthropicType
 
 	// TransformerMetadataKeyAnthropicCaller stores the optional Anthropic
 	// `caller` object as json.RawMessage so it round-trips without the proxy
 	// needing to know the full shape
 	// (direct / code_execution_20250825 / code_execution_20260120 / ...).
-	TransformerMetadataKeyAnthropicCaller = "anthropic_caller"
+	TransformerMetadataKeyAnthropicCaller = llm.TransformerMetadataKeyAnthropicCaller
 
 	// TransformerMetadataKeyAnthropicToolResultContent stores the original
 	// *_tool_result content object as json.RawMessage so it round-trips
 	// byte-identical.
-	TransformerMetadataKeyAnthropicToolResultContent = "anthropic_tool_result_content"
+	TransformerMetadataKeyAnthropicToolResultContent = llm.TransformerMetadataKeyAnthropicToolResultContent
 
 	// TransformerMetadataKeyAnthropicBlockIndex stores the ordinal position
 	// (int) of a content block inside the original Anthropic assistant turn.
 	// Used to restore interleaving (text / tool_use / tool_result) on the
 	// non-streaming path, where llm.Message otherwise flattens order.
-	TransformerMetadataKeyAnthropicBlockIndex = "anthropic_block_index"
+	TransformerMetadataKeyAnthropicBlockIndex = llm.TransformerMetadataKeyAnthropicBlockIndex
 )
 
 // isAnthropicSpecialToolUseBlock reports whether a content block type is an

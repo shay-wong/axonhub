@@ -263,9 +263,14 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 		}
 	}
 
+	input, err := convertInputFromMessagesWithError(llmReq.Messages, llmReq.TransformOptions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert responses input: %w", err)
+	}
+
 	payload := Request{
 		Model:                llmReq.Model,
-		Input:                convertInputFromMessages(llmReq.Messages, llmReq.TransformOptions),
+		Input:                input,
 		Instructions:         convertInstructionsFromMessages(llmReq.Messages),
 		Tools:                tools,
 		ParallelToolCalls:    llmReq.ParallelToolCalls,
@@ -413,7 +418,10 @@ func (t *OutboundTransformer) transformStandardResponse(
 		llmResp.TransformerMetadata = maps.Clone(httpResp.Request.TransformerMetadata)
 	}
 
-	msg := convertOutputToMessage(resp.Output, llmResp.TransformerMetadata)
+	msg, err := convertOutputToMessageWithError(resp.Output, llmResp.TransformerMetadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert responses output: %w", err)
+	}
 
 	choice := llm.Choice{
 		Index:   0,

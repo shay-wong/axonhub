@@ -709,6 +709,208 @@ func TestOutboundTransformer_TransformStream_PreservesToolSearchItems(t *testing
 	require.Equal(t, "get_shipping_eta", outputItem.Tools[0].Name)
 }
 
+func TestOutboundTransformer_TransformStream_BridgesToolSearchItemsWhenAnthropicMetadataPresent(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{
+			Type: "response.created",
+			Data: []byte(`{
+				"type":"response.created",
+				"response":{
+					"id":"resp_tool_search_bridge",
+					"object":"response",
+					"created_at":1700000000,
+					"model":"gpt-5.4",
+					"status":"in_progress",
+					"output":[]
+				}
+			}`),
+		},
+		{
+			Type: "response.output_item.added",
+			Data: []byte(`{
+				"type":"response.output_item.added",
+				"output_index":0,
+				"item":{
+					"id":"tsc_bridge_123",
+					"type":"tool_search_call",
+					"call_id":"call_bridge_123",
+					"execution":"client",
+					"status":"completed",
+					"arguments":{"query":"select:get_weather"}
+				}
+			}`),
+		},
+		{
+			Type: "response.output_item.done",
+			Data: []byte(`{
+				"type":"response.output_item.done",
+				"output_index":0,
+				"item":{
+					"id":"tsc_bridge_123",
+					"type":"tool_search_call",
+					"call_id":"call_bridge_123",
+					"execution":"client",
+					"status":"completed",
+					"arguments":{"query":"select:get_weather"}
+				}
+			}`),
+		},
+		{
+			Type: "response.output_item.added",
+			Data: []byte(`{
+				"type":"response.output_item.added",
+				"output_index":1,
+				"item":{
+					"id":"tso_bridge_123",
+					"type":"tool_search_output",
+					"call_id":"call_bridge_123",
+					"execution":"client",
+					"status":"completed",
+					"tools":[{
+						"type":"function",
+						"name":"get_weather",
+						"description":"Get weather",
+						"parameters":{"type":"object","properties":{}}
+					}]
+				}
+			}`),
+		},
+		{
+			Type: "response.output_item.done",
+			Data: []byte(`{
+				"type":"response.output_item.done",
+				"output_index":1,
+				"item":{
+					"id":"tso_bridge_123",
+					"type":"tool_search_output",
+					"call_id":"call_bridge_123",
+					"execution":"client",
+					"status":"completed",
+					"tools":[{
+						"type":"function",
+						"name":"get_weather",
+						"description":"Get weather",
+						"parameters":{"type":"object","properties":{}}
+					}]
+				}
+			}`),
+		},
+		{
+			Type: "response.completed",
+			Data: []byte(`{
+				"type":"response.completed",
+				"response":{
+					"id":"resp_tool_search_bridge",
+					"object":"response",
+					"created_at":1700000000,
+					"model":"gpt-5.4",
+					"status":"completed",
+					"output":[],
+					"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}
+				}
+			}`),
+		},
+	}
+
+	req := &httpclient.Request{
+		TransformerMetadata: map[string]any{
+			llm.TransformerMetadataKeyAnthropicFunctionToolSearchName: "ToolSearch",
+		},
+	}
+
+	stream, err := trans.TransformStream(context.Background(), req, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	actual, err := streams.All(stream)
+	require.NoError(t, err)
+
+	var (
+		toolCallChunks         []*llm.Response
+		inlineToolResultChunks []*llm.Response
+		serverBlockChunks      []*llm.Response
+	)
+	for _, resp := range actual {
+		if resp == nil || resp == llm.DoneResponse || len(resp.Choices) == 0 || resp.Choices[0].Delta == nil {
+			continue
+		}
+
+		delta := resp.Choices[0].Delta
+		if len(delta.ToolCalls) > 0 {
+			toolCallChunks = append(toolCallChunks, resp)
+		}
+		if len(delta.InlineToolResults) > 0 {
+			inlineToolResultChunks = append(inlineToolResultChunks, resp)
+		}
+		if len(delta.Content.MultipleContent) > 0 {
+			serverBlockChunks = append(serverBlockChunks, resp)
+		}
+	}
+
+	require.Len(t, toolCallChunks, 1)
+	require.Equal(t, "call_bridge_123", toolCallChunks[0].Choices[0].Delta.ToolCalls[0].ID)
+	require.Equal(t, "ToolSearch", toolCallChunks[0].Choices[0].Delta.ToolCalls[0].Function.Name)
+	require.JSONEq(t, `{"query":"select:get_weather"}`, toolCallChunks[0].Choices[0].Delta.ToolCalls[0].Function.Arguments)
+
+	require.Len(t, inlineToolResultChunks, 1)
+	inlineResult := inlineToolResultChunks[0].Choices[0].Delta.InlineToolResults[0]
+	require.Equal(t, "call_bridge_123", inlineResult.ToolCallID)
+	require.Equal(t, "tool_result", inlineResult.TransformerMetadata[llm.TransformerMetadataKeyAnthropicType])
+	require.JSONEq(t, `"{\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get weather\",\"parameters\":{\"properties\":{},\"type\":\"object\"}}]}"`, string(inlineResult.TransformerMetadata[llm.TransformerMetadataKeyAnthropicToolResultContent].(json.RawMessage)))
+	require.Empty(t, serverBlockChunks)
+}
+
+func TestOutboundTransformer_TransformStream_BridgedToolSearchRejectsMalformedOutput(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{
+			Type: "response.created",
+			Data: []byte(`{
+				"type":"response.created",
+				"response":{
+					"id":"resp_tool_search_bridge_bad",
+					"object":"response",
+					"created_at":1700000000,
+					"model":"gpt-5.4",
+					"status":"in_progress",
+					"output":[]
+				}
+			}`),
+		},
+		{
+			Type: "response.output_item.added",
+			Data: []byte(`{
+				"type":"response.output_item.added",
+				"output_index":0,
+				"item":{
+					"id":"tso_bridge_bad",
+					"type":"tool_search_output",
+					"call_id":"call_bridge_bad",
+					"execution":"client",
+					"status":"completed"
+				}
+			}`),
+		},
+	}
+
+	req := &httpclient.Request{
+		TransformerMetadata: map[string]any{
+			llm.TransformerMetadataKeyAnthropicFunctionToolSearchName: "ToolSearch",
+		},
+	}
+
+	stream, err := trans.TransformStream(context.Background(), req, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	_, err = streams.All(stream)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tool_search_output requires tools")
+}
+
 func TestOutboundTransformer_TransformStream_EmitsToolSearchCallWhenDoneHasArguments(t *testing.T) {
 	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
 	require.NoError(t, err)

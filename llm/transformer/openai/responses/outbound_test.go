@@ -14,6 +14,7 @@ import (
 	"github.com/looplj/axonhub/llm/auth"
 	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/internal/pkg/xtest"
+	"github.com/looplj/axonhub/llm/transformer/anthropic"
 	"github.com/looplj/axonhub/llm/transformer/shared"
 )
 
@@ -343,6 +344,214 @@ func TestOutboundTransformer_TransformRequest_ReplaysProviderRawToolsAndToolChoi
 	require.True(t, ok)
 	require.Equal(t, "tool_search", toolChoice["type"])
 	require.Len(t, toolChoice["tools"], 1)
+}
+
+func TestOutboundTransformer_TransformRequest_BridgesAnthropicFunctionToolSearch(t *testing.T) {
+	anthropicInbound := anthropic.NewInboundTransformer()
+	anthropicReq := &httpclient.Request{
+		Headers: http.Header{"Content-Type": []string{"application/json"}},
+		Body: []byte(`{
+			"model": "claude-opus-4-8",
+			"max_tokens": 1024,
+			"messages": [{"role": "user", "content": "find the right tool"}],
+			"tools": [
+				{
+					"name": "ToolSearch",
+					"description": "Find deferred tools",
+					"input_schema": {
+						"type": "object",
+						"properties": {"query": {"type": "string"}}
+					}
+				},
+				{
+					"name": "mcp__plugin_oh_my_codex__session_search",
+					"description": "Search session",
+					"defer_loading": true,
+					"input_schema": {"type": "object", "properties": {}}
+				}
+			],
+			"tool_choice": {"type": "tool", "name": "ToolSearch"}
+		}`),
+	}
+
+	llmReq, err := anthropicInbound.TransformRequest(context.Background(), anthropicReq)
+	require.NoError(t, err)
+	llmReq.Model = "mapped-model"
+
+	outbound, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	httpReq, err := outbound.TransformRequest(context.Background(), llmReq)
+	require.NoError(t, err)
+
+	var payload map[string]any
+	err = json.Unmarshal(httpReq.Body, &payload)
+	require.NoError(t, err)
+	require.Equal(t, "mapped-model", payload["model"])
+
+	tools, ok := payload["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 2)
+
+	toolSearch, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "tool_search", toolSearch["type"])
+	require.Equal(t, "client", toolSearch["execution"])
+	require.Equal(t, "Find deferred tools", toolSearch["description"])
+	require.NotContains(t, toolSearch, "defer_loading")
+
+	deferredFunction, ok := tools[1].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "function", deferredFunction["type"])
+	require.Equal(t, "mcp__plugin_oh_my_codex__session_search", deferredFunction["name"])
+	require.Equal(t, true, deferredFunction["defer_loading"])
+
+	toolChoice, ok := payload["tool_choice"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "tool_search", toolChoice["type"])
+	require.NotContains(t, toolChoice, "name")
+}
+
+func TestOutboundTransformer_TransformResponse_BridgedToolSearchOutputRoundTripsToAnthropicToolResult(t *testing.T) {
+	outbound, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	llmResp, err := outbound.TransformResponse(context.Background(), &httpclient.Response{
+		StatusCode: http.StatusOK,
+		Request: &httpclient.Request{
+			TransformerMetadata: map[string]any{
+				llm.TransformerMetadataKeyAnthropicFunctionToolSearchName: "ToolSearch",
+			},
+		},
+		Body: []byte(`{
+			"id": "resp_search",
+			"object": "response",
+			"created_at": 1700000000,
+			"status": "completed",
+			"model": "mapped-model",
+			"output": [
+				{
+					"type": "tool_search_call",
+					"call_id": "call_search",
+					"execution": "client",
+					"status": "completed",
+					"arguments": {"query":"select:get_weather"}
+				},
+				{
+					"type": "tool_search_output",
+					"call_id": "call_search",
+					"execution": "client",
+					"status": "completed",
+					"tools": [
+						{
+							"type": "function",
+							"name": "get_weather",
+							"description": "Get weather",
+							"parameters": {"type":"object","properties":{"city":{"type":"string"}}}
+						}
+					]
+				}
+			]
+		}`),
+	})
+	require.NoError(t, err)
+	require.Len(t, llmResp.Choices, 1)
+	require.Len(t, llmResp.Choices[0].Message.ToolCalls, 1)
+	require.Len(t, llmResp.Choices[0].Message.InlineToolResults, 1)
+
+	anthropicResp, err := anthropic.NewInboundTransformer().TransformResponse(context.Background(), llmResp)
+	require.NoError(t, err)
+
+	var got anthropic.Message
+	err = json.Unmarshal(anthropicResp.Body, &got)
+	require.NoError(t, err)
+	require.Len(t, got.Content, 2)
+	require.Equal(t, "tool_use", got.Content[0].Type)
+	require.Equal(t, "call_search", got.Content[0].ID)
+	require.NotNil(t, got.Content[0].Name)
+	require.Equal(t, "ToolSearch", *got.Content[0].Name)
+	require.Equal(t, "tool_result", got.Content[1].Type)
+	require.NotNil(t, got.Content[1].ToolUseID)
+	require.Equal(t, "call_search", *got.Content[1].ToolUseID)
+	require.NotNil(t, got.Content[1].Content)
+	require.NotNil(t, got.Content[1].Content.Content)
+	require.JSONEq(t, `{"tools":[{"type":"function","name":"get_weather","description":"Get weather","parameters":{"type":"object","properties":{"city":{"type":"string"}}}}]}`, *got.Content[1].Content.Content)
+}
+
+func TestOutboundTransformer_TransformResponse_BridgedToolSearchRejectsMalformedOutput(t *testing.T) {
+	outbound, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	_, err = outbound.TransformResponse(context.Background(), &httpclient.Response{
+		StatusCode: http.StatusOK,
+		Request: &httpclient.Request{
+			TransformerMetadata: map[string]any{
+				llm.TransformerMetadataKeyAnthropicFunctionToolSearchName: "ToolSearch",
+			},
+		},
+		Body: []byte(`{
+			"id": "resp_search",
+			"object": "response",
+			"created_at": 1700000000,
+			"status": "completed",
+			"model": "mapped-model",
+			"output": [
+				{
+					"type": "tool_search_output",
+					"call_id": "call_search",
+					"execution": "client",
+					"status": "completed"
+				}
+			]
+		}`),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tool_search_output requires tools")
+}
+
+func TestOutboundTransformer_TransformRequest_BridgedToolSearchRejectsMalformedToolResult(t *testing.T) {
+	outbound, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	_, err = outbound.TransformRequest(context.Background(), &llm.Request{
+		Model:       "mapped-model",
+		RequestType: llm.RequestTypeChat,
+		APIFormat:   llm.APIFormatAnthropicMessage,
+		Messages: []llm.Message{
+			{
+				Role: "assistant",
+				ToolCalls: []llm.ToolCall{
+					{
+						ID: "call_search",
+						Function: llm.FunctionCall{
+							Name:      "ToolSearch",
+							Arguments: `{"query":"select:get_weather"}`,
+						},
+						TransformerMetadata: map[string]any{
+							llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType: "tool_search_output",
+						},
+					},
+				},
+			},
+			{
+				Role:       "tool",
+				ToolCallID: lo.ToPtr("call_search"),
+				Content: llm.MessageContent{
+					MultipleContent: []llm.MessageContentPart{
+						{
+							Type: "text",
+							Text: lo.ToPtr("not json"),
+							TransformerMetadata: map[string]any{
+								llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType: "tool_search_output",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tool_search_output requires content")
 }
 
 func TestOutboundTransformer_TransformRequest_ReplaysProviderRawInputItems(t *testing.T) {

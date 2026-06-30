@@ -2,6 +2,7 @@ package responses
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -107,20 +108,25 @@ func convertInstructionsFromMessages(msgs []llm.Message) string {
 // Assistant messages become items with type "message" and content array containing output_text items.
 // Tool calls become function_call items, tool results become function_call_output items.
 func convertInputFromMessages(msgs []llm.Message, transformOptions llm.TransformOptions) Input {
+	input, _ := convertInputFromMessagesWithError(msgs, transformOptions)
+	return input
+}
+
+func convertInputFromMessagesWithError(msgs []llm.Message, transformOptions llm.TransformOptions) (Input, error) {
 	if len(msgs) == 0 {
-		return Input{}
+		return Input{}, nil
 	}
 
 	wasArrayFormat := transformOptions.ArrayInputs != nil && *transformOptions.ArrayInputs
 
 	if len(msgs) == 1 && msgs[0].Content.Content != nil && !wasArrayFormat {
-		return Input{Text: msgs[0].Content.Content}
+		return Input{Text: msgs[0].Content.Content}, nil
 	}
 
 	var items []Item
 
 	// Track tool call types so tool result messages can be encoded correctly.
-	// callID -> item type (function_call_output or custom_tool_call_output)
+	// callID -> item type (function_call_output, custom_tool_call_output, or tool_search_output)
 	toolResultItemTypeByCallID := map[string]string{}
 
 	for _, msg := range msgs {
@@ -142,6 +148,10 @@ func convertInputFromMessages(msgs []llm.Message, transformOptions llm.Transform
 					if it.CallID != "" {
 						toolResultItemTypeByCallID[it.CallID] = "custom_tool_call_output"
 					}
+				case "tool_search_call":
+					if it.CallID != "" {
+						toolResultItemTypeByCallID[it.CallID] = "tool_search_output"
+					}
 				}
 			}
 		case "tool":
@@ -153,13 +163,21 @@ func convertInputFromMessages(msgs []llm.Message, transformOptions llm.Transform
 				}
 			}
 
-			items = append(items, convertToolMessageWithType(msg, itemType))
+			if override := openAIResponsesToolResultItemType(msg); override != "" {
+				itemType = override
+			}
+
+			item, err := convertToolMessageWithTypeWithError(msg, itemType)
+			if err != nil {
+				return Input{}, err
+			}
+			items = append(items, item)
 		}
 	}
 
 	return Input{
 		Items: items,
-	}
+	}, nil
 }
 
 // convertUserMessage converts a user message to Responses API Item format.
@@ -245,6 +263,14 @@ func convertAssistantMessage(msg llm.Message) []Item {
 				Name:   tc.ResponseCustomToolCall.Name,
 				Input:  lo.ToPtr(tc.ResponseCustomToolCall.Input),
 			})
+		} else if openAIResponsesToolResultItemTypeFromMetadata(tc.TransformerMetadata) == "tool_search_output" {
+			toolCallItems = append(toolCallItems, Item{
+				Type:      "tool_search_call",
+				CallID:    tc.ID,
+				Execution: openAIResponsesToolSearchExecutionFromMetadata(tc.TransformerMetadata),
+				Status:    lo.ToPtr("completed"),
+				Arguments: tc.Function.Arguments,
+			})
 		} else {
 			toolCallItems = append(toolCallItems, Item{
 				Type:      "function_call",
@@ -317,6 +343,25 @@ func convertAssistantMessage(msg llm.Message) []Item {
 }
 
 func convertToolMessageWithType(msg llm.Message, itemType string) Item {
+	item, _ := convertToolMessageWithTypeWithError(msg, itemType)
+	return item
+}
+
+func convertToolMessageWithTypeWithError(msg llm.Message, itemType string) (Item, error) {
+	if itemType == "tool_search_output" {
+		tools, err := toolSearchOutputTools(msg)
+		if err != nil {
+			return Item{}, err
+		}
+
+		return Item{
+			Type:      itemType,
+			CallID:    lo.FromPtr(msg.ToolCallID),
+			Execution: openAIResponsesToolSearchExecution(msg),
+			Tools:     tools,
+		}, nil
+	}
+
 	var output Input
 
 	// Handle simple content first
@@ -342,7 +387,134 @@ func convertToolMessageWithType(msg llm.Message, itemType string) Item {
 		Type:   itemType,
 		CallID: lo.FromPtr(msg.ToolCallID),
 		Output: &output,
+	}, nil
+}
+
+func openAIResponsesToolResultItemType(msg llm.Message) string {
+	for _, part := range msg.Content.MultipleContent {
+		if itemType := openAIResponsesToolResultItemTypeFromMetadata(part.TransformerMetadata); itemType != "" {
+			return itemType
+		}
 	}
+
+	return ""
+}
+
+func openAIResponsesToolResultItemTypeFromMetadata(metadata map[string]any) string {
+	itemType, _ := metadata[llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType].(string)
+	switch itemType {
+	case "function_call_output", "custom_tool_call_output", "tool_search_output":
+		return itemType
+	default:
+		return ""
+	}
+}
+
+func openAIResponsesToolSearchExecution(msg llm.Message) string {
+	for _, part := range msg.Content.MultipleContent {
+		if execution := openAIResponsesToolSearchExecutionFromMetadata(part.TransformerMetadata); execution != "" {
+			return execution
+		}
+	}
+
+	return "client"
+}
+
+func openAIResponsesToolSearchExecutionFromMetadata(metadata map[string]any) string {
+	execution, _ := metadata[llm.TransformerMetadataKeyOpenAIResponsesToolSearchExecution].(string)
+	if execution == "" {
+		return "client"
+	}
+
+	return execution
+}
+
+func toolSearchOutputTools(msg llm.Message) ([]Tool, error) {
+	raw := strings.TrimSpace(toolMessageText(msg))
+	if raw == "" {
+		return nil, fmt.Errorf("tool_search_output requires a JSON tool list")
+	}
+
+	var envelope struct {
+		Tools []anthropicFunctionToolResult `json:"tools"`
+	}
+	if err := json.Unmarshal([]byte(raw), &envelope); err == nil && envelope.Tools != nil {
+		return convertAnthropicFunctionToolResults(envelope.Tools), nil
+	}
+
+	var anthropicTools []anthropicFunctionToolResult
+	if err := json.Unmarshal([]byte(raw), &anthropicTools); err == nil {
+		return convertAnthropicFunctionToolResults(anthropicTools), nil
+	}
+
+	return nil, fmt.Errorf("tool_search_output requires content shaped as {\"tools\":[...]} or [...]")
+}
+
+func toolMessageText(msg llm.Message) string {
+	if msg.Content.Content != nil {
+		return *msg.Content.Content
+	}
+
+	var parts []string
+	for _, part := range msg.Content.MultipleContent {
+		if part.Text != nil {
+			parts = append(parts, *part.Text)
+		}
+	}
+
+	return strings.Join(parts, "\n")
+}
+
+type anthropicFunctionToolResult struct {
+	Type         string                        `json:"type,omitempty"`
+	Name         string                        `json:"name"`
+	Description  string                        `json:"description,omitempty"`
+	InputSchema  json.RawMessage               `json:"input_schema,omitempty"`
+	Parameters   map[string]any                `json:"parameters,omitempty"`
+	Strict       *bool                         `json:"strict,omitempty"`
+	DeferLoading *bool                         `json:"defer_loading,omitempty"`
+	Tools        []anthropicFunctionToolResult `json:"tools,omitempty"`
+}
+
+// convertAnthropicFunctionToolResults normalizes the Anthropic ToolSearch
+// bridge result envelope into Responses tool_search_output tools.
+func convertAnthropicFunctionToolResults(src []anthropicFunctionToolResult) []Tool {
+	tools := make([]Tool, 0, len(src))
+	for _, item := range src {
+		if item.Name == "" {
+			continue
+		}
+
+		toolType := item.Type
+		if toolType == "" {
+			toolType = "function"
+		}
+
+		tool := Tool{
+			Type:         toolType,
+			Name:         item.Name,
+			Description:  item.Description,
+			Strict:       item.Strict,
+			DeferLoading: item.DeferLoading,
+		}
+
+		if item.Parameters != nil {
+			tool.Parameters = item.Parameters
+		} else if len(item.InputSchema) > 0 {
+			var params map[string]any
+			if err := json.Unmarshal(item.InputSchema, &params); err == nil {
+				tool.Parameters = params
+			}
+		}
+
+		if len(item.Tools) > 0 {
+			tool.Tools = convertAnthropicFunctionToolResults(item.Tools)
+		}
+
+		tools = append(tools, tool)
+	}
+
+	return tools
 }
 
 func convertImageGenerationToTool(src llm.Tool) Tool {
@@ -522,6 +694,11 @@ func convertToolChoice(src *llm.ToolChoice) *ToolChoice {
 		// String mode like "none", "auto", "required"
 		result.Mode = src.ToolChoice
 	} else if src.NamedToolChoice != nil {
+		if src.NamedToolChoice.Type == llm.ToolTypeToolSearch {
+			result.Type = &src.NamedToolChoice.Type
+			return result
+		}
+
 		// Specific tool choice
 		result.Type = &src.NamedToolChoice.Type
 		result.Name = &src.NamedToolChoice.Function.Name
@@ -652,6 +829,11 @@ func appendResponseWebSearchCallMetadata(transformerMetadata map[string]any, out
 // It aggregates text, reasoning, tool calls, image generation,
 // compaction and compaction_summary items from the response output.
 func convertOutputToMessage(output []Item, transformerMetadata map[string]any) llm.Message {
+	msg, _ := convertOutputToMessageWithError(output, transformerMetadata)
+	return msg
+}
+
+func convertOutputToMessageWithError(output []Item, transformerMetadata map[string]any) (llm.Message, error) {
 	var (
 		contentParts         []llm.MessageContentPart
 		textContent          strings.Builder
@@ -659,6 +841,7 @@ func convertOutputToMessage(output []Item, transformerMetadata map[string]any) l
 		reasoningSignature   *string
 		messageID            string
 		toolCalls            []llm.ToolCall
+		inlineToolResults    []llm.InlineToolResult
 		annotations          []llm.Annotation
 		visibleTextRuneCount int64
 	)
@@ -779,7 +962,35 @@ func convertOutputToMessage(output []Item, transformerMetadata map[string]any) l
 					},
 				})
 			}
-		case "tool_search_call", "tool_search_output":
+		case "tool_search_call":
+			if bridgeName := anthropicFunctionToolSearchName(transformerMetadata); bridgeName != "" {
+				toolCalls = append(toolCalls, llm.ToolCall{
+					ID:   outputItem.CallID,
+					Type: "function",
+					Function: llm.FunctionCall{
+						Name:      bridgeName,
+						Arguments: outputItem.Arguments,
+					},
+					TransformerMetadata: map[string]any{
+						llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType:  "tool_search_output",
+						llm.TransformerMetadataKeyOpenAIResponsesToolSearchExecution: outputItem.Execution,
+					},
+				})
+				continue
+			}
+
+			flushText()
+			contentParts = append(contentParts, serverItemContentPart(outputItem))
+		case "tool_search_output":
+			if anthropicFunctionToolSearchName(transformerMetadata) != "" {
+				inlineToolResult, err := toolSearchOutputInlineToolResult(outputItem)
+				if err != nil {
+					return llm.Message{}, err
+				}
+				inlineToolResults = append(inlineToolResults, inlineToolResult)
+				continue
+			}
+
 			flushText()
 			contentParts = append(contentParts, serverItemContentPart(outputItem))
 		}
@@ -788,10 +999,11 @@ func convertOutputToMessage(output []Item, transformerMetadata map[string]any) l
 	flushText()
 
 	msg := llm.Message{
-		ID:          messageID,
-		Role:        "assistant",
-		ToolCalls:   toolCalls,
-		Annotations: annotations,
+		ID:                messageID,
+		Role:              "assistant",
+		ToolCalls:         toolCalls,
+		Annotations:       annotations,
+		InlineToolResults: inlineToolResults,
 	}
 
 	if reasoningContent.Len() > 0 {
@@ -812,5 +1024,49 @@ func convertOutputToMessage(output []Item, transformerMetadata map[string]any) l
 		}
 	}
 
-	return msg
+	return msg, nil
+}
+
+func toolSearchOutputInlineToolResult(item Item) (llm.InlineToolResult, error) {
+	rawContent, output, err := anthropicToolResultContentFromToolSearchOutput(item)
+	if err != nil {
+		return llm.InlineToolResult{}, err
+	}
+
+	return llm.InlineToolResult{
+		ToolCallID: item.CallID,
+		Output:     output,
+		TransformerMetadata: map[string]any{
+			llm.TransformerMetadataKeyAnthropicType:              "tool_result",
+			llm.TransformerMetadataKeyAnthropicToolResultContent: rawContent,
+		},
+	}, nil
+}
+
+func anthropicToolResultContentFromToolSearchOutput(item Item) (json.RawMessage, string, error) {
+	if item.Tools == nil {
+		return nil, "", fmt.Errorf("tool_search_output requires tools")
+	}
+
+	rawTools, err := json.Marshal(struct {
+		Tools []Tool `json:"tools"`
+	}{
+		Tools: item.Tools,
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to marshal tool_search_output tools: %w", err)
+	}
+
+	output := string(rawTools)
+	rawContent, err := json.Marshal(output)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to marshal anthropic tool_result content: %w", err)
+	}
+
+	return rawContent, output, nil
+}
+
+func anthropicFunctionToolSearchName(transformerMetadata map[string]any) string {
+	name, _ := transformerMetadata[llm.TransformerMetadataKeyAnthropicFunctionToolSearchName].(string)
+	return name
 }

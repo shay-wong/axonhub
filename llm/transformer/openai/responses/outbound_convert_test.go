@@ -176,6 +176,43 @@ func TestConvertToolMessage(t *testing.T) {
 			},
 		},
 		{
+			name: "bridged tool search output",
+			msg: llm.Message{
+				Role:       "tool",
+				ToolCallID: lo.ToPtr("call_search"),
+				Content: llm.MessageContent{
+					MultipleContent: []llm.MessageContentPart{
+						{
+							Type: "text",
+							Text: lo.ToPtr(`{"tools":[{"name":"get_weather","description":"Get weather","input_schema":{"type":"object","properties":{"city":{"type":"string"}}}}]}`),
+							TransformerMetadata: map[string]any{
+								llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType:  "tool_search_output",
+								llm.TransformerMetadataKeyOpenAIResponsesToolSearchExecution: "client",
+							},
+						},
+					},
+				},
+			},
+			expected: Item{
+				Type:      "tool_search_output",
+				CallID:    "call_search",
+				Execution: "client",
+				Tools: []Tool{
+					{
+						Type:        "function",
+						Name:        "get_weather",
+						Description: "Get weather",
+						Parameters: map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"city": map[string]any{"type": "string"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "tool message with multiple content but no text parts",
 			msg: llm.Message{
 				Role:       "tool",
@@ -215,10 +252,99 @@ func TestConvertToolMessage(t *testing.T) {
 				itemType = tt.expected.Type
 			}
 
-			result := convertToolMessageWithType(tt.msg, itemType)
+			result, err := convertToolMessageWithTypeWithError(tt.msg, itemType)
+			require.NoError(t, err)
 			require.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestConvertInputFromMessages_BridgedToolSearchContinuation(t *testing.T) {
+	input, err := convertInputFromMessagesWithError([]llm.Message{
+		{
+			Role: "assistant",
+			ToolCalls: []llm.ToolCall{
+				{
+					ID:   "call_search",
+					Type: "function",
+					Function: llm.FunctionCall{
+						Name:      "ToolSearch",
+						Arguments: `{"query":"select:get_weather"}`,
+					},
+					TransformerMetadata: map[string]any{
+						llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType:  "tool_search_output",
+						llm.TransformerMetadataKeyOpenAIResponsesToolSearchExecution: "client",
+					},
+				},
+			},
+		},
+		{
+			Role:       "tool",
+			ToolCallID: lo.ToPtr("call_search"),
+			Content: llm.MessageContent{
+				MultipleContent: []llm.MessageContentPart{
+					{
+						Type: "text",
+						Text: lo.ToPtr(`{"tools":[{"name":"get_weather","description":"Get weather","input_schema":{"type":"object","properties":{}}}]}`),
+						TransformerMetadata: map[string]any{
+							llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType:  "tool_search_output",
+							llm.TransformerMetadataKeyOpenAIResponsesToolSearchExecution: "client",
+						},
+					},
+				},
+			},
+		},
+	}, llm.TransformOptions{})
+	require.NoError(t, err)
+
+	require.Len(t, input.Items, 2)
+	require.Equal(t, "tool_search_call", input.Items[0].Type)
+	require.Equal(t, "call_search", input.Items[0].CallID)
+	require.Equal(t, "client", input.Items[0].Execution)
+	require.JSONEq(t, `{"query":"select:get_weather"}`, input.Items[0].Arguments)
+	require.Equal(t, "tool_search_output", input.Items[1].Type)
+	require.Equal(t, "call_search", input.Items[1].CallID)
+	require.Equal(t, "client", input.Items[1].Execution)
+	require.Len(t, input.Items[1].Tools, 1)
+	require.Equal(t, "get_weather", input.Items[1].Tools[0].Name)
+}
+
+func TestConvertInputFromMessages_BridgedToolSearchContinuationRejectsMalformedResult(t *testing.T) {
+	_, err := convertInputFromMessagesWithError([]llm.Message{
+		{
+			Role: "assistant",
+			ToolCalls: []llm.ToolCall{
+				{
+					ID: "call_search",
+					Function: llm.FunctionCall{
+						Name:      "ToolSearch",
+						Arguments: `{"query":"select:get_weather"}`,
+					},
+					TransformerMetadata: map[string]any{
+						llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType: "tool_search_output",
+					},
+				},
+			},
+		},
+		{
+			Role:       "tool",
+			ToolCallID: lo.ToPtr("call_search"),
+			Content: llm.MessageContent{
+				MultipleContent: []llm.MessageContentPart{
+					{
+						Type: "text",
+						Text: lo.ToPtr("not json"),
+						TransformerMetadata: map[string]any{
+							llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType: "tool_search_output",
+						},
+					},
+				},
+			},
+		},
+	}, llm.TransformOptions{})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tool_search_output requires content")
 }
 
 func TestConvertWebSearchToTool(t *testing.T) {
@@ -414,6 +540,76 @@ func TestConvertOutputToMessage_PreservesToolSearchItems(t *testing.T) {
 	require.Equal(t, "client", outputItem.Execution)
 	require.Len(t, outputItem.Tools, 1)
 	require.Equal(t, "get_shipping_eta", outputItem.Tools[0].Name)
+}
+
+func TestConvertOutputToMessage_BridgesToolSearchCallToFunctionToolCall(t *testing.T) {
+	output := []Item{
+		{
+			Type:      "tool_search_call",
+			CallID:    "call_search",
+			Execution: "client",
+			Status:    lo.ToPtr("completed"),
+			Arguments: `{"query":"select:get_weather"}`,
+		},
+	}
+
+	msg := convertOutputToMessage(output, map[string]any{
+		llm.TransformerMetadataKeyAnthropicFunctionToolSearchName: "ToolSearch",
+	})
+	require.Equal(t, "assistant", msg.Role)
+	require.Empty(t, msg.Content.MultipleContent)
+	require.Len(t, msg.ToolCalls, 1)
+	require.Equal(t, "call_search", msg.ToolCalls[0].ID)
+	require.Equal(t, "ToolSearch", msg.ToolCalls[0].Function.Name)
+	require.JSONEq(t, `{"query":"select:get_weather"}`, msg.ToolCalls[0].Function.Arguments)
+	require.Equal(t, "tool_search_output", msg.ToolCalls[0].TransformerMetadata[llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType])
+	require.Equal(t, "client", msg.ToolCalls[0].TransformerMetadata[llm.TransformerMetadataKeyOpenAIResponsesToolSearchExecution])
+}
+
+func TestConvertOutputToMessage_BridgesToolSearchOutputToInlineToolResult(t *testing.T) {
+	output := []Item{
+		{
+			Type:      "tool_search_output",
+			CallID:    "call_search",
+			Execution: "client",
+			Status:    lo.ToPtr("completed"),
+			Tools: []Tool{
+				{
+					Type:        "function",
+					Name:        "get_weather",
+					Description: "Get weather",
+					Parameters:  map[string]any{"type": "object", "properties": map[string]any{}},
+				},
+			},
+		},
+	}
+
+	msg := convertOutputToMessage(output, map[string]any{
+		llm.TransformerMetadataKeyAnthropicFunctionToolSearchName: "ToolSearch",
+	})
+	require.Equal(t, "assistant", msg.Role)
+	require.Empty(t, msg.Content.MultipleContent)
+	require.Empty(t, msg.ToolCalls)
+	require.Len(t, msg.InlineToolResults, 1)
+	require.Equal(t, "call_search", msg.InlineToolResults[0].ToolCallID)
+	require.Equal(t, "tool_result", msg.InlineToolResults[0].TransformerMetadata[llm.TransformerMetadataKeyAnthropicType])
+	require.JSONEq(t, `"{\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get weather\",\"parameters\":{\"properties\":{},\"type\":\"object\"}}]}"`, string(msg.InlineToolResults[0].TransformerMetadata[llm.TransformerMetadataKeyAnthropicToolResultContent].(json.RawMessage)))
+}
+
+func TestConvertOutputToMessage_BridgedToolSearchOutputRejectsMalformedItem(t *testing.T) {
+	_, err := convertOutputToMessageWithError([]Item{
+		{
+			Type:      "tool_search_output",
+			CallID:    "call_search",
+			Execution: "client",
+			Status:    lo.ToPtr("completed"),
+		},
+	}, map[string]any{
+		llm.TransformerMetadataKeyAnthropicFunctionToolSearchName: "ToolSearch",
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tool_search_output requires tools")
 }
 
 func TestConvertToTextOptions(t *testing.T) {
@@ -757,7 +953,8 @@ func TestConvertInputFromMessages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertInputFromMessages(tt.msgs, tt.transformOptions)
+			result, err := convertInputFromMessagesWithError(tt.msgs, tt.transformOptions)
+			require.NoError(t, err)
 			require.Equal(t, tt.expected, result)
 		})
 	}

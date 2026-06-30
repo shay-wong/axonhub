@@ -427,8 +427,10 @@ type URLCitation struct {
 	Title string `json:"title,omitempty"`
 }
 
-const responsesWebSearchCallsTransformerMetadataKey = "openai_responses_web_search_calls"
-const responsesReasoningItemTransformerMetadataKey = "openai_responses_reasoning_item"
+const (
+	responsesWebSearchCallsTransformerMetadataKey = "openai_responses_web_search_calls"
+	responsesReasoningItemTransformerMetadataKey  = "openai_responses_reasoning_item"
+)
 
 type responsesReasoningItemMetadata struct {
 	ID   string `json:"id,omitempty"`

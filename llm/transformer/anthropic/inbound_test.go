@@ -1458,6 +1458,217 @@ func TestConvertToolChoiceFromAnthropic(t *testing.T) {
 	}
 }
 
+func TestInboundTransformer_BridgesFunctionToolSearchWhenDeferredToolsPresent(t *testing.T) {
+	transformer := NewInboundTransformer()
+
+	req := &httpclient.Request{
+		Headers: http.Header{"Content-Type": []string{"application/json"}},
+		Body: []byte(`{
+			"model": "claude-opus-4-8",
+			"max_tokens": 1024,
+			"messages": [{"role": "user", "content": "load the right tools"}],
+			"tools": [
+				{
+					"name": "ToolSearch",
+					"description": "Find deferred tools",
+					"input_schema": {
+						"type": "object",
+						"properties": {"query": {"type": "string"}}
+					}
+				},
+				{
+					"name": "mcp__plugin_oh_my_codex__session_search",
+					"description": "Search session",
+					"defer_loading": true,
+					"input_schema": {"type": "object", "properties": {}}
+				}
+			],
+			"tool_choice": {"type": "tool", "name": "ToolSearch"}
+		}`),
+	}
+
+	got, err := transformer.TransformRequest(context.Background(), req)
+	require.NoError(t, err)
+	require.Equal(t, "ToolSearch", got.TransformerMetadata[llm.TransformerMetadataKeyAnthropicFunctionToolSearchName])
+	require.Len(t, got.Tools, 2)
+	require.Equal(t, llm.ToolTypeToolSearch, got.Tools[0].Type)
+	require.NotNil(t, got.Tools[0].ToolSearch)
+	require.Equal(t, ToolSearchVariantBM25, got.Tools[0].ToolSearch.Variant)
+	require.Equal(t, "client", got.Tools[0].ToolSearch.Execution)
+	require.Equal(t, "Find deferred tools", got.Tools[0].ToolSearch.Description)
+	require.JSONEq(t, `{"type":"object","properties":{"query":{"type":"string"}}}`, string(got.Tools[0].ToolSearch.Parameters))
+	require.Equal(t, llm.ToolTypeFunction, got.Tools[1].Type)
+	require.Equal(t, "mcp__plugin_oh_my_codex__session_search", got.Tools[1].Function.Name)
+	require.NotNil(t, got.Tools[1].DeferLoading)
+	require.True(t, *got.Tools[1].DeferLoading)
+	require.NotNil(t, got.ToolChoice)
+	require.NotNil(t, got.ToolChoice.NamedToolChoice)
+	require.Equal(t, llm.ToolTypeToolSearch, got.ToolChoice.NamedToolChoice.Type)
+}
+
+func TestInboundTransformer_DoesNotBridgeFunctionToolSearchWithoutDeferredTools(t *testing.T) {
+	transformer := NewInboundTransformer()
+
+	req := &httpclient.Request{
+		Headers: http.Header{"Content-Type": []string{"application/json"}},
+		Body: []byte(`{
+			"model": "claude-opus-4-8",
+			"max_tokens": 1024,
+			"messages": [{"role": "user", "content": "call ToolSearch as a normal tool"}],
+			"tools": [
+				{
+					"name": "ToolSearch",
+					"description": "A regular function",
+					"input_schema": {"type": "object", "properties": {}}
+				}
+			]
+		}`),
+	}
+
+	got, err := transformer.TransformRequest(context.Background(), req)
+	require.NoError(t, err)
+	require.NotContains(t, got.TransformerMetadata, llm.TransformerMetadataKeyAnthropicFunctionToolSearchName)
+	require.Len(t, got.Tools, 1)
+	require.Equal(t, llm.ToolTypeFunction, got.Tools[0].Type)
+	require.Equal(t, "ToolSearch", got.Tools[0].Function.Name)
+}
+
+func TestInboundTransformer_DoesNotBridgeCustomToolSearchWithDeferredTools(t *testing.T) {
+	transformer := NewInboundTransformer()
+
+	req := &httpclient.Request{
+		Headers: http.Header{"Content-Type": []string{"application/json"}},
+		Body: []byte(`{
+			"model": "claude-opus-4-8",
+			"max_tokens": 1024,
+			"messages": [{"role": "user", "content": "call custom ToolSearch as a normal tool"}],
+			"tools": [
+				{
+					"type": "custom",
+					"name": "ToolSearch",
+					"description": "A regular custom tool",
+					"input_schema": {"type": "object", "properties": {}}
+				},
+				{
+					"name": "mcp__plugin_oh_my_codex__session_search",
+					"description": "Search session",
+					"defer_loading": true,
+					"input_schema": {"type": "object", "properties": {}}
+				}
+			]
+		}`),
+	}
+
+	got, err := transformer.TransformRequest(context.Background(), req)
+	require.NoError(t, err)
+	require.NotContains(t, got.TransformerMetadata, llm.TransformerMetadataKeyAnthropicFunctionToolSearchName)
+	require.Len(t, got.Tools, 2)
+	require.Equal(t, llm.ToolTypeFunction, got.Tools[0].Type)
+	require.Equal(t, "ToolSearch", got.Tools[0].Function.Name)
+	require.Equal(t, llm.ToolTypeFunction, got.Tools[1].Type)
+	require.NotNil(t, got.Tools[1].DeferLoading)
+	require.True(t, *got.Tools[1].DeferLoading)
+}
+
+func TestInboundTransformer_BridgedFunctionToolSearchContinuationMarksToolResult(t *testing.T) {
+	transformer := NewInboundTransformer()
+
+	req := &httpclient.Request{
+		Headers: http.Header{"Content-Type": []string{"application/json"}},
+		Body: []byte(`{
+			"model": "claude-opus-4-8",
+			"max_tokens": 1024,
+			"messages": [
+				{
+					"role": "assistant",
+					"content": [
+						{
+							"type": "tool_use",
+							"id": "call_search",
+							"name": "ToolSearch",
+							"input": {"query": "select:get_weather"}
+						}
+					]
+				},
+				{
+					"role": "user",
+					"content": [
+						{
+							"type": "tool_result",
+							"tool_use_id": "call_search",
+							"content": "{\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get weather\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}}]}"
+						}
+					]
+				}
+			],
+			"tools": [
+				{"name": "ToolSearch", "input_schema": {"type": "object", "properties": {}}},
+				{"name": "get_weather", "defer_loading": true, "input_schema": {"type": "object", "properties": {}}}
+			]
+		}`),
+	}
+
+	got, err := transformer.TransformRequest(context.Background(), req)
+	require.NoError(t, err)
+	require.Len(t, got.Messages, 2)
+	require.Len(t, got.Messages[0].ToolCalls, 1)
+	require.Equal(t, "ToolSearch", got.Messages[0].ToolCalls[0].Function.Name)
+	require.Equal(t, "tool_search_output", got.Messages[0].ToolCalls[0].TransformerMetadata[llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType])
+	require.Equal(t, "client", got.Messages[0].ToolCalls[0].TransformerMetadata[llm.TransformerMetadataKeyOpenAIResponsesToolSearchExecution])
+
+	require.Equal(t, "tool", got.Messages[1].Role)
+	require.Equal(t, "call_search", lo.FromPtr(got.Messages[1].ToolCallID))
+	require.Len(t, got.Messages[1].Content.MultipleContent, 1)
+	require.Equal(t, "tool_search_output", got.Messages[1].Content.MultipleContent[0].TransformerMetadata[llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType])
+	require.Equal(t, "client", got.Messages[1].Content.MultipleContent[0].TransformerMetadata[llm.TransformerMetadataKeyOpenAIResponsesToolSearchExecution])
+}
+
+func TestInboundTransformer_TransformResponse_RestoresBridgedFunctionToolSearchCall(t *testing.T) {
+	transformer := NewInboundTransformer()
+
+	resp, err := transformer.TransformResponse(context.Background(), &llm.Response{
+		ID:     "msg_123",
+		Object: "chat.completion",
+		Model:  "mapped-model",
+		Choices: []llm.Choice{
+			{
+				Index: 0,
+				Message: &llm.Message{
+					Role: "assistant",
+					ToolCalls: []llm.ToolCall{
+						{
+							ID:   "call_search",
+							Type: "function",
+							Function: llm.FunctionCall{
+								Name:      "ToolSearch",
+								Arguments: `{"query":"select:get_weather"}`,
+							},
+							TransformerMetadata: map[string]any{
+								llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType:  "tool_search_output",
+								llm.TransformerMetadataKeyOpenAIResponsesToolSearchExecution: "client",
+							},
+						},
+					},
+				},
+				FinishReason: lo.ToPtr("tool_calls"),
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	var got Message
+	err = json.Unmarshal(resp.Body, &got)
+	require.NoError(t, err)
+	require.Len(t, got.Content, 1)
+	require.Equal(t, "tool_use", got.Content[0].Type)
+	require.Equal(t, "call_search", got.Content[0].ID)
+	require.NotNil(t, got.Content[0].Name)
+	require.Equal(t, "ToolSearch", *got.Content[0].Name)
+	require.JSONEq(t, `{"query":"select:get_weather"}`, string(got.Content[0].Input))
+	require.NotNil(t, got.StopReason)
+	require.Equal(t, "tool_use", *got.StopReason)
+}
+
 func TestInboundTransformer_WebSearchTool(t *testing.T) {
 	transformer := NewInboundTransformer()
 

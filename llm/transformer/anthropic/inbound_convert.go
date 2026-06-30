@@ -75,8 +75,14 @@ func convertToLLMRequest(anthropicReq *MessageRequest) (*llm.Request, error) {
 		chatReq.TransformerMetadata[TransformerMetadataKeyCacheControl] = anthropicReq.CacheControl
 	}
 
+	functionToolSearchBridgeName := bridgedFunctionToolSearchName(anthropicReq.Tools)
+	if functionToolSearchBridgeName != "" {
+		chatReq.TransformerMetadata[llm.TransformerMetadataKeyAnthropicFunctionToolSearchName] = functionToolSearchBridgeName
+	}
+
 	// Convert messages
 	messages := make([]llm.Message, 0, len(anthropicReq.Messages))
+	bridgedToolSearchCallIDs := map[string]struct{}{}
 
 	// Add system message if present
 	if anthropicReq.System != nil {
@@ -212,6 +218,7 @@ func convertToLLMRequest(anthropicReq *MessageRequest) (*llm.Request, error) {
 							}
 						}
 
+						markBridgedToolSearchToolResult(&toolMsg, block.ToolUseID, bridgedToolSearchCallIDs)
 						messages = append(messages, toolMsg)
 					}
 				case "tool_use":
@@ -225,6 +232,10 @@ func convertToLLMRequest(anthropicReq *MessageRequest) (*llm.Request, error) {
 						CacheControl: convertToLLMCacheControl(block.CacheControl),
 					}
 					setAnthropicBlockIndex(&tc.TransformerMetadata, blockIdx)
+					if isBridgedFunctionToolSearchName(tc.Function.Name, functionToolSearchBridgeName) {
+						markBridgedToolSearchToolCall(&tc)
+						bridgedToolSearchCallIDs[tc.ID] = struct{}{}
+					}
 					chatMsg.ToolCalls = append(chatMsg.ToolCalls, tc)
 					hasContent = true
 				default:
@@ -314,6 +325,11 @@ func convertToLLMRequest(anthropicReq *MessageRequest) (*llm.Request, error) {
 	if len(anthropicReq.Tools) > 0 {
 		tools := make([]llm.Tool, 0, len(anthropicReq.Tools))
 		for _, tool := range anthropicReq.Tools {
+			if isBridgedFunctionToolSearch(tool, functionToolSearchBridgeName) {
+				tools = append(tools, convertBridgedFunctionToolSearchToLLM(tool))
+				continue
+			}
+
 			llmTool, ok := convertToolToLLM(tool)
 			if ok {
 				tools = append(tools, llmTool)
@@ -338,7 +354,7 @@ func convertToLLMRequest(anthropicReq *MessageRequest) (*llm.Request, error) {
 
 	// Convert tool_choice
 	if anthropicReq.ToolChoice != nil {
-		chatReq.ToolChoice = convertAnthropicToolChoiceToLLM(anthropicReq.ToolChoice)
+		chatReq.ToolChoice = convertAnthropicToolChoiceToLLM(anthropicReq.ToolChoice, functionToolSearchBridgeName)
 	}
 
 	// Convert thinking configuration to reasoning effort and preserve budget
@@ -385,7 +401,7 @@ func convertToLLMRequest(anthropicReq *MessageRequest) (*llm.Request, error) {
 }
 
 // convertAnthropicToolChoiceToLLM converts Anthropic ToolChoice to llm.ToolChoice.
-func convertAnthropicToolChoiceToLLM(src *ToolChoice) *llm.ToolChoice {
+func convertAnthropicToolChoiceToLLM(src *ToolChoice, bridgedToolSearchName ...string) *llm.ToolChoice {
 	if src == nil {
 		return nil
 	}
@@ -402,6 +418,17 @@ func convertAnthropicToolChoiceToLLM(src *ToolChoice) *llm.ToolChoice {
 		}
 	case "tool":
 		if src.Name != nil {
+			if len(bridgedToolSearchName) > 0 && isBridgedFunctionToolSearchName(*src.Name, bridgedToolSearchName[0]) {
+				return &llm.ToolChoice{
+					NamedToolChoice: &llm.NamedToolChoice{
+						Type: llm.ToolTypeToolSearch,
+						Function: llm.ToolFunction{
+							Name: *src.Name,
+						},
+					},
+				}
+			}
+
 			return &llm.ToolChoice{
 				NamedToolChoice: &llm.NamedToolChoice{
 					Type: "function",
@@ -414,6 +441,106 @@ func convertAnthropicToolChoiceToLLM(src *ToolChoice) *llm.ToolChoice {
 	}
 
 	return nil
+}
+
+func bridgedFunctionToolSearchName(tools []Tool) string {
+	var toolSearchName string
+	hasDeferredTool := false
+
+	for _, tool := range tools {
+		if isFunctionToolSearchCandidate(tool) {
+			toolSearchName = tool.Name
+			continue
+		}
+
+		if tool.DeferLoading != nil && *tool.DeferLoading {
+			hasDeferredTool = true
+		}
+	}
+
+	if toolSearchName == "" || !hasDeferredTool {
+		return ""
+	}
+
+	return toolSearchName
+}
+
+func isFunctionToolSearchCandidate(tool Tool) bool {
+	return tool.Type == "" && tool.Name == "ToolSearch"
+}
+
+func isBridgedFunctionToolSearch(tool Tool, bridgeName string) bool {
+	return bridgeName != "" && isFunctionToolSearchCandidate(tool) && tool.Name == bridgeName
+}
+
+func isBridgedFunctionToolSearchName(name, bridgeName string) bool {
+	return bridgeName != "" && name == bridgeName
+}
+
+func convertBridgedFunctionToolSearchToLLM(tool Tool) llm.Tool {
+	return llm.Tool{
+		Type:         llm.ToolTypeToolSearch,
+		CacheControl: convertToLLMCacheControl(tool.CacheControl),
+		ToolSearch: &llm.ToolSearchTool{
+			Variant:     ToolSearchVariantBM25,
+			Execution:   "client",
+			Description: tool.Description,
+			Parameters:  tool.InputSchema,
+		},
+	}
+}
+
+func markBridgedToolSearchToolCall(tc *llm.ToolCall) {
+	if tc == nil {
+		return
+	}
+
+	ensureMetaMap(&tc.TransformerMetadata)
+	tc.TransformerMetadata[llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType] = "tool_search_output"
+	tc.TransformerMetadata[llm.TransformerMetadataKeyOpenAIResponsesToolSearchExecution] = "client"
+}
+
+func markBridgedToolSearchToolResult(msg *llm.Message, toolUseID *string, bridgedCallIDs map[string]struct{}) {
+	if msg == nil || toolUseID == nil || *toolUseID == "" {
+		return
+	}
+
+	if _, ok := bridgedCallIDs[*toolUseID]; !ok {
+		return
+	}
+
+	meta := map[string]any{
+		llm.TransformerMetadataKeyOpenAIResponsesToolResultItemType:  "tool_search_output",
+		llm.TransformerMetadataKeyOpenAIResponsesToolSearchExecution: "client",
+	}
+
+	if msg.Content.Content != nil {
+		msg.Content.MultipleContent = []llm.MessageContentPart{{
+			Type:                "text",
+			Text:                msg.Content.Content,
+			TransformerMetadata: meta,
+		}}
+		msg.Content.Content = nil
+		return
+	}
+
+	if len(msg.Content.MultipleContent) == 0 {
+		msg.Content.MultipleContent = []llm.MessageContentPart{{
+			Type:                "text",
+			Text:                lo.ToPtr(""),
+			TransformerMetadata: meta,
+		}}
+		return
+	}
+
+	for i := range msg.Content.MultipleContent {
+		if msg.Content.MultipleContent[i].TransformerMetadata == nil {
+			msg.Content.MultipleContent[i].TransformerMetadata = map[string]any{}
+		}
+		for key, value := range meta {
+			msg.Content.MultipleContent[i].TransformerMetadata[key] = value
+		}
+	}
 }
 
 func citationFromLLMAnnotation(annotation llm.Annotation, metadata map[string]any) (TextCitation, bool) {
