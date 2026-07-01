@@ -458,6 +458,8 @@ const clearChannelTemporaryDisableSchema = z.object({
   temporaryDisabledReason: z.string().optional().nullable(),
 });
 
+export const CLEAR_CHANNEL_TEMPORARY_DISABLE_MUTATION_KEY = ['clearChannelTemporaryDisable'] as const;
+
 const BULK_ARCHIVE_CHANNELS_MUTATION = `
   mutation BulkArchiveChannels($ids: [ID!]!) {
     bulkArchiveChannels(ids: $ids)
@@ -1368,6 +1370,7 @@ export function useClearChannelTemporaryDisable() {
   const { handleError } = useErrorHandler();
 
   return useMutation({
+    mutationKey: CLEAR_CHANNEL_TEMPORARY_DISABLE_MUTATION_KEY,
     mutationFn: async ({ channelID }: { channelID: string }) => {
       try {
         const data = await graphqlRequest<{ clearChannelTemporaryDisable: z.infer<typeof clearChannelTemporaryDisableSchema> }>(

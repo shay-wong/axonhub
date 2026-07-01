@@ -1,6 +1,7 @@
 import { useCallback, useState, memo, useRef, useEffect } from 'react';
 import { format } from 'date-fns';
 import { DotsHorizontalIcon } from '@radix-ui/react-icons';
+import { useIsMutating } from '@tanstack/react-query';
 import { ColumnDef, Row, Table } from '@tanstack/react-table';
 import {
   IconPlayerPlay,
@@ -11,7 +12,6 @@ import {
   IconArchive,
   IconTrash,
   IconCheck,
-  IconWeight,
   IconTransform,
   IconNetwork,
   IconAdjustments,
@@ -26,11 +26,9 @@ import {
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { usePermissions } from '@/hooks/usePermissions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,11 +36,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { useChannels } from '../context/channels-context';
-import { useClearChannelTemporaryDisable, useTestChannel, useUpdateChannel } from '../data/channels';
+import {
+  ChannelStatusActionID,
+  ChannelStatusTone,
+  ChannelStatusViewItem,
+  ChannelStatusViewMenuItem,
+  getChannelStatusPolicy,
+  getChannelStatusViewModel,
+} from '../data/channel-status-policy';
+import {
+  CLEAR_CHANNEL_TEMPORARY_DISABLE_MUTATION_KEY,
+  useClearChannelTemporaryDisable,
+  useTestChannel,
+  useUpdateChannel,
+} from '../data/channels';
 import { CHANNEL_CONFIGS, getProvider } from '../data/config_channels';
 import { Channel } from '../data/schema';
 import { ChannelHealthCell } from './channel-health-cell';
@@ -53,13 +65,30 @@ const WEIGHT_PRECISION = 4;
 const MIN_WEIGHT = 0;
 const MAX_WEIGHT = 100;
 
+type StatusIconAction = {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  pending?: boolean;
+};
+type StatusIconComponent = typeof IconAlertTriangle;
+type ChannelStatusIcon = {
+  kind: ChannelStatusViewItem['kind'];
+  tooltipKind: ChannelStatusViewItem['tooltipKind'];
+  icon: StatusIconComponent;
+  className: string;
+  action?: StatusIconAction;
+};
+type ChannelCellProps = {
+  row: Row<Channel>;
+  canWrite: boolean;
+};
+
 const formatWeight = (value: number) => Number(value.toFixed(WEIGHT_PRECISION));
 const clampWeight = (value: number) => formatWeight(Math.min(MAX_WEIGHT, Math.max(MIN_WEIGHT, value)));
 
-function isChannelTemporarilyDisabled(channel: Channel): boolean {
-  if (!channel.temporaryDisabledUntil) return false;
-  const until = new Date(channel.temporaryDisabledUntil).getTime();
-  return Number.isFinite(until) && until > Date.now();
+function assertNever(value: never): never {
+  throw new Error(`Unhandled channel status action: ${value}`);
 }
 
 function getConfiguredAPIKeys(channel: Channel): string[] {
@@ -69,7 +98,7 @@ function getConfiguredAPIKeys(channel: Channel): string[] {
 }
 
 // Status Switch Cell Component to handle status toggle with confirmation dialog
-const StatusSwitchCell = memo(({ row }: { row: Row<Channel> }) => {
+const StatusSwitchCell = memo(({ row, canWrite }: ChannelCellProps) => {
   const channel = row.original;
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -77,14 +106,19 @@ const StatusSwitchCell = memo(({ row }: { row: Row<Channel> }) => {
   const isArchived = channel.status === 'archived';
 
   const handleSwitchClick = useCallback(() => {
-    if (!isArchived) {
+    if (canWrite && !isArchived) {
       setDialogOpen(true);
     }
-  }, [isArchived]);
+  }, [canWrite, isArchived]);
 
   return (
     <div className='flex justify-center'>
-      <Switch checked={isEnabled} onCheckedChange={handleSwitchClick} disabled={isArchived} data-testid='channel-status-switch' />
+      <Switch
+        checked={isEnabled}
+        onCheckedChange={handleSwitchClick}
+        disabled={!canWrite || isArchived}
+        data-testid='channel-status-switch'
+      />
       {dialogOpen && <ChannelsStatusDialog open={dialogOpen} onOpenChange={setDialogOpen} currentRow={channel} />}
     </div>
   );
@@ -92,20 +126,119 @@ const StatusSwitchCell = memo(({ row }: { row: Row<Channel> }) => {
 
 StatusSwitchCell.displayName = 'StatusSwitchCell';
 
+const ChannelStatusIconButton = ({
+  icon: IconComponent,
+  className,
+  action,
+}: {
+  icon: StatusIconComponent;
+  className: string;
+  action?: StatusIconAction;
+}) => {
+  if (!action) {
+    return <IconComponent className={cn('h-4 w-4 shrink-0', className)} />;
+  }
+
+  return (
+    <button
+      type='button'
+      className={cn(
+        'hover:bg-muted focus-visible:ring-ring shrink-0 rounded-sm p-0.5 transition-colors focus-visible:ring-2 focus-visible:outline-hidden',
+        className
+      )}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        action.onClick();
+      }}
+      disabled={action.disabled}
+      aria-label={action.label}
+      title={action.label}
+    >
+      {action.pending ? <IconLoader2 className='h-4 w-4 animate-spin' /> : <IconComponent className='h-4 w-4' />}
+    </button>
+  );
+};
+
+const CHANNEL_STATUS_ICON_BY_TONE: Record<ChannelStatusTone, { icon: StatusIconComponent; className: string }> = {
+  destructive: { icon: IconAlertTriangle, className: 'text-destructive' },
+  temporaryDisable: { icon: IconHistory, className: 'text-orange-500' },
+  disabledKeys: { icon: IconKeyOff, className: 'text-amber-500' },
+};
+
+function useChannelStatusActions(channel: Channel, t: ReturnType<typeof useTranslation>['t'], canWrite: boolean) {
+  const { setOpen, setCurrentRow } = useChannels();
+  const clearTemporaryDisable = useClearChannelTemporaryDisable();
+  const policy = getChannelStatusPolicy(channel, { canWrite });
+  const isClearingTemporaryDisable =
+    useIsMutating({
+      mutationKey: CLEAR_CHANNEL_TEMPORARY_DISABLE_MUTATION_KEY,
+      predicate: (mutation) => (mutation.state.variables as { channelID?: string } | undefined)?.channelID === channel.id,
+    }) > 0;
+  const viewModel = getChannelStatusViewModel(policy, { clearTemporaryDisablePending: isClearingTemporaryDisable });
+
+  const handleRecover = useCallback(() => {
+    setCurrentRow(channel);
+    setOpen('errorResolved');
+  }, [channel, setCurrentRow, setOpen]);
+
+  const handleClearTemporaryDisable = useCallback(() => {
+    clearTemporaryDisable.mutate({ channelID: channel.id });
+  }, [channel.id, clearTemporaryDisable]);
+
+  const handleDisabledKeys = useCallback(() => {
+    setCurrentRow(channel);
+    setOpen('disabledAPIKeys');
+  }, [channel, setCurrentRow, setOpen]);
+
+  const onClickByActionID: Record<ChannelStatusActionID, () => void> = {
+    resolveError: handleRecover,
+    clearTemporaryDisable: handleClearTemporaryDisable,
+    manageDisabledKeys: handleDisabledKeys,
+  };
+
+  const toAction = (item: ChannelStatusViewMenuItem): StatusIconAction => ({
+    label: t(item.action.quickLabelKey),
+    onClick: onClickByActionID[item.action.id],
+    disabled: item.action.disabled,
+    pending: item.action.pending,
+  });
+
+  const getIconAction = (item: ChannelStatusViewItem): StatusIconAction | undefined => {
+    if (!item.action) return undefined;
+    return toAction({ ...item, action: item.action });
+  };
+
+  const getIcon = (item: ChannelStatusViewItem): ChannelStatusIcon => ({
+    kind: item.kind,
+    tooltipKind: item.tooltipKind,
+    ...CHANNEL_STATUS_ICON_BY_TONE[item.tone],
+    action: getIconAction(item),
+  });
+
+  return {
+    policy,
+    viewModel,
+    toAction,
+    statusIcons: viewModel.statusItems.map(getIcon),
+  };
+}
+
 // Action Cell Component to handle hooks properly
-const ActionCell = memo(({ row }: { row: Row<Channel> }) => {
+const ActionCell = memo(({ row, canWrite }: ChannelCellProps) => {
   const { t } = useTranslation();
   const channel = row.original;
   const { setOpen, setCurrentRow } = useChannels();
-  const { channelPermissions } = usePermissions();
   const testChannel = useTestChannel();
-  const clearTemporaryDisable = useClearChannelTemporaryDisable();
+  const channelStatusActions = useChannelStatusActions(channel, t, canWrite);
   const isArchived = channel.status === 'archived';
-  const hasError = !!channel.errorMessage;
-  const hasDisabledAPIKeys = channelPermissions.canWrite && (channel.disabledAPIKeys?.length ?? 0) > 0;
-  const isTemporarilyDisabled = channelPermissions.canWrite && isChannelTemporarilyDisabled(channel);
+  const {
+    policy: { disabledKeysCount },
+    viewModel,
+    toAction,
+  } = channelStatusActions;
   const apiKeysCount = getConfiguredAPIKeys(channel).length;
-  const hasMultipleAPIKeys = channelPermissions.canWrite && apiKeysCount > 1;
+  const hasMultipleAPIKeys = canWrite && apiKeysCount > 1;
 
   const handleDefaultTest = async () => {
     try {
@@ -240,46 +373,35 @@ const ActionCell = memo(({ row }: { row: Row<Channel> }) => {
               {t('channels.actions.testAPIKeys', { count: apiKeysCount })}
             </DropdownMenuItem>
           )}
-          {hasDisabledAPIKeys && (
-            <DropdownMenuItem
-              onClick={() => {
-                setCurrentRow(channel);
-                setOpen('disabledAPIKeys');
-              }}
-              className='text-orange-500!'
-            >
-              <IconKeyOff size={16} className='mr-2' />
-              {t('channels.actions.disabledAPIKeys', { count: channel.disabledAPIKeys?.length ?? 0 })}
-            </DropdownMenuItem>
-          )}
-          {isTemporarilyDisabled && (
-            <DropdownMenuItem
-              onClick={() => {
-                clearTemporaryDisable.mutate({ channelID: channel.id });
-              }}
-              className='text-orange-500!'
-              disabled={clearTemporaryDisable.isPending}
-            >
-              {clearTemporaryDisable.isPending ? (
-                <IconLoader2 size={16} className='mr-2 animate-spin' />
-              ) : (
-                <IconHistory size={16} className='mr-2' />
-              )}
-              {t('channels.actions.clearTemporaryDisable')}
-            </DropdownMenuItem>
-          )}
-          {hasError && (
-            <DropdownMenuItem
-              onClick={() => {
-                setCurrentRow(channel);
-                setOpen('errorResolved');
-              }}
-              className='text-green-600!'
-            >
-              <IconCheck size={16} className='mr-2' />
-              {t('channels.actions.markErrorResolved')}
-            </DropdownMenuItem>
-          )}
+          {viewModel.menuItems.map((item) => {
+            const action = toAction(item);
+
+            switch (item.action.id) {
+              case 'manageDisabledKeys':
+                return (
+                  <DropdownMenuItem key={item.action.id} onClick={action.onClick} className='text-orange-500!'>
+                    <IconKeyOff size={16} className='mr-2' />
+                    {t('channels.actions.disabledAPIKeys', { count: disabledKeysCount })}
+                  </DropdownMenuItem>
+                );
+              case 'clearTemporaryDisable':
+                return (
+                  <DropdownMenuItem key={item.action.id} onClick={action.onClick} className='text-orange-500!' disabled={action.disabled}>
+                    {action.pending ? <IconLoader2 size={16} className='mr-2 animate-spin' /> : <IconHistory size={16} className='mr-2' />}
+                    {t('channels.actions.clearTemporaryDisable')}
+                  </DropdownMenuItem>
+                );
+              case 'resolveError':
+                return (
+                  <DropdownMenuItem key={item.action.id} onClick={action.onClick} className='text-green-600!'>
+                    <IconCheck size={16} className='mr-2' />
+                    {t('channels.actions.markErrorResolved')}
+                  </DropdownMenuItem>
+                );
+              default:
+                return assertNever(item.action.id);
+            }
+          })}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {
@@ -349,14 +471,82 @@ function getProxyURLSummary(proxyURL: string): { label: string; detail?: string 
   }
 }
 
+function renderChannelStatusTooltipContent(
+  icon: ChannelStatusIcon,
+  channel: Channel,
+  disabledKeysCount: number,
+  t: ReturnType<typeof useTranslation>['t']
+) {
+  switch (icon.tooltipKind) {
+    case 'error':
+      return (
+        <div className='space-y-1'>
+          <p className='text-destructive text-sm'>
+            {t(`channels.messages.${channel.errorMessage}`, {
+              defaultValue: channel.errorMessage,
+            })}
+          </p>
+        </div>
+      );
+    case 'temporaryDisable':
+      return (
+        <div className='space-y-1 text-sm text-orange-500'>
+          <p>{t('channels.temporaryDisable.tooltip')}</p>
+          {channel.temporaryDisabledUntil && (
+            <p className='text-muted-foreground'>
+              {t('channels.temporaryDisable.until', {
+                time: format(new Date(channel.temporaryDisabledUntil), 'yyyy-MM-dd HH:mm:ss'),
+              })}
+            </p>
+          )}
+          {channel.temporaryDisabledErrorCode && (
+            <p className='text-muted-foreground'>
+              {t('channels.temporaryDisable.errorCode', { code: channel.temporaryDisabledErrorCode })}
+            </p>
+          )}
+        </div>
+      );
+    case 'disabledKeys':
+      return <p className='text-sm text-amber-500'>{t('channels.actions.disabledAPIKeys', { count: disabledKeysCount })}</p>;
+    case 'disabledKeysReadOnly':
+      return <p className='text-sm text-amber-500'>{t('channels.actions.disabledAPIKeysReadOnly', { count: disabledKeysCount })}</p>;
+    default:
+      return assertNever(icon.tooltipKind);
+  }
+}
+
+function ChannelStatusIconWithTooltip({
+  icon,
+  channel,
+  disabledKeysCount,
+  t,
+}: {
+  icon: ChannelStatusIcon;
+  channel: Channel;
+  disabledKeysCount: number;
+  t: ReturnType<typeof useTranslation>['t'];
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className='inline-flex shrink-0'>
+          <ChannelStatusIconButton icon={icon.icon} className={icon.className} action={icon.action} />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{renderChannelStatusTooltipContent(icon, channel, disabledKeysCount, t)}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 // Memoized cell components to avoid recreating on every render
-const NameCell = memo(({ row }: { row: Row<Channel> }) => {
+const NameCell = memo(({ row, canWrite }: ChannelCellProps) => {
   const { t } = useTranslation();
   const channel = row.original;
-  const hasError = !!channel.errorMessage;
-  const disabledKeysCount = channel.disabledAPIKeys?.length ?? 0;
-  const hasDisabledKeys = disabledKeysCount > 0;
-  const isTemporarilyDisabled = isChannelTemporarilyDisabled(channel);
+  const channelStatusActions = useChannelStatusActions(channel, t, canWrite);
+  const {
+    policy: { hasError, disabledKeysCount },
+  } = channelStatusActions;
+  const statusIcons = channelStatusActions.statusIcons;
   const websiteURL = getChannelWebsiteURL(channel.baseURL);
 
   const nameElement = websiteURL ? (
@@ -376,68 +566,17 @@ const NameCell = memo(({ row }: { row: Row<Channel> }) => {
   const content = (
     <div className='flex justify-center'>
       <div className='flex max-w-56 items-center gap-2'>
-        {hasError && <IconAlertTriangle className='text-destructive h-4 w-4 shrink-0' />}
-        {!hasError && isTemporarilyDisabled && <IconHistory className='h-4 w-4 shrink-0 text-orange-500' />}
-        {!hasError && !isTemporarilyDisabled && hasDisabledKeys && <IconKeyOff className='h-4 w-4 shrink-0 text-amber-500' />}
+        {statusIcons.length > 0 && (
+          <span className='flex shrink-0 items-center gap-1'>
+            {statusIcons.map((icon) => (
+              <ChannelStatusIconWithTooltip key={icon.kind} icon={icon} channel={channel} disabledKeysCount={disabledKeysCount} t={t} />
+            ))}
+          </span>
+        )}
         {nameElement}
       </div>
     </div>
   );
-
-  if (hasError) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{content}</TooltipTrigger>
-        <TooltipContent>
-          <div className='space-y-1'>
-            <p className='text-destructive text-sm'>
-              {t(`channels.messages.${channel.errorMessage}`, {
-                defaultValue: channel.errorMessage,
-              })}
-            </p>
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  if (isTemporarilyDisabled) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{content}</TooltipTrigger>
-        <TooltipContent>
-          <div className='space-y-1 text-sm text-orange-500'>
-            <p>{t('channels.temporaryDisable.tooltip')}</p>
-            {channel.temporaryDisabledUntil && (
-              <p className='text-muted-foreground'>
-                {t('channels.temporaryDisable.until', {
-                  time: format(new Date(channel.temporaryDisabledUntil), 'yyyy-MM-dd HH:mm:ss'),
-                })}
-              </p>
-            )}
-            {channel.temporaryDisabledErrorCode && (
-              <p className='text-muted-foreground'>
-                {t('channels.temporaryDisable.errorCode', { code: channel.temporaryDisabledErrorCode })}
-              </p>
-            )}
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  if (hasDisabledKeys) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{content}</TooltipTrigger>
-        <TooltipContent>
-          <p className='text-sm text-amber-500'>
-            {t('channels.actions.disabledAPIKeys', { count: disabledKeysCount })}
-          </p>
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
 
   return content;
 });
@@ -577,7 +716,7 @@ const SupportedModelsCell = memo(({ row }: { row: Row<Channel> }) => {
 
 SupportedModelsCell.displayName = 'SupportedModelsCell';
 
-const OrderingWeightCell = memo(({ row }: { row: Row<Channel> }) => {
+const OrderingWeightCell = memo(({ row, canWrite }: ChannelCellProps) => {
   const channel = row.original;
   const initialWeight = row.getValue('orderingWeight') as number | null;
   const [isEditing, setIsEditing] = useState(false);
@@ -593,9 +732,10 @@ const OrderingWeightCell = memo(({ row }: { row: Row<Channel> }) => {
   }, [isEditing]);
 
   const handleDoubleClick = useCallback(() => {
+    if (!canWrite) return;
     setIsEditing(true);
     setWeight(initialWeight?.toString() || '1');
-  }, [initialWeight]);
+  }, [canWrite, initialWeight]);
 
   const handleSave = useCallback(async () => {
     const weightValue = clampWeight(Number(weight));
@@ -627,7 +767,7 @@ const OrderingWeightCell = memo(({ row }: { row: Row<Channel> }) => {
     [handleSave, initialWeight]
   );
 
-  if (isEditing) {
+  if (isEditing && canWrite) {
     return (
       <div className='flex justify-center px-2'>
         <Input
@@ -649,11 +789,9 @@ const OrderingWeightCell = memo(({ row }: { row: Row<Channel> }) => {
   }
 
   return (
-    <div className='flex items-center justify-center gap-2 group cursor-pointer' onDoubleClick={handleDoubleClick}>
-      <span className={cn('font-mono text-sm', initialWeight == null && 'text-muted-foreground')}>
-        {initialWeight ?? '-'}
-      </span>
-      {updateChannel.isPending && <IconLoader2 className='h-3 w-3 animate-spin text-muted-foreground' />}
+    <div className={cn('group flex items-center justify-center gap-2', canWrite && 'cursor-pointer')} onDoubleClick={handleDoubleClick}>
+      <span className={cn('font-mono text-sm', initialWeight == null && 'text-muted-foreground')}>{initialWeight ?? '-'}</span>
+      {updateChannel.isPending && <IconLoader2 className='text-muted-foreground h-3 w-3 animate-spin' />}
     </div>
   );
 });
@@ -686,7 +824,7 @@ const CreatedAtCell = memo(({ row }: { row: Row<Channel> }) => {
 
 CreatedAtCell.displayName = 'CreatedAtCell';
 
-export const createColumns = (t: ReturnType<typeof useTranslation>['t'], canWrite: boolean = true): ColumnDef<Channel>[] => {
+export const createColumns = (t: ReturnType<typeof useTranslation>['t'], canWrite: boolean): ColumnDef<Channel>[] => {
   return [
     {
       id: 'expand',
@@ -733,7 +871,7 @@ export const createColumns = (t: ReturnType<typeof useTranslation>['t'], canWrit
     {
       accessorKey: 'name',
       header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.columns.name')} className='justify-center' />,
-      cell: NameCell,
+      cell: ({ row }) => <NameCell row={row} canWrite={canWrite} />,
       meta: {
         className: 'md:table-cell min-w-48 text-center',
       },
@@ -757,7 +895,7 @@ export const createColumns = (t: ReturnType<typeof useTranslation>['t'], canWrit
     {
       accessorKey: 'status',
       header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.columns.status')} className='justify-center' />,
-      cell: StatusSwitchCell,
+      cell: ({ row }) => <StatusSwitchCell row={row} canWrite={canWrite} />,
       meta: {
         className: 'text-center',
       },
@@ -838,7 +976,7 @@ export const createColumns = (t: ReturnType<typeof useTranslation>['t'], canWrit
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title={t('channels.columns.orderingWeight')} className='justify-center' />
       ),
-      cell: OrderingWeightCell,
+      cell: ({ row }) => <OrderingWeightCell row={row} canWrite={canWrite} />,
       meta: {
         className: 'w-20 min-w-20 text-center',
       },
@@ -863,7 +1001,7 @@ export const createColumns = (t: ReturnType<typeof useTranslation>['t'], canWrit
             header: ({ column }: { column: any }) => (
               <DataTableColumnHeader column={column} title={t('common.columns.actions')} className='justify-center' />
             ),
-            cell: ActionCell,
+            cell: ({ row }: { row: Row<Channel> }) => <ActionCell row={row} canWrite={canWrite} />,
             meta: {
               className: 'text-center',
             },
