@@ -25,11 +25,13 @@ const transformOptionsFormSchema = z.object({
   forceArrayInstructions: z.boolean().optional(),
   forceArrayInputs: z.boolean().optional(),
   replaceDeveloperRoleWithSystem: z.boolean().optional(),
+  codexStyleResponses: z.boolean().optional(),
 });
 
 export function ChannelsTransformOptionsDialog({ open, onOpenChange, currentRow }: Props) {
   const { t } = useTranslation();
   const updateChannel = useUpdateChannel();
+  const isCodexChannel = currentRow.type === 'codex';
 
   const form = useForm<TransformOptions>({
     resolver: zodResolver(transformOptionsFormSchema),
@@ -37,6 +39,7 @@ export function ChannelsTransformOptionsDialog({ open, onOpenChange, currentRow 
       forceArrayInstructions: currentRow.settings?.transformOptions?.forceArrayInstructions || false,
       forceArrayInputs: currentRow.settings?.transformOptions?.forceArrayInputs || false,
       replaceDeveloperRoleWithSystem: currentRow.settings?.transformOptions?.replaceDeveloperRoleWithSystem || false,
+      codexStyleResponses: currentRow.settings?.transformOptions?.codexStyleResponses || false,
     },
   });
 
@@ -46,6 +49,7 @@ export function ChannelsTransformOptionsDialog({ open, onOpenChange, currentRow 
         forceArrayInstructions: currentRow.settings?.transformOptions?.forceArrayInstructions || false,
         forceArrayInputs: currentRow.settings?.transformOptions?.forceArrayInputs || false,
         replaceDeveloperRoleWithSystem: currentRow.settings?.transformOptions?.replaceDeveloperRoleWithSystem || false,
+        codexStyleResponses: currentRow.settings?.transformOptions?.codexStyleResponses || false,
       });
     }
   }, [open, currentRow, form]);
@@ -156,6 +160,29 @@ export function ChannelsTransformOptionsDialog({ open, onOpenChange, currentRow 
                       </FormItem>
                     )}
                   />
+
+                  {isCodexChannel && (
+                    <FormField
+                      control={form.control}
+                      name='codexStyleResponses'
+                      render={({ field }) => (
+                        <FormItem className='flex items-center gap-2'>
+                          <FormControl>
+                            <Checkbox checked={field.value || false} onCheckedChange={field.onChange} />
+                          </FormControl>
+                          <div className='space-y-0.5'>
+                            <FormLabel className='cursor-pointer text-sm font-normal'>
+                              {t('channels.dialogs.fields.transformOptions.codexStyleResponses.label')}
+                            </FormLabel>
+                            <p className='text-muted-foreground text-xs'>
+                              {t('channels.dialogs.fields.transformOptions.codexStyleResponses.description')}
+                            </p>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                 </form>
               </Form>
             </CardContent>

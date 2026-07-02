@@ -20,7 +20,8 @@ func applyTransformOptions(req *llm.Request, channelSettings *objects.ChannelSet
 
 	if !transformOptions.ForceArrayInstructions &&
 		!transformOptions.ForceArrayInputs &&
-		!transformOptions.ReplaceDeveloperRoleWithSystem {
+		!transformOptions.ReplaceDeveloperRoleWithSystem &&
+		!transformOptions.CodexStyleResponses {
 		return req
 	}
 
@@ -32,6 +33,10 @@ func applyTransformOptions(req *llm.Request, channelSettings *objects.ChannelSet
 
 	if transformOptions.ForceArrayInputs {
 		newReq.TransformOptions.ArrayInputs = lo.ToPtr(true)
+	}
+
+	if transformOptions.CodexStyleResponses {
+		newReq.TransformOptions.CodexStyleResponses = lo.ToPtr(true)
 	}
 
 	if transformOptions.ReplaceDeveloperRoleWithSystem {

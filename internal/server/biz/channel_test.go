@@ -237,6 +237,51 @@ func TestChannelService_CreateChannel_PersistsAutoSyncModelPatternAndManualModel
 	require.Equal(t, true, got.AutoSyncSupportedModels)
 }
 
+func TestChannelService_CreateChannelNormalizesCodexStyleResponsesByType(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	openaiCh, err := svc.CreateChannel(ctx, ent.CreateChannelInput{
+		Type:                    channel.TypeOpenai,
+		BaseURL:                 lo.ToPtr("https://api.openai.com/v1"),
+		Name:                    "OpenAI Codex Style Ignored",
+		Credentials:             objects.ChannelCredentials{APIKey: "key"},
+		SupportedModels:         []string{"gpt-4"},
+		DefaultTestModel:        "gpt-4",
+		AutoSyncSupportedModels: lo.ToPtr(false),
+		Settings: &objects.ChannelSettings{
+			TransformOptions: objects.TransformOptions{
+				CodexStyleResponses: true,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, openaiCh.Settings)
+	require.False(t, openaiCh.Settings.TransformOptions.CodexStyleResponses)
+
+	codexCh, err := svc.CreateChannel(ctx, ent.CreateChannelInput{
+		Type:                    channel.TypeCodex,
+		BaseURL:                 lo.ToPtr("https://chatgpt.com/backend-api/codex#"),
+		Name:                    "Codex Style Kept",
+		Credentials:             objects.ChannelCredentials{},
+		SupportedModels:         []string{"gpt-5-codex"},
+		DefaultTestModel:        "gpt-5-codex",
+		AutoSyncSupportedModels: lo.ToPtr(false),
+		Settings: &objects.ChannelSettings{
+			TransformOptions: objects.TransformOptions{
+				CodexStyleResponses: true,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, codexCh.Settings)
+	require.True(t, codexCh.Settings.TransformOptions.CodexStyleResponses)
+}
+
 func setupTestChannelService(t *testing.T) (*ChannelService, *ent.Client) {
 	t.Helper()
 
@@ -338,6 +383,70 @@ func TestChannelService_CreateChannel(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestChannelService_UpdateChannelNormalizesCodexStyleResponsesByType(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	openaiCh, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("OpenAI Update").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "key"}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		Save(ctx)
+	require.NoError(t, err)
+
+	updatedOpenAI, err := svc.UpdateChannel(ctx, openaiCh.ID, &ent.UpdateChannelInput{
+		Settings: &objects.ChannelSettings{
+			TransformOptions: objects.TransformOptions{
+				CodexStyleResponses: true,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updatedOpenAI.Settings)
+	require.False(t, updatedOpenAI.Settings.TransformOptions.CodexStyleResponses)
+
+	codexCh, err := client.Channel.Create().
+		SetType(channel.TypeCodex).
+		SetName("Codex Update").
+		SetBaseURL("https://chatgpt.com/backend-api/codex#").
+		SetCredentials(objects.ChannelCredentials{}).
+		SetSupportedModels([]string{"gpt-5-codex"}).
+		SetDefaultTestModel("gpt-5-codex").
+		SetSettings(&objects.ChannelSettings{
+			TransformOptions: objects.TransformOptions{
+				CodexStyleResponses: true,
+			},
+		}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	updatedCodex, err := svc.UpdateChannel(ctx, codexCh.ID, &ent.UpdateChannelInput{
+		Settings: &objects.ChannelSettings{
+			TransformOptions: objects.TransformOptions{
+				CodexStyleResponses: true,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updatedCodex.Settings)
+	require.True(t, updatedCodex.Settings.TransformOptions.CodexStyleResponses)
+
+	targetType := channel.TypeOpenai
+	switched, err := svc.UpdateChannel(ctx, codexCh.ID, &ent.UpdateChannelInput{
+		Type: &targetType,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, switched.Settings)
+	require.False(t, switched.Settings.TransformOptions.CodexStyleResponses)
 }
 
 func TestChannelService_UpdateChannel(t *testing.T) {

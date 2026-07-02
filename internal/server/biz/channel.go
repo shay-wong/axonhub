@@ -572,6 +572,7 @@ func (svc *ChannelService) ListModels(ctx context.Context, input ListModelsInput
 // This is useful for batch operations where reload should happen once at the end.
 func (svc *ChannelService) createChannel(ctx context.Context, input ent.CreateChannelInput) (*ent.Channel, error) {
 	if input.Settings != nil {
+		normalizeChannelSettingsForType(input.Type, input.Settings)
 		normalizeOpenCodeGoQuotaAuthCookieCommand(input.Settings)
 
 		if input.Settings.BodyOverrideOperations != nil {
@@ -800,6 +801,14 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 		}
 	}
 
+	if input.Settings != nil {
+		channelType, err := svc.channelTypeForSettingsUpdate(ctx, id, input.Type)
+		if err != nil {
+			return nil, err
+		}
+		normalizeChannelSettingsForType(channelType, input.Settings)
+	}
+
 	mut := svc.entFromContext(ctx).Channel.UpdateOneID(id).
 		SetNillableType(input.Type).
 		SetNillableBaseURL(input.BaseURL).
@@ -853,6 +862,18 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 		mut.SetSettings(input.Settings)
 	}
 
+	if input.Type != nil && input.Settings == nil {
+		existing, err := svc.entFromContext(ctx).Channel.Get(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get existing channel settings: %w", err)
+		}
+		if existing.Type != *input.Type && existing.Settings != nil && existing.Settings.TransformOptions.CodexStyleResponses {
+			settings := *existing.Settings
+			settings.TransformOptions.CodexStyleResponses = false
+			mut.SetSettings(&settings)
+		}
+	}
+
 	if input.Policies != nil {
 		mut.SetPolicies(*input.Policies)
 	}
@@ -900,6 +921,32 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 	svc.asyncReloadChannels()
 
 	return channel, nil
+}
+
+func (svc *ChannelService) channelTypeForSettingsUpdate(ctx context.Context, id int, inputType *channel.Type) (channel.Type, error) {
+	if inputType != nil {
+		return *inputType, nil
+	}
+
+	existing, err := svc.entFromContext(ctx).Channel.Query().
+		Where(channel.ID(id)).
+		Select(channel.FieldType).
+		Only(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get existing channel type: %w", err)
+	}
+
+	return existing.Type, nil
+}
+
+func normalizeChannelSettingsForType(channelType channel.Type, settings *objects.ChannelSettings) {
+	if settings == nil {
+		return
+	}
+
+	if channelType != channel.TypeCodex {
+		settings.TransformOptions.CodexStyleResponses = false
+	}
 }
 
 // UpdateChannelStatus updates the status of a channel.

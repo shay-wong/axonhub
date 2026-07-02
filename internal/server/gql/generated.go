@@ -1808,6 +1808,7 @@ type ComplexityRoot struct {
 	}
 
 	TransformOptions struct {
+		CodexStyleResponses            func(childComplexity int) int
 		ForceArrayInputs               func(childComplexity int) int
 		ForceArrayInstructions         func(childComplexity int) int
 		ReplaceDeveloperRoleWithSystem func(childComplexity int) int
@@ -10008,6 +10009,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.TraceEdge.Node(childComplexity), true
 
+	case "TransformOptions.codexStyleResponses":
+		if e.complexity.TransformOptions.CodexStyleResponses == nil {
+			break
+		}
+
+		return e.complexity.TransformOptions.CodexStyleResponses(childComplexity), true
 	case "TransformOptions.forceArrayInputs":
 		if e.complexity.TransformOptions.ForceArrayInputs == nil {
 			break
@@ -23276,6 +23283,8 @@ func (ec *executionContext) fieldContext_ChannelSettings_transformOptions(_ cont
 				return ec.fieldContext_TransformOptions_forceArrayInputs(ctx, field)
 			case "replaceDeveloperRoleWithSystem":
 				return ec.fieldContext_TransformOptions_replaceDeveloperRoleWithSystem(ctx, field)
+			case "codexStyleResponses":
+				return ec.fieldContext_TransformOptions_codexStyleResponses(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TransformOptions", field.Name)
 		},
@@ -54066,6 +54075,35 @@ func (ec *executionContext) fieldContext_TransformOptions_replaceDeveloperRoleWi
 	return fc, nil
 }
 
+func (ec *executionContext) _TransformOptions_codexStyleResponses(ctx context.Context, field graphql.CollectedField, obj *objects.TransformOptions) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TransformOptions_codexStyleResponses,
+		func(ctx context.Context) (any, error) {
+			return obj.CodexStyleResponses, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TransformOptions_codexStyleResponses(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TransformOptions",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _TriggerBackupPayload_success(ctx context.Context, field graphql.CollectedField, obj *TriggerBackupPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -79898,7 +79936,7 @@ func (ec *executionContext) unmarshalInputTransformOptionsInput(ctx context.Cont
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"forceArrayInstructions", "forceArrayInputs", "replaceDeveloperRoleWithSystem"}
+	fieldsInOrder := [...]string{"forceArrayInstructions", "forceArrayInputs", "replaceDeveloperRoleWithSystem", "codexStyleResponses"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -79926,6 +79964,13 @@ func (ec *executionContext) unmarshalInputTransformOptionsInput(ctx context.Cont
 				return it, err
 			}
 			it.ReplaceDeveloperRoleWithSystem = data
+		case "codexStyleResponses":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("codexStyleResponses"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CodexStyleResponses = data
 		}
 	}
 
@@ -102756,6 +102801,11 @@ func (ec *executionContext) _TransformOptions(ctx context.Context, sel ast.Selec
 			}
 		case "replaceDeveloperRoleWithSystem":
 			out.Values[i] = ec._TransformOptions_replaceDeveloperRoleWithSystem(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "codexStyleResponses":
+			out.Values[i] = ec._TransformOptions_codexStyleResponses(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

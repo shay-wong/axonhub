@@ -21,6 +21,7 @@ import (
 	"github.com/looplj/axonhub/llm/streams"
 	"github.com/looplj/axonhub/llm/transformer/openai"
 	"github.com/looplj/axonhub/llm/transformer/openai/responses"
+	"github.com/looplj/axonhub/llm/transformer/shared"
 )
 
 func TestCodexOutbound_StreamAcceptHeader(t *testing.T) {
@@ -176,6 +177,42 @@ func TestCodexOutbound_ImageGenerationRequestUsesResponsesImageTool(t *testing.T
 	require.Equal(t, "input_text", payload.Input.Items[0].Content.Items[0].Type)
 	require.Equal(t, "draw a circuit board city", *payload.Input.Items[0].Content.Items[0].Text)
 	require.Equal(t, "You are a helpful assistant that can generate images based on user requests. Must use the image generation tool.", payload.Instructions)
+}
+
+func TestCodexOutbound_CodexStyleResponsesDoesNotApplyToImageRequests(t *testing.T) {
+	ctx := context.Background()
+
+	outbound, err := NewOutboundTransformer(Params{
+		BaseURL: "https://chatgpt.com/backend-api/codex#",
+		TokenProvider: staticTokenGetter{
+			creds: &oauth.OAuthCredentials{
+				AccessToken: testAccessTokenWithAccountID(t),
+				ExpiresAt:   time.Now().Add(time.Hour),
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	req, err := outbound.TransformRequest(ctx, &llm.Request{
+		Model:       "gpt-image-2",
+		RequestType: llm.RequestTypeImage,
+		APIFormat:   llm.APIFormatOpenAIImageGeneration,
+		RawRequest:  &httpclient.Request{Headers: http.Header{}},
+		Image: &llm.ImageRequest{
+			Prompt: "draw a circuit board city",
+		},
+		TransformOptions: llm.TransformOptions{
+			CodexStyleResponses: lo.ToPtr(true),
+		},
+	})
+	require.NoError(t, err)
+
+	body := decodeCodexRequestBody(t, req)
+
+	assert.NotContains(t, body, "prompt_cache_key")
+	assert.NotContains(t, body, "service_tier")
+	assert.NotContains(t, body, "text")
+	assert.Equal(t, "required", body["tool_choice"])
 }
 
 func TestCodexOutbound_ImageEditRequestUsesResponsesImageTool(t *testing.T) {
@@ -446,6 +483,9 @@ func TestCodexOutbound_PreservesMinimalCompatTransforms(t *testing.T) {
 	assert.Equal(t, serviceTier, body["service_tier"])
 	assert.NotContains(t, body, "metadata")
 	assert.Equal(t, []any{"reasoning.encrypted_content"}, body["include"])
+	assert.NotContains(t, body, "prompt_cache_key")
+	assert.NotContains(t, body, "tool_choice")
+	assert.NotContains(t, body, "text")
 
 	reasoning, ok := body["reasoning"].(map[string]any)
 	require.True(t, ok)
@@ -453,6 +493,180 @@ func TestCodexOutbound_PreservesMinimalCompatTransforms(t *testing.T) {
 
 	assert.NotContains(t, string(hreq.Body), "You are a coding agent running in the Codex CLI")
 	assert.NotContains(t, string(hreq.Body), "You are Codex")
+}
+
+func TestCodexOutbound_AppliesCodexStyleResponsesDefaultsWhenEnabled(t *testing.T) {
+	ctx := context.Background()
+	outbound := newTestCodexOutbound(t)
+
+	hreq, err := outbound.TransformRequest(ctx, &llm.Request{
+		Model: "gpt-5-codex",
+		Messages: []llm.Message{{
+			Role:    "user",
+			Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
+		}},
+		Tools: []llm.Tool{{
+			Type: "function",
+			Function: llm.Function{
+				Name:       "shell",
+				Parameters: []byte(`{"type":"object","properties":{}}`),
+			},
+		}},
+		TransformOptions: llm.TransformOptions{
+			CodexStyleResponses: lo.ToPtr(true),
+		},
+	})
+	require.NoError(t, err)
+
+	body := decodeCodexRequestBody(t, hreq)
+
+	require.NotEmpty(t, hreq.Headers.Get(SessionHeader))
+	assert.Equal(t, hreq.Headers.Get(SessionHeader), body["prompt_cache_key"])
+	assert.Equal(t, "auto", body["tool_choice"])
+	assert.Equal(t, "priority", body["service_tier"])
+
+	text, ok := body["text"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "low", text["verbosity"])
+}
+
+func TestCodexOutbound_CodexStyleResponsesPromptCacheKeySessionPrecedence(t *testing.T) {
+	tests := []struct {
+		name        string
+		ctx         context.Context
+		headers     http.Header
+		wantCacheID string
+	}{
+		{
+			name: "session header wins over turn metadata and shared session",
+			ctx:  shared.WithSessionID(context.Background(), "shared-session"),
+			headers: http.Header{
+				SessionHeader:      []string{"header-session"},
+				TurnMetadataHeader: []string{`{"session_id":"turn-session"}`},
+			},
+			wantCacheID: "header-session",
+		},
+		{
+			name: "turn metadata wins over shared session",
+			ctx:  shared.WithSessionID(context.Background(), "shared-session"),
+			headers: http.Header{
+				TurnMetadataHeader: []string{`{"session_id":"turn-session"}`},
+			},
+			wantCacheID: "turn-session",
+		},
+		{
+			name:        "shared session is fallback",
+			ctx:         shared.WithSessionID(context.Background(), "shared-session"),
+			headers:     http.Header{},
+			wantCacheID: "shared-session",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outbound := newTestCodexOutbound(t)
+
+			hreq, err := outbound.TransformRequest(tt.ctx, &llm.Request{
+				Model: "gpt-5-codex",
+				RawRequest: &httpclient.Request{
+					Headers: tt.headers,
+				},
+				Messages: []llm.Message{{
+					Role:    "user",
+					Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
+				}},
+				TransformOptions: llm.TransformOptions{
+					CodexStyleResponses: lo.ToPtr(true),
+				},
+			})
+			require.NoError(t, err)
+
+			body := decodeCodexRequestBody(t, hreq)
+
+			assert.Equal(t, tt.wantCacheID, hreq.Headers.Get(SessionHeader))
+			assert.Equal(t, tt.wantCacheID, body["prompt_cache_key"])
+		})
+	}
+}
+
+func TestCodexOutbound_CodexStyleResponsesPreservesRawToolChoice(t *testing.T) {
+	ctx := context.Background()
+	outbound := newTestCodexOutbound(t)
+
+	rawToolChoice := json.RawMessage(`{"type":"tool_search","tools":[{"type":"tool_search","name":"search_docs"}]}`)
+
+	hreq, err := outbound.TransformRequest(ctx, &llm.Request{
+		Model: "gpt-5-codex",
+		Messages: []llm.Message{{
+			Role:    "user",
+			Content: llm.MessageContent{Content: lo.ToPtr("Search docs")},
+		}},
+		Tools: []llm.Tool{{
+			Type: llm.ToolTypeToolSearch,
+			ToolSearch: &llm.ToolSearchTool{
+				Execution: "client",
+			},
+		}},
+		ProviderExtensions: &llm.ProviderExtensions{
+			OpenAIResponses: &llm.OpenAIResponsesProviderExtensions{
+				Request: &llm.OpenAIResponsesRequestExtensions{
+					RawToolChoice: rawToolChoice,
+				},
+			},
+		},
+		TransformOptions: llm.TransformOptions{
+			CodexStyleResponses: lo.ToPtr(true),
+		},
+	})
+	require.NoError(t, err)
+
+	body := decodeCodexRequestBody(t, hreq)
+	toolChoice, ok := body["tool_choice"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "tool_search", toolChoice["type"])
+	require.Len(t, toolChoice["tools"], 1)
+}
+
+func TestCodexOutbound_PreservesExplicitCodexStyleResponsesValues(t *testing.T) {
+	ctx := context.Background()
+	outbound := newTestCodexOutbound(t)
+	promptCacheKey := "caller-cache-key"
+	toolChoice := "required"
+	verbosity := "high"
+	serviceTier := "flex"
+
+	hreq, err := outbound.TransformRequest(ctx, &llm.Request{
+		Model: "gpt-5-codex",
+		Messages: []llm.Message{{
+			Role:    "user",
+			Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
+		}},
+		Tools: []llm.Tool{{
+			Type: "function",
+			Function: llm.Function{
+				Name:       "shell",
+				Parameters: []byte(`{"type":"object","properties":{}}`),
+			},
+		}},
+		PromptCacheKey: &promptCacheKey,
+		ToolChoice:     &llm.ToolChoice{ToolChoice: &toolChoice},
+		Verbosity:      &verbosity,
+		ServiceTier:    &serviceTier,
+		TransformOptions: llm.TransformOptions{
+			CodexStyleResponses: lo.ToPtr(true),
+		},
+	})
+	require.NoError(t, err)
+
+	body := decodeCodexRequestBody(t, hreq)
+
+	assert.Equal(t, promptCacheKey, body["prompt_cache_key"])
+	assert.Equal(t, toolChoice, body["tool_choice"])
+	assert.Equal(t, serviceTier, body["service_tier"])
+
+	text, ok := body["text"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, verbosity, text["verbosity"])
 }
 
 func TestCodexOutbound_AppliesReasoningDefaultsWhenMissing(t *testing.T) {

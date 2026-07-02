@@ -383,6 +383,8 @@
   "channels.dialogs.fields.transformOptions.forceArrayInputs.description": "强制渠道接受数组格式的输入",
   "channels.dialogs.fields.transformOptions.replaceDeveloperRoleWithSystem.label": "将 developer 角色替换为 system",
   "channels.dialogs.fields.transformOptions.replaceDeveloperRoleWithSystem.description": "用于不支持 developer 角色的渠道，发送请求前将 developer 角色替换为 system",
+  "channels.dialogs.fields.transformOptions.codexStyleResponses.label": "使用 Codex 风格 Responses",
+  "channels.dialogs.fields.transformOptions.codexStyleResponses.description": "Codex 渠道转换请求时补齐原生 Codex Responses 字段，例如 prompt_cache_key、tool_choice、text.verbosity 和 service_tier。",
   "channels.dialogs.buttons.add": "添加",
   "channels.dialogs.buttons.batchAdd": "批量添加",
   "channels.dialogs.buttons.batchAddTooltip": "输入多个模型，用逗号分隔，例如：gpt-4, gpt-3.5-turbo, claude-3-opus",

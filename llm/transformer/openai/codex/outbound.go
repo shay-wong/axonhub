@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -176,6 +177,12 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 
 	reqCopy.TransformOptions.ArrayInputs = lo.ToPtr(true)
 
+	sessionID := ""
+	if lo.FromPtr(reqCopy.TransformOptions.CodexStyleResponses) && !isImageRequest {
+		sessionID = ensureSessionID(ctx, rawSessionID, rawTurnMetadata)
+		applyCodexStyleResponsesDefaults(&reqCopy, sessionID)
+	}
+
 	hreq, err := t.responsesOutbound.TransformRequest(ctx, &reqCopy)
 	if err != nil {
 		return nil, err
@@ -213,16 +220,11 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 		}
 	}
 
-	if rawSessionID != "" {
-		hreq.Headers.Set(SessionHeader, rawSessionID)
-	} else if sessionID := ExtractSessionIDFromTurnMetadata(rawTurnMetadata); sessionID != "" {
-		hreq.Headers.Set(SessionHeader, sessionID)
-	} else if hreq.Headers.Get(SessionHeader) == "" {
-		if sessionID, ok := shared.GetSessionID(ctx); ok {
-			hreq.Headers.Set(SessionHeader, sessionID)
-		} else {
-			hreq.Headers.Set(SessionHeader, uuid.NewString())
+	if hreq.Headers.Get(SessionHeader) == "" {
+		if sessionID == "" {
+			sessionID = ensureSessionID(ctx, rawSessionID, rawTurnMetadata)
 		}
+		hreq.Headers.Set(SessionHeader, sessionID)
 	}
 
 	if accountID != "" {
@@ -230,6 +232,68 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	}
 
 	return hreq, nil
+}
+
+func resolveSessionIDCandidate(ctx context.Context, rawSessionID string, rawTurnMetadata string) (string, bool) {
+	if sessionID := strings.TrimSpace(rawSessionID); sessionID != "" {
+		return sessionID, true
+	}
+
+	if sessionID := ExtractSessionIDFromTurnMetadata(rawTurnMetadata); sessionID != "" {
+		return sessionID, true
+	}
+
+	if sessionID, ok := shared.GetSessionID(ctx); ok && strings.TrimSpace(sessionID) != "" {
+		return strings.TrimSpace(sessionID), true
+	}
+
+	return "", false
+}
+
+func ensureSessionID(ctx context.Context, rawSessionID string, rawTurnMetadata string) string {
+	if sessionID, ok := resolveSessionIDCandidate(ctx, rawSessionID, rawTurnMetadata); ok {
+		return sessionID
+	}
+
+	return uuid.NewString()
+}
+
+func applyCodexStyleResponsesDefaults(req *llm.Request, sessionID string) {
+	if req == nil {
+		return
+	}
+
+	if lo.FromPtr(req.PromptCacheKey) == "" && sessionID != "" {
+		req.PromptCacheKey = lo.ToPtr(sessionID)
+	}
+
+	if len(req.Tools) > 0 && !hasToolChoiceSemantics(req) {
+		req.ToolChoice = &llm.ToolChoice{ToolChoice: lo.ToPtr("auto")}
+	}
+
+	if lo.FromPtr(req.Verbosity) == "" {
+		req.Verbosity = lo.ToPtr("low")
+	}
+
+	if lo.FromPtr(req.ServiceTier) == "" {
+		req.ServiceTier = lo.ToPtr("priority")
+	}
+}
+
+func hasToolChoiceSemantics(req *llm.Request) bool {
+	if req == nil {
+		return false
+	}
+
+	if req.ToolChoice != nil {
+		return true
+	}
+
+	if req.ProviderExtensions == nil || req.ProviderExtensions.OpenAIResponses == nil || req.ProviderExtensions.OpenAIResponses.Request == nil {
+		return false
+	}
+
+	return len(req.ProviderExtensions.OpenAIResponses.Request.RawToolChoice) > 0
 }
 
 func (t *OutboundTransformer) TransformResponse(ctx context.Context, httpResp *httpclient.Response) (*llm.Response, error) {

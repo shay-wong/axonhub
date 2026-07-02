@@ -386,6 +386,8 @@
   "channels.dialogs.fields.transformOptions.forceArrayInputs.description": "Force the channel to accept array format for inputs",
   "channels.dialogs.fields.transformOptions.replaceDeveloperRoleWithSystem.label": "Replace developer role with system",
   "channels.dialogs.fields.transformOptions.replaceDeveloperRoleWithSystem.description": "Replace developer role with system before sending requests for channels that do not support the developer role",
+  "channels.dialogs.fields.transformOptions.codexStyleResponses.label": "Use Codex-style Responses",
+  "channels.dialogs.fields.transformOptions.codexStyleResponses.description": "For Codex channels, add native Codex Responses fields during conversion, such as prompt_cache_key, tool_choice, text.verbosity, and service_tier.",
   "channels.dialogs.buttons.add": "Add",
   "channels.dialogs.buttons.batchAdd": "Batch Add",
   "channels.dialogs.buttons.batchAddTooltip": "Enter multiple models separated by commas, e.g., gpt-4, gpt-3.5-turbo, claude-3-opus",
