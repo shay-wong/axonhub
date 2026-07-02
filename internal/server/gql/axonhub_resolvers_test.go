@@ -23,9 +23,11 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/channelprobe"
 	"github.com/looplj/axonhub/internal/ent/enttest"
+	"github.com/looplj/axonhub/internal/ent/project"
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/ent/usagelog"
+	"github.com/looplj/axonhub/internal/ent/user"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/pkg/xcache"
 	"github.com/looplj/axonhub/internal/scopes"
@@ -703,6 +705,167 @@ func TestQueryResolver_DashboardCostStats_ExcludeTestSource(t *testing.T) {
 	require.Len(t, byAPIKey, 1)
 	require.Equal(t, fixture.APIKey.ID, byAPIKey[0].APIKeyID.ID)
 	require.Equal(t, 1.25, byAPIKey[0].Cost)
+}
+
+func TestQueryResolver_UsageStatsByUser_UsesUsageLogVisibilityPolicy(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:usage_stats_visibility?mode=memory&_fk=0")
+	defer client.Close()
+
+	setupCtx := ent.NewContext(t.Context(), client)
+	setupCtx = authz.WithSystemBypass(setupCtx, "usage stats visibility test setup")
+
+	projectRow, err := client.Project.Create().
+		SetName("Usage Stats Project").
+		SetDescription("usage stats test project").
+		SetStatus(project.StatusActive).
+		Save(setupCtx)
+	require.NoError(t, err)
+
+	ownerUser, err := client.User.Create().
+		SetEmail("owner@example.com").
+		SetPassword("password").
+		SetFirstName("Owner").
+		SetLastName("User").
+		SetStatus(user.StatusActivated).
+		Save(setupCtx)
+	require.NoError(t, err)
+
+	otherUser, err := client.User.Create().
+		SetEmail("other@example.com").
+		SetPassword("password").
+		SetFirstName("Other").
+		SetLastName("User").
+		SetStatus(user.StatusActivated).
+		Save(setupCtx)
+	require.NoError(t, err)
+
+	_, err = client.UserProject.Create().
+		SetUserID(ownerUser.ID).
+		SetProjectID(projectRow.ID).
+		SetIsOwner(true).
+		Save(setupCtx)
+	require.NoError(t, err)
+
+	_, err = client.UserProject.Create().
+		SetUserID(otherUser.ID).
+		SetProjectID(projectRow.ID).
+		SetIsOwner(false).
+		SetScopes([]string{string(scopes.ScopeReadRequests)}).
+		Save(setupCtx)
+	require.NoError(t, err)
+
+	ownerUser, err = client.User.Query().
+		Where(user.ID(ownerUser.ID)).
+		WithProjectUsers().
+		Only(setupCtx)
+	require.NoError(t, err)
+
+	otherUser, err = client.User.Query().
+		Where(user.ID(otherUser.ID)).
+		WithProjectUsers().
+		Only(setupCtx)
+	require.NoError(t, err)
+
+	channelRow, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Usage Stats Channel").
+		SetCredentials(objects.ChannelCredentials{}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetStatus(channel.StatusEnabled).
+		Save(setupCtx)
+	require.NoError(t, err)
+
+	ownerServiceKey, err := client.APIKey.Create().
+		SetProjectID(projectRow.ID).
+		SetUserID(ownerUser.ID).
+		SetKey("owner-service-key").
+		SetName("Owner Service Key").
+		SetType(apikey.TypeServiceAccount).
+		SetStatus(apikey.StatusEnabled).
+		Save(setupCtx)
+	require.NoError(t, err)
+
+	ownerPersonalKey, err := client.APIKey.Create().
+		SetProjectID(projectRow.ID).
+		SetUserID(ownerUser.ID).
+		SetKey("owner-personal-key").
+		SetName("Owner Personal Key").
+		SetType(apikey.TypePersonal).
+		SetStatus(apikey.StatusEnabled).
+		Save(setupCtx)
+	require.NoError(t, err)
+
+	otherPersonalKey, err := client.APIKey.Create().
+		SetProjectID(projectRow.ID).
+		SetUserID(otherUser.ID).
+		SetKey("other-personal-key").
+		SetName("Other Personal Key").
+		SetType(apikey.TypePersonal).
+		SetStatus(apikey.StatusEnabled).
+		Save(setupCtx)
+	require.NoError(t, err)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	createDashboardUsageRecord(t, setupCtx, client, dashboardUsageRecord{
+		ProjectID:       projectRow.ID,
+		APIKeyID:        ownerServiceKey.ID,
+		ChannelID:       channelRow.ID,
+		ModelID:         "gpt-4",
+		RequestSource:   request.SourceAPI,
+		UsageSource:     usagelog.SourceAPI,
+		RequestStatus:   request.StatusCompleted,
+		ExecutionStatus: requestexecution.StatusCompleted,
+		TotalTokens:     100,
+		TotalCost:       1,
+		CreatedAt:       now,
+	})
+	createDashboardUsageRecord(t, setupCtx, client, dashboardUsageRecord{
+		ProjectID:       projectRow.ID,
+		APIKeyID:        ownerPersonalKey.ID,
+		ChannelID:       channelRow.ID,
+		ModelID:         "gpt-4",
+		RequestSource:   request.SourceAPI,
+		UsageSource:     usagelog.SourceAPI,
+		RequestStatus:   request.StatusCompleted,
+		ExecutionStatus: requestexecution.StatusCompleted,
+		TotalTokens:     200,
+		TotalCost:       2,
+		CreatedAt:       now,
+	})
+	createDashboardUsageRecord(t, setupCtx, client, dashboardUsageRecord{
+		ProjectID:       projectRow.ID,
+		APIKeyID:        otherPersonalKey.ID,
+		ChannelID:       channelRow.ID,
+		ModelID:         "gpt-4",
+		RequestSource:   request.SourceAPI,
+		UsageSource:     usagelog.SourceAPI,
+		RequestStatus:   request.StatusCompleted,
+		ExecutionStatus: requestexecution.StatusCompleted,
+		TotalTokens:     300,
+		TotalCost:       3,
+		CreatedAt:       now,
+	})
+
+	resolver := &queryResolver{&Resolver{client: client}}
+	queryCtx := authz.NewUserContext(ent.NewContext(t.Context(), client), ownerUser.ID)
+	queryCtx = contexts.WithUser(queryCtx, ownerUser)
+	queryCtx = contexts.WithProjectID(queryCtx, projectRow.ID)
+
+	stats, err := resolver.UsageStatsByUser(queryCtx, nil)
+	require.NoError(t, err)
+	require.Len(t, stats, 1)
+	require.Equal(t, ownerUser.ID, stats[0].UserID.ID)
+	require.Equal(t, 2, stats[0].RequestCount)
+	require.Equal(t, 300, stats[0].TotalTokens)
+	require.InDelta(t, 3.0, stats[0].TotalCost, 0.001)
+
+	nonOwnerCtx := authz.NewUserContext(ent.NewContext(t.Context(), client), otherUser.ID)
+	nonOwnerCtx = contexts.WithUser(nonOwnerCtx, otherUser)
+	nonOwnerCtx = contexts.WithProjectID(nonOwnerCtx, projectRow.ID)
+
+	_, err = resolver.UsageStatsByUser(nonOwnerCtx, nil)
+	require.ErrorContains(t, err, "only project owners")
 }
 
 func TestQueryResolver_DashboardUsageBreakdowns_ExcludeTestSource(t *testing.T) {

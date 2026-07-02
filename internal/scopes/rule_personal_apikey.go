@@ -28,6 +28,20 @@ func UserPersonalAPIKeyReadRule(requiredScope ScopeSlug) privacy.QueryRule {
 
 		projectID, hasProjectID := contexts.GetProjectID(ctx)
 		if !hasProjectID {
+			if HasSystemScope(currentUser, requiredScope) {
+				pf, ok := q.(PersonalKeyProjectFilter)
+				if !ok {
+					return privacy.Skipf("Query does not support personal key filtering")
+				}
+
+				pf.Where(entql.Or(
+					entql.FieldNEQ("type", "personal"),
+					entql.FieldEQ("user_id", currentUser.ID),
+				))
+
+				return privacy.Allowf("User %d can query API keys with system scope %s", currentUser.ID, requiredScope)
+			}
+
 			return privacy.Skipf("Project ID not found in context")
 		}
 
