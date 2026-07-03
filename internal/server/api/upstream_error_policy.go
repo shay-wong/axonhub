@@ -70,6 +70,7 @@ func applyUpstreamErrorPolicy(ctx context.Context, err error, systemService *biz
 				Type:      firstNonEmpty(respErr.Detail.Type, "upstream_error"),
 				Code:      respErr.Detail.Code,
 				RequestID: respErr.Detail.RequestID,
+				Truncated: respErr.Detail.Truncated,
 			},
 		}
 	}
@@ -83,6 +84,7 @@ func applyUpstreamErrorPolicy(ctx context.Context, err error, systemService *biz
 				Type:      upstreamErrorTypeFromHTTP(httpErr),
 				Code:      upstreamErrorCodeFromHTTP(httpErr),
 				RequestID: upstreamRequestIDFromHTTP(httpErr),
+				Truncated: httpErr.Truncated,
 			},
 		}
 	}

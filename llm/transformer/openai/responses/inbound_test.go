@@ -1314,6 +1314,21 @@ func TestInboundTransformer_TransformError(t *testing.T) {
 				require.Contains(t, string(result.Body), "rate_limit_error")
 			},
 		},
+		{
+			name: "llm response error truncated",
+			err: &llm.ResponseError{
+				StatusCode: http.StatusBadGateway,
+				Detail: llm.ErrorDetail{
+					Message:   "upstream body capped",
+					Type:      "api_error",
+					Truncated: true,
+				},
+			},
+			validate: func(t *testing.T, result *httpclient.Error) {
+				require.Equal(t, http.StatusBadGateway, result.StatusCode)
+				require.JSONEq(t, `{"error":{"message":"upstream body capped","type":"api_error","truncated":true}}`, string(result.Body))
+			},
+		},
 	}
 
 	for _, tt := range tests {

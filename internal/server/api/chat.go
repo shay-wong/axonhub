@@ -282,13 +282,17 @@ func FormatStreamError(_ context.Context, err error) any {
 
 		errCode = respErr.Detail.Code
 		requestID = respErr.Detail.RequestID
+		errorField := gin.H{
+			"message": respErr.Detail.Message,
+			"type":    errType,
+			"code":    errCode,
+		}
+		if respErr.Detail.Truncated {
+			errorField["truncated"] = true
+		}
 
 		return gin.H{
-			"error": gin.H{
-				"message": respErr.Detail.Message,
-				"type":    errType,
-				"code":    errCode,
-			},
+			"error":      errorField,
 			"request_id": requestID,
 		}
 	}
@@ -308,12 +312,17 @@ func FormatStreamError(_ context.Context, err error) any {
 		}
 	}
 
+	errorField := gin.H{
+		"message": orchestrator.ExtractErrorMessage(err),
+		"type":    errType,
+		"code":    errCode,
+	}
+	if httpErr != nil && httpErr.Truncated {
+		errorField["truncated"] = true
+	}
+
 	return gin.H{
-		"error": gin.H{
-			"message": orchestrator.ExtractErrorMessage(err),
-			"type":    errType,
-			"code":    errCode,
-		},
+		"error":      errorField,
 		"request_id": requestID,
 	}
 }

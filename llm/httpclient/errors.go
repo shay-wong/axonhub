@@ -82,6 +82,7 @@ type Error struct {
 	StatusCode int         `json:"status_code"`
 	Status     string      `json:"status"`
 	Body       []byte      `json:"body"`
+	Truncated  bool        `json:"truncated,omitempty"`
 	Headers    http.Header `json:"-"` // HTTP response headers (not serialized)
 }
 

@@ -321,6 +321,19 @@ func TestDataStreamTransformer_TransformError(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   `{"message":"bad request","type":"invalid_request"}`,
 		},
+		{
+			name: "truncated llm response error",
+			input: &llm.ResponseError{
+				StatusCode: http.StatusBadGateway,
+				Detail: llm.ErrorDetail{
+					Message:   "upstream body capped",
+					Type:      "api_error",
+					Truncated: true,
+				},
+			},
+			expectedStatus: http.StatusBadGateway,
+			expectedBody:   `{"message":"upstream body capped","type":"api_error","truncated":true}`,
+		},
 	}
 
 	for _, tt := range tests {

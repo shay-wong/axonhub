@@ -3,10 +3,10 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsBlockedIP(t *testing.T) {
@@ -81,7 +81,7 @@ func TestIsBlockedIP(t *testing.T) {
 	}
 }
 
-func TestClientIPCandidates(t *testing.T) {
+func TestClientIPCandidatesIgnoresForwardedHeadersWithoutTrustedProxy(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
@@ -97,30 +97,23 @@ func TestClientIPCandidates(t *testing.T) {
 	ctx.Request = req
 
 	got := clientIPCandidates(ctx)
-	want := []string{"10.0.0.1", "203.0.113.10", "192.0.2.30"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("clientIPCandidates() = %#v, want %#v", got, want)
-	}
+	require.Equal(t, []string{"10.0.0.1"}, got)
 }
 
-func TestClientIPCandidatesDeduplicates(t *testing.T) {
+func TestClientIPCandidatesUsesConfiguredTrustedProxy(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
 	ctx, engine := gin.CreateTestContext(recorder)
-	if err := engine.SetTrustedProxies(nil); err != nil {
+	if err := engine.SetTrustedProxies([]string{"10.0.0.1"}); err != nil {
 		t.Fatalf("failed to set trusted proxies: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.RemoteAddr = "203.0.113.10:12345"
-	req.Header.Set("X-Forwarded-For", "203.0.113.10, 198.51.100.20")
-	req.Header.Set("X-Real-IP", "203.0.113.10")
+	req.RemoteAddr = "10.0.0.1:12345"
+	req.Header.Set("X-Forwarded-For", "203.0.113.10")
 	ctx.Request = req
 
 	got := clientIPCandidates(ctx)
-	want := []string{"203.0.113.10"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("clientIPCandidates() = %#v, want %#v", got, want)
-	}
+	require.Equal(t, []string{"203.0.113.10"}, got)
 }

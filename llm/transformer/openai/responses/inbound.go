@@ -92,9 +92,10 @@ type ResponseError struct {
 }
 
 type ResponseErrorDetail struct {
-	Message string `json:"message"`
-	Type    string `json:"type"`
-	Code    string `json:"code,omitempty"`
+	Message   string `json:"message"`
+	Type      string `json:"type"`
+	Code      string `json:"code,omitempty"`
+	Truncated bool   `json:"truncated,omitempty"`
 }
 
 // TransformError transforms LLM error response to HTTP error response in Responses API format.
@@ -118,9 +119,10 @@ func (t *InboundTransformer) TransformError(ctx context.Context, rawErr error) *
 	if llmErr, ok := errors.AsType[*llm.ResponseError](rawErr); ok {
 		errResp := ResponseError{
 			Error: ResponseErrorDetail{
-				Message: llmErr.Detail.Message,
-				Type:    llmErr.Detail.Type,
-				Code:    llmErr.Detail.Code,
+				Message:   llmErr.Detail.Message,
+				Type:      llmErr.Detail.Type,
+				Code:      llmErr.Detail.Code,
+				Truncated: llmErr.Detail.Truncated,
 			},
 		}
 

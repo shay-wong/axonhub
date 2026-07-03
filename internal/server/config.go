@@ -25,6 +25,7 @@ type Config struct {
 
 	Debug            bool            `conf:"debug" yaml:"debug" json:"debug"`
 	DisableSSLVerify bool            `conf:"disable_ssl_verify" yaml:"disable_ssl_verify" json:"disable_ssl_verify"`
+	TrustedProxies   []string        `conf:"trusted_proxies" yaml:"trusted_proxies" json:"trusted_proxies"`
 	CORS             CORS            `conf:"cors" yaml:"cors" json:"cors"`
 	API              API             `conf:"api" yaml:"api" json:"api"`
 	IPAccessControl  IPAccessControl `conf:"ip_access_control" yaml:"ip_access_control" json:"ip_access_control"`

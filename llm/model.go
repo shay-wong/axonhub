@@ -879,6 +879,7 @@ type ErrorDetail struct {
 	Type      string `json:"type"`
 	Param     string `json:"param,omitempty"`
 	RequestID string `json:"request_id,omitempty"`
+	Truncated bool   `json:"truncated,omitempty"`
 }
 
 // ModalityTokenCount Represents token counting info for a single modality.

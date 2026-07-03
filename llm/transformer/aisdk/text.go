@@ -207,7 +207,7 @@ func (t *TextTransformer) TransformError(ctx context.Context, rawErr error) *htt
 		return &httpclient.Error{
 			StatusCode: llmErr.StatusCode,
 			Status:     http.StatusText(llmErr.StatusCode),
-			Body:       fmt.Appendf(nil, `{"message":"%s","type":"%s"}`, llmErr.Detail.Message, llmErr.Detail.Type),
+			Body:       marshalErrorResponse(llmErr.Detail.Message, llmErr.Detail.Type, llmErr.Detail.Truncated),
 		}
 	}
 

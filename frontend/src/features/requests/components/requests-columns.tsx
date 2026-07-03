@@ -426,7 +426,7 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
       id: 'tokens',
       accessorFn: (row) => {
         const usageLog = row.usageLogs?.edges?.[0]?.node;
-        return (usageLog?.promptTokens || 0) + (usageLog?.completionTokens || 0);
+        return usageLog?.totalTokens || 0;
       },
       header: ({ column }) => <DataTableColumnHeader column={column} title={t('requests.columns.tokens')} />,
       cell: ({ row }) => {
@@ -440,7 +440,7 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
         const promptTokens = usageLog.promptTokens || 0;
         const completionTokens = usageLog.completionTokens || 0;
         const reasoningTokens = usageLog.completionReasoningTokens || 0;
-        const totalTokens = promptTokens + completionTokens;
+        const totalTokens = usageLog.totalTokens || 0;
 
         return (
           <div className='space-y-0.5 text-xs'>
@@ -463,12 +463,8 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
       enableSorting: true,
       enableHiding: true,
       sortingFn: (rowA, rowB) => {
-        const a =
-          (rowA.original.usageLogs?.edges?.[0]?.node?.promptTokens || 0) +
-          (rowA.original.usageLogs?.edges?.[0]?.node?.completionTokens || 0);
-        const b =
-          (rowB.original.usageLogs?.edges?.[0]?.node?.promptTokens || 0) +
-          (rowB.original.usageLogs?.edges?.[0]?.node?.completionTokens || 0);
+        const a = rowA.original.usageLogs?.edges?.[0]?.node?.totalTokens || 0;
+        const b = rowB.original.usageLogs?.edges?.[0]?.node?.totalTokens || 0;
         return a - b;
       },
     },

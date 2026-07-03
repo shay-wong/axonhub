@@ -148,9 +148,10 @@ func (t *InboundTransformer) TransformError(ctx context.Context, rawErr error) *
 			Status:     http.StatusText(llmErr.StatusCode),
 			Body: xjson.MustMarshal(&GeminiError{
 				Error: ErrorDetail{
-					Code:    llmErr.StatusCode,
-					Message: llmErr.Detail.Message,
-					Status:  mapHTTPStatusToGeminiStatus(llmErr.StatusCode),
+					Code:      llmErr.StatusCode,
+					Message:   llmErr.Detail.Message,
+					Status:    mapHTTPStatusToGeminiStatus(llmErr.StatusCode),
+					Truncated: llmErr.Detail.Truncated,
 				},
 			}),
 		}

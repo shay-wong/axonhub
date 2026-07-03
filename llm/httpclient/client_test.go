@@ -1,6 +1,7 @@
 package httpclient
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -159,6 +160,46 @@ func TestHttpClientImpl_Do(t *testing.T) {
 	}
 }
 
+func TestHttpClientImpl_Do_LimitsErrorResponseBody(t *testing.T) {
+	largeBody := strings.Repeat("x", MaxErrorBodySize+1024)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(largeBody))
+	}))
+	defer server.Close()
+
+	client := NewHttpClient()
+	_, err := client.Do(t.Context(), &Request{
+		Method: http.MethodPost,
+		URL:    server.URL,
+	})
+	require.Error(t, err)
+
+	var httpErr *Error
+	require.True(t, errors.As(err, &httpErr))
+	require.Len(t, httpErr.Body, MaxErrorBodySize)
+	require.Equal(t, largeBody[:MaxErrorBodySize], string(httpErr.Body))
+	require.True(t, httpErr.Truncated)
+}
+
+func TestHttpClientImpl_Do_DoesNotLimitSuccessResponseBody(t *testing.T) {
+	largeBody := strings.Repeat("x", MaxErrorBodySize+1024)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(largeBody))
+	}))
+	defer server.Close()
+
+	client := NewHttpClient()
+	result, err := client.Do(t.Context(), &Request{
+		Method: http.MethodGet,
+		URL:    server.URL,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Body, len(largeBody))
+}
+
 func TestHttpClientImpl_DoStream(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -269,6 +310,28 @@ func TestHttpClientImpl_DoStream(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHttpClientImpl_DoStream_LimitsErrorResponseBody(t *testing.T) {
+	largeBody := strings.Repeat("x", MaxErrorBodySize+1024)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(largeBody))
+	}))
+	defer server.Close()
+
+	client := NewHttpClient()
+	_, err := client.DoStream(t.Context(), &Request{
+		Method: http.MethodPost,
+		URL:    server.URL,
+	})
+	require.Error(t, err)
+
+	var httpErr *Error
+	require.True(t, errors.As(err, &httpErr))
+	require.Len(t, httpErr.Body, MaxErrorBodySize)
+	require.Equal(t, largeBody[:MaxErrorBodySize], string(httpErr.Body))
+	require.True(t, httpErr.Truncated)
 }
 
 func TestNewHttpClient_WithInsecureSkipVerify_PreservesDefaultTransportSettings(t *testing.T) {

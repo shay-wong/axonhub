@@ -471,6 +471,26 @@ func TestFormatStreamError_LlmResponseError_PassesCodeAndRequestID(t *testing.T)
 	assert.Equal(t, "202603112254417d15bd26697445b0", parsed["request_id"])
 }
 
+func TestFormatStreamError_LlmResponseError_PassesTruncated(t *testing.T) {
+	respErr := &llm.ResponseError{
+		Detail: llm.ErrorDetail{
+			Message:   "upstream body was capped",
+			Type:      "api_error",
+			Truncated: true,
+		},
+	}
+
+	result := FormatStreamError(context.Background(), respErr)
+	data, marshalErr := json.Marshal(result)
+	require.NoError(t, marshalErr)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+
+	errorField := parsed["error"].(map[string]any)
+	assert.Equal(t, true, errorField["truncated"])
+}
+
 func TestApplyUpstreamErrorPolicy_CustomMessage(t *testing.T) {
 	ctx, systemService := setupUpstreamErrorPolicyTest(t, biz.UpstreamErrorPolicy{
 		Mode:          biz.UpstreamErrorModeCustom,
@@ -492,6 +512,23 @@ func TestApplyUpstreamErrorPolicy_CustomMessage(t *testing.T) {
 	assert.Equal(t, "provider_rate_limit", respErr.Detail.Code)
 	assert.Equal(t, "req_123", respErr.Detail.RequestID)
 	assert.NotContains(t, respErr.Error(), "raw provider secret")
+}
+
+func TestApplyUpstreamErrorPolicy_PreservesTruncated(t *testing.T) {
+	ctx, systemService := setupUpstreamErrorPolicyTest(t, biz.UpstreamErrorPolicy{
+		Mode: biz.UpstreamErrorModeHidden,
+	})
+
+	rawErr := &httpclient.Error{
+		StatusCode: http.StatusBadGateway,
+		Truncated:  true,
+	}
+
+	err := applyUpstreamErrorPolicy(ctx, pipeline.WrapUpstreamError(rawErr), systemService)
+
+	respErr := &llm.ResponseError{}
+	require.True(t, errors.As(err, &respErr))
+	assert.True(t, respErr.Detail.Truncated)
 }
 
 func TestApplyUpstreamErrorPolicy_PassthroughByDefault(t *testing.T) {

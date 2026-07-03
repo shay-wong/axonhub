@@ -2249,6 +2249,22 @@ func TestInboundTransformer_TransformError(t *testing.T) {
 			},
 		},
 		{
+			name: "truncated error",
+			llmErr: &llm.ResponseError{
+				StatusCode: http.StatusBadGateway,
+				Detail: llm.ErrorDetail{
+					Message:   "upstream body capped",
+					Type:      "api_error",
+					Truncated: true,
+				},
+			},
+			expected: &httpclient.Error{
+				StatusCode: http.StatusBadGateway,
+				Status:     "Bad Gateway",
+				Body:       []byte(`{"type":"api_error","error":{"message":"upstream body capped","type":"api_error","truncated":true},"request_id":""}`),
+			},
+		},
+		{
 			name:   "nil error",
 			llmErr: nil,
 			expected: &httpclient.Error{

@@ -246,6 +246,23 @@ func TestInboundTransformer_TransformResponse(t *testing.T) {
 	}
 }
 
+func TestTextTransformer_TransformError_TruncatedLLMResponseError(t *testing.T) {
+	transformer := NewTextTransformer()
+
+	result := transformer.TransformError(t.Context(), &llm.ResponseError{
+		StatusCode: http.StatusBadGateway,
+		Detail: llm.ErrorDetail{
+			Message:   "upstream body capped",
+			Type:      "api_error",
+			Truncated: true,
+		},
+	})
+
+	require.NotNil(t, result)
+	require.Equal(t, http.StatusBadGateway, result.StatusCode)
+	require.JSONEq(t, `{"message":"upstream body capped","type":"api_error","truncated":true}`, string(result.Body))
+}
+
 func TestInboundTransformer_TransformStreamChunk(t *testing.T) {
 	transformer := NewTextTransformer()
 	ctx := t.Context()

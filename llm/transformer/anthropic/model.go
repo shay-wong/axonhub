@@ -607,8 +607,9 @@ type Message struct {
 }
 
 type ErrorDetail struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
+	Type      string `json:"type"`
+	Message   string `json:"message"`
+	Truncated bool   `json:"truncated,omitempty"`
 }
 
 // AnthropicError follow the https://platform.claude.com/docs/en/api/errors

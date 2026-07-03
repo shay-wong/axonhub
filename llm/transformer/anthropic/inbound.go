@@ -179,7 +179,7 @@ func (t *InboundTransformer) TransformError(ctx context.Context, rawErr error) *
 					Type:       llmErr.Detail.Type,
 					StatusCode: llmErr.StatusCode,
 					RequestID:  llmErr.Detail.RequestID,
-					Error:      ErrorDetail{Type: llmErr.Detail.Type, Message: llmErr.Detail.Message},
+					Error:      ErrorDetail{Type: llmErr.Detail.Type, Message: llmErr.Detail.Message, Truncated: llmErr.Detail.Truncated},
 				},
 			),
 		}

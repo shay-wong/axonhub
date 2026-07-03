@@ -70,7 +70,10 @@ server:
     codex_trace_enabled: false # Enable Codex trace extraction
   debug: false                  # Enable debug mode
   disable_ssl_verify: false     # Disable SSL certificate verification for upstream requests (self-signed certificates)
+  trusted_proxies: []            # Trusted reverse proxy IPs/CIDRs for forwarded client IP headers
 ```
+
+`trusted_proxies` defaults to an empty list. Leave it empty to ignore `X-Forwarded-For` / `X-Real-IP` headers. When AxonHub is deployed behind a reverse proxy and IP allow/block rules must use the original client IP, set this to the proxy IP or CIDR. For environment variables, pass a JSON array such as `AXONHUB_SERVER_TRUSTED_PROXIES='["10.0.0.1","10.0.0.0/24"]'`.
 
 **Environment Variables:**
 - `AXONHUB_SERVER_PORT`
@@ -85,6 +88,7 @@ server:
 - `AXONHUB_SERVER_TRACE_CODEX_TRACE_ENABLED`
 - `AXONHUB_SERVER_DEBUG`
 - `AXONHUB_SERVER_DISABLE_SSL_VERIFY`
+- `AXONHUB_SERVER_TRUSTED_PROXIES`
 
 ### Database Configuration
 

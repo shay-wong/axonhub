@@ -17,12 +17,25 @@ import (
 
 	"github.com/looplj/axonhub/llm/streams"
 )
+
 // MaxErrorBodySize is the maximum number of bytes read from an upstream error
 // response body. Error bodies beyond this size are truncated to prevent OOM
 // from pathological upstream responses that echo large request payloads in
 // validation error messages, producing response bodies of 1+ GB.
 const MaxErrorBodySize = 1 << 20 // 1 MB
 
+func readLimitedErrorBody(body io.Reader) ([]byte, bool, error) {
+	data, err := io.ReadAll(io.LimitReader(body, MaxErrorBodySize+1))
+	if err != nil {
+		return nil, false, err
+	}
+
+	if len(data) <= MaxErrorBodySize {
+		return data, false, nil
+	}
+
+	return data[:MaxErrorBodySize], true, nil
+}
 
 // HttpClient implements the HttpClient interface.
 type HttpClient struct {
@@ -225,13 +238,12 @@ func (hc *HttpClient) Do(ctx context.Context, request *Request) (*Response, erro
 		}
 	}()
 
-	var body []byte
 	// Cap error response bodies at 1 MB to prevent OOM from pathological
 	// upstream error bodies (e.g., vLLM echoing multi-MB input in validation
 	// errors). Successful responses are read in full because they are
 	// typically small JSON payloads.
 	if rawResp.StatusCode >= 400 {
-		body, err = io.ReadAll(io.LimitReader(rawResp.Body, MaxErrorBodySize))
+		body, truncated, err := readLimitedErrorBody(rawResp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read error response body: %w", err)
 		}
@@ -250,11 +262,12 @@ func (hc *HttpClient) Do(ctx context.Context, request *Request) (*Response, erro
 			StatusCode: rawResp.StatusCode,
 			Status:     rawResp.Status,
 			Body:       body,
+			Truncated:  truncated,
 			Headers:    rawResp.Header,
 		}
 	}
 
-	body, err = io.ReadAll(rawResp.Body)
+	body, err := io.ReadAll(rawResp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
@@ -317,7 +330,7 @@ func (hc *HttpClient) DoStream(ctx context.Context, request *Request) (streams.S
 		}()
 
 		// Read error body for streaming requests
-		body, err := io.ReadAll(io.LimitReader(rawResp.Body, MaxErrorBodySize))
+		body, truncated, err := readLimitedErrorBody(rawResp.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -336,6 +349,7 @@ func (hc *HttpClient) DoStream(ctx context.Context, request *Request) (streams.S
 			StatusCode: rawResp.StatusCode,
 			Status:     rawResp.Status,
 			Body:       body,
+			Truncated:  truncated,
 			Headers:    rawResp.Header,
 		}
 	}

@@ -70,7 +70,10 @@ server:
     codex_trace_enabled: false # 启用 Codex 追踪提取
   debug: false                  # 启用调试模式
   disable_ssl_verify: false     # 禁用上游请求的 SSL 证书校验（自签名证书）
+  trusted_proxies: []            # 信任的反向代理 IP/CIDR，用于转发的客户端 IP 请求头
 ```
+
+`trusted_proxies` 默认是空列表。保持为空时会忽略 `X-Forwarded-For` / `X-Real-IP` 请求头；如果 AxonHub 部署在反向代理后面，并且 IP 白名单/黑名单需要使用真实客户端 IP，应配置代理 IP 或 CIDR。使用环境变量时传 JSON 数组，例如 `AXONHUB_SERVER_TRUSTED_PROXIES='["10.0.0.1","10.0.0.0/24"]'`。
 
 **环境变量：**
 - `AXONHUB_SERVER_PORT`
@@ -85,6 +88,7 @@ server:
 - `AXONHUB_SERVER_TRACE_CODEX_TRACE_ENABLED`
 - `AXONHUB_SERVER_DEBUG`
 - `AXONHUB_SERVER_DISABLE_SSL_VERIFY`
+- `AXONHUB_SERVER_TRUSTED_PROXIES`
 
 ### 数据库配置
 

@@ -262,6 +262,15 @@ func TestFactory_NewFactory(t *testing.T) {
 	require.Equal(t, executor, factory.Executor)
 }
 
+func TestTransformHTTPErrorPreservesTruncated(t *testing.T) {
+	p := &pipeline{Outbound: &testOutbound{}}
+
+	respErr := p.transformHTTPError(context.Background(), &httpclient.Error{Truncated: true})
+
+	require.NotNil(t, respErr)
+	require.True(t, respErr.Detail.Truncated)
+}
+
 // testExecutor is a simple test executor.
 type testExecutor struct {
 	callCount int

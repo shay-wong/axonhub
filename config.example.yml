@@ -19,6 +19,8 @@ server:
     codex_trace_enabled: false # Enable extracting trace IDs from Codex Session_id header (env: AXONHUB_SERVER_TRACE_CODEX_TRACE_ENABLED)
   debug: false                  # Enable debug mode (env: AXONHUB_SERVER_DEBUG)
   disable_ssl_verify: false     # Disable SSL certificate verification for self-signed certificates (env: AXONHUB_SERVER_DISABLE_SSL_VERIFY)
+  trusted_proxies: []            # Trusted reverse proxy IPs/CIDRs for X-Forwarded-For / X-Real-IP (env: AXONHUB_SERVER_TRUSTED_PROXIES)
+                                  # Empty disables trusting forwarded IP headers.
   cors:
     enabled: true               # Enable CORS middleware (env: AXONHUB_SERVER_CORS_ENABLED)
     debug: false                # Enable CORS debug logging (env: AXONHUB_SERVER_CORS_DEBUG)

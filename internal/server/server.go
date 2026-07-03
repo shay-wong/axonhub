@@ -31,6 +31,9 @@ func New(config Config) *Server {
 	}
 
 	engine := gin.New()
+	if err := engine.SetTrustedProxies(config.TrustedProxies); err != nil {
+		panic(fmt.Errorf("failed to configure trusted proxies: %w", err))
+	}
 	engine.Use(middleware.Recovery())
 
 	return &Server{
