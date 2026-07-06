@@ -520,8 +520,9 @@ func TestCodexOutbound_AppliesCodexStyleResponsesDefaultsWhenEnabled(t *testing.
 
 	body := decodeCodexRequestBody(t, hreq)
 
-	require.NotEmpty(t, hreq.Headers.Get(SessionHeader))
-	assert.Equal(t, hreq.Headers.Get(SessionHeader), body["prompt_cache_key"])
+	require.NotEmpty(t, hreq.Headers.Get(SessionHeaderHyphen))
+	assert.Empty(t, hreq.Headers.Get(SessionHeader))
+	assert.Equal(t, hreq.Headers.Get(SessionHeaderHyphen), body["prompt_cache_key"])
 	assert.Equal(t, "auto", body["tool_choice"])
 	assert.Equal(t, "priority", body["service_tier"])
 
@@ -545,6 +546,15 @@ func TestCodexOutbound_CodexStyleResponsesPromptCacheKeySessionPrecedence(t *tes
 				TurnMetadataHeader: []string{`{"session_id":"turn-session"}`},
 			},
 			wantCacheID: "header-session",
+		},
+		{
+			name: "hyphen session header wins over turn metadata and shared session",
+			ctx:  shared.WithSessionID(context.Background(), "shared-session"),
+			headers: http.Header{
+				SessionHeaderHyphen: []string{"hyphen-session"},
+				TurnMetadataHeader:  []string{`{"session_id":"turn-session"}`},
+			},
+			wantCacheID: "hyphen-session",
 		},
 		{
 			name: "turn metadata wins over shared session",
@@ -583,10 +593,45 @@ func TestCodexOutbound_CodexStyleResponsesPromptCacheKeySessionPrecedence(t *tes
 
 			body := decodeCodexRequestBody(t, hreq)
 
-			assert.Equal(t, tt.wantCacheID, hreq.Headers.Get(SessionHeader))
+			assert.Equal(t, tt.wantCacheID, hreq.Headers.Get(SessionHeaderHyphen))
+			assert.Empty(t, hreq.Headers.Get(SessionHeader))
 			assert.Equal(t, tt.wantCacheID, body["prompt_cache_key"])
 		})
 	}
+}
+
+func TestCodexOutbound_CodexStyleResponsesCanonicalSessionSurvivesInboundMerge(t *testing.T) {
+	ctx := shared.WithSessionID(context.Background(), "shared-session")
+	outbound := newTestCodexOutbound(t)
+	rawRequest := &httpclient.Request{
+		Headers: http.Header{
+			SessionHeader:       []string{"legacy-session"},
+			SessionHeaderHyphen: []string{"modern-session"},
+			TurnMetadataHeader:  []string{`{"session_id":"turn-session"}`},
+		},
+	}
+
+	hreq, err := outbound.TransformRequest(ctx, &llm.Request{
+		Model:      "gpt-5-codex",
+		RawRequest: rawRequest,
+		Messages: []llm.Message{{
+			Role:    "user",
+			Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
+		}},
+		TransformOptions: llm.TransformOptions{
+			CodexStyleResponses: lo.ToPtr(true),
+		},
+	})
+	require.NoError(t, err)
+
+	hreq = httpclient.MergeInboundRequest(hreq, rawRequest)
+	body := decodeCodexRequestBody(t, hreq)
+
+	assert.Equal(t, "legacy-session", hreq.Headers.Get(SessionHeaderHyphen))
+	assert.Empty(t, hreq.Headers.Get(SessionHeader))
+	assert.Equal(t, "legacy-session", body["prompt_cache_key"])
+	assert.Equal(t, "legacy-session", rawRequest.Headers.Get(SessionHeader))
+	assert.Equal(t, "modern-session", rawRequest.Headers.Get(SessionHeaderHyphen))
 }
 
 func TestCodexOutbound_CodexStyleResponsesPreservesRawToolChoice(t *testing.T) {

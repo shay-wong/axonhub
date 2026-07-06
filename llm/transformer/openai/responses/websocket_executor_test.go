@@ -437,6 +437,67 @@ func TestWebSocketExecutorReusesConnectionForSameSession(t *testing.T) {
 	require.Equal(t, int32(1), upgrades.Load())
 }
 
+func TestWebSocketExecutorReusesConnectionAcrossSessionHeaderVariants(t *testing.T) {
+	upgrader := websocket.Upgrader{}
+	var upgrades atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "session-1", webSocketSessionID(r.Header))
+		upgrades.Add(1)
+
+		conn, err := upgrader.Upgrade(w, r, nil)
+		require.NoError(t, err)
+		defer conn.Close()
+
+		for i := 0; i < 2; i++ {
+			var payload map[string]any
+			require.NoError(t, conn.ReadJSON(&payload))
+			require.Equal(t, "response.create", payload["type"])
+			require.Equal(t, fmt.Sprintf("turn-%d", i+1), payload["instructions"])
+
+			require.NoError(t, conn.WriteJSON(map[string]any{
+				"type": "response.completed",
+				"response": map[string]any{
+					"id":         fmt.Sprintf("resp_%d", i+1),
+					"object":     "response",
+					"created_at": 1700000000,
+					"model":      "gpt-5",
+					"status":     "completed",
+					"output":     []any{},
+				},
+			}))
+		}
+	}))
+	defer server.Close()
+
+	executor := NewWebSocketExecutor(nil)
+	for i := 0; i < 2; i++ {
+		headers := http.Header{
+			webSocketSessionHeader: []string{"session-1"},
+		}
+		if i == 1 {
+			headers = http.Header{
+				webSocketSessionHeaderHyphen: []string{"session-1"},
+			}
+		}
+
+		stream, err := executor.DoStream(webSocketTestContext(), &httpclient.Request{
+			Method:  http.MethodPost,
+			URL:     "http" + strings.TrimPrefix(server.URL, "http") + "/v1/responses",
+			Headers: headers,
+			Auth:    &httpclient.AuthConfig{Type: httpclient.AuthTypeBearer, APIKey: "test-key"},
+			Body:    []byte(fmt.Sprintf(`{"model":"gpt-5","instructions":"turn-%d"}`, i+1)),
+		})
+		require.NoError(t, err)
+		require.True(t, stream.Next())
+		require.Equal(t, "response.completed", stream.Current().Type)
+		require.False(t, stream.Next())
+		require.NoError(t, stream.Err())
+		require.NoError(t, stream.Close())
+	}
+
+	require.Equal(t, int32(1), upgrades.Load())
+}
+
 func TestWebSocketExecutorDoesNotPoolWithoutSession(t *testing.T) {
 	upgrader := websocket.Upgrader{}
 	var upgrades atomic.Int32

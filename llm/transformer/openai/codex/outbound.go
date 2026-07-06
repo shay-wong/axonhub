@@ -114,6 +114,9 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	if llmReq.RawRequest != nil && llmReq.RawRequest.Headers != nil {
 		rawHeaders = llmReq.RawRequest.Headers
 		rawSessionID = llmReq.RawRequest.Headers.Get(SessionHeader)
+		if rawSessionID == "" {
+			rawSessionID = llmReq.RawRequest.Headers.Get(SessionHeaderHyphen)
+		}
 		rawOriginator = llmReq.RawRequest.Headers.Get("Originator")
 		rawUserAgent = llmReq.RawRequest.Headers.Get("User-Agent")
 		rawTurnMetadata = llmReq.RawRequest.Headers.Get(TurnMetadataHeader)
@@ -193,6 +196,12 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 		hreq.APIFormat = originalAPIFormat.String()
 	}
 
+	// Session headers are normalized below; keep RawRequest intact for templates but prevent inbound merge from overriding them.
+	hreq.SkipInboundHeaderMerge = map[string]bool{
+		http.CanonicalHeaderKey(SessionHeader):       true,
+		http.CanonicalHeaderKey(SessionHeaderHyphen): true,
+	}
+
 	// Overwrite auth.
 	hreq.Auth = &httpclient.AuthConfig{Type: httpclient.AuthTypeBearer, APIKey: creds.AccessToken}
 	// Compact requests expect JSON response, others expect SSE stream.
@@ -220,15 +229,27 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 		}
 	}
 
-	if hreq.Headers.Get(SessionHeader) == "" {
+	if hreq.Headers.Get(SessionHeaderHyphen) == "" {
 		if sessionID == "" {
 			sessionID = ensureSessionID(ctx, rawSessionID, rawTurnMetadata)
 		}
-		hreq.Headers.Set(SessionHeader, sessionID)
+		hreq.Headers.Set(SessionHeaderHyphen, sessionID)
 	}
+
+	hreq.Headers.Del(SessionHeader)
 
 	if accountID != "" {
 		hreq.Headers.Set("Chatgpt-Account-Id", accountID)
+	}
+
+	if hreq.Headers.Get("Conversation_id") == "" {
+		if sessionID := hreq.Headers.Get(SessionHeaderHyphen); sessionID != "" {
+			hreq.Headers.Set("Conversation_id", sessionID)
+		}
+	}
+
+	if hreq.Headers.Get("Version") == "" {
+		hreq.Headers.Set("Version", codexDefaultVersion)
 	}
 
 	return hreq, nil

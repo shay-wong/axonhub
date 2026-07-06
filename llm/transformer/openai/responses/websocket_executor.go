@@ -28,12 +28,13 @@ import (
 const WebSocketBetaHeaderValue = "responses_websockets=2026-02-06"
 
 const (
-	webSocketSessionHeader    = "Session_id"
-	webSocketAccountIDHeader  = "Chatgpt-Account-Id"
-	webSocketOriginatorHeader = "Originator"
-	webSocketUserAgentHeader  = "User-Agent"
-	webSocketOrgHeader        = "OpenAI-Organization"
-	webSocketProjectHeader    = "OpenAI-Project"
+	webSocketSessionHeader       = "Session_id"
+	webSocketSessionHeaderHyphen = "Session-Id"
+	webSocketAccountIDHeader     = "Chatgpt-Account-Id"
+	webSocketOriginatorHeader    = "Originator"
+	webSocketUserAgentHeader     = "User-Agent"
+	webSocketOrgHeader           = "OpenAI-Organization"
+	webSocketProjectHeader       = "OpenAI-Project"
 	// OpenAI limits Responses WebSocket connections to 60 minutes. The
 	// Codex store=false path depends on connection-local state: real upstream
 	// probes show reconnecting loses previous_response_id recovery, and
@@ -437,7 +438,7 @@ func (e *WebSocketExecutor) dial(ctx context.Context, request *httpclient.Reques
 }
 
 func (e *WebSocketExecutor) poolKey(ctx context.Context, request *httpclient.Request, wsURL string, headers http.Header) (webSocketPoolKey, bool) {
-	sessionID := strings.TrimSpace(headers.Get(webSocketSessionHeader))
+	sessionID := webSocketSessionID(headers)
 	if sessionID == "" {
 		if value, ok := shared.GetSessionID(ctx); ok {
 			sessionID = strings.TrimSpace(value)
@@ -464,6 +465,15 @@ func (e *WebSocketExecutor) poolKey(ctx context.Context, request *httpclient.Req
 		BetaHeader: strings.TrimSpace(headers.Get("OpenAI-Beta")),
 		Headers:    headerPoolIdentity(headers),
 	}, true
+}
+
+func webSocketSessionID(headers http.Header) string {
+	sessionID := strings.TrimSpace(headers.Get(webSocketSessionHeader))
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(headers.Get(webSocketSessionHeaderHyphen))
+	}
+
+	return sessionID
 }
 
 func headerPoolIdentity(headers http.Header) string {
@@ -503,6 +513,7 @@ var webSocketPoolIdentityExcludedHeaders = canonicalHeaderSet(
 	// Already represented as dedicated webSocketPoolKey fields.
 	"Authorization",
 	webSocketSessionHeader,
+	webSocketSessionHeaderHyphen,
 	webSocketAccountIDHeader,
 	webSocketOriginatorHeader,
 	webSocketUserAgentHeader,

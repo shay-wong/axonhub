@@ -269,7 +269,7 @@ func MergeInboundRequest(dest, src *Request) *Request {
 		return dest
 	}
 
-	dest.Headers = MergeHTTPHeaders(dest.Headers, src.Headers)
+	dest.Headers = MergeHTTPHeadersWithSkip(dest.Headers, src.Headers, dest.SkipInboundHeaderMerge)
 
 	if !dest.SkipInboundQueryMerge {
 		dest.Query = MergeHTTPQuery(dest.Query, src.Query)
@@ -335,8 +335,12 @@ func FinalizeAuthHeaders(req *Request) (*Request, error) {
 // Otherwise, it overwrites the destination header with the source values.
 // Blocked, sensitive, and library-managed headers are not merged.
 func MergeHTTPHeaders(dest, src http.Header) http.Header {
+	return MergeHTTPHeadersWithSkip(dest, src, nil)
+}
+
+func MergeHTTPHeadersWithSkip(dest, src http.Header, skipHeaders map[string]bool) http.Header {
 	for k, v := range src {
-		if IsSensitiveHeader(k) || libManagedHeaders[k] || isBlockedHeader(k) {
+		if skipHeaders[http.CanonicalHeaderKey(k)] || skipHeaders[k] || IsSensitiveHeader(k) || libManagedHeaders[k] || isBlockedHeader(k) {
 			continue
 		}
 

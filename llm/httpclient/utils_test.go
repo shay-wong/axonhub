@@ -349,3 +349,30 @@ func TestMergeHTTPHeaders_AcceptNotOverridden(t *testing.T) {
 	assert.Equal(t, "*/*", merged.Get("Accept"))
 	assert.Equal(t, "client-value", merged.Get("X-Custom"))
 }
+
+func TestMergeInboundRequest_SkipsSelectedHeadersWithoutMutatingSource(t *testing.T) {
+	dest := &Request{
+		Headers: http.Header{
+			"Session-Id": []string{"canonical-session"},
+		},
+		SkipInboundHeaderMerge: map[string]bool{
+			"Session_id": true,
+			"Session-Id": true,
+		},
+	}
+	src := &Request{
+		Headers: http.Header{
+			"Session_id": []string{"legacy-session"},
+			"Session-Id": []string{"raw-modern-session"},
+			"X-Custom":   []string{"client-value"},
+		},
+	}
+
+	merged := MergeInboundRequest(dest, src)
+
+	assert.Equal(t, "canonical-session", merged.Headers.Get("Session-Id"))
+	assert.Empty(t, merged.Headers.Get("Session_id"))
+	assert.Equal(t, "client-value", merged.Headers.Get("X-Custom"))
+	assert.Equal(t, "legacy-session", src.Headers.Get("Session_id"))
+	assert.Equal(t, "raw-modern-session", src.Headers.Get("Session-Id"))
+}
