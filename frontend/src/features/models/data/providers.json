@@ -349,7 +349,7 @@
         {
           "id": "grok-imagine-video",
           "name": "Grok Imagine Video",
-          "description": "Image model for prompt-driven generation, editing, and visual design workflows",
+          "description": "Video model for prompt-driven generation, editing, and multimodal visual workflows",
           "family": "grok",
           "attachment": true,
           "reasoning": {
@@ -796,7 +796,7 @@
         {
           "id": "devstral-latest",
           "name": "Devstral 2",
-          "description": "Legacy model retained for compatibility with older integrations",
+          "description": "Latest Devstral 2 alias for coding-agent workflows and repository automation",
           "family": "devstral",
           "attachment": false,
           "reasoning": {
@@ -902,7 +902,7 @@
         {
           "id": "devstral-medium-latest",
           "name": "Devstral 2 (latest)",
-          "description": "Legacy model retained for compatibility with older integrations",
+          "description": "Latest Devstral 2 medium alias for coding-agent workflows and repository automation",
           "family": "devstral",
           "attachment": false,
           "reasoning": {

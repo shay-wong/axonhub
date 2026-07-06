@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -330,6 +331,83 @@ func TestCodexOutbound_CustomizeExecutorUsesCurrentExecutor(t *testing.T) {
 	require.Same(t, firstInner, againInner)
 	require.Same(t, firstClient, firstInner.Inner())
 	require.Same(t, secondClient, secondInner.Inner())
+}
+
+func TestCodexOutbound_WebSocketExecutorSendsCanonicalSessionHeader(t *testing.T) {
+	ctx := context.Background()
+	upgrader := websocket.Upgrader{}
+	capturedHeaders := make(chan http.Header, 1)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedHeaders <- r.Header.Clone()
+
+		conn, err := upgrader.Upgrade(w, r, nil)
+		require.NoError(t, err)
+		defer conn.Close()
+
+		var payload map[string]any
+		require.NoError(t, conn.ReadJSON(&payload))
+		require.Equal(t, "response.create", payload["type"])
+
+		require.NoError(t, conn.WriteJSON(map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":         "resp_wire_session",
+				"object":     "response",
+				"created_at": 1700000000,
+				"model":      "gpt-5-codex",
+				"status":     "completed",
+				"output":     []any{},
+			},
+		}))
+	}))
+	defer server.Close()
+
+	outbound, err := NewOutboundTransformer(Params{
+		BaseURL:       "wss://chatgpt.com/backend-api/codex#",
+		Transport:     responses.TransportWebSocket,
+		TokenProvider: staticTokenGetter{creds: &oauth.OAuthCredentials{AccessToken: testAccessTokenWithAccountID(t), ExpiresAt: time.Now().Add(time.Hour)}},
+	})
+	require.NoError(t, err)
+
+	executor := outbound.CustomizeExecutor(httpclient.NewHttpClientWithClient(server.Client()))
+	request, err := outbound.TransformRequest(ctx, &llm.Request{
+		Model: "gpt-5-codex",
+		RawRequest: &httpclient.Request{
+			Headers: http.Header{
+				SessionHeader:       []string{"legacy-session"},
+				SessionHeaderHyphen: []string{"canonical-session"},
+			},
+		},
+		Messages: []llm.Message{{
+			Role:    "user",
+			Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
+		}},
+	})
+	require.NoError(t, err)
+
+	request.URL = server.URL + "/v1/responses"
+	request.Headers.Set(SessionHeader, "legacy-override")
+	request.Headers.Set(SessionHeaderHyphen, "modern-override")
+
+	stream, err := executor.DoStream(ctx, request)
+	require.NoError(t, err)
+	defer func() {
+		_ = stream.Close()
+	}()
+
+	require.True(t, stream.Next())
+	require.Equal(t, "response.completed", stream.Current().Type)
+
+	var headers http.Header
+	select {
+	case headers = <-capturedHeaders:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for websocket upgrade request")
+	}
+
+	require.Equal(t, "legacy-session", headers.Get(SessionHeaderHyphen))
+	require.Empty(t, headers.Get(SessionHeader))
 }
 
 func TestCodexOutbound_CustomizeExecutorAggregatesNonStreamRequests(t *testing.T) {

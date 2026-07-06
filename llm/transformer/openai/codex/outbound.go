@@ -26,6 +26,8 @@ import (
 const (
 	codexBaseURL = "https://chatgpt.com/backend-api/codex#"
 	codexAPIURL  = "https://chatgpt.com/backend-api/codex/responses"
+
+	codexSessionIDMetadataKey = "codex_session_id"
 )
 
 // OutboundTransformer implements transformer.Outbound for Codex proxy.
@@ -252,6 +254,13 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 		hreq.Headers.Set("Version", codexDefaultVersion)
 	}
 
+	if sessionID := strings.TrimSpace(hreq.Headers.Get(SessionHeaderHyphen)); sessionID != "" {
+		if hreq.TransformerMetadata == nil {
+			hreq.TransformerMetadata = map[string]any{}
+		}
+		hreq.TransformerMetadata[codexSessionIDMetadataKey] = sessionID
+	}
+
 	return hreq, nil
 }
 
@@ -404,6 +413,8 @@ type codexExecutor struct {
 }
 
 func (e *codexExecutor) Do(ctx context.Context, request *httpclient.Request) (*httpclient.Response, error) {
+	normalizeCodexSessionHeaders(request)
+
 	if request.RequestType == string(llm.RequestTypeCompact) {
 		return e.inner.Do(ctx, request)
 	}
@@ -455,5 +466,30 @@ func (e *codexExecutor) Do(ctx context.Context, request *httpclient.Request) (*h
 }
 
 func (e *codexExecutor) DoStream(ctx context.Context, request *httpclient.Request) (streams.Stream[*httpclient.StreamEvent], error) {
+	normalizeCodexSessionHeaders(request)
+
 	return e.inner.DoStream(ctx, request)
+}
+
+func normalizeCodexSessionHeaders(request *httpclient.Request) {
+	if request == nil || request.Headers == nil {
+		return
+	}
+
+	sessionID := ""
+	if request.TransformerMetadata != nil {
+		if value, ok := request.TransformerMetadata[codexSessionIDMetadataKey].(string); ok {
+			sessionID = strings.TrimSpace(value)
+		}
+	}
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(request.Headers.Get(SessionHeaderHyphen))
+	}
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(request.Headers.Get(SessionHeader))
+	}
+	if sessionID != "" {
+		request.Headers.Set(SessionHeaderHyphen, sessionID)
+	}
+	request.Headers.Del(SessionHeader)
 }
