@@ -13,6 +13,7 @@ import (
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/auth"
 	"github.com/looplj/axonhub/llm/httpclient"
+	"github.com/looplj/axonhub/llm/streams"
 )
 
 func newTestTransformer(t *testing.T) *OutboundTransformer {
@@ -176,6 +177,34 @@ func TestOutboundTransformer_TransformStreamChunk_UsesErrorsFallbackForClineFail
 	require.True(t, errors.As(err, &respErr))
 	assert.Equal(t, http.StatusBadGateway, respErr.StatusCode)
 	assert.Contains(t, respErr.Detail.Message, "quota exceeded")
+}
+
+func TestOutboundTransformer_TransformStream_FiltersEmptyChoicesWithoutDroppingUsageChunk(t *testing.T) {
+	transformer := newTestTransformer(t)
+
+	stream, err := transformer.TransformStream(context.Background(), nil, streams.SliceStream([]*httpclient.StreamEvent{
+		{
+			Data: []byte(`{"id":"chatcmpl-1","object":"chat.completion.chunk","created":123,"model":"cline-pass/deepseek-v4-flash","choices":[{"index":0,"delta":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`),
+		},
+		{
+			Data: []byte(`{"choices":[],"x-opencode-type":"inference-cost","usage":null}`),
+		},
+		{
+			Data: []byte(`{"id":"chatcmpl-1","object":"chat.completion.chunk","created":123,"model":"cline-pass/deepseek-v4-flash","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}`),
+		},
+	}))
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.NoError(t, err)
+	require.Len(t, responses, 2)
+	require.Len(t, responses[0].Choices, 1)
+	require.NotNil(t, responses[0].Choices[0].Delta)
+	require.NotNil(t, responses[0].Choices[0].Delta.Content.Content)
+	assert.Equal(t, "ok", *responses[0].Choices[0].Delta.Content.Content)
+	require.Len(t, responses[1].Choices, 0)
+	require.NotNil(t, responses[1].Usage)
+	assert.Equal(t, int64(15), responses[1].Usage.TotalTokens)
 }
 
 func TestOutboundTransformer_AggregateStreamChunks_UsesClineReasoningFields(t *testing.T) {

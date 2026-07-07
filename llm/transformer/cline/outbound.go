@@ -13,6 +13,7 @@ import (
 	"github.com/looplj/axonhub/llm/streams"
 	"github.com/looplj/axonhub/llm/transformer"
 	"github.com/looplj/axonhub/llm/transformer/openai"
+	"github.com/tidwall/gjson"
 )
 
 // Config holds all configuration for the Cline outbound transformer.
@@ -106,9 +107,9 @@ func (t *OutboundTransformer) TransformResponse(ctx context.Context, httpResp *h
 
 // TransformStream transforms a stream of HTTP events to a stream of llm.Response.
 func (t *OutboundTransformer) TransformStream(ctx context.Context, req *httpclient.Request, stream streams.Stream[*httpclient.StreamEvent]) (streams.Stream[*llm.Response], error) {
-	return streams.MapErr(stream, func(event *httpclient.StreamEvent) (*llm.Response, error) {
+	return streams.NoNil(streams.MapErr(stream, func(event *httpclient.StreamEvent) (*llm.Response, error) {
 		return t.TransformStreamChunk(ctx, event)
-	}), nil
+	})), nil
 }
 
 // TransformStreamChunk transforms a single stream event to llm.Response.
@@ -121,6 +122,9 @@ func (t *OutboundTransformer) TransformStreamChunk(ctx context.Context, event *h
 	}
 	if streamErr := parseClineErrorEvent(event); streamErr != nil {
 		return nil, streamErr
+	}
+	if shouldSkipEmptyChoicesEvent(event.Data) {
+		return nil, nil
 	}
 
 	return t.TransformResponse(ctx, &httpclient.Response{Body: event.Data})
@@ -135,6 +139,20 @@ func (t *OutboundTransformer) TransformError(ctx context.Context, rawErr *httpcl
 	}
 
 	return parseClineError(rawErr.StatusCode, rawErr.Body)
+}
+
+func shouldSkipEmptyChoicesEvent(data []byte) bool {
+	choicesVal := gjson.GetBytes(data, "choices")
+	usageVal := gjson.GetBytes(data, "usage")
+	if !choicesVal.Exists() {
+		choicesVal = gjson.GetBytes(data, "data.choices")
+		usageVal = gjson.GetBytes(data, "data.usage")
+	}
+
+	return choicesVal.Exists() &&
+		choicesVal.IsArray() &&
+		len(choicesVal.Array()) == 0 &&
+		(!usageVal.Exists() || usageVal.Raw == "null")
 }
 
 func clineChunkTransform(ctx context.Context, chunk *httpclient.StreamEvent) (*openai.Response, error) {

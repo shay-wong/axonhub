@@ -158,6 +158,40 @@ func TestAggregateStreamChunks_EmptyChunks(t *testing.T) {
 	require.Equal(t, llm.Response{}, got)
 }
 
+func TestAggregateStreamChunks_PreservesMetadataWithTrailingEmptyChoiceEvents(t *testing.T) {
+	chunks := []*httpclient.StreamEvent{
+		{
+			Data: []byte(`{"id":"chatcmpl-real","object":"chat.completion.chunk","created":1677652288,"model":"gpt-4","system_fingerprint":"fp-real","choices":[{"index":0,"delta":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`),
+		},
+		{
+			Data: []byte(`{"choices":[],"x-opencode-type":"inference-cost","usage":null}`),
+		},
+		{
+			Data: []byte(`{"id":"chatcmpl-usage","object":"chat.completion.chunk","created":1677652299,"model":"metadata-event","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}`),
+		},
+	}
+
+	gotBytes, meta, err := AggregateStreamChunks(context.Background(), chunks, DefaultTransformChunk)
+	require.NoError(t, err)
+	require.Equal(t, "chatcmpl-real", meta.ID)
+	require.NotNil(t, meta.Usage)
+	require.Equal(t, int64(15), meta.Usage.TotalTokens)
+
+	var got llm.Response
+	err = json.Unmarshal(gotBytes, &got)
+	require.NoError(t, err)
+
+	require.Equal(t, "chatcmpl-real", got.ID)
+	require.Equal(t, "gpt-4", got.Model)
+	require.Equal(t, int64(1677652288), got.Created)
+	require.Equal(t, "fp-real", got.SystemFingerprint)
+	require.NotNil(t, got.Usage)
+	require.Equal(t, int64(15), got.Usage.TotalTokens)
+	require.Len(t, got.Choices, 1)
+	require.NotNil(t, got.Choices[0].Message.Content.Content)
+	require.Equal(t, "ok", *got.Choices[0].Message.Content.Content)
+}
+
 func TestAggregateStreamChunks_WithCitations(t *testing.T) {
 	// Create chunks with citations spread across them
 	chunks := []*httpclient.StreamEvent{
