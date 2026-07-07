@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   helm-chart:
-    if: github.repository_owner == 'looplj'
+    if: github.repository == 'shay-wong/axonhub'
     runs-on: ubuntu-latest
     concurrency:
       group: release-helm-chart-${{ github.ref }}

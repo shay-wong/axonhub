@@ -4,9 +4,9 @@ version: 0.1.0
 appVersion: "latest"
 description: A Helm chart for deploying AxonHub on Kubernetes
 type: application
-home: https://github.com/looplj/axonhub
+home: https://github.com/shay-wong/axonhub
 sources:
-  - https://github.com/looplj/axonhub
+  - https://github.com/shay-wong/axonhub
 maintainers:
   - name: AxonHub Team
     email: team@axonhub.ai

@@ -31,7 +31,7 @@ The following table lists the configurable parameters of the AxonHub chart and t
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `axonhub.replicaCount` | Number of AxonHub replicas | `1` |
-| `axonhub.image.repository` | AxonHub image repository | `looplj/axonhub` |
+| `axonhub.image.repository` | AxonHub image repository | `shay-wong/axonhub` |
 | `axonhub.image.tag` | AxonHub image tag override. Defaults to chart `appVersion` when empty | `""` |
 | `axonhub.image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `axonhub.dbPassword` | Database password | `axonhub_password` |
