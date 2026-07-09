@@ -3551,6 +3551,7 @@
             }
           ],
           "tool_call": true,
+          "structured_output": true,
           "temperature": false,
           "knowledge": "2026-02-16",
           "release_date": "2026-07-09",
@@ -3568,13 +3569,58 @@
           "open_weights": false,
           "limit": {
             "context": 1050000,
+            "input": 922000,
             "output": 128000
+          },
+          "experimental": {
+            "modes": {
+              "fast": {
+                "cost": {
+                  "input": 10,
+                  "output": 60,
+                  "cache_read": 1,
+                  "cache_write": 12.5
+                },
+                "provider": {
+                  "body": {
+                    "service_tier": "priority"
+                  }
+                }
+              },
+              "pro": {
+                "provider": {
+                  "body": {
+                    "reasoning": {
+                      "mode": "pro"
+                    }
+                  }
+                }
+              }
+            }
           },
           "cost": {
             "input": 5,
             "output": 30,
             "cache_read": 0.5,
-            "cache_write": 6.25
+            "cache_write": 6.25,
+            "tiers": [
+              {
+                "input": 10,
+                "output": 45,
+                "cache_read": 1,
+                "cache_write": 12.5,
+                "tier": {
+                  "type": "context",
+                  "size": 272000
+                }
+              }
+            ],
+            "context_over_200k": {
+              "input": 10,
+              "output": 45,
+              "cache_read": 1,
+              "cache_write": 12.5
+            }
           },
           "display_name": "GPT-5.6 Sol",
           "type": "chat"
@@ -3603,6 +3649,7 @@
             }
           ],
           "tool_call": true,
+          "structured_output": true,
           "temperature": false,
           "knowledge": "2026-02-16",
           "release_date": "2026-07-09",
@@ -3620,13 +3667,58 @@
           "open_weights": false,
           "limit": {
             "context": 1050000,
+            "input": 922000,
             "output": 128000
+          },
+          "experimental": {
+            "modes": {
+              "fast": {
+                "cost": {
+                  "input": 5,
+                  "output": 30,
+                  "cache_read": 0.5,
+                  "cache_write": 6.25
+                },
+                "provider": {
+                  "body": {
+                    "service_tier": "priority"
+                  }
+                }
+              },
+              "pro": {
+                "provider": {
+                  "body": {
+                    "reasoning": {
+                      "mode": "pro"
+                    }
+                  }
+                }
+              }
+            }
           },
           "cost": {
             "input": 2.5,
             "output": 15,
             "cache_read": 0.25,
-            "cache_write": 3.125
+            "cache_write": 3.125,
+            "tiers": [
+              {
+                "input": 5,
+                "output": 22.5,
+                "cache_read": 0.5,
+                "cache_write": 6.25,
+                "tier": {
+                  "type": "context",
+                  "size": 272000
+                }
+              }
+            ],
+            "context_over_200k": {
+              "input": 5,
+              "output": 22.5,
+              "cache_read": 0.5,
+              "cache_write": 6.25
+            }
           },
           "display_name": "GPT-5.6 Terra",
           "type": "chat"
@@ -3655,6 +3747,7 @@
             }
           ],
           "tool_call": true,
+          "structured_output": true,
           "temperature": false,
           "knowledge": "2026-02-16",
           "release_date": "2026-07-09",
@@ -3672,13 +3765,58 @@
           "open_weights": false,
           "limit": {
             "context": 1050000,
+            "input": 922000,
             "output": 128000
+          },
+          "experimental": {
+            "modes": {
+              "fast": {
+                "cost": {
+                  "input": 2,
+                  "output": 12,
+                  "cache_read": 0.2,
+                  "cache_write": 2.5
+                },
+                "provider": {
+                  "body": {
+                    "service_tier": "priority"
+                  }
+                }
+              },
+              "pro": {
+                "provider": {
+                  "body": {
+                    "reasoning": {
+                      "mode": "pro"
+                    }
+                  }
+                }
+              }
+            }
           },
           "cost": {
             "input": 1,
             "output": 6,
             "cache_read": 0.1,
-            "cache_write": 1.25
+            "cache_write": 1.25,
+            "tiers": [
+              {
+                "input": 2,
+                "output": 9,
+                "cache_read": 0.2,
+                "cache_write": 2.5,
+                "tier": {
+                  "type": "context",
+                  "size": 272000
+                }
+              }
+            ],
+            "context_over_200k": {
+              "input": 2,
+              "output": 9,
+              "cache_read": 0.2,
+              "cache_write": 2.5
+            }
           },
           "display_name": "GPT-5.6 Luna",
           "type": "chat"

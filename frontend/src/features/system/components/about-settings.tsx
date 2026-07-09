@@ -1,5 +1,6 @@
 'use client';
 
+import { resolveExternalURLs } from '@/config/external-urls';
 import { ExternalLink, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSystemVersion, useCheckForUpdate } from '../data/system';
+
+const { repositoryURL, releasesURL, issuesURL } = resolveExternalURLs(import.meta.env);
 
 export function AboutSettings() {
   const { t } = useTranslation();
@@ -125,19 +128,19 @@ export function AboutSettings() {
             <h4 className='mb-4 text-sm font-medium'>{t('system.about.links.title')}</h4>
             <div className='flex flex-wrap gap-4'>
               <Button variant='outline' size='sm' asChild>
-                <a href='https://github.com/shay-wong/axonhub' target='_blank' rel='noopener noreferrer'>
+                <a href={repositoryURL} target='_blank' rel='noopener noreferrer'>
                   GitHub
                   <ExternalLink className='ml-1 h-3 w-3' />
                 </a>
               </Button>
               <Button variant='outline' size='sm' asChild>
-                <a href='https://github.com/shay-wong/axonhub/releases' target='_blank' rel='noopener noreferrer'>
+                <a href={releasesURL} target='_blank' rel='noopener noreferrer'>
                   {t('system.about.links.releases')}
                   <ExternalLink className='ml-1 h-3 w-3' />
                 </a>
               </Button>
               <Button variant='outline' size='sm' asChild>
-                <a href='https://github.com/shay-wong/axonhub/issues' target='_blank' rel='noopener noreferrer'>
+                <a href={issuesURL} target='_blank' rel='noopener noreferrer'>
                   {t('system.about.links.issues')}
                   <ExternalLink className='ml-1 h-3 w-3' />
                 </a>
