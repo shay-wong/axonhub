@@ -7,12 +7,16 @@ const modelTokenCostSchema = z.object({
   cache_write: z.number().optional(),
 });
 
-const modelCostTierSchema = modelTokenCostSchema.extend({
-  tier: z.object({
-    type: z.string(),
-    size: z.number().optional(),
-  }),
-});
+const modelCostTierSchema = modelTokenCostSchema
+  .extend({
+    tier: z
+      .object({
+        type: z.string(),
+        size: z.number().optional(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
 
 // Model cost schema
 export const modelCostSchema = modelTokenCostSchema.extend({
@@ -46,14 +50,18 @@ const modelReasoningOptionSchema = z.object({
   max: z.number().optional(),
 });
 
-const modelExperimentalModeSchema = z.object({
-  cost: modelTokenCostSchema.optional(),
-  provider: z.record(z.string(), z.unknown()).optional(),
-});
+const modelExperimentalModeSchema = z
+  .object({
+    cost: modelTokenCostSchema.optional(),
+    provider: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
 
-const modelExperimentalSchema = z.object({
-  modes: z.record(z.string(), modelExperimentalModeSchema).optional(),
-});
+const modelExperimentalSchema = z
+  .object({
+    modes: z.record(z.string(), modelExperimentalModeSchema).optional(),
+  })
+  .passthrough();
 
 // Single model schema
 export const providerModelSchema = z.object({
@@ -76,6 +84,7 @@ export const providerModelSchema = z.object({
   limit: modelLimitSchema.optional().nullable(),
   experimental: modelExperimentalSchema.optional(),
   display_name: z.string().optional(),
+  extra_capabilities: z.record(z.string(), z.unknown()).optional(),
   vision: z.boolean().optional(),
   type: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
