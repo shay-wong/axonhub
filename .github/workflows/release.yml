@@ -74,5 +74,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
-          AXONHUB_UPDATE_REPOSITORY: ${{ vars.UPSTREAM_REPOSITORY || 'looplj/axonhub' }}
+          AXONHUB_RELEASE_REPOSITORY: ${{ github.repository }}
+          AXONHUB_UPDATE_REPOSITORY: ${{ vars.UPDATE_REPOSITORY || github.repository }}
           AXONHUB_UPDATE_CHANNEL: ${{ (contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc')) && 'beta' || 'stable' }}
+          VITE_GITHUB_REPOSITORY: ${{ github.repository }}
+          VITE_GITHUB_REF: ${{ github.ref_name }}

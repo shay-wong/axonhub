@@ -109,10 +109,10 @@ brews:
       name: homebrew-axonhub
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Formula
-    homepage: "https://github.com/looplj/axonhub"
+    homepage: "https://github.com/{{ .Env.AXONHUB_RELEASE_REPOSITORY }}"
     description: "All-in-one AI development platform. Use any SDK, access any model."
     license: "Apache-2.0"
-    url_template: "https://github.com/looplj/axonhub/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    url_template: "https://github.com/{{ .Env.AXONHUB_RELEASE_REPOSITORY }}/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_author:
       name: "github-actions[bot]"
       email: "github-actions[bot]@users.noreply.github.com"

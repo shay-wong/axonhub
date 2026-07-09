@@ -1,6 +1,14 @@
 FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-builder
 
 WORKDIR /build
+ARG VITE_GITHUB_REPOSITORY
+ARG VITE_GITHUB_REF
+ARG VITE_PROVIDER_CATALOG_URL
+ARG VITE_DEVELOPER_CATALOG_URL
+ENV VITE_GITHUB_REPOSITORY=${VITE_GITHUB_REPOSITORY} \
+    VITE_GITHUB_REF=${VITE_GITHUB_REF} \
+    VITE_PROVIDER_CATALOG_URL=${VITE_PROVIDER_CATALOG_URL} \
+    VITE_DEVELOPER_CATALOG_URL=${VITE_DEVELOPER_CATALOG_URL}
 RUN corepack enable && corepack prepare pnpm@10 --activate
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
