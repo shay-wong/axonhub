@@ -16,3 +16,6 @@
 
 # Ignore auto generated routeTree.gen.ts
 /src/routeTree.gen.ts
+
+# Ignore the externally maintained provider catalog
+/src/features/models/data/providers.json
