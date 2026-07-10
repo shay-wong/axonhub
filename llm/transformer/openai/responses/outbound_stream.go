@@ -487,20 +487,54 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		}
 
 	case StreamEventTypeFunctionCallArgumentsDone:
-		// Function call completed - update state but don't emit an event
-		if streamEvent.CallID != "" {
-			if tc, ok := s.state.toolCalls[streamEvent.CallID]; ok {
-				if streamEvent.Name != "" {
-					tc.Function.Name = streamEvent.Name
-				}
-				if streamEvent.Namespace != "" {
-					tc.Function.Namespace = streamEvent.Namespace
-				}
-				tc.Function.Arguments = streamEvent.Arguments
+		callID := streamEvent.CallID
+		if callID == "" && streamEvent.ItemID != nil {
+			var ok bool
+			callID, ok = s.state.itemToCallID[*streamEvent.ItemID]
+			if !ok {
+				callID = *streamEvent.ItemID
 			}
 		}
 
-		return nil // Intentionally skip this event
+		tc, ok := s.state.toolCalls[callID]
+		if !ok {
+			return nil
+		}
+
+		if streamEvent.Name != "" {
+			tc.Function.Name = streamEvent.Name
+		}
+		if streamEvent.Namespace != "" {
+			tc.Function.Namespace = streamEvent.Namespace
+		}
+
+		previousArguments := tc.Function.Arguments
+		tc.Function.Arguments = streamEvent.Arguments
+
+		argumentDelta := ""
+		if strings.HasPrefix(streamEvent.Arguments, previousArguments) {
+			argumentDelta = strings.TrimPrefix(streamEvent.Arguments, previousArguments)
+		}
+		if argumentDelta == "" {
+			return nil
+		}
+
+		toolCallIdx := s.state.toolCallIndex[callID]
+		resp.Choices = []llm.Choice{
+			{
+				Index: 0,
+				Delta: &llm.Message{
+					ToolCalls: []llm.ToolCall{
+						{
+							Index: toolCallIdx,
+							Function: llm.FunctionCall{
+								Arguments: argumentDelta,
+							},
+						},
+					},
+				},
+			},
+		}
 
 	case StreamEventTypeCustomToolCallInputDelta:
 		// Custom tool call input delta - accumulate and emit as tool call delta

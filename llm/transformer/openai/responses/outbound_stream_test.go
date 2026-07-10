@@ -133,6 +133,106 @@ func TestOutboundTransformer_StreamTransformation_ErrorEvent(t *testing.T) {
 	require.Contains(t, err.Error(), "Something went wrong")
 }
 
+func TestOutboundTransformer_TransformStream_UsesDoneArgumentsWithoutDeltas(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{
+			Type: "response.created",
+			Data: []byte(`{
+				"type":"response.created",
+				"response":{
+					"id":"resp_done_only_arguments",
+					"object":"response",
+					"created_at":1700000000,
+					"model":"gpt-5.6-sol",
+					"status":"in_progress",
+					"output":[]
+				}
+			}`),
+		},
+		{
+			Type: "response.output_item.added",
+			Data: []byte(`{
+				"type":"response.output_item.added",
+				"output_index":0,
+				"item":{
+					"id":"fc_done_only_123",
+					"type":"function_call",
+					"call_id":"call_done_only_123",
+					"name":"spawn_agent",
+					"namespace":"collaboration",
+					"status":"in_progress",
+					"arguments":""
+				}
+			}`),
+		},
+		{
+			Type: "response.function_call_arguments.done",
+			Data: []byte(`{
+				"type":"response.function_call_arguments.done",
+				"item_id":"fc_done_only_123",
+				"output_index":0,
+				"arguments":"{\"agent_type\":\"explore\",\"message\":\"inspect pricing\"}"
+			}`),
+		},
+		{
+			Type: "response.output_item.done",
+			Data: []byte(`{
+				"type":"response.output_item.done",
+				"output_index":0,
+				"item":{
+					"id":"fc_done_only_123",
+					"type":"function_call",
+					"call_id":"call_done_only_123",
+					"name":"spawn_agent",
+					"namespace":"collaboration",
+					"status":"completed",
+					"arguments":"{\"agent_type\":\"explore\",\"message\":\"inspect pricing\"}"
+				}
+			}`),
+		},
+		{
+			Type: "response.completed",
+			Data: []byte(`{
+				"type":"response.completed",
+				"response":{
+					"id":"resp_done_only_arguments",
+					"object":"response",
+					"created_at":1700000000,
+					"model":"gpt-5.6-sol",
+					"status":"completed",
+					"output":[],
+					"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}
+				}
+			}`),
+		},
+	}
+
+	stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	actual, err := streams.All(stream)
+	require.NoError(t, err)
+
+	var toolCallChunks []llm.ToolCall
+	for _, resp := range actual {
+		if resp == nil || resp == llm.DoneResponse || len(resp.Choices) == 0 || resp.Choices[0].Delta == nil {
+			continue
+		}
+
+		toolCallChunks = append(toolCallChunks, resp.Choices[0].Delta.ToolCalls...)
+	}
+
+	require.Len(t, toolCallChunks, 2)
+	require.Equal(t, "call_done_only_123", toolCallChunks[0].ID)
+	require.Equal(t, "spawn_agent", toolCallChunks[0].Function.Name)
+	require.Equal(t, "collaboration", toolCallChunks[0].Function.Namespace)
+	require.Equal(t, 0, toolCallChunks[1].Index)
+	require.JSONEq(t, `{"agent_type":"explore","message":"inspect pricing"}`, toolCallChunks[1].Function.Arguments)
+}
+
 func TestOutboundTransformer_TransformStream_UsesFinalEncryptedContentPerReasoningItem(t *testing.T) {
 	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
 	require.NoError(t, err)
