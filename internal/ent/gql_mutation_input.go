@@ -1379,10 +1379,14 @@ type CreateUsageLogInput struct {
 	CompletionRejectedPredictionTokens *int64
 	Source                             *usagelog.Source
 	Format                             *string
+	RequestedServiceTier               *string
+	AppliedServiceTier                 *string
+	ServiceTier                        *string
 	TotalCost                          *float64
 	CostItems                          []objects.CostItem
 	CostPriceReferenceID               *string
 	RequestID                          int
+	RequestExecutionID                 *int
 	ProjectID                          int
 	ChannelID                          *int
 }
@@ -1435,6 +1439,15 @@ func (i *CreateUsageLogInput) Mutate(m *UsageLogMutation) {
 	if v := i.Format; v != nil {
 		m.SetFormat(*v)
 	}
+	if v := i.RequestedServiceTier; v != nil {
+		m.SetRequestedServiceTier(*v)
+	}
+	if v := i.AppliedServiceTier; v != nil {
+		m.SetAppliedServiceTier(*v)
+	}
+	if v := i.ServiceTier; v != nil {
+		m.SetServiceTier(*v)
+	}
 	if v := i.TotalCost; v != nil {
 		m.SetTotalCost(*v)
 	}
@@ -1445,6 +1458,9 @@ func (i *CreateUsageLogInput) Mutate(m *UsageLogMutation) {
 		m.SetCostPriceReferenceID(*v)
 	}
 	m.SetRequestID(i.RequestID)
+	if v := i.RequestExecutionID; v != nil {
+		m.SetRequestExecutionID(*v)
+	}
 	m.SetProjectID(i.ProjectID)
 	if v := i.ChannelID; v != nil {
 		m.SetChannelID(*v)

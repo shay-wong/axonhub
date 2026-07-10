@@ -277,7 +277,7 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 		Stream:               llmReq.Stream,
 		Text:                 convertToTextOptions(llmReq),
 		Store:                llmReq.Store,
-		ServiceTier:          llmReq.ServiceTier,
+		ServiceTier:          llm.OpenAIServiceTier(llmReq.APIFormat, llmReq.ServiceTier),
 		SafetyIdentifier:     llmReq.SafetyIdentifier,
 		User:                 llmReq.User,
 		Metadata:             llmReq.Metadata,
@@ -405,6 +405,7 @@ func (t *OutboundTransformer) transformStandardResponse(
 		Model:               resp.Model,
 		Created:             resp.CreatedAt,
 		PreviousResponseID:  resp.PreviousResponseID,
+		ServiceTier:         lo.FromPtr(resp.ServiceTier),
 		Choices:             make([]llm.Choice, 0),
 		TransformerMetadata: map[string]any{},
 	}

@@ -181,11 +181,18 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	reqCopy.Metadata = nil
 
 	reqCopy.TransformOptions.ArrayInputs = lo.ToPtr(true)
+	reqCopy.ServiceTier = llm.OpenAIServiceTier(reqCopy.APIFormat, reqCopy.ServiceTier)
 
 	sessionID := ""
 	if lo.FromPtr(reqCopy.TransformOptions.CodexStyleResponses) && !isImageRequest {
 		sessionID = ensureSessionID(ctx, rawSessionID, rawTurnMetadata)
 		applyCodexStyleResponsesDefaults(&reqCopy, sessionID)
+	}
+	if !isImageRequest {
+		// The copied request now targets the OpenAI Responses wire protocol. This
+		// allows Codex-injected defaults (for example priority tier) through the
+		// Responses transformer without forwarding a source protocol's tier value.
+		reqCopy.APIFormat = llm.APIFormatOpenAIResponse
 	}
 
 	hreq, err := t.responsesOutbound.TransformRequest(ctx, &reqCopy)
@@ -306,7 +313,7 @@ func applyCodexStyleResponsesDefaults(req *llm.Request, sessionID string) {
 	}
 
 	if lo.FromPtr(req.ServiceTier) == "" {
-		req.ServiceTier = lo.ToPtr("priority")
+		req.ServiceTier = lo.ToPtr(llm.ServiceTierPriority)
 	}
 }
 

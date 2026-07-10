@@ -35,11 +35,12 @@ type OutboundPersistentStream struct {
 	request     *ent.Request
 	requestExec *ent.RequestExecution
 
-	transformer    transformer.Outbound
-	perf           *biz.PerformanceRecord
-	responseChunks []*httpclient.StreamEvent
-	closed         bool
-	state          *PersistenceState
+	transformer          transformer.Outbound
+	perf                 *biz.PerformanceRecord
+	responseChunks       []*httpclient.StreamEvent
+	closed               bool
+	state                *PersistenceState
+	requestedServiceTier string
 }
 
 var _ streams.Stream[*httpclient.StreamEvent] = (*OutboundPersistentStream)(nil)
@@ -56,17 +57,18 @@ func NewOutboundPersistentStream(
 	state *PersistenceState,
 ) *OutboundPersistentStream {
 	s := &OutboundPersistentStream{
-		ctx:             ctx,
-		stream:          stream,
-		request:         request,
-		requestExec:     requestExec,
-		RequestService:  requestService,
-		UsageLogService: usageLogService,
-		transformer:     outboundTransformer,
-		perf:            perf,
-		responseChunks:  make([]*httpclient.StreamEvent, 0),
-		closed:          false,
-		state:           state,
+		ctx:                  ctx,
+		stream:               stream,
+		request:              request,
+		requestExec:          requestExec,
+		RequestService:       requestService,
+		UsageLogService:      usageLogService,
+		transformer:          outboundTransformer,
+		perf:                 perf,
+		responseChunks:       make([]*httpclient.StreamEvent, 0),
+		closed:               false,
+		state:                state,
+		requestedServiceTier: state.RequestedServiceTier,
 	}
 
 	return s
@@ -262,8 +264,16 @@ func (ts *OutboundPersistentStream) persistAggregatedResponse(ctx context.Contex
 	}
 
 	// Try to create usage log from aggregated response
-	if usage := meta.Usage; usage != nil {
-		_, err := ts.UsageLogService.CreateUsageLogFromRequest(ctx, ts.request, ts.requestExec, usage)
+	if usage := meta.Usage; usage != nil && ts.state.UsageLogEligible {
+		ts.state.AppliedServiceTier = meta.ServiceTier
+		_, err := ts.UsageLogService.CreateUsageLogFromRequest(
+			ctx,
+			ts.request,
+			ts.requestExec,
+			usage,
+			ts.requestedServiceTier,
+			meta.ServiceTier,
+		)
 		if err != nil {
 			log.Warn(ctx, "Failed to create usage log from request", log.Cause(err))
 		}

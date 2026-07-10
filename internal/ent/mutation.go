@@ -17903,6 +17903,7 @@ type RequestExecutionMutation struct {
 	source                            *requestexecution.Source
 	model_id                          *string
 	format                            *string
+	requested_service_tier            *string
 	request_body                      *objects.JSONRawMessage
 	appendrequest_body                objects.JSONRawMessage
 	response_body                     *objects.JSONRawMessage
@@ -17931,6 +17932,8 @@ type RequestExecutionMutation struct {
 	clearedchannel                    bool
 	data_storage                      *int
 	cleareddata_storage               bool
+	usage_log                         *int
+	clearedusage_log                  bool
 	done                              bool
 	oldValue                          func(context.Context) (*RequestExecution, error)
 	predicates                        []predicate.RequestExecution
@@ -18451,6 +18454,55 @@ func (m *RequestExecutionMutation) OldFormat(ctx context.Context) (v string, err
 // ResetFormat resets all changes to the "format" field.
 func (m *RequestExecutionMutation) ResetFormat() {
 	m.format = nil
+}
+
+// SetRequestedServiceTier sets the "requested_service_tier" field.
+func (m *RequestExecutionMutation) SetRequestedServiceTier(s string) {
+	m.requested_service_tier = &s
+}
+
+// RequestedServiceTier returns the value of the "requested_service_tier" field in the mutation.
+func (m *RequestExecutionMutation) RequestedServiceTier() (r string, exists bool) {
+	v := m.requested_service_tier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestedServiceTier returns the old "requested_service_tier" field's value of the RequestExecution entity.
+// If the RequestExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestExecutionMutation) OldRequestedServiceTier(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestedServiceTier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestedServiceTier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestedServiceTier: %w", err)
+	}
+	return oldValue.RequestedServiceTier, nil
+}
+
+// ClearRequestedServiceTier clears the value of the "requested_service_tier" field.
+func (m *RequestExecutionMutation) ClearRequestedServiceTier() {
+	m.requested_service_tier = nil
+	m.clearedFields[requestexecution.FieldRequestedServiceTier] = struct{}{}
+}
+
+// RequestedServiceTierCleared returns if the "requested_service_tier" field was cleared in this mutation.
+func (m *RequestExecutionMutation) RequestedServiceTierCleared() bool {
+	_, ok := m.clearedFields[requestexecution.FieldRequestedServiceTier]
+	return ok
+}
+
+// ResetRequestedServiceTier resets all changes to the "requested_service_tier" field.
+func (m *RequestExecutionMutation) ResetRequestedServiceTier() {
+	m.requested_service_tier = nil
+	delete(m.clearedFields, requestexecution.FieldRequestedServiceTier)
 }
 
 // SetRequestBody sets the "request_body" field.
@@ -19266,6 +19318,45 @@ func (m *RequestExecutionMutation) ResetDataStorage() {
 	m.cleareddata_storage = false
 }
 
+// SetUsageLogID sets the "usage_log" edge to the UsageLog entity by id.
+func (m *RequestExecutionMutation) SetUsageLogID(id int) {
+	m.usage_log = &id
+}
+
+// ClearUsageLog clears the "usage_log" edge to the UsageLog entity.
+func (m *RequestExecutionMutation) ClearUsageLog() {
+	m.clearedusage_log = true
+}
+
+// UsageLogCleared reports if the "usage_log" edge to the UsageLog entity was cleared.
+func (m *RequestExecutionMutation) UsageLogCleared() bool {
+	return m.clearedusage_log
+}
+
+// UsageLogID returns the "usage_log" edge ID in the mutation.
+func (m *RequestExecutionMutation) UsageLogID() (id int, exists bool) {
+	if m.usage_log != nil {
+		return *m.usage_log, true
+	}
+	return
+}
+
+// UsageLogIDs returns the "usage_log" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UsageLogID instead. It exists only for internal usage by the builders.
+func (m *RequestExecutionMutation) UsageLogIDs() (ids []int) {
+	if id := m.usage_log; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUsageLog resets all changes to the "usage_log" edge.
+func (m *RequestExecutionMutation) ResetUsageLog() {
+	m.usage_log = nil
+	m.clearedusage_log = false
+}
+
 // Where appends a list predicates to the RequestExecutionMutation builder.
 func (m *RequestExecutionMutation) Where(ps ...predicate.RequestExecution) {
 	m.predicates = append(m.predicates, ps...)
@@ -19300,7 +19391,7 @@ func (m *RequestExecutionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RequestExecutionMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 24)
 	if m.created_at != nil {
 		fields = append(fields, requestexecution.FieldCreatedAt)
 	}
@@ -19330,6 +19421,9 @@ func (m *RequestExecutionMutation) Fields() []string {
 	}
 	if m.format != nil {
 		fields = append(fields, requestexecution.FieldFormat)
+	}
+	if m.requested_service_tier != nil {
+		fields = append(fields, requestexecution.FieldRequestedServiceTier)
 	}
 	if m.request_body != nil {
 		fields = append(fields, requestexecution.FieldRequestBody)
@@ -19398,6 +19492,8 @@ func (m *RequestExecutionMutation) Field(name string) (ent.Value, bool) {
 		return m.ModelID()
 	case requestexecution.FieldFormat:
 		return m.Format()
+	case requestexecution.FieldRequestedServiceTier:
+		return m.RequestedServiceTier()
 	case requestexecution.FieldRequestBody:
 		return m.RequestBody()
 	case requestexecution.FieldResponseBody:
@@ -19453,6 +19549,8 @@ func (m *RequestExecutionMutation) OldField(ctx context.Context, name string) (e
 		return m.OldModelID(ctx)
 	case requestexecution.FieldFormat:
 		return m.OldFormat(ctx)
+	case requestexecution.FieldRequestedServiceTier:
+		return m.OldRequestedServiceTier(ctx)
 	case requestexecution.FieldRequestBody:
 		return m.OldRequestBody(ctx)
 	case requestexecution.FieldResponseBody:
@@ -19557,6 +19655,13 @@ func (m *RequestExecutionMutation) SetField(name string, value ent.Value) error 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetFormat(v)
+		return nil
+	case requestexecution.FieldRequestedServiceTier:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestedServiceTier(v)
 		return nil
 	case requestexecution.FieldRequestBody:
 		v, ok := value.(objects.JSONRawMessage)
@@ -19751,6 +19856,9 @@ func (m *RequestExecutionMutation) ClearedFields() []string {
 	if m.FieldCleared(requestexecution.FieldExternalID) {
 		fields = append(fields, requestexecution.FieldExternalID)
 	}
+	if m.FieldCleared(requestexecution.FieldRequestedServiceTier) {
+		fields = append(fields, requestexecution.FieldRequestedServiceTier)
+	}
 	if m.FieldCleared(requestexecution.FieldResponseBody) {
 		fields = append(fields, requestexecution.FieldResponseBody)
 	}
@@ -19800,6 +19908,9 @@ func (m *RequestExecutionMutation) ClearField(name string) error {
 		return nil
 	case requestexecution.FieldExternalID:
 		m.ClearExternalID()
+		return nil
+	case requestexecution.FieldRequestedServiceTier:
+		m.ClearRequestedServiceTier()
 		return nil
 	case requestexecution.FieldResponseBody:
 		m.ClearResponseBody()
@@ -19866,6 +19977,9 @@ func (m *RequestExecutionMutation) ResetField(name string) error {
 	case requestexecution.FieldFormat:
 		m.ResetFormat()
 		return nil
+	case requestexecution.FieldRequestedServiceTier:
+		m.ResetRequestedServiceTier()
+		return nil
 	case requestexecution.FieldRequestBody:
 		m.ResetRequestBody()
 		return nil
@@ -19911,7 +20025,7 @@ func (m *RequestExecutionMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *RequestExecutionMutation) AddedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.request != nil {
 		edges = append(edges, requestexecution.EdgeRequest)
 	}
@@ -19920,6 +20034,9 @@ func (m *RequestExecutionMutation) AddedEdges() []string {
 	}
 	if m.data_storage != nil {
 		edges = append(edges, requestexecution.EdgeDataStorage)
+	}
+	if m.usage_log != nil {
+		edges = append(edges, requestexecution.EdgeUsageLog)
 	}
 	return edges
 }
@@ -19940,13 +20057,17 @@ func (m *RequestExecutionMutation) AddedIDs(name string) []ent.Value {
 		if id := m.data_storage; id != nil {
 			return []ent.Value{*id}
 		}
+	case requestexecution.EdgeUsageLog:
+		if id := m.usage_log; id != nil {
+			return []ent.Value{*id}
+		}
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *RequestExecutionMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	return edges
 }
 
@@ -19958,7 +20079,7 @@ func (m *RequestExecutionMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *RequestExecutionMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.clearedrequest {
 		edges = append(edges, requestexecution.EdgeRequest)
 	}
@@ -19967,6 +20088,9 @@ func (m *RequestExecutionMutation) ClearedEdges() []string {
 	}
 	if m.cleareddata_storage {
 		edges = append(edges, requestexecution.EdgeDataStorage)
+	}
+	if m.clearedusage_log {
+		edges = append(edges, requestexecution.EdgeUsageLog)
 	}
 	return edges
 }
@@ -19981,6 +20105,8 @@ func (m *RequestExecutionMutation) EdgeCleared(name string) bool {
 		return m.clearedchannel
 	case requestexecution.EdgeDataStorage:
 		return m.cleareddata_storage
+	case requestexecution.EdgeUsageLog:
+		return m.clearedusage_log
 	}
 	return false
 }
@@ -19998,6 +20124,9 @@ func (m *RequestExecutionMutation) ClearEdge(name string) error {
 	case requestexecution.EdgeDataStorage:
 		m.ClearDataStorage()
 		return nil
+	case requestexecution.EdgeUsageLog:
+		m.ClearUsageLog()
+		return nil
 	}
 	return fmt.Errorf("unknown RequestExecution unique edge %s", name)
 }
@@ -20014,6 +20143,9 @@ func (m *RequestExecutionMutation) ResetEdge(name string) error {
 		return nil
 	case requestexecution.EdgeDataStorage:
 		m.ResetDataStorage()
+		return nil
+	case requestexecution.EdgeUsageLog:
+		m.ResetUsageLog()
 		return nil
 	}
 	return fmt.Errorf("unknown RequestExecution edge %s", name)
@@ -22982,6 +23114,9 @@ type UsageLogMutation struct {
 	addcompletion_rejected_prediction_tokens *int64
 	source                                   *usagelog.Source
 	format                                   *string
+	requested_service_tier                   *string
+	applied_service_tier                     *string
+	service_tier                             *string
 	total_cost                               *float64
 	addtotal_cost                            *float64
 	cost_items                               *[]objects.CostItem
@@ -22990,6 +23125,8 @@ type UsageLogMutation struct {
 	clearedFields                            map[string]struct{}
 	request                                  *int
 	clearedrequest                           bool
+	request_execution                        *int
+	clearedrequest_execution                 bool
 	project                                  *int
 	clearedproject                           bool
 	channel                                  *int
@@ -23203,6 +23340,55 @@ func (m *UsageLogMutation) OldRequestID(ctx context.Context) (v int, err error) 
 // ResetRequestID resets all changes to the "request_id" field.
 func (m *UsageLogMutation) ResetRequestID() {
 	m.request = nil
+}
+
+// SetRequestExecutionID sets the "request_execution_id" field.
+func (m *UsageLogMutation) SetRequestExecutionID(i int) {
+	m.request_execution = &i
+}
+
+// RequestExecutionID returns the value of the "request_execution_id" field in the mutation.
+func (m *UsageLogMutation) RequestExecutionID() (r int, exists bool) {
+	v := m.request_execution
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestExecutionID returns the old "request_execution_id" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldRequestExecutionID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestExecutionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestExecutionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestExecutionID: %w", err)
+	}
+	return oldValue.RequestExecutionID, nil
+}
+
+// ClearRequestExecutionID clears the value of the "request_execution_id" field.
+func (m *UsageLogMutation) ClearRequestExecutionID() {
+	m.request_execution = nil
+	m.clearedFields[usagelog.FieldRequestExecutionID] = struct{}{}
+}
+
+// RequestExecutionIDCleared returns if the "request_execution_id" field was cleared in this mutation.
+func (m *UsageLogMutation) RequestExecutionIDCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldRequestExecutionID]
+	return ok
+}
+
+// ResetRequestExecutionID resets all changes to the "request_execution_id" field.
+func (m *UsageLogMutation) ResetRequestExecutionID() {
+	m.request_execution = nil
+	delete(m.clearedFields, usagelog.FieldRequestExecutionID)
 }
 
 // SetAPIKeyID sets the "api_key_id" field.
@@ -24266,6 +24452,153 @@ func (m *UsageLogMutation) ResetFormat() {
 	m.format = nil
 }
 
+// SetRequestedServiceTier sets the "requested_service_tier" field.
+func (m *UsageLogMutation) SetRequestedServiceTier(s string) {
+	m.requested_service_tier = &s
+}
+
+// RequestedServiceTier returns the value of the "requested_service_tier" field in the mutation.
+func (m *UsageLogMutation) RequestedServiceTier() (r string, exists bool) {
+	v := m.requested_service_tier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestedServiceTier returns the old "requested_service_tier" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldRequestedServiceTier(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestedServiceTier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestedServiceTier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestedServiceTier: %w", err)
+	}
+	return oldValue.RequestedServiceTier, nil
+}
+
+// ClearRequestedServiceTier clears the value of the "requested_service_tier" field.
+func (m *UsageLogMutation) ClearRequestedServiceTier() {
+	m.requested_service_tier = nil
+	m.clearedFields[usagelog.FieldRequestedServiceTier] = struct{}{}
+}
+
+// RequestedServiceTierCleared returns if the "requested_service_tier" field was cleared in this mutation.
+func (m *UsageLogMutation) RequestedServiceTierCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldRequestedServiceTier]
+	return ok
+}
+
+// ResetRequestedServiceTier resets all changes to the "requested_service_tier" field.
+func (m *UsageLogMutation) ResetRequestedServiceTier() {
+	m.requested_service_tier = nil
+	delete(m.clearedFields, usagelog.FieldRequestedServiceTier)
+}
+
+// SetAppliedServiceTier sets the "applied_service_tier" field.
+func (m *UsageLogMutation) SetAppliedServiceTier(s string) {
+	m.applied_service_tier = &s
+}
+
+// AppliedServiceTier returns the value of the "applied_service_tier" field in the mutation.
+func (m *UsageLogMutation) AppliedServiceTier() (r string, exists bool) {
+	v := m.applied_service_tier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAppliedServiceTier returns the old "applied_service_tier" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldAppliedServiceTier(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAppliedServiceTier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAppliedServiceTier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAppliedServiceTier: %w", err)
+	}
+	return oldValue.AppliedServiceTier, nil
+}
+
+// ClearAppliedServiceTier clears the value of the "applied_service_tier" field.
+func (m *UsageLogMutation) ClearAppliedServiceTier() {
+	m.applied_service_tier = nil
+	m.clearedFields[usagelog.FieldAppliedServiceTier] = struct{}{}
+}
+
+// AppliedServiceTierCleared returns if the "applied_service_tier" field was cleared in this mutation.
+func (m *UsageLogMutation) AppliedServiceTierCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldAppliedServiceTier]
+	return ok
+}
+
+// ResetAppliedServiceTier resets all changes to the "applied_service_tier" field.
+func (m *UsageLogMutation) ResetAppliedServiceTier() {
+	m.applied_service_tier = nil
+	delete(m.clearedFields, usagelog.FieldAppliedServiceTier)
+}
+
+// SetServiceTier sets the "service_tier" field.
+func (m *UsageLogMutation) SetServiceTier(s string) {
+	m.service_tier = &s
+}
+
+// ServiceTier returns the value of the "service_tier" field in the mutation.
+func (m *UsageLogMutation) ServiceTier() (r string, exists bool) {
+	v := m.service_tier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldServiceTier returns the old "service_tier" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldServiceTier(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldServiceTier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldServiceTier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldServiceTier: %w", err)
+	}
+	return oldValue.ServiceTier, nil
+}
+
+// ClearServiceTier clears the value of the "service_tier" field.
+func (m *UsageLogMutation) ClearServiceTier() {
+	m.service_tier = nil
+	m.clearedFields[usagelog.FieldServiceTier] = struct{}{}
+}
+
+// ServiceTierCleared returns if the "service_tier" field was cleared in this mutation.
+func (m *UsageLogMutation) ServiceTierCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldServiceTier]
+	return ok
+}
+
+// ResetServiceTier resets all changes to the "service_tier" field.
+func (m *UsageLogMutation) ResetServiceTier() {
+	m.service_tier = nil
+	delete(m.clearedFields, usagelog.FieldServiceTier)
+}
+
 // SetTotalCost sets the "total_cost" field.
 func (m *UsageLogMutation) SetTotalCost(f float64) {
 	m.total_cost = &f
@@ -24477,6 +24810,33 @@ func (m *UsageLogMutation) ResetRequest() {
 	m.clearedrequest = false
 }
 
+// ClearRequestExecution clears the "request_execution" edge to the RequestExecution entity.
+func (m *UsageLogMutation) ClearRequestExecution() {
+	m.clearedrequest_execution = true
+	m.clearedFields[usagelog.FieldRequestExecutionID] = struct{}{}
+}
+
+// RequestExecutionCleared reports if the "request_execution" edge to the RequestExecution entity was cleared.
+func (m *UsageLogMutation) RequestExecutionCleared() bool {
+	return m.RequestExecutionIDCleared() || m.clearedrequest_execution
+}
+
+// RequestExecutionIDs returns the "request_execution" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// RequestExecutionID instead. It exists only for internal usage by the builders.
+func (m *UsageLogMutation) RequestExecutionIDs() (ids []int) {
+	if id := m.request_execution; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetRequestExecution resets all changes to the "request_execution" edge.
+func (m *UsageLogMutation) ResetRequestExecution() {
+	m.request_execution = nil
+	m.clearedrequest_execution = false
+}
+
 // ClearProject clears the "project" edge to the Project entity.
 func (m *UsageLogMutation) ClearProject() {
 	m.clearedproject = true
@@ -24565,7 +24925,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 28)
 	if m.created_at != nil {
 		fields = append(fields, usagelog.FieldCreatedAt)
 	}
@@ -24574,6 +24934,9 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.request != nil {
 		fields = append(fields, usagelog.FieldRequestID)
+	}
+	if m.request_execution != nil {
+		fields = append(fields, usagelog.FieldRequestExecutionID)
 	}
 	if m.api_key_id != nil {
 		fields = append(fields, usagelog.FieldAPIKeyID)
@@ -24629,6 +24992,15 @@ func (m *UsageLogMutation) Fields() []string {
 	if m.format != nil {
 		fields = append(fields, usagelog.FieldFormat)
 	}
+	if m.requested_service_tier != nil {
+		fields = append(fields, usagelog.FieldRequestedServiceTier)
+	}
+	if m.applied_service_tier != nil {
+		fields = append(fields, usagelog.FieldAppliedServiceTier)
+	}
+	if m.service_tier != nil {
+		fields = append(fields, usagelog.FieldServiceTier)
+	}
 	if m.total_cost != nil {
 		fields = append(fields, usagelog.FieldTotalCost)
 	}
@@ -24652,6 +25024,8 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.UpdatedAt()
 	case usagelog.FieldRequestID:
 		return m.RequestID()
+	case usagelog.FieldRequestExecutionID:
+		return m.RequestExecutionID()
 	case usagelog.FieldAPIKeyID:
 		return m.APIKeyID()
 	case usagelog.FieldProjectID:
@@ -24688,6 +25062,12 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.Source()
 	case usagelog.FieldFormat:
 		return m.Format()
+	case usagelog.FieldRequestedServiceTier:
+		return m.RequestedServiceTier()
+	case usagelog.FieldAppliedServiceTier:
+		return m.AppliedServiceTier()
+	case usagelog.FieldServiceTier:
+		return m.ServiceTier()
 	case usagelog.FieldTotalCost:
 		return m.TotalCost()
 	case usagelog.FieldCostItems:
@@ -24709,6 +25089,8 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldUpdatedAt(ctx)
 	case usagelog.FieldRequestID:
 		return m.OldRequestID(ctx)
+	case usagelog.FieldRequestExecutionID:
+		return m.OldRequestExecutionID(ctx)
 	case usagelog.FieldAPIKeyID:
 		return m.OldAPIKeyID(ctx)
 	case usagelog.FieldProjectID:
@@ -24745,6 +25127,12 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldSource(ctx)
 	case usagelog.FieldFormat:
 		return m.OldFormat(ctx)
+	case usagelog.FieldRequestedServiceTier:
+		return m.OldRequestedServiceTier(ctx)
+	case usagelog.FieldAppliedServiceTier:
+		return m.OldAppliedServiceTier(ctx)
+	case usagelog.FieldServiceTier:
+		return m.OldServiceTier(ctx)
 	case usagelog.FieldTotalCost:
 		return m.OldTotalCost(ctx)
 	case usagelog.FieldCostItems:
@@ -24780,6 +25168,13 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRequestID(v)
+		return nil
+	case usagelog.FieldRequestExecutionID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestExecutionID(v)
 		return nil
 	case usagelog.FieldAPIKeyID:
 		v, ok := value.(int)
@@ -24906,6 +25301,27 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetFormat(v)
+		return nil
+	case usagelog.FieldRequestedServiceTier:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestedServiceTier(v)
+		return nil
+	case usagelog.FieldAppliedServiceTier:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAppliedServiceTier(v)
+		return nil
+	case usagelog.FieldServiceTier:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetServiceTier(v)
 		return nil
 	case usagelog.FieldTotalCost:
 		v, ok := value.(float64)
@@ -25129,6 +25545,9 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *UsageLogMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(usagelog.FieldRequestExecutionID) {
+		fields = append(fields, usagelog.FieldRequestExecutionID)
+	}
 	if m.FieldCleared(usagelog.FieldAPIKeyID) {
 		fields = append(fields, usagelog.FieldAPIKeyID)
 	}
@@ -25162,6 +25581,15 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	if m.FieldCleared(usagelog.FieldCompletionRejectedPredictionTokens) {
 		fields = append(fields, usagelog.FieldCompletionRejectedPredictionTokens)
 	}
+	if m.FieldCleared(usagelog.FieldRequestedServiceTier) {
+		fields = append(fields, usagelog.FieldRequestedServiceTier)
+	}
+	if m.FieldCleared(usagelog.FieldAppliedServiceTier) {
+		fields = append(fields, usagelog.FieldAppliedServiceTier)
+	}
+	if m.FieldCleared(usagelog.FieldServiceTier) {
+		fields = append(fields, usagelog.FieldServiceTier)
+	}
 	if m.FieldCleared(usagelog.FieldTotalCost) {
 		fields = append(fields, usagelog.FieldTotalCost)
 	}
@@ -25185,6 +25613,9 @@ func (m *UsageLogMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *UsageLogMutation) ClearField(name string) error {
 	switch name {
+	case usagelog.FieldRequestExecutionID:
+		m.ClearRequestExecutionID()
+		return nil
 	case usagelog.FieldAPIKeyID:
 		m.ClearAPIKeyID()
 		return nil
@@ -25218,6 +25649,15 @@ func (m *UsageLogMutation) ClearField(name string) error {
 	case usagelog.FieldCompletionRejectedPredictionTokens:
 		m.ClearCompletionRejectedPredictionTokens()
 		return nil
+	case usagelog.FieldRequestedServiceTier:
+		m.ClearRequestedServiceTier()
+		return nil
+	case usagelog.FieldAppliedServiceTier:
+		m.ClearAppliedServiceTier()
+		return nil
+	case usagelog.FieldServiceTier:
+		m.ClearServiceTier()
+		return nil
 	case usagelog.FieldTotalCost:
 		m.ClearTotalCost()
 		return nil
@@ -25243,6 +25683,9 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldRequestID:
 		m.ResetRequestID()
+		return nil
+	case usagelog.FieldRequestExecutionID:
+		m.ResetRequestExecutionID()
 		return nil
 	case usagelog.FieldAPIKeyID:
 		m.ResetAPIKeyID()
@@ -25298,6 +25741,15 @@ func (m *UsageLogMutation) ResetField(name string) error {
 	case usagelog.FieldFormat:
 		m.ResetFormat()
 		return nil
+	case usagelog.FieldRequestedServiceTier:
+		m.ResetRequestedServiceTier()
+		return nil
+	case usagelog.FieldAppliedServiceTier:
+		m.ResetAppliedServiceTier()
+		return nil
+	case usagelog.FieldServiceTier:
+		m.ResetServiceTier()
+		return nil
 	case usagelog.FieldTotalCost:
 		m.ResetTotalCost()
 		return nil
@@ -25313,9 +25765,12 @@ func (m *UsageLogMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UsageLogMutation) AddedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.request != nil {
 		edges = append(edges, usagelog.EdgeRequest)
+	}
+	if m.request_execution != nil {
+		edges = append(edges, usagelog.EdgeRequestExecution)
 	}
 	if m.project != nil {
 		edges = append(edges, usagelog.EdgeProject)
@@ -25334,6 +25789,10 @@ func (m *UsageLogMutation) AddedIDs(name string) []ent.Value {
 		if id := m.request; id != nil {
 			return []ent.Value{*id}
 		}
+	case usagelog.EdgeRequestExecution:
+		if id := m.request_execution; id != nil {
+			return []ent.Value{*id}
+		}
 	case usagelog.EdgeProject:
 		if id := m.project; id != nil {
 			return []ent.Value{*id}
@@ -25348,7 +25807,7 @@ func (m *UsageLogMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UsageLogMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	return edges
 }
 
@@ -25360,9 +25819,12 @@ func (m *UsageLogMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UsageLogMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.clearedrequest {
 		edges = append(edges, usagelog.EdgeRequest)
+	}
+	if m.clearedrequest_execution {
+		edges = append(edges, usagelog.EdgeRequestExecution)
 	}
 	if m.clearedproject {
 		edges = append(edges, usagelog.EdgeProject)
@@ -25379,6 +25841,8 @@ func (m *UsageLogMutation) EdgeCleared(name string) bool {
 	switch name {
 	case usagelog.EdgeRequest:
 		return m.clearedrequest
+	case usagelog.EdgeRequestExecution:
+		return m.clearedrequest_execution
 	case usagelog.EdgeProject:
 		return m.clearedproject
 	case usagelog.EdgeChannel:
@@ -25393,6 +25857,9 @@ func (m *UsageLogMutation) ClearEdge(name string) error {
 	switch name {
 	case usagelog.EdgeRequest:
 		m.ClearRequest()
+		return nil
+	case usagelog.EdgeRequestExecution:
+		m.ClearRequestExecution()
 		return nil
 	case usagelog.EdgeProject:
 		m.ClearProject()
@@ -25410,6 +25877,9 @@ func (m *UsageLogMutation) ResetEdge(name string) error {
 	switch name {
 	case usagelog.EdgeRequest:
 		m.ResetRequest()
+		return nil
+	case usagelog.EdgeRequestExecution:
+		m.ResetRequestExecution()
 		return nil
 	case usagelog.EdgeProject:
 		m.ResetProject()

@@ -760,9 +760,10 @@ type TopLogprob struct {
 }
 
 type ResponseMeta struct {
-	ID        string `json:"id"`
-	Usage     *Usage `json:"usage"`
-	Completed bool   `json:"completed,omitempty"`
+	ID          string `json:"id"`
+	Usage       *Usage `json:"usage"`
+	ServiceTier string `json:"service_tier,omitempty"`
+	Completed   bool   `json:"completed,omitempty"`
 }
 
 // Usage Represents the total token usage per request to OpenAI.

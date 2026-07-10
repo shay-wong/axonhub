@@ -127,6 +127,7 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 		lastChunkResponse *Response
 		usage             *Usage
 		systemFingerprint string
+		serviceTier       string
 		// Map to track choices by their index
 		choicesAggs = make(map[int]*choiceAggregator)
 		// Map to track unique citations
@@ -234,6 +235,10 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 		// Extract usage information if present
 		if chunk.Usage != nil {
 			usage = chunk.Usage
+		}
+
+		if chunk.ServiceTier != "" {
+			serviceTier = chunk.ServiceTier
 		}
 
 		// Collect citations from chunk
@@ -360,6 +365,7 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 		Object:            "chat.completion", // Change from "chat.completion.chunk" to "chat.completion"
 		Created:           lastChunkResponse.Created,
 		SystemFingerprint: systemFingerprint,
+		ServiceTier:       serviceTier,
 		Choices:           choices,
 		Usage:             responseUsage,
 	}
@@ -386,7 +392,8 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 	}
 
 	return data, llm.ResponseMeta{
-		ID:    response.ID,
-		Usage: responseUsage,
+		ID:          response.ID,
+		Usage:       responseUsage,
+		ServiceTier: serviceTier,
 	}, nil
 }

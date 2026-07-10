@@ -20,6 +20,7 @@ type streamAggregator struct {
 	createdAt          int64
 	status             string
 	previousResponseID *string
+	serviceTier        string
 
 	// Output items - keyed by output_index.
 	// Some streams may (unexpectedly) reuse output_index for multiple items, so we store a slice.
@@ -219,7 +220,8 @@ func AggregateStreamChunks(_ context.Context, chunks []*httpclient.StreamEvent) 
 	}
 
 	meta := llm.ResponseMeta{
-		ID: agg.responseID,
+		ID:          agg.responseID,
+		ServiceTier: agg.serviceTier,
 	}
 
 	if agg.usage != nil {
@@ -239,6 +241,9 @@ func (a *streamAggregator) processEvent(ev *StreamEvent) {
 			a.model = ev.Response.Model
 			a.createdAt = ev.Response.CreatedAt
 			a.previousResponseID = ev.Response.PreviousResponseID
+			if ev.Response.ServiceTier != nil {
+				a.serviceTier = *ev.Response.ServiceTier
+			}
 
 			if ev.Response.Usage != nil {
 				a.usage = ev.Response.Usage
@@ -533,6 +538,9 @@ func (a *streamAggregator) processEvent(ev *StreamEvent) {
 		a.status = "completed"
 		if ev.Response != nil {
 			a.previousResponseID = ev.Response.PreviousResponseID
+			if ev.Response.ServiceTier != nil {
+				a.serviceTier = *ev.Response.ServiceTier
+			}
 			if ev.Response.Usage != nil {
 				a.usage = ev.Response.Usage
 			}
@@ -574,6 +582,9 @@ func (a *streamAggregator) applyResponseSnapshot(response *Response) {
 	}
 	if response.PreviousResponseID != nil {
 		a.previousResponseID = response.PreviousResponseID
+	}
+	if response.ServiceTier != nil {
+		a.serviceTier = *response.ServiceTier
 	}
 	if response.Status != nil {
 		a.status = *response.Status
@@ -739,6 +750,11 @@ func (a *streamAggregator) buildResponse() *Response {
 		}
 	}
 
+	var serviceTier *string
+	if a.serviceTier != "" {
+		serviceTier = lo.ToPtr(a.serviceTier)
+	}
+
 	return &Response{
 		Object:             "response",
 		ID:                 a.responseID,
@@ -748,6 +764,7 @@ func (a *streamAggregator) buildResponse() *Response {
 		Output:             output,
 		Usage:              a.usage,
 		PreviousResponseID: a.previousResponseID,
+		ServiceTier:        serviceTier,
 		Error:              a.responseError,
 		IncompleteDetails:  a.incompleteDetails,
 	}

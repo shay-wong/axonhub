@@ -53,6 +53,7 @@ type outboundStreamState struct {
 	responseID         string
 	responseModel      string
 	previousResponseID *string
+	serviceTier        string
 	usage              *llm.Usage
 	created            int64
 
@@ -287,6 +288,10 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		slog.DebugContext(context.Background(), "received response stream event", slog.Any("event", streamEvent))
 	}
 
+	if streamEvent.Response != nil && streamEvent.Response.ServiceTier != nil {
+		s.state.serviceTier = *streamEvent.Response.ServiceTier
+	}
+
 	// Build base response
 	resp := &llm.Response{
 		Object:             "chat.completion.chunk",
@@ -294,6 +299,7 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		Model:              s.state.responseModel,
 		Created:            s.state.created,
 		PreviousResponseID: s.state.previousResponseID,
+		ServiceTier:        s.state.serviceTier,
 	}
 
 	//nolint:exhaustive //Only process events we care about.
@@ -751,6 +757,7 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 				Model:              s.state.responseModel,
 				Created:            s.state.created,
 				PreviousResponseID: s.state.previousResponseID,
+				ServiceTier:        s.state.serviceTier,
 				Choices:            []llm.Choice{},
 				Usage:              s.state.usage,
 			}

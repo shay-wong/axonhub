@@ -74,7 +74,7 @@ func TestUsageLogService_CreateUsageLog_PromptWriteCachedTokens(t *testing.T) {
 	require.Equal(t, int64(3), created.PromptWriteCachedTokens)
 }
 
-func TestUsageLogService_CreateUsageLog_WithPriceReferenceID(t *testing.T) {
+func TestUsageLogService_CreateUsageLog_WithPriceReferenceIDAndServiceTier(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
 	defer client.Close()
 
@@ -122,6 +122,27 @@ func TestUsageLogService_CreateUsageLog_WithPriceReferenceID(t *testing.T) {
 					},
 				},
 			},
+			ServiceTierPrices: []objects.ServiceTierPrice{
+				{
+					ServiceTier: "priority",
+					Items: []objects.ModelPriceItem{
+						{
+							ItemCode: objects.PriceItemCodeUsage,
+							Pricing: objects.Pricing{
+								Mode:         objects.PricingModeUsagePerUnit,
+								UsagePerUnit: toDecimalPtr("0.06"),
+							},
+						},
+						{
+							ItemCode: objects.PriceItemCodeCompletion,
+							Pricing: objects.Pricing{
+								Mode:         objects.PricingModeUsagePerUnit,
+								UsagePerUnit: toDecimalPtr("0.12"),
+							},
+						},
+					},
+				},
+			},
 		}).
 		Save(ctx)
 	require.NoError(t, err)
@@ -164,27 +185,41 @@ func TestUsageLogService_CreateUsageLog_WithPriceReferenceID(t *testing.T) {
 	}
 
 	channelID := ch.ID
+	requestExecutionID := 42
 	created, err := svc.CreateUsageLog(ctx, CreateUsageLogParams{
-		RequestID:     req.ID,
-		ProjectID:     p.ID,
-		ChannelID:     channelID,
-		ActualModelID: "gpt-4",
-		Usage:         usage,
-		Source:        usagelog.SourceAPI,
-		Format:        "openai/chat_completions",
-		APIKeyID:      nil,
+		RequestID:            req.ID,
+		RequestExecutionID:   &requestExecutionID,
+		ProjectID:            p.ID,
+		ChannelID:            channelID,
+		ActualModelID:        "gpt-4",
+		Usage:                usage,
+		Source:               usagelog.SourceAPI,
+		Format:               "openai/chat_completions",
+		APIKeyID:             nil,
+		RequestedServiceTier: "default",
+		AppliedServiceTier:   "priority",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, created)
 
 	// Verify price_reference_id is set
 	require.Equal(t, "test-ref-123", created.CostPriceReferenceID)
+	require.Equal(t, requestExecutionID, created.RequestExecutionID)
+	require.Equal(t, "default", created.RequestedServiceTier)
+	require.Equal(t, "priority", created.AppliedServiceTier)
+	require.Equal(t, "priority", created.ServiceTier)
 	require.NotNil(t, created.TotalCost)
 	require.NotEmpty(t, created.CostItems)
 
 	// Verify cost calculation is correct
-	// (1000 / 1_000_000) * 0.03 + (500 / 1_000_000) * 0.06 = 0.00003 + 0.00003 = 0.00006
-	require.InDelta(t, 0.00006, *created.TotalCost, 0.0000001)
+	// (1000 / 1_000_000) * 0.06 + (500 / 1_000_000) * 0.12 = 0.00006 + 0.00006 = 0.00012
+	require.InDelta(t, 0.00012, *created.TotalCost, 0.0000001)
+}
+
+func TestEffectiveServiceTier(t *testing.T) {
+	require.Equal(t, "priority", effectiveServiceTier("default", "priority"))
+	require.Equal(t, "priority", effectiveServiceTier("priority", ""))
+	require.Empty(t, effectiveServiceTier("", ""))
 }
 
 func TestUsageLogService_CreateUsageLog_WithCachedTokens(t *testing.T) {

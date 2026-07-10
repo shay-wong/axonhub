@@ -26,6 +26,7 @@ func TestConvertToChatCompletionResponse(t *testing.T) {
 		Usage: &Usage{
 			InputTokens:  10,
 			OutputTokens: 20,
+			ServiceTier:  "priority",
 		},
 	}
 	result := convertToLlmResponse(anthropicResp, PlatformDirect)
@@ -40,6 +41,7 @@ func TestConvertToChatCompletionResponse(t *testing.T) {
 	require.Equal(t, int64(10), result.Usage.PromptTokens)
 	require.Equal(t, int64(20), result.Usage.CompletionTokens)
 	require.Equal(t, int64(30), result.Usage.TotalTokens)
+	require.Equal(t, "priority", result.ServiceTier)
 }
 
 func TestConvertToolChoiceToAnthropic(t *testing.T) {

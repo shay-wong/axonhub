@@ -13,6 +13,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/project"
 	"github.com/looplj/axonhub/internal/ent/request"
+	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/objects"
 )
@@ -28,6 +29,8 @@ type UsageLog struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// Related request ID
 	RequestID int `json:"request_id,omitempty"`
+	// Exact request execution billed by this usage log
+	RequestExecutionID int `json:"request_execution_id,omitempty"`
 	// APIKeyID holds the value of the "api_key_id" field.
 	APIKeyID int `json:"api_key_id,omitempty"`
 	// Project ID, default to 1 for backward compatibility
@@ -64,6 +67,12 @@ type UsageLog struct {
 	Source usagelog.Source `json:"source,omitempty"`
 	// Request format used
 	Format string `json:"format,omitempty"`
+	// Service tier sent in the provider request
+	RequestedServiceTier string `json:"requested_service_tier,omitempty"`
+	// Service tier reported by the provider response
+	AppliedServiceTier string `json:"applied_service_tier,omitempty"`
+	// Effective service tier used for billing: applied when reported, otherwise requested
+	ServiceTier string `json:"service_tier,omitempty"`
 	// Total cost calculated based on channel model price
 	TotalCost *float64 `json:"total_cost,omitempty"`
 	// Detailed cost breakdown items in JSON
@@ -80,15 +89,17 @@ type UsageLog struct {
 type UsageLogEdges struct {
 	// Request holds the value of the request edge.
 	Request *Request `json:"request,omitempty"`
+	// RequestExecution holds the value of the request_execution edge.
+	RequestExecution *RequestExecution `json:"request_execution,omitempty"`
 	// Project holds the value of the project edge.
 	Project *Project `json:"project,omitempty"`
 	// Channel holds the value of the channel edge.
 	Channel *Channel `json:"channel,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [4]bool
 	// totalCount holds the count of the edges above.
-	totalCount [3]map[string]int
+	totalCount [4]map[string]int
 }
 
 // RequestOrErr returns the Request value or an error if the edge
@@ -102,12 +113,23 @@ func (e UsageLogEdges) RequestOrErr() (*Request, error) {
 	return nil, &NotLoadedError{edge: "request"}
 }
 
+// RequestExecutionOrErr returns the RequestExecution value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e UsageLogEdges) RequestExecutionOrErr() (*RequestExecution, error) {
+	if e.RequestExecution != nil {
+		return e.RequestExecution, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: requestexecution.Label}
+	}
+	return nil, &NotLoadedError{edge: "request_execution"}
+}
+
 // ProjectOrErr returns the Project value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UsageLogEdges) ProjectOrErr() (*Project, error) {
 	if e.Project != nil {
 		return e.Project, nil
-	} else if e.loadedTypes[1] {
+	} else if e.loadedTypes[2] {
 		return nil, &NotFoundError{label: project.Label}
 	}
 	return nil, &NotLoadedError{edge: "project"}
@@ -118,7 +140,7 @@ func (e UsageLogEdges) ProjectOrErr() (*Project, error) {
 func (e UsageLogEdges) ChannelOrErr() (*Channel, error) {
 	if e.Channel != nil {
 		return e.Channel, nil
-	} else if e.loadedTypes[2] {
+	} else if e.loadedTypes[3] {
 		return nil, &NotFoundError{label: channel.Label}
 	}
 	return nil, &NotLoadedError{edge: "channel"}
@@ -133,9 +155,9 @@ func (*UsageLog) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case usagelog.FieldTotalCost:
 			values[i] = new(sql.NullFloat64)
-		case usagelog.FieldID, usagelog.FieldRequestID, usagelog.FieldAPIKeyID, usagelog.FieldProjectID, usagelog.FieldChannelID, usagelog.FieldPromptTokens, usagelog.FieldCompletionTokens, usagelog.FieldTotalTokens, usagelog.FieldPromptAudioTokens, usagelog.FieldPromptCachedTokens, usagelog.FieldPromptWriteCachedTokens, usagelog.FieldPromptWriteCachedTokens5m, usagelog.FieldPromptWriteCachedTokens1h, usagelog.FieldCompletionAudioTokens, usagelog.FieldCompletionReasoningTokens, usagelog.FieldCompletionAcceptedPredictionTokens, usagelog.FieldCompletionRejectedPredictionTokens:
+		case usagelog.FieldID, usagelog.FieldRequestID, usagelog.FieldRequestExecutionID, usagelog.FieldAPIKeyID, usagelog.FieldProjectID, usagelog.FieldChannelID, usagelog.FieldPromptTokens, usagelog.FieldCompletionTokens, usagelog.FieldTotalTokens, usagelog.FieldPromptAudioTokens, usagelog.FieldPromptCachedTokens, usagelog.FieldPromptWriteCachedTokens, usagelog.FieldPromptWriteCachedTokens5m, usagelog.FieldPromptWriteCachedTokens1h, usagelog.FieldCompletionAudioTokens, usagelog.FieldCompletionReasoningTokens, usagelog.FieldCompletionAcceptedPredictionTokens, usagelog.FieldCompletionRejectedPredictionTokens:
 			values[i] = new(sql.NullInt64)
-		case usagelog.FieldModelID, usagelog.FieldSource, usagelog.FieldFormat, usagelog.FieldCostPriceReferenceID:
+		case usagelog.FieldModelID, usagelog.FieldSource, usagelog.FieldFormat, usagelog.FieldRequestedServiceTier, usagelog.FieldAppliedServiceTier, usagelog.FieldServiceTier, usagelog.FieldCostPriceReferenceID:
 			values[i] = new(sql.NullString)
 		case usagelog.FieldCreatedAt, usagelog.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -177,6 +199,12 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field request_id", values[i])
 			} else if value.Valid {
 				_m.RequestID = int(value.Int64)
+			}
+		case usagelog.FieldRequestExecutionID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field request_execution_id", values[i])
+			} else if value.Valid {
+				_m.RequestExecutionID = int(value.Int64)
 			}
 		case usagelog.FieldAPIKeyID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -286,6 +314,24 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Format = value.String
 			}
+		case usagelog.FieldRequestedServiceTier:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field requested_service_tier", values[i])
+			} else if value.Valid {
+				_m.RequestedServiceTier = value.String
+			}
+		case usagelog.FieldAppliedServiceTier:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field applied_service_tier", values[i])
+			} else if value.Valid {
+				_m.AppliedServiceTier = value.String
+			}
+		case usagelog.FieldServiceTier:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field service_tier", values[i])
+			} else if value.Valid {
+				_m.ServiceTier = value.String
+			}
 		case usagelog.FieldTotalCost:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
 				return fmt.Errorf("unexpected type %T for field total_cost", values[i])
@@ -323,6 +369,11 @@ func (_m *UsageLog) Value(name string) (ent.Value, error) {
 // QueryRequest queries the "request" edge of the UsageLog entity.
 func (_m *UsageLog) QueryRequest() *RequestQuery {
 	return NewUsageLogClient(_m.config).QueryRequest(_m)
+}
+
+// QueryRequestExecution queries the "request_execution" edge of the UsageLog entity.
+func (_m *UsageLog) QueryRequestExecution() *RequestExecutionQuery {
+	return NewUsageLogClient(_m.config).QueryRequestExecution(_m)
 }
 
 // QueryProject queries the "project" edge of the UsageLog entity.
@@ -366,6 +417,9 @@ func (_m *UsageLog) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("request_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RequestID))
+	builder.WriteString(", ")
+	builder.WriteString("request_execution_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RequestExecutionID))
 	builder.WriteString(", ")
 	builder.WriteString("api_key_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.APIKeyID))
@@ -420,6 +474,15 @@ func (_m *UsageLog) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("format=")
 	builder.WriteString(_m.Format)
+	builder.WriteString(", ")
+	builder.WriteString("requested_service_tier=")
+	builder.WriteString(_m.RequestedServiceTier)
+	builder.WriteString(", ")
+	builder.WriteString("applied_service_tier=")
+	builder.WriteString(_m.AppliedServiceTier)
+	builder.WriteString(", ")
+	builder.WriteString("service_tier=")
+	builder.WriteString(_m.ServiceTier)
 	builder.WriteString(", ")
 	if v := _m.TotalCost; v != nil {
 		builder.WriteString("total_cost=")

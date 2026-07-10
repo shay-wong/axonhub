@@ -15,6 +15,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/datastorage"
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
+	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/objects"
 )
 
@@ -146,6 +147,20 @@ func (_c *RequestExecutionCreate) SetFormat(v string) *RequestExecutionCreate {
 func (_c *RequestExecutionCreate) SetNillableFormat(v *string) *RequestExecutionCreate {
 	if v != nil {
 		_c.SetFormat(*v)
+	}
+	return _c
+}
+
+// SetRequestedServiceTier sets the "requested_service_tier" field.
+func (_c *RequestExecutionCreate) SetRequestedServiceTier(v string) *RequestExecutionCreate {
+	_c.mutation.SetRequestedServiceTier(v)
+	return _c
+}
+
+// SetNillableRequestedServiceTier sets the "requested_service_tier" field if the given value is not nil.
+func (_c *RequestExecutionCreate) SetNillableRequestedServiceTier(v *string) *RequestExecutionCreate {
+	if v != nil {
+		_c.SetRequestedServiceTier(*v)
 	}
 	return _c
 }
@@ -305,6 +320,25 @@ func (_c *RequestExecutionCreate) SetChannel(v *Channel) *RequestExecutionCreate
 // SetDataStorage sets the "data_storage" edge to the DataStorage entity.
 func (_c *RequestExecutionCreate) SetDataStorage(v *DataStorage) *RequestExecutionCreate {
 	return _c.SetDataStorageID(v.ID)
+}
+
+// SetUsageLogID sets the "usage_log" edge to the UsageLog entity by ID.
+func (_c *RequestExecutionCreate) SetUsageLogID(id int) *RequestExecutionCreate {
+	_c.mutation.SetUsageLogID(id)
+	return _c
+}
+
+// SetNillableUsageLogID sets the "usage_log" edge to the UsageLog entity by ID if the given value is not nil.
+func (_c *RequestExecutionCreate) SetNillableUsageLogID(id *int) *RequestExecutionCreate {
+	if id != nil {
+		_c = _c.SetUsageLogID(*id)
+	}
+	return _c
+}
+
+// SetUsageLog sets the "usage_log" edge to the UsageLog entity.
+func (_c *RequestExecutionCreate) SetUsageLog(v *UsageLog) *RequestExecutionCreate {
+	return _c.SetUsageLogID(v.ID)
 }
 
 // Mutation returns the RequestExecutionMutation object of the builder.
@@ -474,6 +508,10 @@ func (_c *RequestExecutionCreate) createSpec() (*RequestExecution, *sqlgraph.Cre
 		_spec.SetField(requestexecution.FieldFormat, field.TypeString, value)
 		_node.Format = value
 	}
+	if value, ok := _c.mutation.RequestedServiceTier(); ok {
+		_spec.SetField(requestexecution.FieldRequestedServiceTier, field.TypeString, value)
+		_node.RequestedServiceTier = value
+	}
 	if value, ok := _c.mutation.RequestBody(); ok {
 		_spec.SetField(requestexecution.FieldRequestBody, field.TypeJSON, value)
 		_node.RequestBody = value
@@ -575,6 +613,22 @@ func (_c *RequestExecutionCreate) createSpec() (*RequestExecution, *sqlgraph.Cre
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.DataStorageID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.UsageLogIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   requestexecution.UsageLogTable,
+			Columns: []string{requestexecution.UsageLogColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagelog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
@@ -903,6 +957,9 @@ func (u *RequestExecutionUpsertOne) UpdateNewValues() *RequestExecutionUpsertOne
 		}
 		if _, exists := u.create.mutation.Format(); exists {
 			s.SetIgnore(requestexecution.FieldFormat)
+		}
+		if _, exists := u.create.mutation.RequestedServiceTier(); exists {
+			s.SetIgnore(requestexecution.FieldRequestedServiceTier)
 		}
 		if _, exists := u.create.mutation.RequestBody(); exists {
 			s.SetIgnore(requestexecution.FieldRequestBody)
@@ -1420,6 +1477,9 @@ func (u *RequestExecutionUpsertBulk) UpdateNewValues() *RequestExecutionUpsertBu
 			}
 			if _, exists := b.mutation.Format(); exists {
 				s.SetIgnore(requestexecution.FieldFormat)
+			}
+			if _, exists := b.mutation.RequestedServiceTier(); exists {
+				s.SetIgnore(requestexecution.FieldRequestedServiceTier)
 			}
 			if _, exists := b.mutation.RequestBody(); exists {
 				s.SetIgnore(requestexecution.FieldRequestBody)

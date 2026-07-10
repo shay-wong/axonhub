@@ -48,9 +48,10 @@ type responsesInboundStream struct {
 	pendingAnnotations      []llm.Annotation
 
 	// Response metadata
-	responseID string
-	model      string
-	createdAt  int64
+	responseID  string
+	model       string
+	createdAt   int64
+	serviceTier string
 
 	// Content tracking
 	outputIndex    int
@@ -199,6 +200,13 @@ func (s *responsesInboundStream) Next() bool {
 		s.usage = chunk.Usage
 	}
 
+	if chunk.ServiceTier != "" {
+		s.serviceTier = chunk.ServiceTier
+		if s.aggregator != nil {
+			s.aggregator.serviceTier = chunk.ServiceTier
+		}
+	}
+
 	if len(chunk.TransformerMetadata) > 0 {
 		s.mergeTransformerMetadata(chunk.TransformerMetadata)
 	}
@@ -214,6 +222,9 @@ func (s *responsesInboundStream) Next() bool {
 			CreatedAt: s.createdAt,
 			Status:    lo.ToPtr("in_progress"),
 			Output:    []Item{},
+		}
+		if s.serviceTier != "" {
+			response.ServiceTier = lo.ToPtr(s.serviceTier)
 		}
 
 		if s.usage != nil {
@@ -1140,6 +1151,9 @@ func (s *responsesInboundStream) buildFailedResponse(code, message string) *Resp
 			Code:    code,
 			Message: message,
 		},
+	}
+	if s.serviceTier != "" {
+		response.ServiceTier = lo.ToPtr(s.serviceTier)
 	}
 
 	if s.aggregator != nil {

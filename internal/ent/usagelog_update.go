@@ -589,6 +589,15 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.CompletionRejectedPredictionTokensCleared() {
 		_spec.ClearField(usagelog.FieldCompletionRejectedPredictionTokens, field.TypeInt64)
 	}
+	if _u.mutation.RequestedServiceTierCleared() {
+		_spec.ClearField(usagelog.FieldRequestedServiceTier, field.TypeString)
+	}
+	if _u.mutation.AppliedServiceTierCleared() {
+		_spec.ClearField(usagelog.FieldAppliedServiceTier, field.TypeString)
+	}
+	if _u.mutation.ServiceTierCleared() {
+		_spec.ClearField(usagelog.FieldServiceTier, field.TypeString)
+	}
 	if value, ok := _u.mutation.TotalCost(); ok {
 		_spec.SetField(usagelog.FieldTotalCost, field.TypeFloat64, value)
 	}
@@ -1224,6 +1233,15 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.CompletionRejectedPredictionTokensCleared() {
 		_spec.ClearField(usagelog.FieldCompletionRejectedPredictionTokens, field.TypeInt64)
+	}
+	if _u.mutation.RequestedServiceTierCleared() {
+		_spec.ClearField(usagelog.FieldRequestedServiceTier, field.TypeString)
+	}
+	if _u.mutation.AppliedServiceTierCleared() {
+		_spec.ClearField(usagelog.FieldAppliedServiceTier, field.TypeString)
+	}
+	if _u.mutation.ServiceTierCleared() {
+		_spec.ClearField(usagelog.FieldServiceTier, field.TypeString)
 	}
 	if value, ok := _u.mutation.TotalCost(); ok {
 		_spec.SetField(usagelog.FieldTotalCost, field.TypeFloat64, value)

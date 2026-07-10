@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/looplj/axonhub/internal/ent/predicate"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
+	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/objects"
 )
 
@@ -287,9 +288,34 @@ func (_u *RequestExecutionUpdate) SetNillablePassThroughApplied(v *bool) *Reques
 	return _u
 }
 
+// SetUsageLogID sets the "usage_log" edge to the UsageLog entity by ID.
+func (_u *RequestExecutionUpdate) SetUsageLogID(id int) *RequestExecutionUpdate {
+	_u.mutation.SetUsageLogID(id)
+	return _u
+}
+
+// SetNillableUsageLogID sets the "usage_log" edge to the UsageLog entity by ID if the given value is not nil.
+func (_u *RequestExecutionUpdate) SetNillableUsageLogID(id *int) *RequestExecutionUpdate {
+	if id != nil {
+		_u = _u.SetUsageLogID(*id)
+	}
+	return _u
+}
+
+// SetUsageLog sets the "usage_log" edge to the UsageLog entity.
+func (_u *RequestExecutionUpdate) SetUsageLog(v *UsageLog) *RequestExecutionUpdate {
+	return _u.SetUsageLogID(v.ID)
+}
+
 // Mutation returns the RequestExecutionMutation object of the builder.
 func (_u *RequestExecutionUpdate) Mutation() *RequestExecutionMutation {
 	return _u.mutation
+}
+
+// ClearUsageLog clears the "usage_log" edge to the UsageLog entity.
+func (_u *RequestExecutionUpdate) ClearUsageLog() *RequestExecutionUpdate {
+	_u.mutation.ClearUsageLog()
+	return _u
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -372,6 +398,9 @@ func (_u *RequestExecutionUpdate) sqlSave(ctx context.Context) (_node int, err e
 	}
 	if _u.mutation.ExternalIDCleared() {
 		_spec.ClearField(requestexecution.FieldExternalID, field.TypeString)
+	}
+	if _u.mutation.RequestedServiceTierCleared() {
+		_spec.ClearField(requestexecution.FieldRequestedServiceTier, field.TypeString)
 	}
 	if value, ok := _u.mutation.ResponseBody(); ok {
 		_spec.SetField(requestexecution.FieldResponseBody, field.TypeJSON, value)
@@ -459,6 +488,35 @@ func (_u *RequestExecutionUpdate) sqlSave(ctx context.Context) (_node int, err e
 	}
 	if value, ok := _u.mutation.PassThroughApplied(); ok {
 		_spec.SetField(requestexecution.FieldPassThroughApplied, field.TypeBool, value)
+	}
+	if _u.mutation.UsageLogCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   requestexecution.UsageLogTable,
+			Columns: []string{requestexecution.UsageLogColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagelog.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UsageLogIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   requestexecution.UsageLogTable,
+			Columns: []string{requestexecution.UsageLogColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagelog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
@@ -738,9 +796,34 @@ func (_u *RequestExecutionUpdateOne) SetNillablePassThroughApplied(v *bool) *Req
 	return _u
 }
 
+// SetUsageLogID sets the "usage_log" edge to the UsageLog entity by ID.
+func (_u *RequestExecutionUpdateOne) SetUsageLogID(id int) *RequestExecutionUpdateOne {
+	_u.mutation.SetUsageLogID(id)
+	return _u
+}
+
+// SetNillableUsageLogID sets the "usage_log" edge to the UsageLog entity by ID if the given value is not nil.
+func (_u *RequestExecutionUpdateOne) SetNillableUsageLogID(id *int) *RequestExecutionUpdateOne {
+	if id != nil {
+		_u = _u.SetUsageLogID(*id)
+	}
+	return _u
+}
+
+// SetUsageLog sets the "usage_log" edge to the UsageLog entity.
+func (_u *RequestExecutionUpdateOne) SetUsageLog(v *UsageLog) *RequestExecutionUpdateOne {
+	return _u.SetUsageLogID(v.ID)
+}
+
 // Mutation returns the RequestExecutionMutation object of the builder.
 func (_u *RequestExecutionUpdateOne) Mutation() *RequestExecutionMutation {
 	return _u.mutation
+}
+
+// ClearUsageLog clears the "usage_log" edge to the UsageLog entity.
+func (_u *RequestExecutionUpdateOne) ClearUsageLog() *RequestExecutionUpdateOne {
+	_u.mutation.ClearUsageLog()
+	return _u
 }
 
 // Where appends a list predicates to the RequestExecutionUpdate builder.
@@ -854,6 +937,9 @@ func (_u *RequestExecutionUpdateOne) sqlSave(ctx context.Context) (_node *Reques
 	if _u.mutation.ExternalIDCleared() {
 		_spec.ClearField(requestexecution.FieldExternalID, field.TypeString)
 	}
+	if _u.mutation.RequestedServiceTierCleared() {
+		_spec.ClearField(requestexecution.FieldRequestedServiceTier, field.TypeString)
+	}
 	if value, ok := _u.mutation.ResponseBody(); ok {
 		_spec.SetField(requestexecution.FieldResponseBody, field.TypeJSON, value)
 	}
@@ -940,6 +1026,35 @@ func (_u *RequestExecutionUpdateOne) sqlSave(ctx context.Context) (_node *Reques
 	}
 	if value, ok := _u.mutation.PassThroughApplied(); ok {
 		_spec.SetField(requestexecution.FieldPassThroughApplied, field.TypeBool, value)
+	}
+	if _u.mutation.UsageLogCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   requestexecution.UsageLogTable,
+			Columns: []string{requestexecution.UsageLogColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagelog.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UsageLogIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   requestexecution.UsageLogTable,
+			Columns: []string{requestexecution.UsageLogColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagelog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_spec.AddModifiers(_u.modifiers...)
 	_node = &RequestExecution{config: _u.config}

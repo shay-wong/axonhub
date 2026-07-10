@@ -865,7 +865,8 @@ type ComplexityRoot struct {
 	}
 
 	ModelPrice struct {
-		Items func(childComplexity int) int
+		Items             func(childComplexity int) int
+		ServiceTierPrices func(childComplexity int) int
 	}
 
 	ModelPriceItem struct {
@@ -1408,6 +1409,7 @@ type ComplexityRoot struct {
 		RequestHeaders             func(childComplexity int) int
 		RequestID                  func(childComplexity int) int
 		RequestURL                 func(childComplexity int) int
+		RequestedServiceTier       func(childComplexity int) int
 		ResponseBody               func(childComplexity int) int
 		ResponseChunks             func(childComplexity int) int
 		ResponseStatusCode         func(childComplexity int) int
@@ -1415,6 +1417,7 @@ type ComplexityRoot struct {
 		Status                     func(childComplexity int) int
 		Stream                     func(childComplexity int) int
 		UpdatedAt                  func(childComplexity int) int
+		UsageLog                   func(childComplexity int) int
 	}
 
 	RequestExecutionConnection struct {
@@ -1541,6 +1544,11 @@ type ComplexityRoot struct {
 		RequestSpans  func(childComplexity int) int
 		ResponseSpans func(childComplexity int) int
 		StartTime     func(childComplexity int) int
+	}
+
+	ServiceTierPrice struct {
+		Items       func(childComplexity int) int
+		ServiceTier func(childComplexity int) int
 	}
 
 	SignInPayload struct {
@@ -1832,6 +1840,7 @@ type ComplexityRoot struct {
 
 	UsageLog struct {
 		APIKeyID                           func(childComplexity int) int
+		AppliedServiceTier                 func(childComplexity int) int
 		Channel                            func(childComplexity int) int
 		ChannelID                          func(childComplexity int) int
 		CompletionAcceptedPredictionTokens func(childComplexity int) int
@@ -1854,7 +1863,11 @@ type ComplexityRoot struct {
 		PromptWriteCachedTokens1h          func(childComplexity int) int
 		PromptWriteCachedTokens5m          func(childComplexity int) int
 		Request                            func(childComplexity int) int
+		RequestExecution                   func(childComplexity int) int
+		RequestExecutionID                 func(childComplexity int) int
 		RequestID                          func(childComplexity int) int
+		RequestedServiceTier               func(childComplexity int) int
+		ServiceTier                        func(childComplexity int) int
 		Source                             func(childComplexity int) int
 		TotalCost                          func(childComplexity int) int
 		TotalTokens                        func(childComplexity int) int
@@ -2358,6 +2371,7 @@ type UsageLogResolver interface {
 	ID(ctx context.Context, obj *ent.UsageLog) (*objects.GUID, error)
 
 	RequestID(ctx context.Context, obj *ent.UsageLog) (*objects.GUID, error)
+	RequestExecutionID(ctx context.Context, obj *ent.UsageLog) (*objects.GUID, error)
 
 	ProjectID(ctx context.Context, obj *ent.UsageLog) (*objects.GUID, error)
 	ChannelID(ctx context.Context, obj *ent.UsageLog) (*objects.GUID, error)
@@ -5256,6 +5270,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ModelPrice.Items(childComplexity), true
+	case "ModelPrice.serviceTierPrices":
+		if e.complexity.ModelPrice.ServiceTierPrices == nil {
+			break
+		}
+
+		return e.complexity.ModelPrice.ServiceTierPrices(childComplexity), true
 
 	case "ModelPriceItem.itemCode":
 		if e.complexity.ModelPriceItem.ItemCode == nil {
@@ -8578,6 +8598,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.RequestExecution.RequestURL(childComplexity), true
+	case "RequestExecution.requestedServiceTier":
+		if e.complexity.RequestExecution.RequestedServiceTier == nil {
+			break
+		}
+
+		return e.complexity.RequestExecution.RequestedServiceTier(childComplexity), true
 	case "RequestExecution.responseBody":
 		if e.complexity.RequestExecution.ResponseBody == nil {
 			break
@@ -8620,6 +8646,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.RequestExecution.UpdatedAt(childComplexity), true
+	case "RequestExecution.usageLog":
+		if e.complexity.RequestExecution.UsageLog == nil {
+			break
+		}
+
+		return e.complexity.RequestExecution.UsageLog(childComplexity), true
 
 	case "RequestExecutionConnection.edges":
 		if e.complexity.RequestExecutionConnection.Edges == nil {
@@ -9075,6 +9107,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Segment.StartTime(childComplexity), true
+
+	case "ServiceTierPrice.items":
+		if e.complexity.ServiceTierPrice.Items == nil {
+			break
+		}
+
+		return e.complexity.ServiceTierPrice.Items(childComplexity), true
+	case "ServiceTierPrice.serviceTier":
+		if e.complexity.ServiceTierPrice.ServiceTier == nil {
+			break
+		}
+
+		return e.complexity.ServiceTierPrice.ServiceTier(childComplexity), true
 
 	case "SignInPayload.token":
 		if e.complexity.SignInPayload.Token == nil {
@@ -10100,6 +10145,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.UsageLog.APIKeyID(childComplexity), true
+	case "UsageLog.appliedServiceTier":
+		if e.complexity.UsageLog.AppliedServiceTier == nil {
+			break
+		}
+
+		return e.complexity.UsageLog.AppliedServiceTier(childComplexity), true
 	case "UsageLog.channel":
 		if e.complexity.UsageLog.Channel == nil {
 			break
@@ -10232,12 +10283,36 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.UsageLog.Request(childComplexity), true
+	case "UsageLog.requestExecution":
+		if e.complexity.UsageLog.RequestExecution == nil {
+			break
+		}
+
+		return e.complexity.UsageLog.RequestExecution(childComplexity), true
+	case "UsageLog.requestExecutionID":
+		if e.complexity.UsageLog.RequestExecutionID == nil {
+			break
+		}
+
+		return e.complexity.UsageLog.RequestExecutionID(childComplexity), true
 	case "UsageLog.requestID":
 		if e.complexity.UsageLog.RequestID == nil {
 			break
 		}
 
 		return e.complexity.UsageLog.RequestID(childComplexity), true
+	case "UsageLog.requestedServiceTier":
+		if e.complexity.UsageLog.RequestedServiceTier == nil {
+			break
+		}
+
+		return e.complexity.UsageLog.RequestedServiceTier(childComplexity), true
+	case "UsageLog.serviceTier":
+		if e.complexity.UsageLog.ServiceTier == nil {
+			break
+		}
+
+		return e.complexity.UsageLog.ServiceTier(childComplexity), true
 	case "UsageLog.source":
 		if e.complexity.UsageLog.Source == nil {
 			break
@@ -11027,6 +11102,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSaveChannelEndpointsInput,
 		ec.unmarshalInputSaveChannelModelPriceInput,
 		ec.unmarshalInputSaveProxyPresetInput,
+		ec.unmarshalInputServiceTierPriceInput,
 		ec.unmarshalInputSignInInput,
 		ec.unmarshalInputSystemOrder,
 		ec.unmarshalInputSystemWhereInput,
@@ -20567,6 +20643,8 @@ func (ec *executionContext) fieldContext_ChannelModelPrice_price(_ context.Conte
 			switch field.Name {
 			case "items":
 				return ec.fieldContext_ModelPrice_items(ctx, field)
+			case "serviceTierPrices":
+				return ec.fieldContext_ModelPrice_serviceTierPrices(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ModelPrice", field.Name)
 		},
@@ -21136,6 +21214,8 @@ func (ec *executionContext) fieldContext_ChannelModelPriceVersion_price(_ contex
 			switch field.Name {
 			case "items":
 				return ec.fieldContext_ModelPrice_items(ctx, field)
+			case "serviceTierPrices":
+				return ec.fieldContext_ModelPrice_serviceTierPrices(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ModelPrice", field.Name)
 		},
@@ -29570,6 +29650,41 @@ func (ec *executionContext) fieldContext_ModelPrice_items(_ context.Context, fie
 				return ec.fieldContext_ModelPriceItem_promptWriteCacheVariants(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ModelPriceItem", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ModelPrice_serviceTierPrices(ctx context.Context, field graphql.CollectedField, obj *objects.ModelPrice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ModelPrice_serviceTierPrices,
+		func(ctx context.Context) (any, error) {
+			return obj.ServiceTierPrices, nil
+		},
+		nil,
+		ec.marshalNServiceTierPrice2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐServiceTierPriceᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ModelPrice_serviceTierPrices(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ModelPrice",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "serviceTier":
+				return ec.fieldContext_ServiceTierPrice_serviceTier(ctx, field)
+			case "items":
+				return ec.fieldContext_ServiceTierPrice_items(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ServiceTierPrice", field.Name)
 		},
 	}
 	return fc, nil
@@ -46317,6 +46432,35 @@ func (ec *executionContext) fieldContext_RequestExecution_format(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _RequestExecution_requestedServiceTier(ctx context.Context, field graphql.CollectedField, obj *ent.RequestExecution) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RequestExecution_requestedServiceTier,
+		func(ctx context.Context) (any, error) {
+			return obj.RequestedServiceTier, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RequestExecution_requestedServiceTier(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RequestExecution",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _RequestExecution_requestBody(ctx context.Context, field graphql.CollectedField, obj *ent.RequestExecution) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -46943,6 +47087,103 @@ func (ec *executionContext) fieldContext_RequestExecution_dataStorage(_ context.
 	return fc, nil
 }
 
+func (ec *executionContext) _RequestExecution_usageLog(ctx context.Context, field graphql.CollectedField, obj *ent.RequestExecution) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RequestExecution_usageLog,
+		func(ctx context.Context) (any, error) {
+			return obj.UsageLog(ctx)
+		},
+		nil,
+		ec.marshalOUsageLog2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐUsageLog,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RequestExecution_usageLog(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RequestExecution",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_UsageLog_id(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_UsageLog_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_UsageLog_updatedAt(ctx, field)
+			case "requestID":
+				return ec.fieldContext_UsageLog_requestID(ctx, field)
+			case "requestExecutionID":
+				return ec.fieldContext_UsageLog_requestExecutionID(ctx, field)
+			case "apiKeyID":
+				return ec.fieldContext_UsageLog_apiKeyID(ctx, field)
+			case "projectID":
+				return ec.fieldContext_UsageLog_projectID(ctx, field)
+			case "channelID":
+				return ec.fieldContext_UsageLog_channelID(ctx, field)
+			case "modelID":
+				return ec.fieldContext_UsageLog_modelID(ctx, field)
+			case "promptTokens":
+				return ec.fieldContext_UsageLog_promptTokens(ctx, field)
+			case "completionTokens":
+				return ec.fieldContext_UsageLog_completionTokens(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_UsageLog_totalTokens(ctx, field)
+			case "promptAudioTokens":
+				return ec.fieldContext_UsageLog_promptAudioTokens(ctx, field)
+			case "promptCachedTokens":
+				return ec.fieldContext_UsageLog_promptCachedTokens(ctx, field)
+			case "promptWriteCachedTokens":
+				return ec.fieldContext_UsageLog_promptWriteCachedTokens(ctx, field)
+			case "promptWriteCachedTokens5m":
+				return ec.fieldContext_UsageLog_promptWriteCachedTokens5m(ctx, field)
+			case "promptWriteCachedTokens1h":
+				return ec.fieldContext_UsageLog_promptWriteCachedTokens1h(ctx, field)
+			case "completionAudioTokens":
+				return ec.fieldContext_UsageLog_completionAudioTokens(ctx, field)
+			case "completionReasoningTokens":
+				return ec.fieldContext_UsageLog_completionReasoningTokens(ctx, field)
+			case "completionAcceptedPredictionTokens":
+				return ec.fieldContext_UsageLog_completionAcceptedPredictionTokens(ctx, field)
+			case "completionRejectedPredictionTokens":
+				return ec.fieldContext_UsageLog_completionRejectedPredictionTokens(ctx, field)
+			case "source":
+				return ec.fieldContext_UsageLog_source(ctx, field)
+			case "format":
+				return ec.fieldContext_UsageLog_format(ctx, field)
+			case "requestedServiceTier":
+				return ec.fieldContext_UsageLog_requestedServiceTier(ctx, field)
+			case "appliedServiceTier":
+				return ec.fieldContext_UsageLog_appliedServiceTier(ctx, field)
+			case "serviceTier":
+				return ec.fieldContext_UsageLog_serviceTier(ctx, field)
+			case "totalCost":
+				return ec.fieldContext_UsageLog_totalCost(ctx, field)
+			case "costItems":
+				return ec.fieldContext_UsageLog_costItems(ctx, field)
+			case "costPriceReferenceID":
+				return ec.fieldContext_UsageLog_costPriceReferenceID(ctx, field)
+			case "request":
+				return ec.fieldContext_UsageLog_request(ctx, field)
+			case "requestExecution":
+				return ec.fieldContext_UsageLog_requestExecution(ctx, field)
+			case "project":
+				return ec.fieldContext_UsageLog_project(ctx, field)
+			case "channel":
+				return ec.fieldContext_UsageLog_channel(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UsageLog", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _RequestExecutionConnection_edges(ctx context.Context, field graphql.CollectedField, obj *ent.RequestExecutionConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -47092,6 +47333,8 @@ func (ec *executionContext) fieldContext_RequestExecutionEdge_node(_ context.Con
 				return ec.fieldContext_RequestExecution_modelID(ctx, field)
 			case "format":
 				return ec.fieldContext_RequestExecution_format(ctx, field)
+			case "requestedServiceTier":
+				return ec.fieldContext_RequestExecution_requestedServiceTier(ctx, field)
 			case "requestBody":
 				return ec.fieldContext_RequestExecution_requestBody(ctx, field)
 			case "responseBody":
@@ -47124,6 +47367,8 @@ func (ec *executionContext) fieldContext_RequestExecutionEdge_node(_ context.Con
 				return ec.fieldContext_RequestExecution_channel(ctx, field)
 			case "dataStorage":
 				return ec.fieldContext_RequestExecution_dataStorage(ctx, field)
+			case "usageLog":
+				return ec.fieldContext_RequestExecution_usageLog(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type RequestExecution", field.Name)
 		},
@@ -49290,6 +49535,72 @@ func (ec *executionContext) fieldContext_Segment_duration(_ context.Context, fie
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ServiceTierPrice_serviceTier(ctx context.Context, field graphql.CollectedField, obj *objects.ServiceTierPrice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ServiceTierPrice_serviceTier,
+		func(ctx context.Context) (any, error) {
+			return obj.ServiceTier, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ServiceTierPrice_serviceTier(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ServiceTierPrice",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ServiceTierPrice_items(ctx context.Context, field graphql.CollectedField, obj *objects.ServiceTierPrice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ServiceTierPrice_items,
+		func(ctx context.Context) (any, error) {
+			return obj.Items, nil
+		},
+		nil,
+		ec.marshalNModelPriceItem2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐModelPriceItemᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ServiceTierPrice_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ServiceTierPrice",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "itemCode":
+				return ec.fieldContext_ModelPriceItem_itemCode(ctx, field)
+			case "pricing":
+				return ec.fieldContext_ModelPriceItem_pricing(ctx, field)
+			case "promptWriteCacheVariants":
+				return ec.fieldContext_ModelPriceItem_promptWriteCacheVariants(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ModelPriceItem", field.Name)
 		},
 	}
 	return fc, nil
@@ -54578,6 +54889,35 @@ func (ec *executionContext) fieldContext_UsageLog_requestID(_ context.Context, f
 	return fc, nil
 }
 
+func (ec *executionContext) _UsageLog_requestExecutionID(ctx context.Context, field graphql.CollectedField, obj *ent.UsageLog) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UsageLog_requestExecutionID,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.UsageLog().RequestExecutionID(ctx, obj)
+		},
+		nil,
+		ec.marshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UsageLog_requestExecutionID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UsageLog",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _UsageLog_apiKeyID(ctx context.Context, field graphql.CollectedField, obj *ent.UsageLog) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -55100,6 +55440,93 @@ func (ec *executionContext) fieldContext_UsageLog_format(_ context.Context, fiel
 	return fc, nil
 }
 
+func (ec *executionContext) _UsageLog_requestedServiceTier(ctx context.Context, field graphql.CollectedField, obj *ent.UsageLog) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UsageLog_requestedServiceTier,
+		func(ctx context.Context) (any, error) {
+			return obj.RequestedServiceTier, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UsageLog_requestedServiceTier(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UsageLog",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UsageLog_appliedServiceTier(ctx context.Context, field graphql.CollectedField, obj *ent.UsageLog) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UsageLog_appliedServiceTier,
+		func(ctx context.Context) (any, error) {
+			return obj.AppliedServiceTier, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UsageLog_appliedServiceTier(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UsageLog",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UsageLog_serviceTier(ctx context.Context, field graphql.CollectedField, obj *ent.UsageLog) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UsageLog_serviceTier,
+		func(ctx context.Context) (any, error) {
+			return obj.ServiceTier, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UsageLog_serviceTier(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UsageLog",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _UsageLog_totalCost(ctx context.Context, field graphql.CollectedField, obj *ent.UsageLog) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -55291,6 +55718,95 @@ func (ec *executionContext) fieldContext_UsageLog_request(_ context.Context, fie
 				return ec.fieldContext_Request_usageLogs(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Request", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UsageLog_requestExecution(ctx context.Context, field graphql.CollectedField, obj *ent.UsageLog) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UsageLog_requestExecution,
+		func(ctx context.Context) (any, error) {
+			return obj.RequestExecution(ctx)
+		},
+		nil,
+		ec.marshalORequestExecution2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐRequestExecution,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UsageLog_requestExecution(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UsageLog",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_RequestExecution_id(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_RequestExecution_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_RequestExecution_updatedAt(ctx, field)
+			case "projectID":
+				return ec.fieldContext_RequestExecution_projectID(ctx, field)
+			case "requestID":
+				return ec.fieldContext_RequestExecution_requestID(ctx, field)
+			case "channelID":
+				return ec.fieldContext_RequestExecution_channelID(ctx, field)
+			case "dataStorageID":
+				return ec.fieldContext_RequestExecution_dataStorageID(ctx, field)
+			case "externalID":
+				return ec.fieldContext_RequestExecution_externalID(ctx, field)
+			case "source":
+				return ec.fieldContext_RequestExecution_source(ctx, field)
+			case "modelID":
+				return ec.fieldContext_RequestExecution_modelID(ctx, field)
+			case "format":
+				return ec.fieldContext_RequestExecution_format(ctx, field)
+			case "requestedServiceTier":
+				return ec.fieldContext_RequestExecution_requestedServiceTier(ctx, field)
+			case "requestBody":
+				return ec.fieldContext_RequestExecution_requestBody(ctx, field)
+			case "responseBody":
+				return ec.fieldContext_RequestExecution_responseBody(ctx, field)
+			case "responseChunks":
+				return ec.fieldContext_RequestExecution_responseChunks(ctx, field)
+			case "errorMessage":
+				return ec.fieldContext_RequestExecution_errorMessage(ctx, field)
+			case "responseStatusCode":
+				return ec.fieldContext_RequestExecution_responseStatusCode(ctx, field)
+			case "status":
+				return ec.fieldContext_RequestExecution_status(ctx, field)
+			case "stream":
+				return ec.fieldContext_RequestExecution_stream(ctx, field)
+			case "metricsLatencyMs":
+				return ec.fieldContext_RequestExecution_metricsLatencyMs(ctx, field)
+			case "metricsFirstTokenLatencyMs":
+				return ec.fieldContext_RequestExecution_metricsFirstTokenLatencyMs(ctx, field)
+			case "metricsReasoningDurationMs":
+				return ec.fieldContext_RequestExecution_metricsReasoningDurationMs(ctx, field)
+			case "requestHeaders":
+				return ec.fieldContext_RequestExecution_requestHeaders(ctx, field)
+			case "requestURL":
+				return ec.fieldContext_RequestExecution_requestURL(ctx, field)
+			case "passThroughApplied":
+				return ec.fieldContext_RequestExecution_passThroughApplied(ctx, field)
+			case "request":
+				return ec.fieldContext_RequestExecution_request(ctx, field)
+			case "channel":
+				return ec.fieldContext_RequestExecution_channel(ctx, field)
+			case "dataStorage":
+				return ec.fieldContext_RequestExecution_dataStorage(ctx, field)
+			case "usageLog":
+				return ec.fieldContext_RequestExecution_usageLog(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RequestExecution", field.Name)
 		},
 	}
 	return fc, nil
@@ -55593,6 +56109,8 @@ func (ec *executionContext) fieldContext_UsageLogEdge_node(_ context.Context, fi
 				return ec.fieldContext_UsageLog_updatedAt(ctx, field)
 			case "requestID":
 				return ec.fieldContext_UsageLog_requestID(ctx, field)
+			case "requestExecutionID":
+				return ec.fieldContext_UsageLog_requestExecutionID(ctx, field)
 			case "apiKeyID":
 				return ec.fieldContext_UsageLog_apiKeyID(ctx, field)
 			case "projectID":
@@ -55629,6 +56147,12 @@ func (ec *executionContext) fieldContext_UsageLogEdge_node(_ context.Context, fi
 				return ec.fieldContext_UsageLog_source(ctx, field)
 			case "format":
 				return ec.fieldContext_UsageLog_format(ctx, field)
+			case "requestedServiceTier":
+				return ec.fieldContext_UsageLog_requestedServiceTier(ctx, field)
+			case "appliedServiceTier":
+				return ec.fieldContext_UsageLog_appliedServiceTier(ctx, field)
+			case "serviceTier":
+				return ec.fieldContext_UsageLog_serviceTier(ctx, field)
 			case "totalCost":
 				return ec.fieldContext_UsageLog_totalCost(ctx, field)
 			case "costItems":
@@ -55637,6 +56161,8 @@ func (ec *executionContext) fieldContext_UsageLogEdge_node(_ context.Context, fi
 				return ec.fieldContext_UsageLog_costPriceReferenceID(ctx, field)
 			case "request":
 				return ec.fieldContext_UsageLog_request(ctx, field)
+			case "requestExecution":
+				return ec.fieldContext_UsageLog_requestExecution(ctx, field)
 			case "project":
 				return ec.fieldContext_UsageLog_project(ctx, field)
 			case "channel":
@@ -67757,7 +68283,7 @@ func (ec *executionContext) unmarshalInputCreateUsageLogInput(ctx context.Contex
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"apiKeyID", "modelID", "promptTokens", "completionTokens", "totalTokens", "promptAudioTokens", "promptCachedTokens", "promptWriteCachedTokens", "promptWriteCachedTokens5m", "promptWriteCachedTokens1h", "completionAudioTokens", "completionReasoningTokens", "completionAcceptedPredictionTokens", "completionRejectedPredictionTokens", "source", "format", "totalCost", "costItems", "costPriceReferenceID", "requestID", "projectID", "channelID"}
+	fieldsInOrder := [...]string{"apiKeyID", "modelID", "promptTokens", "completionTokens", "totalTokens", "promptAudioTokens", "promptCachedTokens", "promptWriteCachedTokens", "promptWriteCachedTokens5m", "promptWriteCachedTokens1h", "completionAudioTokens", "completionReasoningTokens", "completionAcceptedPredictionTokens", "completionRejectedPredictionTokens", "source", "format", "requestedServiceTier", "appliedServiceTier", "serviceTier", "totalCost", "costItems", "costPriceReferenceID", "requestID", "requestExecutionID", "projectID", "channelID"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -67876,6 +68402,27 @@ func (ec *executionContext) unmarshalInputCreateUsageLogInput(ctx context.Contex
 				return it, err
 			}
 			it.Format = data
+		case "requestedServiceTier":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTier"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTier = data
+		case "appliedServiceTier":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTier"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTier = data
+		case "serviceTier":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTier"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTier = data
 		case "totalCost":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("totalCost"))
 			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
@@ -67908,6 +68455,17 @@ func (ec *executionContext) unmarshalInputCreateUsageLogInput(ctx context.Contex
 				return it, graphql.ErrorOnPath(ctx, err)
 			}
 			it.RequestID = converted
+		case "requestExecutionID":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestExecutionID"))
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrToIntPtr(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.RequestExecutionID = converted
 		case "projectID":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectID"))
 			data, err := ec.unmarshalNID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
@@ -69615,7 +70173,7 @@ func (ec *executionContext) unmarshalInputModelPriceInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"items"}
+	fieldsInOrder := [...]string{"items", "serviceTierPrices"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -69629,6 +70187,13 @@ func (ec *executionContext) unmarshalInputModelPriceInput(ctx context.Context, o
 				return it, err
 			}
 			it.Items = data
+		case "serviceTierPrices":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierPrices"))
+			data, err := ec.unmarshalOServiceTierPriceInput2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐServiceTierPriceᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierPrices = data
 		}
 	}
 
@@ -74792,7 +75357,7 @@ func (ec *executionContext) unmarshalInputRequestExecutionWhereInput(ctx context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "projectID", "projectIDNEQ", "projectIDIn", "projectIDNotIn", "projectIDGT", "projectIDGTE", "projectIDLT", "projectIDLTE", "requestID", "requestIDNEQ", "requestIDIn", "requestIDNotIn", "channelID", "channelIDNEQ", "channelIDIn", "channelIDNotIn", "channelIDIsNil", "channelIDNotNil", "dataStorageID", "dataStorageIDNEQ", "dataStorageIDIn", "dataStorageIDNotIn", "dataStorageIDIsNil", "dataStorageIDNotNil", "externalID", "externalIDNEQ", "externalIDIn", "externalIDNotIn", "externalIDGT", "externalIDGTE", "externalIDLT", "externalIDLTE", "externalIDContains", "externalIDHasPrefix", "externalIDHasSuffix", "externalIDIsNil", "externalIDNotNil", "externalIDEqualFold", "externalIDContainsFold", "source", "sourceNEQ", "sourceIn", "sourceNotIn", "modelID", "modelIDNEQ", "modelIDIn", "modelIDNotIn", "modelIDGT", "modelIDGTE", "modelIDLT", "modelIDLTE", "modelIDContains", "modelIDHasPrefix", "modelIDHasSuffix", "modelIDEqualFold", "modelIDContainsFold", "format", "formatNEQ", "formatIn", "formatNotIn", "formatGT", "formatGTE", "formatLT", "formatLTE", "formatContains", "formatHasPrefix", "formatHasSuffix", "formatEqualFold", "formatContainsFold", "errorMessage", "errorMessageNEQ", "errorMessageIn", "errorMessageNotIn", "errorMessageGT", "errorMessageGTE", "errorMessageLT", "errorMessageLTE", "errorMessageContains", "errorMessageHasPrefix", "errorMessageHasSuffix", "errorMessageIsNil", "errorMessageNotNil", "errorMessageEqualFold", "errorMessageContainsFold", "responseStatusCode", "responseStatusCodeNEQ", "responseStatusCodeIn", "responseStatusCodeNotIn", "responseStatusCodeGT", "responseStatusCodeGTE", "responseStatusCodeLT", "responseStatusCodeLTE", "responseStatusCodeIsNil", "responseStatusCodeNotNil", "status", "statusNEQ", "statusIn", "statusNotIn", "stream", "streamNEQ", "metricsLatencyMs", "metricsLatencyMsNEQ", "metricsLatencyMsIn", "metricsLatencyMsNotIn", "metricsLatencyMsGT", "metricsLatencyMsGTE", "metricsLatencyMsLT", "metricsLatencyMsLTE", "metricsLatencyMsIsNil", "metricsLatencyMsNotNil", "metricsFirstTokenLatencyMs", "metricsFirstTokenLatencyMsNEQ", "metricsFirstTokenLatencyMsIn", "metricsFirstTokenLatencyMsNotIn", "metricsFirstTokenLatencyMsGT", "metricsFirstTokenLatencyMsGTE", "metricsFirstTokenLatencyMsLT", "metricsFirstTokenLatencyMsLTE", "metricsFirstTokenLatencyMsIsNil", "metricsFirstTokenLatencyMsNotNil", "metricsReasoningDurationMs", "metricsReasoningDurationMsNEQ", "metricsReasoningDurationMsIn", "metricsReasoningDurationMsNotIn", "metricsReasoningDurationMsGT", "metricsReasoningDurationMsGTE", "metricsReasoningDurationMsLT", "metricsReasoningDurationMsLTE", "metricsReasoningDurationMsIsNil", "metricsReasoningDurationMsNotNil", "requestURL", "requestURLNEQ", "requestURLIn", "requestURLNotIn", "requestURLGT", "requestURLGTE", "requestURLLT", "requestURLLTE", "requestURLContains", "requestURLHasPrefix", "requestURLHasSuffix", "requestURLIsNil", "requestURLNotNil", "requestURLEqualFold", "requestURLContainsFold", "passThroughApplied", "passThroughAppliedNEQ", "hasRequest", "hasRequestWith", "hasChannel", "hasChannelWith", "hasDataStorage", "hasDataStorageWith"}
+	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "projectID", "projectIDNEQ", "projectIDIn", "projectIDNotIn", "projectIDGT", "projectIDGTE", "projectIDLT", "projectIDLTE", "requestID", "requestIDNEQ", "requestIDIn", "requestIDNotIn", "channelID", "channelIDNEQ", "channelIDIn", "channelIDNotIn", "channelIDIsNil", "channelIDNotNil", "dataStorageID", "dataStorageIDNEQ", "dataStorageIDIn", "dataStorageIDNotIn", "dataStorageIDIsNil", "dataStorageIDNotNil", "externalID", "externalIDNEQ", "externalIDIn", "externalIDNotIn", "externalIDGT", "externalIDGTE", "externalIDLT", "externalIDLTE", "externalIDContains", "externalIDHasPrefix", "externalIDHasSuffix", "externalIDIsNil", "externalIDNotNil", "externalIDEqualFold", "externalIDContainsFold", "source", "sourceNEQ", "sourceIn", "sourceNotIn", "modelID", "modelIDNEQ", "modelIDIn", "modelIDNotIn", "modelIDGT", "modelIDGTE", "modelIDLT", "modelIDLTE", "modelIDContains", "modelIDHasPrefix", "modelIDHasSuffix", "modelIDEqualFold", "modelIDContainsFold", "format", "formatNEQ", "formatIn", "formatNotIn", "formatGT", "formatGTE", "formatLT", "formatLTE", "formatContains", "formatHasPrefix", "formatHasSuffix", "formatEqualFold", "formatContainsFold", "requestedServiceTier", "requestedServiceTierNEQ", "requestedServiceTierIn", "requestedServiceTierNotIn", "requestedServiceTierGT", "requestedServiceTierGTE", "requestedServiceTierLT", "requestedServiceTierLTE", "requestedServiceTierContains", "requestedServiceTierHasPrefix", "requestedServiceTierHasSuffix", "requestedServiceTierIsNil", "requestedServiceTierNotNil", "requestedServiceTierEqualFold", "requestedServiceTierContainsFold", "errorMessage", "errorMessageNEQ", "errorMessageIn", "errorMessageNotIn", "errorMessageGT", "errorMessageGTE", "errorMessageLT", "errorMessageLTE", "errorMessageContains", "errorMessageHasPrefix", "errorMessageHasSuffix", "errorMessageIsNil", "errorMessageNotNil", "errorMessageEqualFold", "errorMessageContainsFold", "responseStatusCode", "responseStatusCodeNEQ", "responseStatusCodeIn", "responseStatusCodeNotIn", "responseStatusCodeGT", "responseStatusCodeGTE", "responseStatusCodeLT", "responseStatusCodeLTE", "responseStatusCodeIsNil", "responseStatusCodeNotNil", "status", "statusNEQ", "statusIn", "statusNotIn", "stream", "streamNEQ", "metricsLatencyMs", "metricsLatencyMsNEQ", "metricsLatencyMsIn", "metricsLatencyMsNotIn", "metricsLatencyMsGT", "metricsLatencyMsGTE", "metricsLatencyMsLT", "metricsLatencyMsLTE", "metricsLatencyMsIsNil", "metricsLatencyMsNotNil", "metricsFirstTokenLatencyMs", "metricsFirstTokenLatencyMsNEQ", "metricsFirstTokenLatencyMsIn", "metricsFirstTokenLatencyMsNotIn", "metricsFirstTokenLatencyMsGT", "metricsFirstTokenLatencyMsGTE", "metricsFirstTokenLatencyMsLT", "metricsFirstTokenLatencyMsLTE", "metricsFirstTokenLatencyMsIsNil", "metricsFirstTokenLatencyMsNotNil", "metricsReasoningDurationMs", "metricsReasoningDurationMsNEQ", "metricsReasoningDurationMsIn", "metricsReasoningDurationMsNotIn", "metricsReasoningDurationMsGT", "metricsReasoningDurationMsGTE", "metricsReasoningDurationMsLT", "metricsReasoningDurationMsLTE", "metricsReasoningDurationMsIsNil", "metricsReasoningDurationMsNotNil", "requestURL", "requestURLNEQ", "requestURLIn", "requestURLNotIn", "requestURLGT", "requestURLGTE", "requestURLLT", "requestURLLTE", "requestURLContains", "requestURLHasPrefix", "requestURLHasSuffix", "requestURLIsNil", "requestURLNotNil", "requestURLEqualFold", "requestURLContainsFold", "passThroughApplied", "passThroughAppliedNEQ", "hasRequest", "hasRequestWith", "hasChannel", "hasChannelWith", "hasDataStorage", "hasDataStorageWith", "hasUsageLog", "hasUsageLogWith"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -75551,6 +76116,111 @@ func (ec *executionContext) unmarshalInputRequestExecutionWhereInput(ctx context
 				return it, err
 			}
 			it.FormatContainsFold = data
+		case "requestedServiceTier":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTier"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTier = data
+		case "requestedServiceTierNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierNEQ"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierNEQ = data
+		case "requestedServiceTierIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierIn = data
+		case "requestedServiceTierNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierNotIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierNotIn = data
+		case "requestedServiceTierGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierGT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierGT = data
+		case "requestedServiceTierGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierGTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierGTE = data
+		case "requestedServiceTierLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierLT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierLT = data
+		case "requestedServiceTierLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierLTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierLTE = data
+		case "requestedServiceTierContains":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierContains"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierContains = data
+		case "requestedServiceTierHasPrefix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierHasPrefix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierHasPrefix = data
+		case "requestedServiceTierHasSuffix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierHasSuffix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierHasSuffix = data
+		case "requestedServiceTierIsNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierIsNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierIsNil = data
+		case "requestedServiceTierNotNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierNotNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierNotNil = data
+		case "requestedServiceTierEqualFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierEqualFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierEqualFold = data
+		case "requestedServiceTierContainsFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierContainsFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierContainsFold = data
 		case "errorMessage":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessage"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -76139,6 +76809,20 @@ func (ec *executionContext) unmarshalInputRequestExecutionWhereInput(ctx context
 				return it, err
 			}
 			it.HasDataStorageWith = data
+		case "hasUsageLog":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasUsageLog"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HasUsageLog = data
+		case "hasUsageLogWith":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasUsageLogWith"))
+			data, err := ec.unmarshalOUsageLogWhereInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐUsageLogWhereInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HasUsageLogWith = data
 		}
 	}
 
@@ -78624,6 +79308,40 @@ func (ec *executionContext) unmarshalInputSaveProxyPresetInput(ctx context.Conte
 				return it, err
 			}
 			it.Password = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputServiceTierPriceInput(ctx context.Context, obj any) (objects.ServiceTierPrice, error) {
+	var it objects.ServiceTierPrice
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"serviceTier", "items"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "serviceTier":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTier"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTier = data
+		case "items":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("items"))
+			data, err := ec.unmarshalNModelPriceItemInput2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐModelPriceItemᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Items = data
 		}
 	}
 
@@ -82881,7 +83599,7 @@ func (ec *executionContext) unmarshalInputUsageLogWhereInput(ctx context.Context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "requestID", "requestIDNEQ", "requestIDIn", "requestIDNotIn", "apiKeyID", "apiKeyIDNEQ", "apiKeyIDIn", "apiKeyIDNotIn", "apiKeyIDGT", "apiKeyIDGTE", "apiKeyIDLT", "apiKeyIDLTE", "apiKeyIDIsNil", "apiKeyIDNotNil", "projectID", "projectIDNEQ", "projectIDIn", "projectIDNotIn", "channelID", "channelIDNEQ", "channelIDIn", "channelIDNotIn", "channelIDIsNil", "channelIDNotNil", "modelID", "modelIDNEQ", "modelIDIn", "modelIDNotIn", "modelIDGT", "modelIDGTE", "modelIDLT", "modelIDLTE", "modelIDContains", "modelIDHasPrefix", "modelIDHasSuffix", "modelIDEqualFold", "modelIDContainsFold", "promptTokens", "promptTokensNEQ", "promptTokensIn", "promptTokensNotIn", "promptTokensGT", "promptTokensGTE", "promptTokensLT", "promptTokensLTE", "completionTokens", "completionTokensNEQ", "completionTokensIn", "completionTokensNotIn", "completionTokensGT", "completionTokensGTE", "completionTokensLT", "completionTokensLTE", "totalTokens", "totalTokensNEQ", "totalTokensIn", "totalTokensNotIn", "totalTokensGT", "totalTokensGTE", "totalTokensLT", "totalTokensLTE", "promptAudioTokens", "promptAudioTokensNEQ", "promptAudioTokensIn", "promptAudioTokensNotIn", "promptAudioTokensGT", "promptAudioTokensGTE", "promptAudioTokensLT", "promptAudioTokensLTE", "promptAudioTokensIsNil", "promptAudioTokensNotNil", "promptCachedTokens", "promptCachedTokensNEQ", "promptCachedTokensIn", "promptCachedTokensNotIn", "promptCachedTokensGT", "promptCachedTokensGTE", "promptCachedTokensLT", "promptCachedTokensLTE", "promptCachedTokensIsNil", "promptCachedTokensNotNil", "promptWriteCachedTokens", "promptWriteCachedTokensNEQ", "promptWriteCachedTokensIn", "promptWriteCachedTokensNotIn", "promptWriteCachedTokensGT", "promptWriteCachedTokensGTE", "promptWriteCachedTokensLT", "promptWriteCachedTokensLTE", "promptWriteCachedTokensIsNil", "promptWriteCachedTokensNotNil", "promptWriteCachedTokens5m", "promptWriteCachedTokens5mNEQ", "promptWriteCachedTokens5mIn", "promptWriteCachedTokens5mNotIn", "promptWriteCachedTokens5mGT", "promptWriteCachedTokens5mGTE", "promptWriteCachedTokens5mLT", "promptWriteCachedTokens5mLTE", "promptWriteCachedTokens5mIsNil", "promptWriteCachedTokens5mNotNil", "promptWriteCachedTokens1h", "promptWriteCachedTokens1hNEQ", "promptWriteCachedTokens1hIn", "promptWriteCachedTokens1hNotIn", "promptWriteCachedTokens1hGT", "promptWriteCachedTokens1hGTE", "promptWriteCachedTokens1hLT", "promptWriteCachedTokens1hLTE", "promptWriteCachedTokens1hIsNil", "promptWriteCachedTokens1hNotNil", "completionAudioTokens", "completionAudioTokensNEQ", "completionAudioTokensIn", "completionAudioTokensNotIn", "completionAudioTokensGT", "completionAudioTokensGTE", "completionAudioTokensLT", "completionAudioTokensLTE", "completionAudioTokensIsNil", "completionAudioTokensNotNil", "completionReasoningTokens", "completionReasoningTokensNEQ", "completionReasoningTokensIn", "completionReasoningTokensNotIn", "completionReasoningTokensGT", "completionReasoningTokensGTE", "completionReasoningTokensLT", "completionReasoningTokensLTE", "completionReasoningTokensIsNil", "completionReasoningTokensNotNil", "completionAcceptedPredictionTokens", "completionAcceptedPredictionTokensNEQ", "completionAcceptedPredictionTokensIn", "completionAcceptedPredictionTokensNotIn", "completionAcceptedPredictionTokensGT", "completionAcceptedPredictionTokensGTE", "completionAcceptedPredictionTokensLT", "completionAcceptedPredictionTokensLTE", "completionAcceptedPredictionTokensIsNil", "completionAcceptedPredictionTokensNotNil", "completionRejectedPredictionTokens", "completionRejectedPredictionTokensNEQ", "completionRejectedPredictionTokensIn", "completionRejectedPredictionTokensNotIn", "completionRejectedPredictionTokensGT", "completionRejectedPredictionTokensGTE", "completionRejectedPredictionTokensLT", "completionRejectedPredictionTokensLTE", "completionRejectedPredictionTokensIsNil", "completionRejectedPredictionTokensNotNil", "source", "sourceNEQ", "sourceIn", "sourceNotIn", "format", "formatNEQ", "formatIn", "formatNotIn", "formatGT", "formatGTE", "formatLT", "formatLTE", "formatContains", "formatHasPrefix", "formatHasSuffix", "formatEqualFold", "formatContainsFold", "totalCost", "totalCostNEQ", "totalCostIn", "totalCostNotIn", "totalCostGT", "totalCostGTE", "totalCostLT", "totalCostLTE", "totalCostIsNil", "totalCostNotNil", "costPriceReferenceID", "costPriceReferenceIDNEQ", "costPriceReferenceIDIn", "costPriceReferenceIDNotIn", "costPriceReferenceIDGT", "costPriceReferenceIDGTE", "costPriceReferenceIDLT", "costPriceReferenceIDLTE", "costPriceReferenceIDContains", "costPriceReferenceIDHasPrefix", "costPriceReferenceIDHasSuffix", "costPriceReferenceIDIsNil", "costPriceReferenceIDNotNil", "costPriceReferenceIDEqualFold", "costPriceReferenceIDContainsFold", "hasRequest", "hasRequestWith", "hasProject", "hasProjectWith", "hasChannel", "hasChannelWith"}
+	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "requestID", "requestIDNEQ", "requestIDIn", "requestIDNotIn", "requestExecutionID", "requestExecutionIDNEQ", "requestExecutionIDIn", "requestExecutionIDNotIn", "requestExecutionIDIsNil", "requestExecutionIDNotNil", "apiKeyID", "apiKeyIDNEQ", "apiKeyIDIn", "apiKeyIDNotIn", "apiKeyIDGT", "apiKeyIDGTE", "apiKeyIDLT", "apiKeyIDLTE", "apiKeyIDIsNil", "apiKeyIDNotNil", "projectID", "projectIDNEQ", "projectIDIn", "projectIDNotIn", "channelID", "channelIDNEQ", "channelIDIn", "channelIDNotIn", "channelIDIsNil", "channelIDNotNil", "modelID", "modelIDNEQ", "modelIDIn", "modelIDNotIn", "modelIDGT", "modelIDGTE", "modelIDLT", "modelIDLTE", "modelIDContains", "modelIDHasPrefix", "modelIDHasSuffix", "modelIDEqualFold", "modelIDContainsFold", "promptTokens", "promptTokensNEQ", "promptTokensIn", "promptTokensNotIn", "promptTokensGT", "promptTokensGTE", "promptTokensLT", "promptTokensLTE", "completionTokens", "completionTokensNEQ", "completionTokensIn", "completionTokensNotIn", "completionTokensGT", "completionTokensGTE", "completionTokensLT", "completionTokensLTE", "totalTokens", "totalTokensNEQ", "totalTokensIn", "totalTokensNotIn", "totalTokensGT", "totalTokensGTE", "totalTokensLT", "totalTokensLTE", "promptAudioTokens", "promptAudioTokensNEQ", "promptAudioTokensIn", "promptAudioTokensNotIn", "promptAudioTokensGT", "promptAudioTokensGTE", "promptAudioTokensLT", "promptAudioTokensLTE", "promptAudioTokensIsNil", "promptAudioTokensNotNil", "promptCachedTokens", "promptCachedTokensNEQ", "promptCachedTokensIn", "promptCachedTokensNotIn", "promptCachedTokensGT", "promptCachedTokensGTE", "promptCachedTokensLT", "promptCachedTokensLTE", "promptCachedTokensIsNil", "promptCachedTokensNotNil", "promptWriteCachedTokens", "promptWriteCachedTokensNEQ", "promptWriteCachedTokensIn", "promptWriteCachedTokensNotIn", "promptWriteCachedTokensGT", "promptWriteCachedTokensGTE", "promptWriteCachedTokensLT", "promptWriteCachedTokensLTE", "promptWriteCachedTokensIsNil", "promptWriteCachedTokensNotNil", "promptWriteCachedTokens5m", "promptWriteCachedTokens5mNEQ", "promptWriteCachedTokens5mIn", "promptWriteCachedTokens5mNotIn", "promptWriteCachedTokens5mGT", "promptWriteCachedTokens5mGTE", "promptWriteCachedTokens5mLT", "promptWriteCachedTokens5mLTE", "promptWriteCachedTokens5mIsNil", "promptWriteCachedTokens5mNotNil", "promptWriteCachedTokens1h", "promptWriteCachedTokens1hNEQ", "promptWriteCachedTokens1hIn", "promptWriteCachedTokens1hNotIn", "promptWriteCachedTokens1hGT", "promptWriteCachedTokens1hGTE", "promptWriteCachedTokens1hLT", "promptWriteCachedTokens1hLTE", "promptWriteCachedTokens1hIsNil", "promptWriteCachedTokens1hNotNil", "completionAudioTokens", "completionAudioTokensNEQ", "completionAudioTokensIn", "completionAudioTokensNotIn", "completionAudioTokensGT", "completionAudioTokensGTE", "completionAudioTokensLT", "completionAudioTokensLTE", "completionAudioTokensIsNil", "completionAudioTokensNotNil", "completionReasoningTokens", "completionReasoningTokensNEQ", "completionReasoningTokensIn", "completionReasoningTokensNotIn", "completionReasoningTokensGT", "completionReasoningTokensGTE", "completionReasoningTokensLT", "completionReasoningTokensLTE", "completionReasoningTokensIsNil", "completionReasoningTokensNotNil", "completionAcceptedPredictionTokens", "completionAcceptedPredictionTokensNEQ", "completionAcceptedPredictionTokensIn", "completionAcceptedPredictionTokensNotIn", "completionAcceptedPredictionTokensGT", "completionAcceptedPredictionTokensGTE", "completionAcceptedPredictionTokensLT", "completionAcceptedPredictionTokensLTE", "completionAcceptedPredictionTokensIsNil", "completionAcceptedPredictionTokensNotNil", "completionRejectedPredictionTokens", "completionRejectedPredictionTokensNEQ", "completionRejectedPredictionTokensIn", "completionRejectedPredictionTokensNotIn", "completionRejectedPredictionTokensGT", "completionRejectedPredictionTokensGTE", "completionRejectedPredictionTokensLT", "completionRejectedPredictionTokensLTE", "completionRejectedPredictionTokensIsNil", "completionRejectedPredictionTokensNotNil", "source", "sourceNEQ", "sourceIn", "sourceNotIn", "format", "formatNEQ", "formatIn", "formatNotIn", "formatGT", "formatGTE", "formatLT", "formatLTE", "formatContains", "formatHasPrefix", "formatHasSuffix", "formatEqualFold", "formatContainsFold", "requestedServiceTier", "requestedServiceTierNEQ", "requestedServiceTierIn", "requestedServiceTierNotIn", "requestedServiceTierGT", "requestedServiceTierGTE", "requestedServiceTierLT", "requestedServiceTierLTE", "requestedServiceTierContains", "requestedServiceTierHasPrefix", "requestedServiceTierHasSuffix", "requestedServiceTierIsNil", "requestedServiceTierNotNil", "requestedServiceTierEqualFold", "requestedServiceTierContainsFold", "appliedServiceTier", "appliedServiceTierNEQ", "appliedServiceTierIn", "appliedServiceTierNotIn", "appliedServiceTierGT", "appliedServiceTierGTE", "appliedServiceTierLT", "appliedServiceTierLTE", "appliedServiceTierContains", "appliedServiceTierHasPrefix", "appliedServiceTierHasSuffix", "appliedServiceTierIsNil", "appliedServiceTierNotNil", "appliedServiceTierEqualFold", "appliedServiceTierContainsFold", "serviceTier", "serviceTierNEQ", "serviceTierIn", "serviceTierNotIn", "serviceTierGT", "serviceTierGTE", "serviceTierLT", "serviceTierLTE", "serviceTierContains", "serviceTierHasPrefix", "serviceTierHasSuffix", "serviceTierIsNil", "serviceTierNotNil", "serviceTierEqualFold", "serviceTierContainsFold", "totalCost", "totalCostNEQ", "totalCostIn", "totalCostNotIn", "totalCostGT", "totalCostGTE", "totalCostLT", "totalCostLTE", "totalCostIsNil", "totalCostNotNil", "costPriceReferenceID", "costPriceReferenceIDNEQ", "costPriceReferenceIDIn", "costPriceReferenceIDNotIn", "costPriceReferenceIDGT", "costPriceReferenceIDGTE", "costPriceReferenceIDLT", "costPriceReferenceIDLTE", "costPriceReferenceIDContains", "costPriceReferenceIDHasPrefix", "costPriceReferenceIDHasSuffix", "costPriceReferenceIDIsNil", "costPriceReferenceIDNotNil", "costPriceReferenceIDEqualFold", "costPriceReferenceIDContainsFold", "hasRequest", "hasRequestWith", "hasRequestExecution", "hasRequestExecutionWith", "hasProject", "hasProjectWith", "hasChannel", "hasChannelWith"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -83153,6 +83871,64 @@ func (ec *executionContext) unmarshalInputUsageLogWhereInput(ctx context.Context
 				return it, graphql.ErrorOnPath(ctx, err)
 			}
 			it.RequestIDNotIn = converted
+		case "requestExecutionID":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestExecutionID"))
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrToIntPtr(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.RequestExecutionID = converted
+		case "requestExecutionIDNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestExecutionIDNEQ"))
+			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrToIntPtr(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.RequestExecutionIDNEQ = converted
+		case "requestExecutionIDIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestExecutionIDIn"))
+			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrsToInts(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.RequestExecutionIDIn = converted
+		case "requestExecutionIDNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestExecutionIDNotIn"))
+			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			converted, err := objects.ConvertGUIDPtrsToInts(data)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			it.RequestExecutionIDNotIn = converted
+		case "requestExecutionIDIsNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestExecutionIDIsNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestExecutionIDIsNil = data
+		case "requestExecutionIDNotNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestExecutionIDNotNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestExecutionIDNotNil = data
 		case "apiKeyID":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("apiKeyID"))
 			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
@@ -84333,6 +85109,321 @@ func (ec *executionContext) unmarshalInputUsageLogWhereInput(ctx context.Context
 				return it, err
 			}
 			it.FormatContainsFold = data
+		case "requestedServiceTier":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTier"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTier = data
+		case "requestedServiceTierNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierNEQ"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierNEQ = data
+		case "requestedServiceTierIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierIn = data
+		case "requestedServiceTierNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierNotIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierNotIn = data
+		case "requestedServiceTierGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierGT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierGT = data
+		case "requestedServiceTierGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierGTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierGTE = data
+		case "requestedServiceTierLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierLT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierLT = data
+		case "requestedServiceTierLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierLTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierLTE = data
+		case "requestedServiceTierContains":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierContains"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierContains = data
+		case "requestedServiceTierHasPrefix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierHasPrefix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierHasPrefix = data
+		case "requestedServiceTierHasSuffix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierHasSuffix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierHasSuffix = data
+		case "requestedServiceTierIsNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierIsNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierIsNil = data
+		case "requestedServiceTierNotNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierNotNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierNotNil = data
+		case "requestedServiceTierEqualFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierEqualFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierEqualFold = data
+		case "requestedServiceTierContainsFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestedServiceTierContainsFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestedServiceTierContainsFold = data
+		case "appliedServiceTier":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTier"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTier = data
+		case "appliedServiceTierNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierNEQ"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierNEQ = data
+		case "appliedServiceTierIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierIn = data
+		case "appliedServiceTierNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierNotIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierNotIn = data
+		case "appliedServiceTierGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierGT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierGT = data
+		case "appliedServiceTierGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierGTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierGTE = data
+		case "appliedServiceTierLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierLT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierLT = data
+		case "appliedServiceTierLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierLTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierLTE = data
+		case "appliedServiceTierContains":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierContains"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierContains = data
+		case "appliedServiceTierHasPrefix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierHasPrefix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierHasPrefix = data
+		case "appliedServiceTierHasSuffix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierHasSuffix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierHasSuffix = data
+		case "appliedServiceTierIsNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierIsNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierIsNil = data
+		case "appliedServiceTierNotNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierNotNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierNotNil = data
+		case "appliedServiceTierEqualFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierEqualFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierEqualFold = data
+		case "appliedServiceTierContainsFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("appliedServiceTierContainsFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AppliedServiceTierContainsFold = data
+		case "serviceTier":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTier"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTier = data
+		case "serviceTierNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierNEQ"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierNEQ = data
+		case "serviceTierIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierIn = data
+		case "serviceTierNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierNotIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierNotIn = data
+		case "serviceTierGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierGT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierGT = data
+		case "serviceTierGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierGTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierGTE = data
+		case "serviceTierLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierLT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierLT = data
+		case "serviceTierLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierLTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierLTE = data
+		case "serviceTierContains":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierContains"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierContains = data
+		case "serviceTierHasPrefix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierHasPrefix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierHasPrefix = data
+		case "serviceTierHasSuffix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierHasSuffix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierHasSuffix = data
+		case "serviceTierIsNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierIsNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierIsNil = data
+		case "serviceTierNotNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierNotNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierNotNil = data
+		case "serviceTierEqualFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierEqualFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierEqualFold = data
+		case "serviceTierContainsFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("serviceTierContainsFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ServiceTierContainsFold = data
 		case "totalCost":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("totalCost"))
 			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
@@ -84522,6 +85613,20 @@ func (ec *executionContext) unmarshalInputUsageLogWhereInput(ctx context.Context
 				return it, err
 			}
 			it.HasRequestWith = data
+		case "hasRequestExecution":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasRequestExecution"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HasRequestExecution = data
+		case "hasRequestExecutionWith":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasRequestExecutionWith"))
+			data, err := ec.unmarshalORequestExecutionWhereInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐRequestExecutionWhereInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HasRequestExecutionWith = data
 		case "hasProject":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasProject"))
 			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
@@ -93124,6 +94229,11 @@ func (ec *executionContext) _ModelPrice(ctx context.Context, sel ast.SelectionSe
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "serviceTierPrices":
+			out.Values[i] = ec._ModelPrice_serviceTierPrices(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -99191,6 +100301,8 @@ func (ec *executionContext) _RequestExecution(ctx context.Context, sel ast.Selec
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "requestedServiceTier":
+			out.Values[i] = ec._RequestExecution_requestedServiceTier(ctx, field, obj)
 		case "requestBody":
 			field := field
 
@@ -99401,6 +100513,39 @@ func (ec *executionContext) _RequestExecution(ctx context.Context, sel ast.Selec
 					}
 				}()
 				res = ec._RequestExecution_dataStorage(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "usageLog":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._RequestExecution_usageLog(ctx, field, obj)
 				return res
 			}
 
@@ -100555,6 +101700,50 @@ func (ec *executionContext) _Segment(ctx context.Context, sel ast.SelectionSet, 
 			out.Values[i] = ec._Segment_duration(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var serviceTierPriceImplementors = []string{"ServiceTierPrice"}
+
+func (ec *executionContext) _ServiceTierPrice(ctx context.Context, sel ast.SelectionSet, obj *objects.ServiceTierPrice) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, serviceTierPriceImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ServiceTierPrice")
+		case "serviceTier":
+			out.Values[i] = ec._ServiceTierPrice_serviceTier(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "items":
+			out.Values[i] = ec._ServiceTierPrice_items(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
 			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
@@ -103337,6 +104526,39 @@ func (ec *executionContext) _UsageLog(ctx context.Context, sel ast.SelectionSet,
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "requestExecutionID":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._UsageLog_requestExecutionID(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "apiKeyID":
 			out.Values[i] = ec._UsageLog_apiKeyID(ctx, field, obj)
 		case "projectID":
@@ -103456,6 +104678,12 @@ func (ec *executionContext) _UsageLog(ctx context.Context, sel ast.SelectionSet,
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "requestedServiceTier":
+			out.Values[i] = ec._UsageLog_requestedServiceTier(ctx, field, obj)
+		case "appliedServiceTier":
+			out.Values[i] = ec._UsageLog_appliedServiceTier(ctx, field, obj)
+		case "serviceTier":
+			out.Values[i] = ec._UsageLog_serviceTier(ctx, field, obj)
 		case "totalCost":
 			out.Values[i] = ec._UsageLog_totalCost(ctx, field, obj)
 		case "costItems":
@@ -103475,6 +104703,39 @@ func (ec *executionContext) _UsageLog(ctx context.Context, sel ast.SelectionSet,
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "requestExecution":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._UsageLog_requestExecution(ctx, field, obj)
 				return res
 			}
 
@@ -110257,6 +111518,59 @@ func (ec *executionContext) marshalNSegment2ᚖgithubᚗcomᚋloopljᚋaxonhub�
 		return graphql.Null
 	}
 	return ec._Segment(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNServiceTierPrice2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐServiceTierPrice(ctx context.Context, sel ast.SelectionSet, v objects.ServiceTierPrice) graphql.Marshaler {
+	return ec._ServiceTierPrice(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNServiceTierPrice2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐServiceTierPriceᚄ(ctx context.Context, sel ast.SelectionSet, v []objects.ServiceTierPrice) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNServiceTierPrice2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐServiceTierPrice(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalNServiceTierPriceInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐServiceTierPrice(ctx context.Context, v any) (objects.ServiceTierPrice, error) {
+	res, err := ec.unmarshalInputServiceTierPriceInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNSpan2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐSpan(ctx context.Context, sel ast.SelectionSet, v biz.Span) graphql.Marshaler {
@@ -117050,6 +118364,24 @@ func (ec *executionContext) marshalOSegment2ᚖgithubᚗcomᚋloopljᚋaxonhub�
 		return graphql.Null
 	}
 	return ec._Segment(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOServiceTierPriceInput2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐServiceTierPriceᚄ(ctx context.Context, v any) ([]objects.ServiceTierPrice, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]objects.ServiceTierPrice, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNServiceTierPriceInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐServiceTierPrice(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (ec *executionContext) marshalOSpan2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐSpanᚄ(ctx context.Context, sel ast.SelectionSet, v []biz.Span) graphql.Marshaler {

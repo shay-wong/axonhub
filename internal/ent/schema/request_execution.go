@@ -55,6 +55,7 @@ func (RequestExecution) Fields() []ent.Field {
 		field.String("model_id").Immutable(),
 		//  The format of the request, e.g: openai/chat_completions, claude/messages, openai/response.
 		field.String("format").Immutable().Default("openai/chat_completions"),
+		field.String("requested_service_tier").Optional().Immutable().Comment("Canonical service tier sent to the provider for this execution"),
 		// The original request to the provider.
 		// e.g: the user request via OpenAI request format, but the actual request to the provider with Claude format, the request_body is the Claude request format.
 		field.JSON("request_body", objects.JSONRawMessage{}).Immutable().Annotations(
@@ -119,6 +120,11 @@ func (RequestExecution) Edges() []ent.Edge {
 			Field("data_storage_id").
 			Immutable().
 			Unique(),
+		edge.To("usage_log", UsageLog.Type).
+			Unique().
+			Annotations(
+				entgql.Skip(entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput),
+			),
 	}
 }
 

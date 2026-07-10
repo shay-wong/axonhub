@@ -436,3 +436,51 @@ func mustDecimalPtr(s string) *decimal.Decimal {
 
 	return &d
 }
+
+func TestComputeUsageCostForServiceTier(t *testing.T) {
+	usage := &llm.Usage{
+		PromptTokens:     1_000_000,
+		CompletionTokens: 1_000_000,
+		TotalTokens:      2_000_000,
+	}
+	price := objects.ModelPrice{
+		Items: []objects.ModelPriceItem{
+			{
+				ItemCode: objects.PriceItemCodeUsage,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: mustDecimalPtr("5"),
+				},
+			},
+			{
+				ItemCode: objects.PriceItemCodeCompletion,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: mustDecimalPtr("30"),
+				},
+			},
+		},
+		ServiceTierPrices: []objects.ServiceTierPrice{
+			{
+				ServiceTier: "priority",
+				Items: []objects.ModelPriceItem{
+					{
+						ItemCode: objects.PriceItemCodeUsage,
+						Pricing: objects.Pricing{
+							Mode:         objects.PricingModeUsagePerUnit,
+							UsagePerUnit: mustDecimalPtr("10"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, standardTotal := ComputeUsageCostForServiceTier(usage, price, "")
+	_, priorityTotal := ComputeUsageCostForServiceTier(usage, price, "priority")
+	_, unknownTotal := ComputeUsageCostForServiceTier(usage, price, "unknown")
+
+	require.True(t, decimal.NewFromInt(35).Equal(standardTotal))
+	require.True(t, decimal.NewFromInt(40).Equal(priorityTotal))
+	require.True(t, standardTotal.Equal(unknownTotal))
+}

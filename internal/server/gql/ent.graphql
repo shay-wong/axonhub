@@ -1989,6 +1989,18 @@ input CreateUsageLogInput {
   """
   format: String
   """
+  Service tier sent in the provider request
+  """
+  requestedServiceTier: String
+  """
+  Service tier reported by the provider response
+  """
+  appliedServiceTier: String
+  """
+  Effective service tier used for billing: applied when reported, otherwise requested
+  """
+  serviceTier: String
+  """
   Total cost calculated based on channel model price
   """
   totalCost: Float
@@ -2001,6 +2013,7 @@ input CreateUsageLogInput {
   """
   costPriceReferenceID: String
   requestID: ID!
+  requestExecutionID: ID
   projectID: ID!
   channelID: ID
 }
@@ -4639,6 +4652,10 @@ type RequestExecution implements Node {
   source: RequestExecutionSource!
   modelID: String!
   format: String!
+  """
+  Canonical service tier sent to the provider for this execution
+  """
+  requestedServiceTier: String
   requestBody: JSONRawMessage! @goField(forceResolver: true)
   responseBody: JSONRawMessage @goField(forceResolver: true)
   responseChunks: [JSONRawMessage!] @goField(forceResolver: true)
@@ -4670,6 +4687,7 @@ type RequestExecution implements Node {
   request: Request!
   channel: Channel @goField(forceResolver: true)
   dataStorage: DataStorage
+  usageLog: UsageLog
 }
 """
 A connection to a list of items.
@@ -4874,6 +4892,24 @@ input RequestExecutionWhereInput {
   formatEqualFold: String
   formatContainsFold: String
   """
+  requested_service_tier field predicates
+  """
+  requestedServiceTier: String
+  requestedServiceTierNEQ: String
+  requestedServiceTierIn: [String!]
+  requestedServiceTierNotIn: [String!]
+  requestedServiceTierGT: String
+  requestedServiceTierGTE: String
+  requestedServiceTierLT: String
+  requestedServiceTierLTE: String
+  requestedServiceTierContains: String
+  requestedServiceTierHasPrefix: String
+  requestedServiceTierHasSuffix: String
+  requestedServiceTierIsNil: Boolean
+  requestedServiceTierNotNil: Boolean
+  requestedServiceTierEqualFold: String
+  requestedServiceTierContainsFold: String
+  """
   error_message field predicates
   """
   errorMessage: String
@@ -4993,6 +5029,11 @@ input RequestExecutionWhereInput {
   """
   hasDataStorage: Boolean
   hasDataStorageWith: [DataStorageWhereInput!]
+  """
+  usage_log edge predicates
+  """
+  hasUsageLog: Boolean
+  hasUsageLogWith: [UsageLogWhereInput!]
 }
 """
 Ordering options for Request connections
@@ -6520,6 +6561,10 @@ type UsageLog implements Node {
   Related request ID
   """
   requestID: ID!
+  """
+  Exact request execution billed by this usage log
+  """
+  requestExecutionID: ID
   apiKeyID: Int
   """
   Project ID, default to 1 for backward compatibility
@@ -6590,6 +6635,18 @@ type UsageLog implements Node {
   """
   format: String!
   """
+  Service tier sent in the provider request
+  """
+  requestedServiceTier: String
+  """
+  Service tier reported by the provider response
+  """
+  appliedServiceTier: String
+  """
+  Effective service tier used for billing: applied when reported, otherwise requested
+  """
+  serviceTier: String
+  """
   Total cost calculated based on channel model price
   """
   totalCost: Float
@@ -6602,6 +6659,7 @@ type UsageLog implements Node {
   """
   costPriceReferenceID: String
   request: Request!
+  requestExecution: RequestExecution
   project: Project!
   channel: Channel @goField(forceResolver: true)
 }
@@ -6711,6 +6769,15 @@ input UsageLogWhereInput {
   requestIDNEQ: ID
   requestIDIn: [ID!]
   requestIDNotIn: [ID!]
+  """
+  request_execution_id field predicates
+  """
+  requestExecutionID: ID
+  requestExecutionIDNEQ: ID
+  requestExecutionIDIn: [ID!]
+  requestExecutionIDNotIn: [ID!]
+  requestExecutionIDIsNil: Boolean
+  requestExecutionIDNotNil: Boolean
   """
   api_key_id field predicates
   """
@@ -6930,6 +6997,60 @@ input UsageLogWhereInput {
   formatEqualFold: String
   formatContainsFold: String
   """
+  requested_service_tier field predicates
+  """
+  requestedServiceTier: String
+  requestedServiceTierNEQ: String
+  requestedServiceTierIn: [String!]
+  requestedServiceTierNotIn: [String!]
+  requestedServiceTierGT: String
+  requestedServiceTierGTE: String
+  requestedServiceTierLT: String
+  requestedServiceTierLTE: String
+  requestedServiceTierContains: String
+  requestedServiceTierHasPrefix: String
+  requestedServiceTierHasSuffix: String
+  requestedServiceTierIsNil: Boolean
+  requestedServiceTierNotNil: Boolean
+  requestedServiceTierEqualFold: String
+  requestedServiceTierContainsFold: String
+  """
+  applied_service_tier field predicates
+  """
+  appliedServiceTier: String
+  appliedServiceTierNEQ: String
+  appliedServiceTierIn: [String!]
+  appliedServiceTierNotIn: [String!]
+  appliedServiceTierGT: String
+  appliedServiceTierGTE: String
+  appliedServiceTierLT: String
+  appliedServiceTierLTE: String
+  appliedServiceTierContains: String
+  appliedServiceTierHasPrefix: String
+  appliedServiceTierHasSuffix: String
+  appliedServiceTierIsNil: Boolean
+  appliedServiceTierNotNil: Boolean
+  appliedServiceTierEqualFold: String
+  appliedServiceTierContainsFold: String
+  """
+  service_tier field predicates
+  """
+  serviceTier: String
+  serviceTierNEQ: String
+  serviceTierIn: [String!]
+  serviceTierNotIn: [String!]
+  serviceTierGT: String
+  serviceTierGTE: String
+  serviceTierLT: String
+  serviceTierLTE: String
+  serviceTierContains: String
+  serviceTierHasPrefix: String
+  serviceTierHasSuffix: String
+  serviceTierIsNil: Boolean
+  serviceTierNotNil: Boolean
+  serviceTierEqualFold: String
+  serviceTierContainsFold: String
+  """
   total_cost field predicates
   """
   totalCost: Float
@@ -6965,6 +7086,11 @@ input UsageLogWhereInput {
   """
   hasRequest: Boolean
   hasRequestWith: [RequestWhereInput!]
+  """
+  request_execution edge predicates
+  """
+  hasRequestExecution: Boolean
+  hasRequestExecutionWith: [RequestExecutionWhereInput!]
   """
   project edge predicates
   """

@@ -25,6 +25,8 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldRequestID holds the string denoting the request_id field in the database.
 	FieldRequestID = "request_id"
+	// FieldRequestExecutionID holds the string denoting the request_execution_id field in the database.
+	FieldRequestExecutionID = "request_execution_id"
 	// FieldAPIKeyID holds the string denoting the api_key_id field in the database.
 	FieldAPIKeyID = "api_key_id"
 	// FieldProjectID holds the string denoting the project_id field in the database.
@@ -61,6 +63,12 @@ const (
 	FieldSource = "source"
 	// FieldFormat holds the string denoting the format field in the database.
 	FieldFormat = "format"
+	// FieldRequestedServiceTier holds the string denoting the requested_service_tier field in the database.
+	FieldRequestedServiceTier = "requested_service_tier"
+	// FieldAppliedServiceTier holds the string denoting the applied_service_tier field in the database.
+	FieldAppliedServiceTier = "applied_service_tier"
+	// FieldServiceTier holds the string denoting the service_tier field in the database.
+	FieldServiceTier = "service_tier"
 	// FieldTotalCost holds the string denoting the total_cost field in the database.
 	FieldTotalCost = "total_cost"
 	// FieldCostItems holds the string denoting the cost_items field in the database.
@@ -69,6 +77,8 @@ const (
 	FieldCostPriceReferenceID = "cost_price_reference_id"
 	// EdgeRequest holds the string denoting the request edge name in mutations.
 	EdgeRequest = "request"
+	// EdgeRequestExecution holds the string denoting the request_execution edge name in mutations.
+	EdgeRequestExecution = "request_execution"
 	// EdgeProject holds the string denoting the project edge name in mutations.
 	EdgeProject = "project"
 	// EdgeChannel holds the string denoting the channel edge name in mutations.
@@ -82,6 +92,13 @@ const (
 	RequestInverseTable = "requests"
 	// RequestColumn is the table column denoting the request relation/edge.
 	RequestColumn = "request_id"
+	// RequestExecutionTable is the table that holds the request_execution relation/edge.
+	RequestExecutionTable = "usage_logs"
+	// RequestExecutionInverseTable is the table name for the RequestExecution entity.
+	// It exists in this package in order to avoid circular dependency with the "requestexecution" package.
+	RequestExecutionInverseTable = "request_executions"
+	// RequestExecutionColumn is the table column denoting the request_execution relation/edge.
+	RequestExecutionColumn = "request_execution_id"
 	// ProjectTable is the table that holds the project relation/edge.
 	ProjectTable = "usage_logs"
 	// ProjectInverseTable is the table name for the Project entity.
@@ -104,6 +121,7 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldRequestID,
+	FieldRequestExecutionID,
 	FieldAPIKeyID,
 	FieldProjectID,
 	FieldChannelID,
@@ -122,6 +140,9 @@ var Columns = []string{
 	FieldCompletionRejectedPredictionTokens,
 	FieldSource,
 	FieldFormat,
+	FieldRequestedServiceTier,
+	FieldAppliedServiceTier,
+	FieldServiceTier,
 	FieldTotalCost,
 	FieldCostItems,
 	FieldCostPriceReferenceID,
@@ -233,6 +254,11 @@ func ByRequestID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRequestID, opts...).ToFunc()
 }
 
+// ByRequestExecutionID orders the results by the request_execution_id field.
+func ByRequestExecutionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRequestExecutionID, opts...).ToFunc()
+}
+
 // ByAPIKeyID orders the results by the api_key_id field.
 func ByAPIKeyID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAPIKeyID, opts...).ToFunc()
@@ -323,6 +349,21 @@ func ByFormat(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFormat, opts...).ToFunc()
 }
 
+// ByRequestedServiceTier orders the results by the requested_service_tier field.
+func ByRequestedServiceTier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRequestedServiceTier, opts...).ToFunc()
+}
+
+// ByAppliedServiceTier orders the results by the applied_service_tier field.
+func ByAppliedServiceTier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAppliedServiceTier, opts...).ToFunc()
+}
+
+// ByServiceTier orders the results by the service_tier field.
+func ByServiceTier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldServiceTier, opts...).ToFunc()
+}
+
 // ByTotalCost orders the results by the total_cost field.
 func ByTotalCost(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTotalCost, opts...).ToFunc()
@@ -337,6 +378,13 @@ func ByCostPriceReferenceID(opts ...sql.OrderTermOption) OrderOption {
 func ByRequestField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newRequestStep(), sql.OrderByField(field, opts...))
+	}
+}
+
+// ByRequestExecutionField orders the results by request_execution field.
+func ByRequestExecutionField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newRequestExecutionStep(), sql.OrderByField(field, opts...))
 	}
 }
 
@@ -358,6 +406,13 @@ func newRequestStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(RequestInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, RequestTable, RequestColumn),
+	)
+}
+func newRequestExecutionStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(RequestExecutionInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2O, true, RequestExecutionTable, RequestExecutionColumn),
 	)
 }
 func newProjectStep() *sqlgraph.Step {

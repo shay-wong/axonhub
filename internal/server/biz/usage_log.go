@@ -26,7 +26,13 @@ type UsageLogService struct {
 	OnUsageLogCreated func()
 }
 
-func (s *UsageLogService) computeUsageCost(ctx context.Context, channelID int, modelID string, usage *llm.Usage) ([]objects.CostItem, *float64, string) {
+func (s *UsageLogService) computeUsageCost(
+	ctx context.Context,
+	channelID int,
+	modelID string,
+	serviceTier string,
+	usage *llm.Usage,
+) ([]objects.CostItem, *float64, string) {
 	if usage == nil {
 		return nil, nil, ""
 	}
@@ -50,7 +56,7 @@ func (s *UsageLogService) computeUsageCost(ctx context.Context, channelID int, m
 	}
 
 	if modelPrice, ok := ch.cachedModelPrices[modelID]; ok {
-		items, total := ComputeUsageCost(usage, modelPrice.Price)
+		items, total := ComputeUsageCostForServiceTier(usage, modelPrice.Price, serviceTier)
 
 		totalCost := total.InexactFloat64()
 		if log.DebugEnabled(ctx) {
@@ -60,6 +66,7 @@ func (s *UsageLogService) computeUsageCost(ctx context.Context, channelID int, m
 				log.Float64("total_cost", totalCost),
 				log.Int64("total_tokens", usage.TotalTokens),
 				log.String("price_reference_id", modelPrice.ReferenceID),
+				log.String("service_tier", serviceTier),
 			)
 		}
 
@@ -82,14 +89,27 @@ func NewUsageLogService(ent *ent.Client, systemService *SystemService, channelSe
 
 // CreateUsageLogParams represents the parameters for creating a usage log.
 type CreateUsageLogParams struct {
-	RequestID     int
-	ProjectID     int
-	ChannelID     int
-	ActualModelID string // The channel actual model ID, not the request model ID.
-	Usage         *llm.Usage
-	Source        usagelog.Source
-	Format        string
-	APIKeyID      *int
+	RequestID          int
+	RequestExecutionID *int
+	ProjectID          int
+	ChannelID          int
+	ActualModelID      string // The channel actual model ID, not the request model ID.
+	Usage              *llm.Usage
+	Source             usagelog.Source
+	Format             string
+	APIKeyID           *int
+	// RequestedServiceTier is the final tier sent to the provider.
+	RequestedServiceTier string
+	// AppliedServiceTier is the provider-reported tier and may be empty.
+	AppliedServiceTier string
+}
+
+func effectiveServiceTier(requested, applied string) string {
+	if applied != "" {
+		return llm.CanonicalServiceTier(applied)
+	}
+
+	return llm.CanonicalServiceTier(requested)
 }
 
 // CreateUsageLog creates a new usage log record from LLM response usage data.
@@ -97,6 +117,8 @@ func (s *UsageLogService) CreateUsageLog(ctx context.Context, params CreateUsage
 	if params.Usage == nil {
 		return nil, nil // No usage data to log
 	}
+	params.RequestedServiceTier = llm.CanonicalServiceTier(params.RequestedServiceTier)
+	params.AppliedServiceTier = llm.CanonicalServiceTier(params.AppliedServiceTier)
 
 	client := s.entFromContext(ctx)
 
@@ -115,6 +137,23 @@ func (s *UsageLogService) CreateUsageLog(ctx context.Context, params CreateUsage
 		mut = mut.SetAPIKeyID(*params.APIKeyID)
 	} else if ctxAPIKey, ok := contexts.GetAPIKey(ctx); ok && ctxAPIKey != nil {
 		mut = mut.SetAPIKeyID(ctxAPIKey.ID)
+	}
+
+	if params.RequestExecutionID != nil {
+		mut = mut.SetRequestExecutionID(*params.RequestExecutionID)
+	}
+
+	if params.RequestedServiceTier != "" {
+		mut = mut.SetRequestedServiceTier(params.RequestedServiceTier)
+	}
+
+	if params.AppliedServiceTier != "" {
+		mut = mut.SetAppliedServiceTier(params.AppliedServiceTier)
+	}
+
+	serviceTier := effectiveServiceTier(params.RequestedServiceTier, params.AppliedServiceTier)
+	if serviceTier != "" {
+		mut = mut.SetServiceTier(serviceTier)
 	}
 
 	// Set prompt tokens details if available
@@ -143,7 +182,13 @@ func (s *UsageLogService) CreateUsageLog(ctx context.Context, params CreateUsage
 		priceReferenceID string
 	)
 
-	costItems, totalCost, priceReferenceID = s.computeUsageCost(ctx, params.ChannelID, params.ActualModelID, params.Usage)
+	costItems, totalCost, priceReferenceID = s.computeUsageCost(
+		ctx,
+		params.ChannelID,
+		params.ActualModelID,
+		serviceTier,
+		params.Usage,
+	)
 
 	mut = mut.
 		SetNillableTotalCost(totalCost).
@@ -180,19 +225,24 @@ func (s *UsageLogService) CreateUsageLogFromRequest(
 	request *ent.Request,
 	requestExec *ent.RequestExecution,
 	usage *llm.Usage,
+	requestedServiceTier string,
+	appliedServiceTier string,
 ) (*ent.UsageLog, error) {
-	if request == nil || usage == nil {
+	if request == nil || requestExec == nil || usage == nil {
 		return nil, nil
 	}
 
 	return s.CreateUsageLog(ctx, CreateUsageLogParams{
-		RequestID:     request.ID,
-		ProjectID:     request.ProjectID,
-		ChannelID:     requestExec.ChannelID,
-		ActualModelID: requestExec.ModelID,
-		Usage:         usage,
-		Source:        usagelog.Source(request.Source),
-		Format:        request.Format,
-		APIKeyID:      lo.ToPtr(request.APIKeyID),
+		RequestID:            request.ID,
+		RequestExecutionID:   lo.ToPtr(requestExec.ID),
+		ProjectID:            request.ProjectID,
+		ChannelID:            requestExec.ChannelID,
+		ActualModelID:        requestExec.ModelID,
+		Usage:                usage,
+		Source:               usagelog.Source(request.Source),
+		Format:               request.Format,
+		APIKeyID:             lo.ToPtr(request.APIKeyID),
+		RequestedServiceTier: requestedServiceTier,
+		AppliedServiceTier:   appliedServiceTier,
 	})
 }

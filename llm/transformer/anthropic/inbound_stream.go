@@ -42,6 +42,7 @@ type anthropicInboundStream struct {
 	messageStoped             bool
 	messageID                 string
 	model                     string
+	serviceTier               string
 	contentIndex              int64
 	eventQueue                []*httpclient.StreamEvent
 	queueIndex                int
@@ -374,6 +375,10 @@ func (s *anthropicInboundStream) Next() bool {
 		s.model = chunk.Model
 	}
 
+	if chunk.ServiceTier != "" {
+		s.serviceTier = chunk.ServiceTier
+	}
+
 	// Generate message_start event if this is the first chunk
 	if !s.hasStarted {
 		s.hasStarted = true
@@ -385,6 +390,7 @@ func (s *anthropicInboundStream) Next() bool {
 		if chunk.Usage != nil {
 			usage = convertToAnthropicUsage(chunk.Usage)
 		}
+		usage.ServiceTier = s.serviceTier
 
 		streamEvent := StreamEvent{
 			Type: "message_start",
@@ -982,6 +988,7 @@ func (s *anthropicInboundStream) Next() bool {
 		}
 
 		streamEvent.Usage = convertToAnthropicUsage(chunk.Usage)
+		streamEvent.Usage.ServiceTier = s.serviceTier
 
 		err := s.enqueEvent(&streamEvent)
 		if err != nil {

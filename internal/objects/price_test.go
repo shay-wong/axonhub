@@ -438,3 +438,241 @@ func TestModelPrice_Validate(t *testing.T) {
 		assert.Contains(t, err.Error(), "usagePerUnit is required")
 	})
 }
+
+func TestModelPrice_ValidateTierBounds(t *testing.T) {
+	pricingForBounds := func(mode PricingMode, bounds ...int64) Pricing {
+		tiers := make([]PriceTier, 0, len(bounds)+1)
+		for _, bound := range bounds {
+			bound := bound
+			tiers = append(tiers, PriceTier{UpTo: &bound, PricePerUnit: decimal.NewFromInt(1)})
+		}
+		tiers = append(tiers, PriceTier{PricePerUnit: decimal.NewFromInt(2)})
+
+		return Pricing{
+			Mode: mode,
+			UsageTiered: &TieredPricing{
+				Tiers: tiers,
+			},
+		}
+	}
+
+	validBasePrice := decimal.NewFromInt(1)
+	tests := []struct {
+		name            string
+		mode            PricingMode
+		bounds          []int64
+		serviceTierPath bool
+		wantError       string
+	}{
+		{
+			name:      "usage tiered accepts positive increasing bounds",
+			mode:      PricingModeTiered,
+			bounds:    []int64{100, 200},
+			wantError: "",
+		},
+		{
+			name:      "usage volume accepts positive increasing bounds",
+			mode:      PricingModeVolume,
+			bounds:    []int64{100, 200},
+			wantError: "",
+		},
+		{
+			name:      "usage tiered rejects decreasing bounds",
+			mode:      PricingModeTiered,
+			bounds:    []int64{200, 100},
+			wantError: "tiers[1].upTo must be greater than tiers[0].upTo",
+		},
+		{
+			name:      "usage volume rejects duplicate bounds",
+			mode:      PricingModeVolume,
+			bounds:    []int64{100, 100},
+			wantError: "tiers[1].upTo must be greater than tiers[0].upTo",
+		},
+		{
+			name:            "service tier usage tiered rejects zero bound",
+			mode:            PricingModeTiered,
+			bounds:          []int64{0},
+			serviceTierPath: true,
+			wantError:       "serviceTierPrices[0].items[0]: pricing: tiers[0].upTo must be greater than 0",
+		},
+		{
+			name:            "service tier usage volume rejects negative bound",
+			mode:            PricingModeVolume,
+			bounds:          []int64{-1},
+			serviceTierPath: true,
+			wantError:       "serviceTierPrices[0].items[0]: pricing: tiers[0].upTo must be greater than 0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item := ModelPriceItem{
+				ItemCode: PriceItemCodeUsage,
+				Pricing:  pricingForBounds(tt.mode, tt.bounds...),
+			}
+			price := ModelPrice{Items: []ModelPriceItem{item}}
+			if tt.serviceTierPath {
+				price = ModelPrice{
+					Items: []ModelPriceItem{
+						{
+							ItemCode: PriceItemCodeUsage,
+							Pricing: Pricing{
+								Mode:         PricingModeUsagePerUnit,
+								UsagePerUnit: &validBasePrice,
+							},
+						},
+					},
+					ServiceTierPrices: []ServiceTierPrice{
+						{ServiceTier: "priority", Items: []ModelPriceItem{item}},
+					},
+				}
+			}
+
+			err := price.Validate()
+			if tt.wantError == "" {
+				require.NoError(t, err)
+				return
+			}
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantError)
+		})
+	}
+}
+
+func TestModelPrice_ItemsForServiceTier(t *testing.T) {
+	baseInput := decimal.NewFromInt(5)
+	baseCompletion := decimal.NewFromInt(30)
+	fastInput := decimal.NewFromInt(10)
+	fastCache := decimal.NewFromInt(1)
+
+	price := ModelPrice{
+		Items: []ModelPriceItem{
+			{
+				ItemCode: PriceItemCodeUsage,
+				Pricing: Pricing{
+					Mode:         PricingModeUsagePerUnit,
+					UsagePerUnit: &baseInput,
+				},
+			},
+			{
+				ItemCode: PriceItemCodeCompletion,
+				Pricing: Pricing{
+					Mode:         PricingModeUsagePerUnit,
+					UsagePerUnit: &baseCompletion,
+				},
+			},
+		},
+		ServiceTierPrices: []ServiceTierPrice{
+			{
+				ServiceTier: "priority",
+				Items: []ModelPriceItem{
+					{
+						ItemCode: PriceItemCodeUsage,
+						Pricing: Pricing{
+							Mode:         PricingModeUsagePerUnit,
+							UsagePerUnit: &fastInput,
+						},
+					},
+					{
+						ItemCode: PriceItemCodePromptCachedToken,
+						Pricing: Pricing{
+							Mode:         PricingModeUsagePerUnit,
+							UsagePerUnit: &fastCache,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	priorityItems := price.ItemsForServiceTier("priority")
+	require.Equal(t, priorityItems, price.ItemsForServiceTier(" PRIORITY "))
+	require.Len(t, priorityItems, 3)
+	require.Equal(t, PriceItemCodeUsage, priorityItems[0].ItemCode)
+	require.True(t, fastInput.Equal(*priorityItems[0].Pricing.UsagePerUnit))
+	require.Equal(t, PriceItemCodeCompletion, priorityItems[1].ItemCode)
+	require.True(t, baseCompletion.Equal(*priorityItems[1].Pricing.UsagePerUnit))
+	require.Equal(t, PriceItemCodePromptCachedToken, priorityItems[2].ItemCode)
+	require.True(t, fastCache.Equal(*priorityItems[2].Pricing.UsagePerUnit))
+	require.Equal(t, price.Items, price.ItemsForServiceTier(""))
+	require.Equal(t, price.Items, price.ItemsForServiceTier("default"))
+	require.Equal(t, price.Items, price.ItemsForServiceTier("unknown"))
+
+	canonicalized := price
+	canonicalized.ServiceTierPrices[0].ServiceTier = " PRIORITY "
+	normalized := canonicalized.CanonicalizedServiceTiers()
+	require.Equal(t, "priority", normalized.ServiceTierPrices[0].ServiceTier)
+	require.Equal(t, " PRIORITY ", canonicalized.ServiceTierPrices[0].ServiceTier)
+}
+
+func TestModelPrice_ServiceTierPricesValidationAndEquality(t *testing.T) {
+	baseInput := decimal.NewFromInt(5)
+	fastInput := decimal.NewFromInt(10)
+	baseItems := []ModelPriceItem{
+		{
+			ItemCode: PriceItemCodeUsage,
+			Pricing: Pricing{
+				Mode:         PricingModeUsagePerUnit,
+				UsagePerUnit: &baseInput,
+			},
+		},
+	}
+	fastItems := []ModelPriceItem{
+		{
+			ItemCode: PriceItemCodeUsage,
+			Pricing: Pricing{
+				Mode:         PricingModeUsagePerUnit,
+				UsagePerUnit: &fastInput,
+			},
+		},
+	}
+
+	price := ModelPrice{
+		Items: baseItems,
+		ServiceTierPrices: []ServiceTierPrice{
+			{ServiceTier: "priority", Items: fastItems},
+		},
+	}
+	require.NoError(t, price.Validate())
+	require.True(t, price.Equals(price))
+
+	different := price
+	different.ServiceTierPrices = []ServiceTierPrice{
+		{ServiceTier: "priority", Items: baseItems},
+	}
+	require.False(t, price.Equals(different))
+
+	missingTier := price
+	missingTier.ServiceTierPrices = []ServiceTierPrice{
+		{ServiceTier: "", Items: fastItems},
+	}
+	err := missingTier.Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "serviceTier is required")
+
+	duplicateTier := price
+	duplicateTier.ServiceTierPrices = []ServiceTierPrice{
+		{ServiceTier: "priority", Items: fastItems},
+		{ServiceTier: "Priority", Items: fastItems},
+	}
+	err = duplicateTier.Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "duplicate serviceTier")
+
+	paddedTier := price
+	paddedTier.ServiceTierPrices = []ServiceTierPrice{
+		{ServiceTier: " priority ", Items: fastItems},
+	}
+	err = paddedTier.Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "surrounding whitespace")
+
+	duplicateTierItem := price
+	duplicateTierItem.ServiceTierPrices = []ServiceTierPrice{
+		{ServiceTier: "priority", Items: append(append([]ModelPriceItem(nil), fastItems...), fastItems[0])},
+	}
+	err = duplicateTierItem.Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "duplicate itemCode")
+}

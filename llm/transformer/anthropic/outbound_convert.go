@@ -120,6 +120,7 @@ func buildBaseRequest(chatReq *llm.Request, config *Config) *MessageRequest {
 		Stream:      chatReq.Stream,
 		System:      convertToAnthropicSystemPrompt(chatReq),
 		MaxTokens:   resolveMaxTokens(chatReq),
+		ServiceTier: anthropicServiceTier(chatReq, config),
 	}
 
 	if chatReq.Metadata != nil && chatReq.Metadata["user_id"] != "" {
@@ -187,6 +188,31 @@ func buildBaseRequest(chatReq *llm.Request, config *Config) *MessageRequest {
 	}
 
 	return req
+}
+
+func anthropicServiceTier(request *llm.Request, config *Config) string {
+	if request == nil || request.ServiceTier == nil {
+		return ""
+	}
+
+	if request.APIFormat != "" && request.APIFormat != llm.APIFormatAnthropicMessage {
+		return ""
+	}
+
+	if config != nil {
+		switch config.Type {
+		case "", PlatformDirect, PlatformClaudeCode:
+		default:
+			return ""
+		}
+	}
+
+	switch *request.ServiceTier {
+	case "auto", "standard_only":
+		return *request.ServiceTier
+	default:
+		return ""
+	}
 }
 
 // resolveMaxTokens determines the max_tokens value with fallback.
@@ -1167,6 +1193,9 @@ func convertToLlmResponse(anthropicResp *Message, platformType PlatformType) *ll
 	resp.Choices = []llm.Choice{choice}
 
 	resp.Usage = convertToLlmUsage(anthropicResp.Usage, platformType)
+	if anthropicResp.Usage != nil {
+		resp.ServiceTier = anthropicResp.Usage.ServiceTier
+	}
 	if transformerMetadata != nil {
 		resp.TransformerMetadata = transformerMetadata
 	}

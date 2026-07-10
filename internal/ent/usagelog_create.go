@@ -14,6 +14,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/project"
 	"github.com/looplj/axonhub/internal/ent/request"
+	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/objects"
 )
@@ -57,6 +58,20 @@ func (_c *UsageLogCreate) SetNillableUpdatedAt(v *time.Time) *UsageLogCreate {
 // SetRequestID sets the "request_id" field.
 func (_c *UsageLogCreate) SetRequestID(v int) *UsageLogCreate {
 	_c.mutation.SetRequestID(v)
+	return _c
+}
+
+// SetRequestExecutionID sets the "request_execution_id" field.
+func (_c *UsageLogCreate) SetRequestExecutionID(v int) *UsageLogCreate {
+	_c.mutation.SetRequestExecutionID(v)
+	return _c
+}
+
+// SetNillableRequestExecutionID sets the "request_execution_id" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableRequestExecutionID(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetRequestExecutionID(*v)
+	}
 	return _c
 }
 
@@ -304,6 +319,48 @@ func (_c *UsageLogCreate) SetNillableFormat(v *string) *UsageLogCreate {
 	return _c
 }
 
+// SetRequestedServiceTier sets the "requested_service_tier" field.
+func (_c *UsageLogCreate) SetRequestedServiceTier(v string) *UsageLogCreate {
+	_c.mutation.SetRequestedServiceTier(v)
+	return _c
+}
+
+// SetNillableRequestedServiceTier sets the "requested_service_tier" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableRequestedServiceTier(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetRequestedServiceTier(*v)
+	}
+	return _c
+}
+
+// SetAppliedServiceTier sets the "applied_service_tier" field.
+func (_c *UsageLogCreate) SetAppliedServiceTier(v string) *UsageLogCreate {
+	_c.mutation.SetAppliedServiceTier(v)
+	return _c
+}
+
+// SetNillableAppliedServiceTier sets the "applied_service_tier" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableAppliedServiceTier(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetAppliedServiceTier(*v)
+	}
+	return _c
+}
+
+// SetServiceTier sets the "service_tier" field.
+func (_c *UsageLogCreate) SetServiceTier(v string) *UsageLogCreate {
+	_c.mutation.SetServiceTier(v)
+	return _c
+}
+
+// SetNillableServiceTier sets the "service_tier" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableServiceTier(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetServiceTier(*v)
+	}
+	return _c
+}
+
 // SetTotalCost sets the "total_cost" field.
 func (_c *UsageLogCreate) SetTotalCost(v float64) *UsageLogCreate {
 	_c.mutation.SetTotalCost(v)
@@ -341,6 +398,11 @@ func (_c *UsageLogCreate) SetNillableCostPriceReferenceID(v *string) *UsageLogCr
 // SetRequest sets the "request" edge to the Request entity.
 func (_c *UsageLogCreate) SetRequest(v *Request) *UsageLogCreate {
 	return _c.SetRequestID(v.ID)
+}
+
+// SetRequestExecution sets the "request_execution" edge to the RequestExecution entity.
+func (_c *UsageLogCreate) SetRequestExecution(v *RequestExecution) *UsageLogCreate {
+	return _c.SetRequestExecutionID(v.ID)
 }
 
 // SetProject sets the "project" edge to the Project entity.
@@ -607,6 +669,18 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 		_spec.SetField(usagelog.FieldFormat, field.TypeString, value)
 		_node.Format = value
 	}
+	if value, ok := _c.mutation.RequestedServiceTier(); ok {
+		_spec.SetField(usagelog.FieldRequestedServiceTier, field.TypeString, value)
+		_node.RequestedServiceTier = value
+	}
+	if value, ok := _c.mutation.AppliedServiceTier(); ok {
+		_spec.SetField(usagelog.FieldAppliedServiceTier, field.TypeString, value)
+		_node.AppliedServiceTier = value
+	}
+	if value, ok := _c.mutation.ServiceTier(); ok {
+		_spec.SetField(usagelog.FieldServiceTier, field.TypeString, value)
+		_node.ServiceTier = value
+	}
 	if value, ok := _c.mutation.TotalCost(); ok {
 		_spec.SetField(usagelog.FieldTotalCost, field.TypeFloat64, value)
 		_node.TotalCost = &value
@@ -634,6 +708,23 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.RequestID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.RequestExecutionIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: true,
+			Table:   usagelog.RequestExecutionTable,
+			Columns: []string{usagelog.RequestExecutionColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(requestexecution.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.RequestExecutionID = nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.ProjectIDs(); len(nodes) > 0 {
@@ -1081,6 +1172,9 @@ func (u *UsageLogUpsertOne) UpdateNewValues() *UsageLogUpsertOne {
 		if _, exists := u.create.mutation.RequestID(); exists {
 			s.SetIgnore(usagelog.FieldRequestID)
 		}
+		if _, exists := u.create.mutation.RequestExecutionID(); exists {
+			s.SetIgnore(usagelog.FieldRequestExecutionID)
+		}
 		if _, exists := u.create.mutation.APIKeyID(); exists {
 			s.SetIgnore(usagelog.FieldAPIKeyID)
 		}
@@ -1098,6 +1192,15 @@ func (u *UsageLogUpsertOne) UpdateNewValues() *UsageLogUpsertOne {
 		}
 		if _, exists := u.create.mutation.Format(); exists {
 			s.SetIgnore(usagelog.FieldFormat)
+		}
+		if _, exists := u.create.mutation.RequestedServiceTier(); exists {
+			s.SetIgnore(usagelog.FieldRequestedServiceTier)
+		}
+		if _, exists := u.create.mutation.AppliedServiceTier(); exists {
+			s.SetIgnore(usagelog.FieldAppliedServiceTier)
+		}
+		if _, exists := u.create.mutation.ServiceTier(); exists {
+			s.SetIgnore(usagelog.FieldServiceTier)
 		}
 	}))
 	return u
@@ -1711,6 +1814,9 @@ func (u *UsageLogUpsertBulk) UpdateNewValues() *UsageLogUpsertBulk {
 			if _, exists := b.mutation.RequestID(); exists {
 				s.SetIgnore(usagelog.FieldRequestID)
 			}
+			if _, exists := b.mutation.RequestExecutionID(); exists {
+				s.SetIgnore(usagelog.FieldRequestExecutionID)
+			}
 			if _, exists := b.mutation.APIKeyID(); exists {
 				s.SetIgnore(usagelog.FieldAPIKeyID)
 			}
@@ -1728,6 +1834,15 @@ func (u *UsageLogUpsertBulk) UpdateNewValues() *UsageLogUpsertBulk {
 			}
 			if _, exists := b.mutation.Format(); exists {
 				s.SetIgnore(usagelog.FieldFormat)
+			}
+			if _, exists := b.mutation.RequestedServiceTier(); exists {
+				s.SetIgnore(usagelog.FieldRequestedServiceTier)
+			}
+			if _, exists := b.mutation.AppliedServiceTier(); exists {
+				s.SetIgnore(usagelog.FieldAppliedServiceTier)
+			}
+			if _, exists := b.mutation.ServiceTier(); exists {
+				s.SetIgnore(usagelog.FieldServiceTier)
 			}
 		}
 	}))

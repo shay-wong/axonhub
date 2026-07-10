@@ -82,6 +82,18 @@ func TestOutboundTransformer_TransformResponse_CanceledFinishReason(t *testing.T
 	require.Equal(t, "cancelled", *result.Choices[0].FinishReason)
 }
 
+func TestOutboundTransformer_TransformResponse_PreservesAppliedServiceTier(t *testing.T) {
+	transformer, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	result, err := transformer.TransformResponse(t.Context(), &httpclient.Response{
+		StatusCode: http.StatusOK,
+		Body:       []byte(`{"id":"resp_tier","object":"response","created_at":1700000000,"status":"completed","model":"gpt-5","service_tier":"priority","output":[]}`),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "priority", result.ServiceTier)
+}
+
 func TestOutboundTransformer_buildFullRequestURL(t *testing.T) {
 	tests := []struct {
 		name     string

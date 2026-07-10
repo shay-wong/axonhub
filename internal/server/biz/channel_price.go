@@ -60,6 +60,13 @@ func calculatePriceChanges(prices []*ent.ChannelModelPrice, inputs []SaveChannel
 				ExistingPrice: nil,
 			})
 		} else {
+			// A nil tier-price slice means the GraphQL input omitted this newly added
+			// field. Preserve existing overrides for older clients; a non-nil empty
+			// slice is an explicit request to clear them.
+			if input.Price.ServiceTierPrices == nil {
+				input.Price.ServiceTierPrices = existing.Price.ServiceTierPrices
+			}
+
 			// Only update if price changed
 			if existing.Price.Equals(input.Price) {
 				actions = append(actions, PriceChangeAction{
@@ -98,8 +105,12 @@ func (svc *ChannelService) SaveChannelModelPrices(
 	channelID int,
 	inputs []SaveChannelModelPriceInput,
 ) ([]*ent.ChannelModelPrice, error) {
+	normalizedInputs := make([]SaveChannelModelPriceInput, len(inputs))
 	seenModelIDs := make(map[string]struct{}, len(inputs))
-	for _, input := range inputs {
+	for idx, input := range inputs {
+		input.Price = input.Price.CanonicalizedServiceTiers()
+		normalizedInputs[idx] = input
+
 		if _, ok := seenModelIDs[input.ModelID]; ok {
 			return nil, fmt.Errorf("duplicate model price input: model_id=%s", input.ModelID)
 		}
@@ -110,6 +121,7 @@ func (svc *ChannelService) SaveChannelModelPrices(
 			return nil, fmt.Errorf("invalid model price: model_id=%s: %w", input.ModelID, err)
 		}
 	}
+	inputs = normalizedInputs
 
 	db := svc.entFromContext(ctx)
 

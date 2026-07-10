@@ -7756,6 +7756,23 @@ type RequestExecutionWhereInput struct {
 	FormatEqualFold    *string  `json:"formatEqualFold,omitempty"`
 	FormatContainsFold *string  `json:"formatContainsFold,omitempty"`
 
+	// "requested_service_tier" field predicates.
+	RequestedServiceTier             *string  `json:"requestedServiceTier,omitempty"`
+	RequestedServiceTierNEQ          *string  `json:"requestedServiceTierNEQ,omitempty"`
+	RequestedServiceTierIn           []string `json:"requestedServiceTierIn,omitempty"`
+	RequestedServiceTierNotIn        []string `json:"requestedServiceTierNotIn,omitempty"`
+	RequestedServiceTierGT           *string  `json:"requestedServiceTierGT,omitempty"`
+	RequestedServiceTierGTE          *string  `json:"requestedServiceTierGTE,omitempty"`
+	RequestedServiceTierLT           *string  `json:"requestedServiceTierLT,omitempty"`
+	RequestedServiceTierLTE          *string  `json:"requestedServiceTierLTE,omitempty"`
+	RequestedServiceTierContains     *string  `json:"requestedServiceTierContains,omitempty"`
+	RequestedServiceTierHasPrefix    *string  `json:"requestedServiceTierHasPrefix,omitempty"`
+	RequestedServiceTierHasSuffix    *string  `json:"requestedServiceTierHasSuffix,omitempty"`
+	RequestedServiceTierIsNil        bool     `json:"requestedServiceTierIsNil,omitempty"`
+	RequestedServiceTierNotNil       bool     `json:"requestedServiceTierNotNil,omitempty"`
+	RequestedServiceTierEqualFold    *string  `json:"requestedServiceTierEqualFold,omitempty"`
+	RequestedServiceTierContainsFold *string  `json:"requestedServiceTierContainsFold,omitempty"`
+
 	// "error_message" field predicates.
 	ErrorMessage             *string  `json:"errorMessage,omitempty"`
 	ErrorMessageNEQ          *string  `json:"errorMessageNEQ,omitempty"`
@@ -7863,6 +7880,10 @@ type RequestExecutionWhereInput struct {
 	// "data_storage" edge predicates.
 	HasDataStorage     *bool                    `json:"hasDataStorage,omitempty"`
 	HasDataStorageWith []*DataStorageWhereInput `json:"hasDataStorageWith,omitempty"`
+
+	// "usage_log" edge predicates.
+	HasUsageLog     *bool                 `json:"hasUsageLog,omitempty"`
+	HasUsageLogWith []*UsageLogWhereInput `json:"hasUsageLogWith,omitempty"`
 }
 
 // AddPredicates adds custom predicates to the where input to be used during the filtering phase.
@@ -8215,6 +8236,51 @@ func (i *RequestExecutionWhereInput) P() (predicate.RequestExecution, error) {
 	if i.FormatContainsFold != nil {
 		predicates = append(predicates, requestexecution.FormatContainsFold(*i.FormatContainsFold))
 	}
+	if i.RequestedServiceTier != nil {
+		predicates = append(predicates, requestexecution.RequestedServiceTierEQ(*i.RequestedServiceTier))
+	}
+	if i.RequestedServiceTierNEQ != nil {
+		predicates = append(predicates, requestexecution.RequestedServiceTierNEQ(*i.RequestedServiceTierNEQ))
+	}
+	if len(i.RequestedServiceTierIn) > 0 {
+		predicates = append(predicates, requestexecution.RequestedServiceTierIn(i.RequestedServiceTierIn...))
+	}
+	if len(i.RequestedServiceTierNotIn) > 0 {
+		predicates = append(predicates, requestexecution.RequestedServiceTierNotIn(i.RequestedServiceTierNotIn...))
+	}
+	if i.RequestedServiceTierGT != nil {
+		predicates = append(predicates, requestexecution.RequestedServiceTierGT(*i.RequestedServiceTierGT))
+	}
+	if i.RequestedServiceTierGTE != nil {
+		predicates = append(predicates, requestexecution.RequestedServiceTierGTE(*i.RequestedServiceTierGTE))
+	}
+	if i.RequestedServiceTierLT != nil {
+		predicates = append(predicates, requestexecution.RequestedServiceTierLT(*i.RequestedServiceTierLT))
+	}
+	if i.RequestedServiceTierLTE != nil {
+		predicates = append(predicates, requestexecution.RequestedServiceTierLTE(*i.RequestedServiceTierLTE))
+	}
+	if i.RequestedServiceTierContains != nil {
+		predicates = append(predicates, requestexecution.RequestedServiceTierContains(*i.RequestedServiceTierContains))
+	}
+	if i.RequestedServiceTierHasPrefix != nil {
+		predicates = append(predicates, requestexecution.RequestedServiceTierHasPrefix(*i.RequestedServiceTierHasPrefix))
+	}
+	if i.RequestedServiceTierHasSuffix != nil {
+		predicates = append(predicates, requestexecution.RequestedServiceTierHasSuffix(*i.RequestedServiceTierHasSuffix))
+	}
+	if i.RequestedServiceTierIsNil {
+		predicates = append(predicates, requestexecution.RequestedServiceTierIsNil())
+	}
+	if i.RequestedServiceTierNotNil {
+		predicates = append(predicates, requestexecution.RequestedServiceTierNotNil())
+	}
+	if i.RequestedServiceTierEqualFold != nil {
+		predicates = append(predicates, requestexecution.RequestedServiceTierEqualFold(*i.RequestedServiceTierEqualFold))
+	}
+	if i.RequestedServiceTierContainsFold != nil {
+		predicates = append(predicates, requestexecution.RequestedServiceTierContainsFold(*i.RequestedServiceTierContainsFold))
+	}
 	if i.ErrorMessage != nil {
 		predicates = append(predicates, requestexecution.ErrorMessageEQ(*i.ErrorMessage))
 	}
@@ -8503,6 +8569,24 @@ func (i *RequestExecutionWhereInput) P() (predicate.RequestExecution, error) {
 			with = append(with, p)
 		}
 		predicates = append(predicates, requestexecution.HasDataStorageWith(with...))
+	}
+	if i.HasUsageLog != nil {
+		p := requestexecution.HasUsageLog()
+		if !*i.HasUsageLog {
+			p = requestexecution.Not(p)
+		}
+		predicates = append(predicates, p)
+	}
+	if len(i.HasUsageLogWith) > 0 {
+		with := make([]predicate.UsageLog, 0, len(i.HasUsageLogWith))
+		for _, w := range i.HasUsageLogWith {
+			p, err := w.P()
+			if err != nil {
+				return nil, fmt.Errorf("%w: field 'HasUsageLogWith'", err)
+			}
+			with = append(with, p)
+		}
+		predicates = append(predicates, requestexecution.HasUsageLogWith(with...))
 	}
 	switch len(predicates) {
 	case 0:
@@ -9877,6 +9961,14 @@ type UsageLogWhereInput struct {
 	RequestIDIn    []int `json:"requestIDIn,omitempty"`
 	RequestIDNotIn []int `json:"requestIDNotIn,omitempty"`
 
+	// "request_execution_id" field predicates.
+	RequestExecutionID       *int  `json:"requestExecutionID,omitempty"`
+	RequestExecutionIDNEQ    *int  `json:"requestExecutionIDNEQ,omitempty"`
+	RequestExecutionIDIn     []int `json:"requestExecutionIDIn,omitempty"`
+	RequestExecutionIDNotIn  []int `json:"requestExecutionIDNotIn,omitempty"`
+	RequestExecutionIDIsNil  bool  `json:"requestExecutionIDIsNil,omitempty"`
+	RequestExecutionIDNotNil bool  `json:"requestExecutionIDNotNil,omitempty"`
+
 	// "api_key_id" field predicates.
 	APIKeyID       *int  `json:"apiKeyID,omitempty"`
 	APIKeyIDNEQ    *int  `json:"apiKeyIDNEQ,omitempty"`
@@ -10077,6 +10169,57 @@ type UsageLogWhereInput struct {
 	FormatEqualFold    *string  `json:"formatEqualFold,omitempty"`
 	FormatContainsFold *string  `json:"formatContainsFold,omitempty"`
 
+	// "requested_service_tier" field predicates.
+	RequestedServiceTier             *string  `json:"requestedServiceTier,omitempty"`
+	RequestedServiceTierNEQ          *string  `json:"requestedServiceTierNEQ,omitempty"`
+	RequestedServiceTierIn           []string `json:"requestedServiceTierIn,omitempty"`
+	RequestedServiceTierNotIn        []string `json:"requestedServiceTierNotIn,omitempty"`
+	RequestedServiceTierGT           *string  `json:"requestedServiceTierGT,omitempty"`
+	RequestedServiceTierGTE          *string  `json:"requestedServiceTierGTE,omitempty"`
+	RequestedServiceTierLT           *string  `json:"requestedServiceTierLT,omitempty"`
+	RequestedServiceTierLTE          *string  `json:"requestedServiceTierLTE,omitempty"`
+	RequestedServiceTierContains     *string  `json:"requestedServiceTierContains,omitempty"`
+	RequestedServiceTierHasPrefix    *string  `json:"requestedServiceTierHasPrefix,omitempty"`
+	RequestedServiceTierHasSuffix    *string  `json:"requestedServiceTierHasSuffix,omitempty"`
+	RequestedServiceTierIsNil        bool     `json:"requestedServiceTierIsNil,omitempty"`
+	RequestedServiceTierNotNil       bool     `json:"requestedServiceTierNotNil,omitempty"`
+	RequestedServiceTierEqualFold    *string  `json:"requestedServiceTierEqualFold,omitempty"`
+	RequestedServiceTierContainsFold *string  `json:"requestedServiceTierContainsFold,omitempty"`
+
+	// "applied_service_tier" field predicates.
+	AppliedServiceTier             *string  `json:"appliedServiceTier,omitempty"`
+	AppliedServiceTierNEQ          *string  `json:"appliedServiceTierNEQ,omitempty"`
+	AppliedServiceTierIn           []string `json:"appliedServiceTierIn,omitempty"`
+	AppliedServiceTierNotIn        []string `json:"appliedServiceTierNotIn,omitempty"`
+	AppliedServiceTierGT           *string  `json:"appliedServiceTierGT,omitempty"`
+	AppliedServiceTierGTE          *string  `json:"appliedServiceTierGTE,omitempty"`
+	AppliedServiceTierLT           *string  `json:"appliedServiceTierLT,omitempty"`
+	AppliedServiceTierLTE          *string  `json:"appliedServiceTierLTE,omitempty"`
+	AppliedServiceTierContains     *string  `json:"appliedServiceTierContains,omitempty"`
+	AppliedServiceTierHasPrefix    *string  `json:"appliedServiceTierHasPrefix,omitempty"`
+	AppliedServiceTierHasSuffix    *string  `json:"appliedServiceTierHasSuffix,omitempty"`
+	AppliedServiceTierIsNil        bool     `json:"appliedServiceTierIsNil,omitempty"`
+	AppliedServiceTierNotNil       bool     `json:"appliedServiceTierNotNil,omitempty"`
+	AppliedServiceTierEqualFold    *string  `json:"appliedServiceTierEqualFold,omitempty"`
+	AppliedServiceTierContainsFold *string  `json:"appliedServiceTierContainsFold,omitempty"`
+
+	// "service_tier" field predicates.
+	ServiceTier             *string  `json:"serviceTier,omitempty"`
+	ServiceTierNEQ          *string  `json:"serviceTierNEQ,omitempty"`
+	ServiceTierIn           []string `json:"serviceTierIn,omitempty"`
+	ServiceTierNotIn        []string `json:"serviceTierNotIn,omitempty"`
+	ServiceTierGT           *string  `json:"serviceTierGT,omitempty"`
+	ServiceTierGTE          *string  `json:"serviceTierGTE,omitempty"`
+	ServiceTierLT           *string  `json:"serviceTierLT,omitempty"`
+	ServiceTierLTE          *string  `json:"serviceTierLTE,omitempty"`
+	ServiceTierContains     *string  `json:"serviceTierContains,omitempty"`
+	ServiceTierHasPrefix    *string  `json:"serviceTierHasPrefix,omitempty"`
+	ServiceTierHasSuffix    *string  `json:"serviceTierHasSuffix,omitempty"`
+	ServiceTierIsNil        bool     `json:"serviceTierIsNil,omitempty"`
+	ServiceTierNotNil       bool     `json:"serviceTierNotNil,omitempty"`
+	ServiceTierEqualFold    *string  `json:"serviceTierEqualFold,omitempty"`
+	ServiceTierContainsFold *string  `json:"serviceTierContainsFold,omitempty"`
+
 	// "total_cost" field predicates.
 	TotalCost       *float64  `json:"totalCost,omitempty"`
 	TotalCostNEQ    *float64  `json:"totalCostNEQ,omitempty"`
@@ -10109,6 +10252,10 @@ type UsageLogWhereInput struct {
 	// "request" edge predicates.
 	HasRequest     *bool                `json:"hasRequest,omitempty"`
 	HasRequestWith []*RequestWhereInput `json:"hasRequestWith,omitempty"`
+
+	// "request_execution" edge predicates.
+	HasRequestExecution     *bool                         `json:"hasRequestExecution,omitempty"`
+	HasRequestExecutionWith []*RequestExecutionWhereInput `json:"hasRequestExecutionWith,omitempty"`
 
 	// "project" edge predicates.
 	HasProject     *bool                `json:"hasProject,omitempty"`
@@ -10273,6 +10420,24 @@ func (i *UsageLogWhereInput) P() (predicate.UsageLog, error) {
 	}
 	if len(i.RequestIDNotIn) > 0 {
 		predicates = append(predicates, usagelog.RequestIDNotIn(i.RequestIDNotIn...))
+	}
+	if i.RequestExecutionID != nil {
+		predicates = append(predicates, usagelog.RequestExecutionIDEQ(*i.RequestExecutionID))
+	}
+	if i.RequestExecutionIDNEQ != nil {
+		predicates = append(predicates, usagelog.RequestExecutionIDNEQ(*i.RequestExecutionIDNEQ))
+	}
+	if len(i.RequestExecutionIDIn) > 0 {
+		predicates = append(predicates, usagelog.RequestExecutionIDIn(i.RequestExecutionIDIn...))
+	}
+	if len(i.RequestExecutionIDNotIn) > 0 {
+		predicates = append(predicates, usagelog.RequestExecutionIDNotIn(i.RequestExecutionIDNotIn...))
+	}
+	if i.RequestExecutionIDIsNil {
+		predicates = append(predicates, usagelog.RequestExecutionIDIsNil())
+	}
+	if i.RequestExecutionIDNotNil {
+		predicates = append(predicates, usagelog.RequestExecutionIDNotNil())
 	}
 	if i.APIKeyID != nil {
 		predicates = append(predicates, usagelog.APIKeyIDEQ(*i.APIKeyID))
@@ -10766,6 +10931,141 @@ func (i *UsageLogWhereInput) P() (predicate.UsageLog, error) {
 	if i.FormatContainsFold != nil {
 		predicates = append(predicates, usagelog.FormatContainsFold(*i.FormatContainsFold))
 	}
+	if i.RequestedServiceTier != nil {
+		predicates = append(predicates, usagelog.RequestedServiceTierEQ(*i.RequestedServiceTier))
+	}
+	if i.RequestedServiceTierNEQ != nil {
+		predicates = append(predicates, usagelog.RequestedServiceTierNEQ(*i.RequestedServiceTierNEQ))
+	}
+	if len(i.RequestedServiceTierIn) > 0 {
+		predicates = append(predicates, usagelog.RequestedServiceTierIn(i.RequestedServiceTierIn...))
+	}
+	if len(i.RequestedServiceTierNotIn) > 0 {
+		predicates = append(predicates, usagelog.RequestedServiceTierNotIn(i.RequestedServiceTierNotIn...))
+	}
+	if i.RequestedServiceTierGT != nil {
+		predicates = append(predicates, usagelog.RequestedServiceTierGT(*i.RequestedServiceTierGT))
+	}
+	if i.RequestedServiceTierGTE != nil {
+		predicates = append(predicates, usagelog.RequestedServiceTierGTE(*i.RequestedServiceTierGTE))
+	}
+	if i.RequestedServiceTierLT != nil {
+		predicates = append(predicates, usagelog.RequestedServiceTierLT(*i.RequestedServiceTierLT))
+	}
+	if i.RequestedServiceTierLTE != nil {
+		predicates = append(predicates, usagelog.RequestedServiceTierLTE(*i.RequestedServiceTierLTE))
+	}
+	if i.RequestedServiceTierContains != nil {
+		predicates = append(predicates, usagelog.RequestedServiceTierContains(*i.RequestedServiceTierContains))
+	}
+	if i.RequestedServiceTierHasPrefix != nil {
+		predicates = append(predicates, usagelog.RequestedServiceTierHasPrefix(*i.RequestedServiceTierHasPrefix))
+	}
+	if i.RequestedServiceTierHasSuffix != nil {
+		predicates = append(predicates, usagelog.RequestedServiceTierHasSuffix(*i.RequestedServiceTierHasSuffix))
+	}
+	if i.RequestedServiceTierIsNil {
+		predicates = append(predicates, usagelog.RequestedServiceTierIsNil())
+	}
+	if i.RequestedServiceTierNotNil {
+		predicates = append(predicates, usagelog.RequestedServiceTierNotNil())
+	}
+	if i.RequestedServiceTierEqualFold != nil {
+		predicates = append(predicates, usagelog.RequestedServiceTierEqualFold(*i.RequestedServiceTierEqualFold))
+	}
+	if i.RequestedServiceTierContainsFold != nil {
+		predicates = append(predicates, usagelog.RequestedServiceTierContainsFold(*i.RequestedServiceTierContainsFold))
+	}
+	if i.AppliedServiceTier != nil {
+		predicates = append(predicates, usagelog.AppliedServiceTierEQ(*i.AppliedServiceTier))
+	}
+	if i.AppliedServiceTierNEQ != nil {
+		predicates = append(predicates, usagelog.AppliedServiceTierNEQ(*i.AppliedServiceTierNEQ))
+	}
+	if len(i.AppliedServiceTierIn) > 0 {
+		predicates = append(predicates, usagelog.AppliedServiceTierIn(i.AppliedServiceTierIn...))
+	}
+	if len(i.AppliedServiceTierNotIn) > 0 {
+		predicates = append(predicates, usagelog.AppliedServiceTierNotIn(i.AppliedServiceTierNotIn...))
+	}
+	if i.AppliedServiceTierGT != nil {
+		predicates = append(predicates, usagelog.AppliedServiceTierGT(*i.AppliedServiceTierGT))
+	}
+	if i.AppliedServiceTierGTE != nil {
+		predicates = append(predicates, usagelog.AppliedServiceTierGTE(*i.AppliedServiceTierGTE))
+	}
+	if i.AppliedServiceTierLT != nil {
+		predicates = append(predicates, usagelog.AppliedServiceTierLT(*i.AppliedServiceTierLT))
+	}
+	if i.AppliedServiceTierLTE != nil {
+		predicates = append(predicates, usagelog.AppliedServiceTierLTE(*i.AppliedServiceTierLTE))
+	}
+	if i.AppliedServiceTierContains != nil {
+		predicates = append(predicates, usagelog.AppliedServiceTierContains(*i.AppliedServiceTierContains))
+	}
+	if i.AppliedServiceTierHasPrefix != nil {
+		predicates = append(predicates, usagelog.AppliedServiceTierHasPrefix(*i.AppliedServiceTierHasPrefix))
+	}
+	if i.AppliedServiceTierHasSuffix != nil {
+		predicates = append(predicates, usagelog.AppliedServiceTierHasSuffix(*i.AppliedServiceTierHasSuffix))
+	}
+	if i.AppliedServiceTierIsNil {
+		predicates = append(predicates, usagelog.AppliedServiceTierIsNil())
+	}
+	if i.AppliedServiceTierNotNil {
+		predicates = append(predicates, usagelog.AppliedServiceTierNotNil())
+	}
+	if i.AppliedServiceTierEqualFold != nil {
+		predicates = append(predicates, usagelog.AppliedServiceTierEqualFold(*i.AppliedServiceTierEqualFold))
+	}
+	if i.AppliedServiceTierContainsFold != nil {
+		predicates = append(predicates, usagelog.AppliedServiceTierContainsFold(*i.AppliedServiceTierContainsFold))
+	}
+	if i.ServiceTier != nil {
+		predicates = append(predicates, usagelog.ServiceTierEQ(*i.ServiceTier))
+	}
+	if i.ServiceTierNEQ != nil {
+		predicates = append(predicates, usagelog.ServiceTierNEQ(*i.ServiceTierNEQ))
+	}
+	if len(i.ServiceTierIn) > 0 {
+		predicates = append(predicates, usagelog.ServiceTierIn(i.ServiceTierIn...))
+	}
+	if len(i.ServiceTierNotIn) > 0 {
+		predicates = append(predicates, usagelog.ServiceTierNotIn(i.ServiceTierNotIn...))
+	}
+	if i.ServiceTierGT != nil {
+		predicates = append(predicates, usagelog.ServiceTierGT(*i.ServiceTierGT))
+	}
+	if i.ServiceTierGTE != nil {
+		predicates = append(predicates, usagelog.ServiceTierGTE(*i.ServiceTierGTE))
+	}
+	if i.ServiceTierLT != nil {
+		predicates = append(predicates, usagelog.ServiceTierLT(*i.ServiceTierLT))
+	}
+	if i.ServiceTierLTE != nil {
+		predicates = append(predicates, usagelog.ServiceTierLTE(*i.ServiceTierLTE))
+	}
+	if i.ServiceTierContains != nil {
+		predicates = append(predicates, usagelog.ServiceTierContains(*i.ServiceTierContains))
+	}
+	if i.ServiceTierHasPrefix != nil {
+		predicates = append(predicates, usagelog.ServiceTierHasPrefix(*i.ServiceTierHasPrefix))
+	}
+	if i.ServiceTierHasSuffix != nil {
+		predicates = append(predicates, usagelog.ServiceTierHasSuffix(*i.ServiceTierHasSuffix))
+	}
+	if i.ServiceTierIsNil {
+		predicates = append(predicates, usagelog.ServiceTierIsNil())
+	}
+	if i.ServiceTierNotNil {
+		predicates = append(predicates, usagelog.ServiceTierNotNil())
+	}
+	if i.ServiceTierEqualFold != nil {
+		predicates = append(predicates, usagelog.ServiceTierEqualFold(*i.ServiceTierEqualFold))
+	}
+	if i.ServiceTierContainsFold != nil {
+		predicates = append(predicates, usagelog.ServiceTierContainsFold(*i.ServiceTierContainsFold))
+	}
 	if i.TotalCost != nil {
 		predicates = append(predicates, usagelog.TotalCostEQ(*i.TotalCost))
 	}
@@ -10859,6 +11159,24 @@ func (i *UsageLogWhereInput) P() (predicate.UsageLog, error) {
 			with = append(with, p)
 		}
 		predicates = append(predicates, usagelog.HasRequestWith(with...))
+	}
+	if i.HasRequestExecution != nil {
+		p := usagelog.HasRequestExecution()
+		if !*i.HasRequestExecution {
+			p = usagelog.Not(p)
+		}
+		predicates = append(predicates, p)
+	}
+	if len(i.HasRequestExecutionWith) > 0 {
+		with := make([]predicate.RequestExecution, 0, len(i.HasRequestExecutionWith))
+		for _, w := range i.HasRequestExecutionWith {
+			p, err := w.P()
+			if err != nil {
+				return nil, fmt.Errorf("%w: field 'HasRequestExecutionWith'", err)
+			}
+			with = append(with, p)
+		}
+		predicates = append(predicates, usagelog.HasRequestExecutionWith(with...))
 	}
 	if i.HasProject != nil {
 		p := usagelog.HasProject()

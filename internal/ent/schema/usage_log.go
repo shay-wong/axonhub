@@ -43,6 +43,7 @@ func (UsageLog) Indexes() []ent.Index {
 func (UsageLog) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int("request_id").Immutable().Comment("Related request ID"),
+		field.Int("request_execution_id").Optional().Immutable().Comment("Exact request execution billed by this usage log"),
 		field.Int("api_key_id").Optional().Immutable(),
 		field.Int("project_id").Immutable().Default(1).Comment("Project ID, default to 1 for backward compatibility"),
 		field.Int("channel_id").Immutable().Optional().Comment("Channel ID used for the request"), // Optional for deleted channel, this field is not null.
@@ -69,6 +70,9 @@ func (UsageLog) Fields() []ent.Field {
 		// Additional metadata
 		field.Enum("source").Values("api", "playground", "test").Default("api").Immutable().Comment("Source of the request"),
 		field.String("format").Immutable().Default("openai/chat_completions").Comment("Request format used"),
+		field.String("requested_service_tier").Optional().Immutable().Comment("Service tier sent in the provider request"),
+		field.String("applied_service_tier").Optional().Immutable().Comment("Service tier reported by the provider response"),
+		field.String("service_tier").Optional().Immutable().Comment("Effective service tier used for billing: applied when reported, otherwise requested"),
 
 		// Cost fields
 		field.Float("total_cost").
@@ -91,6 +95,11 @@ func (UsageLog) Edges() []ent.Edge {
 			Ref("usage_logs").
 			Field("request_id").
 			Required().
+			Immutable().
+			Unique(),
+		edge.From("request_execution", RequestExecution.Type).
+			Ref("usage_log").
+			Field("request_execution_id").
 			Immutable().
 			Unique(),
 		edge.From("project", Project.Type).

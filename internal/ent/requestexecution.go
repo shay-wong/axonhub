@@ -14,6 +14,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/datastorage"
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
+	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/objects"
 )
 
@@ -42,6 +43,8 @@ type RequestExecution struct {
 	ModelID string `json:"model_id,omitempty"`
 	// Format holds the value of the "format" field.
 	Format string `json:"format,omitempty"`
+	// Canonical service tier sent to the provider for this execution
+	RequestedServiceTier string `json:"requested_service_tier,omitempty"`
 	// RequestBody holds the value of the "request_body" field.
 	RequestBody objects.JSONRawMessage `json:"request_body,omitempty"`
 	// ResponseBody holds the value of the "response_body" field.
@@ -82,11 +85,13 @@ type RequestExecutionEdges struct {
 	Channel *Channel `json:"channel,omitempty"`
 	// DataStorage holds the value of the data_storage edge.
 	DataStorage *DataStorage `json:"data_storage,omitempty"`
+	// UsageLog holds the value of the usage_log edge.
+	UsageLog *UsageLog `json:"usage_log,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [4]bool
 	// totalCount holds the count of the edges above.
-	totalCount [3]map[string]int
+	totalCount [4]map[string]int
 }
 
 // RequestOrErr returns the Request value or an error if the edge
@@ -122,6 +127,17 @@ func (e RequestExecutionEdges) DataStorageOrErr() (*DataStorage, error) {
 	return nil, &NotLoadedError{edge: "data_storage"}
 }
 
+// UsageLogOrErr returns the UsageLog value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e RequestExecutionEdges) UsageLogOrErr() (*UsageLog, error) {
+	if e.UsageLog != nil {
+		return e.UsageLog, nil
+	} else if e.loadedTypes[3] {
+		return nil, &NotFoundError{label: usagelog.Label}
+	}
+	return nil, &NotLoadedError{edge: "usage_log"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*RequestExecution) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
@@ -133,7 +149,7 @@ func (*RequestExecution) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case requestexecution.FieldID, requestexecution.FieldProjectID, requestexecution.FieldRequestID, requestexecution.FieldChannelID, requestexecution.FieldDataStorageID, requestexecution.FieldResponseStatusCode, requestexecution.FieldMetricsLatencyMs, requestexecution.FieldMetricsFirstTokenLatencyMs, requestexecution.FieldMetricsReasoningDurationMs:
 			values[i] = new(sql.NullInt64)
-		case requestexecution.FieldExternalID, requestexecution.FieldSource, requestexecution.FieldModelID, requestexecution.FieldFormat, requestexecution.FieldErrorMessage, requestexecution.FieldStatus, requestexecution.FieldRequestURL:
+		case requestexecution.FieldExternalID, requestexecution.FieldSource, requestexecution.FieldModelID, requestexecution.FieldFormat, requestexecution.FieldRequestedServiceTier, requestexecution.FieldErrorMessage, requestexecution.FieldStatus, requestexecution.FieldRequestURL:
 			values[i] = new(sql.NullString)
 		case requestexecution.FieldCreatedAt, requestexecution.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -217,6 +233,12 @@ func (_m *RequestExecution) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field format", values[i])
 			} else if value.Valid {
 				_m.Format = value.String
+			}
+		case requestexecution.FieldRequestedServiceTier:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field requested_service_tier", values[i])
+			} else if value.Valid {
+				_m.RequestedServiceTier = value.String
 			}
 		case requestexecution.FieldRequestBody:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -336,6 +358,11 @@ func (_m *RequestExecution) QueryDataStorage() *DataStorageQuery {
 	return NewRequestExecutionClient(_m.config).QueryDataStorage(_m)
 }
 
+// QueryUsageLog queries the "usage_log" edge of the RequestExecution entity.
+func (_m *RequestExecution) QueryUsageLog() *UsageLogQuery {
+	return NewRequestExecutionClient(_m.config).QueryUsageLog(_m)
+}
+
 // Update returns a builder for updating this RequestExecution.
 // Note that you need to call RequestExecution.Unwrap() before calling this method if this RequestExecution
 // was returned from a transaction, and the transaction was committed or rolled back.
@@ -388,6 +415,9 @@ func (_m *RequestExecution) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("format=")
 	builder.WriteString(_m.Format)
+	builder.WriteString(", ")
+	builder.WriteString("requested_service_tier=")
+	builder.WriteString(_m.RequestedServiceTier)
 	builder.WriteString(", ")
 	builder.WriteString("request_body=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RequestBody))

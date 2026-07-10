@@ -6,6 +6,7 @@ import (
 
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/request"
+	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/objects"
 )
@@ -19,6 +20,7 @@ type BackupData struct {
 	ChannelModelPrices []*BackupChannelModelPrice `json:"channel_model_prices,omitempty"`
 	APIKeys            []*BackupAPIKey            `json:"api_keys,omitempty"`
 	UsageRequests      []*BackupUsageRequest      `json:"usage_requests,omitempty"`
+	RequestExecutions  []*BackupRequestExecution  `json:"request_executions,omitempty"`
 	UsageLogs          []*BackupUsageLog          `json:"usage_logs,omitempty"`
 }
 
@@ -52,9 +54,43 @@ type BackupChannelModelPrice struct {
 type BackupUsageRequest struct {
 	ent.Request
 
-	ProjectName string `json:"project_name,omitempty"`
-	ChannelName string `json:"channel_name,omitempty"`
-	APIKeyKey   string `json:"api_key_key,omitempty"`
+	ProjectName      string `json:"project_name,omitempty"`
+	ChannelName      string `json:"channel_name,omitempty"`
+	ChannelDeletedAt int    `json:"channel_deleted_at,omitempty"`
+	APIKeyKey        string `json:"api_key_key,omitempty"`
+}
+
+type BackupRequestExecution struct {
+	ID                         int                      `json:"id,omitempty"`
+	CreatedAt                  time.Time                `json:"created_at,omitzero"`
+	UpdatedAt                  time.Time                `json:"updated_at,omitzero"`
+	ProjectID                  int                      `json:"project_id,omitempty"`
+	RequestID                  int                      `json:"request_id,omitempty"`
+	ChannelID                  int                      `json:"channel_id,omitempty"`
+	DataStorageID              int                      `json:"data_storage_id,omitempty"`
+	ExternalID                 string                   `json:"external_id,omitempty"`
+	Source                     requestexecution.Source  `json:"source,omitempty"`
+	ModelID                    string                   `json:"model_id,omitempty"`
+	Format                     string                   `json:"format,omitempty"`
+	RequestedServiceTier       string                   `json:"requested_service_tier,omitempty"`
+	RequestBody                objects.JSONRawMessage   `json:"request_body,omitempty"`
+	ResponseBody               objects.JSONRawMessage   `json:"response_body,omitempty"`
+	ResponseChunks             []objects.JSONRawMessage `json:"response_chunks,omitempty"`
+	ErrorMessage               string                   `json:"error_message,omitempty"`
+	ResponseStatusCode         *int                     `json:"response_status_code,omitempty"`
+	Status                     requestexecution.Status  `json:"status,omitempty"`
+	Stream                     bool                     `json:"stream,omitempty"`
+	MetricsLatencyMs           *int64                   `json:"metrics_latency_ms,omitempty"`
+	MetricsFirstTokenLatencyMs *int64                   `json:"metrics_first_token_latency_ms,omitempty"`
+	MetricsReasoningDurationMs *int64                   `json:"metrics_reasoning_duration_ms,omitempty"`
+	RequestHeaders             objects.JSONRawMessage   `json:"request_headers,omitempty"`
+	RequestURL                 string                   `json:"request_url,omitempty"`
+	PassThroughApplied         bool                     `json:"pass_through_applied,omitempty"`
+	ProjectName                string                   `json:"project_name,omitempty"`
+	ChannelName                string                   `json:"channel_name,omitempty"`
+	ChannelDeletedAt           int                      `json:"channel_deleted_at,omitempty"`
+	DataStorageName            string                   `json:"data_storage_name,omitempty"`
+	DataStorageDeletedAt       int                      `json:"data_storage_deleted_at,omitempty"`
 }
 
 func (r BackupUsageRequest) MarshalJSON() ([]byte, error) {
@@ -85,6 +121,7 @@ func (r BackupUsageRequest) MarshalJSON() ([]byte, error) {
 		ContentSavedAt             *time.Time               `json:"content_saved_at,omitempty"`
 		ProjectName                string                   `json:"project_name,omitempty"`
 		ChannelName                string                   `json:"channel_name,omitempty"`
+		ChannelDeletedAt           int                      `json:"channel_deleted_at,omitempty"`
 		APIKeyKey                  string                   `json:"api_key_key,omitempty"`
 	}
 
@@ -115,6 +152,7 @@ func (r BackupUsageRequest) MarshalJSON() ([]byte, error) {
 		ContentSavedAt:             r.ContentSavedAt,
 		ProjectName:                r.ProjectName,
 		ChannelName:                r.ChannelName,
+		ChannelDeletedAt:           r.ChannelDeletedAt,
 		APIKeyKey:                  r.APIKeyKey,
 	})
 }
@@ -122,9 +160,19 @@ func (r BackupUsageRequest) MarshalJSON() ([]byte, error) {
 type BackupUsageLog struct {
 	ent.UsageLog
 
-	ProjectName string `json:"project_name,omitempty"`
-	ChannelName string `json:"channel_name,omitempty"`
-	APIKeyKey   string `json:"api_key_key,omitempty"`
+	ProjectName                string         `json:"project_name,omitempty"`
+	ChannelName                string         `json:"channel_name,omitempty"`
+	ChannelDeletedAt           int            `json:"channel_deleted_at,omitempty"`
+	APIKeyKey                  string         `json:"api_key_key,omitempty"`
+	RequestCreatedAt           time.Time      `json:"request_created_at,omitzero"`
+	RequestSource              request.Source `json:"request_source,omitempty"`
+	RequestModelID             string         `json:"request_model_id,omitempty"`
+	RequestReasoningEffort     string         `json:"request_reasoning_effort,omitempty"`
+	RequestFormat              string         `json:"request_format,omitempty"`
+	RequestStream              bool           `json:"request_stream,omitempty"`
+	RequestExecutionCreatedAt  time.Time      `json:"request_execution_created_at,omitzero"`
+	RequestExecutionFormat     string         `json:"request_execution_format,omitempty"`
+	RequestExecutionRequestURL string         `json:"request_execution_request_url,omitempty"`
 }
 
 func (l BackupUsageLog) MarshalJSON() ([]byte, error) {
@@ -133,6 +181,16 @@ func (l BackupUsageLog) MarshalJSON() ([]byte, error) {
 		CreatedAt                          time.Time          `json:"created_at,omitzero"`
 		UpdatedAt                          time.Time          `json:"updated_at,omitzero"`
 		RequestID                          int                `json:"request_id,omitempty"`
+		RequestCreatedAt                   time.Time          `json:"request_created_at,omitzero"`
+		RequestSource                      request.Source     `json:"request_source,omitempty"`
+		RequestModelID                     string             `json:"request_model_id,omitempty"`
+		RequestReasoningEffort             string             `json:"request_reasoning_effort,omitempty"`
+		RequestFormat                      string             `json:"request_format,omitempty"`
+		RequestStream                      bool               `json:"request_stream,omitempty"`
+		RequestExecutionID                 int                `json:"request_execution_id,omitempty"`
+		RequestExecutionCreatedAt          time.Time          `json:"request_execution_created_at,omitzero"`
+		RequestExecutionFormat             string             `json:"request_execution_format,omitempty"`
+		RequestExecutionRequestURL         string             `json:"request_execution_request_url,omitempty"`
 		ProjectID                          int                `json:"project_id,omitempty"`
 		ChannelID                          int                `json:"channel_id,omitempty"`
 		ModelID                            string             `json:"model_id,omitempty"`
@@ -150,11 +208,15 @@ func (l BackupUsageLog) MarshalJSON() ([]byte, error) {
 		CompletionRejectedPredictionTokens int64              `json:"completion_rejected_prediction_tokens,omitempty"`
 		Source                             usagelog.Source    `json:"source,omitempty"`
 		Format                             string             `json:"format,omitempty"`
+		RequestedServiceTier               string             `json:"requested_service_tier,omitempty"`
+		AppliedServiceTier                 string             `json:"applied_service_tier,omitempty"`
+		ServiceTier                        string             `json:"service_tier,omitempty"`
 		TotalCost                          *float64           `json:"total_cost,omitempty"`
 		CostItems                          []objects.CostItem `json:"cost_items,omitempty"`
 		CostPriceReferenceID               string             `json:"cost_price_reference_id,omitempty"`
 		ProjectName                        string             `json:"project_name,omitempty"`
 		ChannelName                        string             `json:"channel_name,omitempty"`
+		ChannelDeletedAt                   int                `json:"channel_deleted_at,omitempty"`
 		APIKeyKey                          string             `json:"api_key_key,omitempty"`
 	}
 
@@ -163,6 +225,16 @@ func (l BackupUsageLog) MarshalJSON() ([]byte, error) {
 		CreatedAt:                          l.CreatedAt,
 		UpdatedAt:                          l.UpdatedAt,
 		RequestID:                          l.RequestID,
+		RequestCreatedAt:                   l.RequestCreatedAt,
+		RequestSource:                      l.RequestSource,
+		RequestModelID:                     l.RequestModelID,
+		RequestReasoningEffort:             l.RequestReasoningEffort,
+		RequestFormat:                      l.RequestFormat,
+		RequestStream:                      l.RequestStream,
+		RequestExecutionID:                 l.RequestExecutionID,
+		RequestExecutionCreatedAt:          l.RequestExecutionCreatedAt,
+		RequestExecutionFormat:             l.RequestExecutionFormat,
+		RequestExecutionRequestURL:         l.RequestExecutionRequestURL,
 		ProjectID:                          l.ProjectID,
 		ChannelID:                          l.ChannelID,
 		ModelID:                            l.ModelID,
@@ -180,20 +252,25 @@ func (l BackupUsageLog) MarshalJSON() ([]byte, error) {
 		CompletionRejectedPredictionTokens: l.CompletionRejectedPredictionTokens,
 		Source:                             l.Source,
 		Format:                             l.Format,
+		RequestedServiceTier:               l.RequestedServiceTier,
+		AppliedServiceTier:                 l.AppliedServiceTier,
+		ServiceTier:                        l.ServiceTier,
 		TotalCost:                          l.TotalCost,
 		CostItems:                          l.CostItems,
 		CostPriceReferenceID:               l.CostPriceReferenceID,
 		ProjectName:                        l.ProjectName,
 		ChannelName:                        l.ChannelName,
+		ChannelDeletedAt:                   l.ChannelDeletedAt,
 		APIKeyKey:                          l.APIKeyKey,
 	})
 }
 
 const (
-	BackupVersion   = "1.3"
+	BackupVersion   = "1.4"
 	BackupVersionV1 = "1.0"
 	BackupVersionV2 = "1.1"
 	BackupVersionV3 = "1.2"
+	BackupVersionV4 = "1.3"
 )
 
 type BackupOptions struct {

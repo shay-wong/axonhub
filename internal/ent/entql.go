@@ -422,6 +422,7 @@ var schemaGraph = func() *sqlgraph.Schema {
 			requestexecution.FieldSource:                     {Type: field.TypeEnum, Column: requestexecution.FieldSource},
 			requestexecution.FieldModelID:                    {Type: field.TypeString, Column: requestexecution.FieldModelID},
 			requestexecution.FieldFormat:                     {Type: field.TypeString, Column: requestexecution.FieldFormat},
+			requestexecution.FieldRequestedServiceTier:       {Type: field.TypeString, Column: requestexecution.FieldRequestedServiceTier},
 			requestexecution.FieldRequestBody:                {Type: field.TypeJSON, Column: requestexecution.FieldRequestBody},
 			requestexecution.FieldResponseBody:               {Type: field.TypeJSON, Column: requestexecution.FieldResponseBody},
 			requestexecution.FieldResponseChunks:             {Type: field.TypeJSON, Column: requestexecution.FieldResponseChunks},
@@ -524,6 +525,7 @@ var schemaGraph = func() *sqlgraph.Schema {
 			usagelog.FieldCreatedAt:                          {Type: field.TypeTime, Column: usagelog.FieldCreatedAt},
 			usagelog.FieldUpdatedAt:                          {Type: field.TypeTime, Column: usagelog.FieldUpdatedAt},
 			usagelog.FieldRequestID:                          {Type: field.TypeInt, Column: usagelog.FieldRequestID},
+			usagelog.FieldRequestExecutionID:                 {Type: field.TypeInt, Column: usagelog.FieldRequestExecutionID},
 			usagelog.FieldAPIKeyID:                           {Type: field.TypeInt, Column: usagelog.FieldAPIKeyID},
 			usagelog.FieldProjectID:                          {Type: field.TypeInt, Column: usagelog.FieldProjectID},
 			usagelog.FieldChannelID:                          {Type: field.TypeInt, Column: usagelog.FieldChannelID},
@@ -542,6 +544,9 @@ var schemaGraph = func() *sqlgraph.Schema {
 			usagelog.FieldCompletionRejectedPredictionTokens: {Type: field.TypeInt64, Column: usagelog.FieldCompletionRejectedPredictionTokens},
 			usagelog.FieldSource:                             {Type: field.TypeEnum, Column: usagelog.FieldSource},
 			usagelog.FieldFormat:                             {Type: field.TypeString, Column: usagelog.FieldFormat},
+			usagelog.FieldRequestedServiceTier:               {Type: field.TypeString, Column: usagelog.FieldRequestedServiceTier},
+			usagelog.FieldAppliedServiceTier:                 {Type: field.TypeString, Column: usagelog.FieldAppliedServiceTier},
+			usagelog.FieldServiceTier:                        {Type: field.TypeString, Column: usagelog.FieldServiceTier},
 			usagelog.FieldTotalCost:                          {Type: field.TypeFloat64, Column: usagelog.FieldTotalCost},
 			usagelog.FieldCostItems:                          {Type: field.TypeJSON, Column: usagelog.FieldCostItems},
 			usagelog.FieldCostPriceReferenceID:               {Type: field.TypeString, Column: usagelog.FieldCostPriceReferenceID},
@@ -1089,6 +1094,18 @@ var schemaGraph = func() *sqlgraph.Schema {
 		"DataStorage",
 	)
 	graph.MustAddE(
+		"usage_log",
+		&sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   requestexecution.UsageLogTable,
+			Columns: []string{requestexecution.UsageLogColumn},
+			Bidi:    false,
+		},
+		"RequestExecution",
+		"UsageLog",
+	)
+	graph.MustAddE(
 		"users",
 		&sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2M,
@@ -1195,6 +1212,18 @@ var schemaGraph = func() *sqlgraph.Schema {
 		},
 		"UsageLog",
 		"Request",
+	)
+	graph.MustAddE(
+		"request_execution",
+		&sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: true,
+			Table:   usagelog.RequestExecutionTable,
+			Columns: []string{usagelog.RequestExecutionColumn},
+			Bidi:    false,
+		},
+		"UsageLog",
+		"RequestExecution",
 	)
 	graph.MustAddE(
 		"project",
@@ -3409,6 +3438,11 @@ func (f *RequestExecutionFilter) WhereFormat(p entql.StringP) {
 	f.Where(p.Field(requestexecution.FieldFormat))
 }
 
+// WhereRequestedServiceTier applies the entql string predicate on the requested_service_tier field.
+func (f *RequestExecutionFilter) WhereRequestedServiceTier(p entql.StringP) {
+	f.Where(p.Field(requestexecution.FieldRequestedServiceTier))
+}
+
 // WhereRequestBody applies the entql json.RawMessage predicate on the request_body field.
 func (f *RequestExecutionFilter) WhereRequestBody(p entql.BytesP) {
 	f.Where(p.Field(requestexecution.FieldRequestBody))
@@ -3510,6 +3544,20 @@ func (f *RequestExecutionFilter) WhereHasDataStorage() {
 // WhereHasDataStorageWith applies a predicate to check if query has an edge data_storage with a given conditions (other predicates).
 func (f *RequestExecutionFilter) WhereHasDataStorageWith(preds ...predicate.DataStorage) {
 	f.Where(entql.HasEdgeWith("data_storage", sqlgraph.WrapFunc(func(s *sql.Selector) {
+		for _, p := range preds {
+			p(s)
+		}
+	})))
+}
+
+// WhereHasUsageLog applies a predicate to check if query has an edge usage_log.
+func (f *RequestExecutionFilter) WhereHasUsageLog() {
+	f.Where(entql.HasEdge("usage_log"))
+}
+
+// WhereHasUsageLogWith applies a predicate to check if query has an edge usage_log with a given conditions (other predicates).
+func (f *RequestExecutionFilter) WhereHasUsageLogWith(preds ...predicate.UsageLog) {
+	f.Where(entql.HasEdgeWith("usage_log", sqlgraph.WrapFunc(func(s *sql.Selector) {
 		for _, p := range preds {
 			p(s)
 		}
@@ -3948,6 +3996,11 @@ func (f *UsageLogFilter) WhereRequestID(p entql.IntP) {
 	f.Where(p.Field(usagelog.FieldRequestID))
 }
 
+// WhereRequestExecutionID applies the entql int predicate on the request_execution_id field.
+func (f *UsageLogFilter) WhereRequestExecutionID(p entql.IntP) {
+	f.Where(p.Field(usagelog.FieldRequestExecutionID))
+}
+
 // WhereAPIKeyID applies the entql int predicate on the api_key_id field.
 func (f *UsageLogFilter) WhereAPIKeyID(p entql.IntP) {
 	f.Where(p.Field(usagelog.FieldAPIKeyID))
@@ -4038,6 +4091,21 @@ func (f *UsageLogFilter) WhereFormat(p entql.StringP) {
 	f.Where(p.Field(usagelog.FieldFormat))
 }
 
+// WhereRequestedServiceTier applies the entql string predicate on the requested_service_tier field.
+func (f *UsageLogFilter) WhereRequestedServiceTier(p entql.StringP) {
+	f.Where(p.Field(usagelog.FieldRequestedServiceTier))
+}
+
+// WhereAppliedServiceTier applies the entql string predicate on the applied_service_tier field.
+func (f *UsageLogFilter) WhereAppliedServiceTier(p entql.StringP) {
+	f.Where(p.Field(usagelog.FieldAppliedServiceTier))
+}
+
+// WhereServiceTier applies the entql string predicate on the service_tier field.
+func (f *UsageLogFilter) WhereServiceTier(p entql.StringP) {
+	f.Where(p.Field(usagelog.FieldServiceTier))
+}
+
 // WhereTotalCost applies the entql float64 predicate on the total_cost field.
 func (f *UsageLogFilter) WhereTotalCost(p entql.Float64P) {
 	f.Where(p.Field(usagelog.FieldTotalCost))
@@ -4061,6 +4129,20 @@ func (f *UsageLogFilter) WhereHasRequest() {
 // WhereHasRequestWith applies a predicate to check if query has an edge request with a given conditions (other predicates).
 func (f *UsageLogFilter) WhereHasRequestWith(preds ...predicate.Request) {
 	f.Where(entql.HasEdgeWith("request", sqlgraph.WrapFunc(func(s *sql.Selector) {
+		for _, p := range preds {
+			p(s)
+		}
+	})))
+}
+
+// WhereHasRequestExecution applies a predicate to check if query has an edge request_execution.
+func (f *UsageLogFilter) WhereHasRequestExecution() {
+	f.Where(entql.HasEdge("request_execution"))
+}
+
+// WhereHasRequestExecutionWith applies a predicate to check if query has an edge request_execution with a given conditions (other predicates).
+func (f *UsageLogFilter) WhereHasRequestExecutionWith(preds ...predicate.RequestExecution) {
+	f.Where(entql.HasEdgeWith("request_execution", sqlgraph.WrapFunc(func(s *sql.Selector) {
 		for _, p := range preds {
 			p(s)
 		}

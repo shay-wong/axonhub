@@ -255,11 +255,12 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		selectCandidates(inbound, processor.quotaProvider, processor.SystemService),
 		injectPrompts(inbound),
 		protectPrompts(inbound),
-		// Response pass-through middlewares run before persistRequest so the raw provider
-		// response is saved when pass-through is enabled.
+		// Non-stream pass-through must run before persistence so the raw provider
+		// response is saved. Stream pass-through runs after persistence marks the
+		// accepted attempt eligible, before its drain goroutine can close the stream.
 		applyPassThroughResponse(outbound, processor.SystemService),
-		applyPassThroughStream(outbound, processor.SystemService),
 		persistRequest(inbound),
+		applyPassThroughStream(outbound, processor.SystemService),
 	)
 
 	// Add outbound middlewares (executed after outbound.TransformRequest)
@@ -278,8 +279,12 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 
 		withModelCircuitBreaker(outbound, processor.modelCircuitBreaker, strategy),
 
-		// The request execution middleware must be the final middleware
-		// to ensure that the request execution is created with the correct request bodys.
+		// Capture the tier after request body/header mutators and before persisting the
+		// execution so every retry attempt has a queryable canonical tier.
+		captureRequestedServiceTier(outbound),
+
+		// Persistence runs after the final orchestrator request body/header mutators.
+		// Later middlewares perform observability and admission without changing the request.
 		persistRequestExecution(outbound),
 
 		// Forward the events to the live streaming.
@@ -294,10 +299,11 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		// Rate limit tracking middleware for TPM and provider cooldown signals.
 		withRateLimitTracking(outbound, processor.rateLimitTracker),
 
-		// Response pass-through capture middlewares must be last in the outbound list
-		// so they run first in reverse order (before any other OnOutboundRawResponse/OnOutboundRawStream handlers).
+		// These are the last outbound response handlers, so they run first in reverse
+		// order. The request-only tier capture below is a no-op for responses.
 		captureRawProviderResponse(outbound, processor.SystemService),
 		captureRawProviderStream(outbound, processor.SystemService),
+
 	)
 
 	pipelineOpts = append(pipelineOpts, pipeline.WithMiddlewares(middlewares...))

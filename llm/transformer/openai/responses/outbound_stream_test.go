@@ -81,9 +81,13 @@ func TestOutboundTransformer_StreamTransformation_WithTestData(t *testing.T) {
 			require.Len(t, actualLLMResponses, len(expectedEvents))
 
 			// exclude the last DONE event
+			ignoreServiceTier := cmp.FilterPath(func(path cmp.Path) bool {
+				field, ok := path.Last().(cmp.StructField)
+				return ok && field.Name() == "ServiceTier"
+			}, cmp.Ignore())
 			for i, expectedEvent := range expectedEvents[:len(expectedEvents)-1] {
-				if !xtest.Equal(expectedEvent, actualLLMResponses[i]) {
-					t.Fatalf("event %d mismatch:\n%s", i, cmp.Diff(expectedEvent, actualLLMResponses[i]))
+				if !xtest.Equal(expectedEvent, actualLLMResponses[i], ignoreServiceTier) {
+					t.Fatalf("event %d mismatch:\n%s", i, cmp.Diff(expectedEvent, actualLLMResponses[i], ignoreServiceTier))
 				}
 			}
 

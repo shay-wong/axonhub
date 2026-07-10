@@ -12,6 +12,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/enttest"
 	entrequest "github.com/looplj/axonhub/internal/ent/request"
+	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
@@ -56,6 +57,98 @@ func TestPersistRequestMiddleware_OnOutboundLlmResponse_NilResponse(t *testing.T
 
 	require.NoError(t, err)
 	require.Nil(t, result)
+}
+
+func TestPersistRequestMiddleware_OnInboundRawResponse_ServiceTierSelection(t *testing.T) {
+	tests := []struct {
+		name        string
+		requested   string
+		applied     string
+		wantApplied string
+		wantBilled  string
+	}{
+		{
+			name:        "provider applied tier overrides requested tier",
+			requested:   "default",
+			applied:     "priority",
+			wantApplied: "priority",
+			wantBilled:  "priority",
+		},
+		{
+			name:       "requested tier is billing fallback",
+			requested:  "priority",
+			wantBilled: "priority",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+			defer client.Close()
+
+			ctx := authz.WithTestBypass(ent.NewContext(t.Context(), client))
+			project := createTestProject(t, ctx, client)
+			ch := createTestChannel(t, ctx, client)
+			_, requestService, _, usageLogService := setupTestServices(t, client)
+
+			requestRow, err := client.Request.Create().
+				SetProjectID(project.ID).
+				SetChannelID(ch.ID).
+				SetModelID("gpt-5").
+				SetRequestBody([]byte(`{"model":"gpt-5"}`)).
+				SetStatus(entrequest.StatusProcessing).
+				Save(ctx)
+			require.NoError(t, err)
+
+			executionRow, err := client.RequestExecution.Create().
+				SetRequestID(requestRow.ID).
+				SetProjectID(project.ID).
+				SetChannelID(ch.ID).
+				SetModelID("gpt-5").
+				SetRequestBody([]byte(`{"model":"gpt-5"}`)).
+				SetStatus(requestexecution.StatusProcessing).
+				Save(ctx)
+			require.NoError(t, err)
+
+			state := &PersistenceState{
+				Request:              requestRow,
+				RequestExec:          executionRow,
+				RequestService:       requestService,
+				UsageLogService:      usageLogService,
+				RequestedServiceTier: tt.requested,
+			}
+
+			middleware := &persistRequestMiddleware{
+				inbound: &PersistentInboundTransformer{state: state},
+			}
+			response := &llm.Response{
+				ServiceTier: tt.applied,
+				Usage: &llm.Usage{
+					PromptTokens:     10,
+					CompletionTokens: 2,
+					TotalTokens:      12,
+				},
+			}
+
+			_, err = middleware.OnOutboundLlmResponse(ctx, response)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantApplied, state.AppliedServiceTier)
+			require.Zero(t, client.UsageLog.Query().CountX(ctx))
+
+			_, err = middleware.OnInboundRawResponse(ctx, &httpclient.Response{
+				StatusCode: 200,
+				Body:       []byte(`{"id":"resp-1"}`),
+			})
+			require.NoError(t, err)
+
+			usageLog, err := client.UsageLog.Query().Only(ctx)
+			require.NoError(t, err)
+			require.Equal(t, state.RequestExec.ID, usageLog.RequestExecutionID)
+			require.Equal(t, tt.requested, usageLog.RequestedServiceTier)
+			require.Equal(t, tt.wantApplied, usageLog.AppliedServiceTier)
+			require.Equal(t, tt.wantBilled, usageLog.ServiceTier)
+		})
+	}
 }
 
 func TestPersistRequestMiddleware_Name(t *testing.T) {

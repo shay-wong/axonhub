@@ -65,6 +65,20 @@ type PersistenceState struct {
 	// RawProviderRequest stores the actual outbound provider request for pass-through checks.
 	RawProviderRequest *httpclient.Request
 
+	// RequestedServiceTier is the service tier in the final orchestrator request for
+	// the current provider attempt, after registered request mutators are applied.
+	// Provider executor implementations may still perform protocol-specific rewrites.
+	RequestedServiceTier string
+
+	// AppliedServiceTier is the actual tier reported by the provider response.
+	// It remains empty when the provider does not report a tier; billing then falls
+	// back to RequestedServiceTier without treating that fallback as provider-applied.
+	AppliedServiceTier string
+
+	// UsageLogEligible is true only after the pipeline accepts the current
+	// streaming attempt as the request response.
+	UsageLogEligible bool
+
 	// RawStreamCh receives raw provider stream events for stream response pass-through.
 	RawStreamCh chan *httpclient.StreamEvent
 

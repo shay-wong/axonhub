@@ -720,6 +720,37 @@ const GET_CHANNEL_MODEL_PRICES_QUERY = `
               }
             }
           }
+          serviceTierPrices {
+            serviceTier
+            items {
+              itemCode
+              pricing {
+                mode
+                flatFee
+                usagePerUnit
+                usageTiered {
+                  tiers {
+                    upTo
+                    pricePerUnit
+                  }
+                }
+              }
+              promptWriteCacheVariants {
+                variantCode
+                pricing {
+                  mode
+                  flatFee
+                  usagePerUnit
+                  usageTiered {
+                    tiers {
+                      upTo
+                      pricePerUnit
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -756,6 +787,37 @@ const SAVE_CHANNEL_MODEL_PRICES_MUTATION = `
                 tiers {
                   upTo
                   pricePerUnit
+                }
+              }
+            }
+          }
+        }
+        serviceTierPrices {
+          serviceTier
+          items {
+            itemCode
+            pricing {
+              mode
+              flatFee
+              usagePerUnit
+              usageTiered {
+                tiers {
+                  upTo
+                  pricePerUnit
+                }
+              }
+            }
+            promptWriteCacheVariants {
+              variantCode
+              pricing {
+                mode
+                flatFee
+                usagePerUnit
+                usageTiered {
+                  tiers {
+                    upTo
+                    pricePerUnit
+                  }
                 }
               }
             }

@@ -415,8 +415,15 @@ export const modelPriceItemSchema = z.object({
 });
 export type ModelPriceItem = z.infer<typeof modelPriceItemSchema>;
 
+export const serviceTierPriceSchema = z.object({
+  serviceTier: z.string(),
+  items: z.array(modelPriceItemSchema),
+});
+export type ServiceTierPrice = z.infer<typeof serviceTierPriceSchema>;
+
 export const modelPriceSchema = z.object({
   items: z.array(modelPriceItemSchema),
+  serviceTierPrices: z.array(serviceTierPriceSchema).nullable().optional(),
 });
 export type ModelPrice = z.infer<typeof modelPriceSchema>;
 

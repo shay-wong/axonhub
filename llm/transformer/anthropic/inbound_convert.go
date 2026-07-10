@@ -64,6 +64,9 @@ func convertToLLMRequest(anthropicReq *MessageRequest) (*llm.Request, error) {
 		TransformerMetadata: map[string]any{},
 		TransformOptions:    llm.TransformOptions{},
 	}
+	if anthropicReq.ServiceTier != "" {
+		chatReq.ServiceTier = &anthropicReq.ServiceTier
+	}
 	if anthropicReq.Metadata != nil {
 		chatReq.Metadata["user_id"] = anthropicReq.Metadata.UserID
 	}
@@ -840,6 +843,7 @@ func convertToAnthropicResponse(chatResp *llm.Response) *Message {
 	// Convert usage
 	if chatResp.Usage != nil {
 		resp.Usage = convertToAnthropicUsage(chatResp.Usage)
+		resp.Usage.ServiceTier = chatResp.ServiceTier
 	}
 
 	return resp

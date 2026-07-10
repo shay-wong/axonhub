@@ -1,8 +1,11 @@
 package backup
 
 import (
+	"context"
 	"encoding/json"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
@@ -11,9 +14,13 @@ import (
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
+	"github.com/looplj/axonhub/internal/ent/datastorage"
 	"github.com/looplj/axonhub/internal/ent/model"
 	"github.com/looplj/axonhub/internal/ent/project"
+	"github.com/looplj/axonhub/internal/ent/requestexecution"
+	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/internal/server/biz"
 )
 
 func TestBackupService_Restore(t *testing.T) {
@@ -703,6 +710,13 @@ func TestBackupService_Restore_UsageStats(t *testing.T) {
 		IncludeUsageStats: true,
 	})
 	require.NoError(t, err)
+	var backupData BackupData
+	require.NoError(t, json.Unmarshal(data, &backupData))
+	backupData.UsageLogs[0].RequestedServiceTier = " PRIORITY "
+	backupData.UsageLogs[0].AppliedServiceTier = " PRIORITY "
+	backupData.UsageLogs[0].ServiceTier = " PRIORITY "
+	data, err = json.Marshal(backupData)
+	require.NoError(t, err)
 
 	_, err = client.UsageLog.Delete().Exec(ctx)
 	require.NoError(t, err)
@@ -724,6 +738,10 @@ func TestBackupService_Restore_UsageStats(t *testing.T) {
 	require.Len(t, usageLogs, 1)
 	require.Equal(t, int64(150), usageLogs[0].TotalTokens)
 	require.Equal(t, int64(20), usageLogs[0].PromptCachedTokens)
+	require.NotZero(t, usageLogs[0].RequestExecutionID)
+	require.Equal(t, "priority", usageLogs[0].RequestedServiceTier)
+	require.Equal(t, "priority", usageLogs[0].AppliedServiceTier)
+	require.Equal(t, "priority", usageLogs[0].ServiceTier)
 	require.NotNil(t, usageLogs[0].TotalCost)
 	require.Equal(t, *usage.TotalCost, *usageLogs[0].TotalCost)
 	require.Equal(t, "price-ref", usageLogs[0].CostPriceReferenceID)
@@ -735,6 +753,28 @@ func TestBackupService_Restore_UsageStats(t *testing.T) {
 	require.Equal(t, ch.ID, restoredRequest.ChannelID)
 	require.Equal(t, ak.ID, restoredRequest.APIKeyID)
 	require.JSONEq(t, `{}`, string(restoredRequest.RequestBody))
+
+	restoredExecution, err := usageLogs[0].QueryRequestExecution().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, restoredRequest.ID, restoredExecution.RequestID)
+	require.Equal(t, ch.ID, restoredExecution.ChannelID)
+	require.Equal(t, "priority", restoredExecution.RequestedServiceTier)
+	require.JSONEq(t, `{}`, string(restoredExecution.RequestBody))
+
+	expectedExecution := *backupData.RequestExecutions[0]
+	expectedExecution.ID = restoredExecution.ID
+	expectedExecution.ProjectID = restoredExecution.ProjectID
+	expectedExecution.RequestID = restoredExecution.RequestID
+	expectedExecution.ChannelID = restoredExecution.ChannelID
+	expectedExecution.DataStorageID = restoredExecution.DataStorageID
+	expectedExecution.ProjectName = ""
+	expectedExecution.ChannelName = ""
+	expectedExecution.ChannelDeletedAt = 0
+	expectedExecution.DataStorageName = ""
+	expectedExecution.DataStorageDeletedAt = 0
+	require.Equal(t, &expectedExecution, backupRequestExecution(restoredExecution, nil, nil, nil, true))
+	executionCountBeforeSecondRestore, err := client.RequestExecution.Query().Count(ctx)
+	require.NoError(t, err)
 
 	err = service.Restore(ctx, data, RestoreOptions{
 		IncludeUsageStats: true,
@@ -749,6 +789,707 @@ func TestBackupService_Restore_UsageStats(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, usageLogsAfterSecondRestore, 1)
 	require.Equal(t, restoredRequest.ID, usageLogsAfterSecondRestore[0].RequestID)
+	executionsAfterSecondRestore, err := client.RequestExecution.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, executionCountBeforeSecondRestore, executionsAfterSecondRestore)
+}
+
+func TestBackupService_Restore_UsageStatsOnlyReusesUnchangedSourceRecords(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	user, _ := client.User.Query().First(ctx)
+	proj := createBackupTestProject(t, client, ctx, "Project1", "Test Project")
+	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	ak := createBackupTestAPIKey(t, client, ctx, user, proj, "API Key 1", "sk-test-key-1")
+	req, usage := createBackupTestUsage(t, client, ctx, proj, ch, ak)
+	execution, err := usage.QueryRequestExecution().Only(ctx)
+	require.NoError(t, err)
+
+	data, err := service.Backup(ctx, BackupOptions{
+		IncludeAPIKeys:    true,
+		IncludeUsageStats: true,
+	})
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{IncludeUsageStats: true})
+	require.NoError(t, err)
+
+	require.Equal(t, 1, mustCountRequests(t, client, ctx))
+	require.Equal(t, 1, mustCountRequestExecutions(t, client, ctx))
+	require.Equal(t, 1, mustCountUsageLogs(t, client, ctx))
+	restoredUsage, err := client.UsageLog.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, req.ID, restoredUsage.RequestID)
+	require.Equal(t, execution.ID, restoredUsage.RequestExecutionID)
+}
+
+func TestBackupService_Restore_UsageStatsOnlyReusesParentsWhenUsageLogWasDeleted(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	user, _ := client.User.Query().First(ctx)
+	proj := createBackupTestProject(t, client, ctx, "Project1", "Test Project")
+	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	ak := createBackupTestAPIKey(t, client, ctx, user, proj, "API Key 1", "sk-test-key-1")
+	req, usage := createBackupTestUsage(t, client, ctx, proj, ch, ak)
+	execution, err := usage.QueryRequestExecution().Only(ctx)
+	require.NoError(t, err)
+
+	data, err := service.Backup(ctx, BackupOptions{
+		IncludeAPIKeys:    true,
+		IncludeUsageStats: true,
+	})
+	require.NoError(t, err)
+
+	_, err = client.UsageLog.Delete().Exec(ctx)
+	require.NoError(t, err)
+	err = service.Restore(ctx, data, RestoreOptions{IncludeUsageStats: true})
+	require.NoError(t, err)
+
+	require.Equal(t, 1, mustCountRequests(t, client, ctx))
+	require.Equal(t, 1, mustCountRequestExecutions(t, client, ctx))
+	require.Equal(t, 1, mustCountUsageLogs(t, client, ctx))
+	restoredUsage, err := client.UsageLog.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, req.ID, restoredUsage.RequestID)
+	require.Equal(t, execution.ID, restoredUsage.RequestExecutionID)
+}
+
+func TestBackupService_Restore_UsageStatsOnlyDoesNotReuseAmbiguousRequestCandidate(t *testing.T) {
+	sourceClient, sourceService, sourceCtx := setupBackupTestWithDSN(t, "file:usage-identity-source?mode=memory&_fk=1")
+	defer sourceClient.Close()
+	sourceUser, _ := sourceClient.User.Query().First(sourceCtx)
+	sourceProject := createBackupTestProject(t, sourceClient, sourceCtx, "Project1", "Test Project")
+	sourceChannel := createBackupTestChannel(t, sourceClient, sourceCtx, "Channel 1", channel.TypeOpenai)
+	sourceAPIKey := createBackupTestAPIKey(t, sourceClient, sourceCtx, sourceUser, sourceProject, "API Key 1", "sk-test-key-1")
+	sourceRequest, _ := createBackupTestUsage(t, sourceClient, sourceCtx, sourceProject, sourceChannel, sourceAPIKey)
+	data, err := sourceService.Backup(sourceCtx, BackupOptions{
+		IncludeAPIKeys:    true,
+		IncludeUsageStats: true,
+	})
+	require.NoError(t, err)
+
+	targetClient, targetService, targetCtx := setupBackupTestWithDSN(t, "file:usage-identity-target?mode=memory&_fk=1")
+	defer targetClient.Close()
+	targetUser, _ := targetClient.User.Query().First(targetCtx)
+	targetProject := createBackupTestProject(t, targetClient, targetCtx, sourceProject.Name, "Target Project")
+	targetChannel := createBackupTestChannel(t, targetClient, targetCtx, sourceChannel.Name, channel.TypeOpenai)
+	targetAPIKey := createBackupTestAPIKey(t, targetClient, targetCtx, targetUser, targetProject, "API Key 1", "sk-test-key-1")
+
+	_, err = targetClient.Request.Create().
+		SetProjectID(targetProject.ID).
+		SetAPIKeyID(targetAPIKey.ID).
+		SetChannelID(targetChannel.ID).
+		SetSource("api").
+		SetModelID("unrelated-model").
+		SetFormat(sourceRequest.Format).
+		SetRequestBody(objects.JSONRawMessage(`{}`)).
+		SetStatus("completed").
+		SetStream(sourceRequest.Stream).
+		SetClientIP("").
+		Save(targetCtx)
+	require.NoError(t, err)
+
+	ambiguousIDs := make(map[int]struct{}, 2)
+	for range 2 {
+		candidate, err := targetClient.Request.Create().
+			SetCreatedAt(sourceRequest.CreatedAt).
+			SetUpdatedAt(sourceRequest.UpdatedAt).
+			SetProjectID(targetProject.ID).
+			SetAPIKeyID(targetAPIKey.ID).
+			SetChannelID(targetChannel.ID).
+			SetSource(sourceRequest.Source).
+			SetModelID(sourceRequest.ModelID).
+			SetFormat(sourceRequest.Format).
+			SetRequestBody(objects.JSONRawMessage(`{}`)).
+			SetStatus("processing").
+			SetStream(sourceRequest.Stream).
+			SetClientIP("").
+			Save(targetCtx)
+		require.NoError(t, err)
+		ambiguousIDs[candidate.ID] = struct{}{}
+	}
+
+	err = targetService.Restore(targetCtx, data, RestoreOptions{IncludeUsageStats: true})
+	require.NoError(t, err)
+	require.Equal(t, 4, mustCountRequests(t, targetClient, targetCtx))
+	restoredUsage, err := targetClient.UsageLog.Query().Only(targetCtx)
+	require.NoError(t, err)
+	_, ambiguous := ambiguousIDs[restoredUsage.RequestID]
+	require.False(t, ambiguous)
+}
+
+func TestBackupService_Restore_FullRequestLogsHydratesExternalStorageAndRestoresInline(t *testing.T) {
+	sourceClient, sourceService, sourceCtx := setupBackupTestWithDSN(t, "file:external-source?mode=memory&_fk=1")
+	defer sourceClient.Close()
+	sourceStorageService := attachBackupTestDataStorageService(t, sourceClient, sourceService)
+
+	sourceUser, _ := sourceClient.User.Query().First(sourceCtx)
+	sourceProject := createBackupTestProject(t, sourceClient, sourceCtx, "Project1", "Test Project")
+	sourceChannel := createBackupTestChannel(t, sourceClient, sourceCtx, "Channel 1", channel.TypeOpenai)
+	sourceAPIKey := createBackupTestAPIKey(t, sourceClient, sourceCtx, sourceUser, sourceProject, "API Key 1", "sk-test-key-1")
+	sourceStorage := createBackupTestFSDataStorage(t, sourceClient, sourceCtx, "request-storage", t.TempDir())
+
+	sourceRequest, err := sourceClient.Request.Create().
+		SetProjectID(sourceProject.ID).
+		SetAPIKeyID(sourceAPIKey.ID).
+		SetChannelID(sourceChannel.ID).
+		SetDataStorageID(sourceStorage.ID).
+		SetSource("api").
+		SetModelID("gpt-4").
+		SetFormat("openai/chat_completions").
+		SetRequestBody(objects.JSONRawMessage(`{}`)).
+		SetStatus("completed").
+		SetStream(true).
+		SetClientIP("127.0.0.1").
+		SetContentSaved(true).
+		SetContentStorageID(sourceStorage.ID).
+		SetContentStorageKey("/old/request/audio.mp3").
+		SetContentSavedAt(time.Now().UTC()).
+		Save(sourceCtx)
+	require.NoError(t, err)
+	sourceExecution, err := sourceClient.RequestExecution.Create().
+		SetProjectID(sourceProject.ID).
+		SetRequestID(sourceRequest.ID).
+		SetChannelID(sourceChannel.ID).
+		SetDataStorageID(sourceStorage.ID).
+		SetSource("api").
+		SetModelID("gpt-4").
+		SetFormat("openai/chat_completions").
+		SetRequestBody(objects.JSONRawMessage(`{}`)).
+		SetStatus("completed").
+		SetStream(true).
+		Save(sourceCtx)
+	require.NoError(t, err)
+	_, err = sourceClient.UsageLog.Create().
+		SetRequestID(sourceRequest.ID).
+		SetRequestExecutionID(sourceExecution.ID).
+		SetAPIKeyID(sourceAPIKey.ID).
+		SetProjectID(sourceProject.ID).
+		SetChannelID(sourceChannel.ID).
+		SetModelID("gpt-4").
+		SetPromptTokens(10).
+		SetCompletionTokens(2).
+		SetTotalTokens(12).
+		SetSource("api").
+		SetFormat("openai/chat_completions").
+		Save(sourceCtx)
+	require.NoError(t, err)
+
+	requestBody := []byte(`{"model":"external-request"}`)
+	responseBody := []byte(`{"id":"external-response"}`)
+	responseChunks := []byte(`[{"delta":"external-request-chunk"}]`)
+	executionRequestBody := []byte(`{"model":"external-execution"}`)
+	executionResponseBody := []byte(`{"id":"external-execution-response"}`)
+	executionResponseChunks := []byte(`[{"delta":"external-execution-chunk"}]`)
+	require.NoError(t, sourceStorageService.SaveData(sourceCtx, sourceStorage, biz.GenerateRequestBodyKey(sourceProject.ID, sourceRequest.ID), requestBody))
+	require.NoError(t, sourceStorageService.SaveData(sourceCtx, sourceStorage, biz.GenerateResponseBodyKey(sourceProject.ID, sourceRequest.ID), responseBody))
+	require.NoError(t, sourceStorageService.SaveData(sourceCtx, sourceStorage, biz.GenerateResponseChunksKey(sourceProject.ID, sourceRequest.ID), responseChunks))
+	require.NoError(t, sourceStorageService.SaveData(sourceCtx, sourceStorage, biz.GenerateExecutionRequestBodyKey(sourceProject.ID, sourceRequest.ID, sourceExecution.ID), executionRequestBody))
+	require.NoError(t, sourceStorageService.SaveData(sourceCtx, sourceStorage, biz.GenerateExecutionResponseBodyKey(sourceProject.ID, sourceRequest.ID, sourceExecution.ID), executionResponseBody))
+	require.NoError(t, sourceStorageService.SaveData(sourceCtx, sourceStorage, biz.GenerateExecutionResponseChunksKey(sourceProject.ID, sourceRequest.ID, sourceExecution.ID), executionResponseChunks))
+
+	data, err := sourceService.Backup(sourceCtx, BackupOptions{
+		IncludeAPIKeys:     true,
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+	var backupData BackupData
+	require.NoError(t, json.Unmarshal(data, &backupData))
+	require.Len(t, backupData.UsageRequests, 1)
+	require.JSONEq(t, string(requestBody), string(backupData.UsageRequests[0].RequestBody))
+	require.JSONEq(t, string(responseBody), string(backupData.UsageRequests[0].ResponseBody))
+	require.JSONEq(t, string(responseChunks), mustJSON(t, backupData.UsageRequests[0].ResponseChunks))
+	require.Len(t, backupData.RequestExecutions, 1)
+	require.JSONEq(t, string(executionRequestBody), string(backupData.RequestExecutions[0].RequestBody))
+	require.JSONEq(t, string(executionResponseBody), string(backupData.RequestExecutions[0].ResponseBody))
+	require.JSONEq(t, string(executionResponseChunks), mustJSON(t, backupData.RequestExecutions[0].ResponseChunks))
+	require.False(t, backupData.UsageRequests[0].ContentSaved)
+	require.Nil(t, backupData.UsageRequests[0].ContentStorageID)
+	require.Nil(t, backupData.UsageRequests[0].ContentStorageKey)
+	require.Nil(t, backupData.UsageRequests[0].ContentSavedAt)
+
+	_, err = sourceClient.UsageLog.Delete().Exec(sourceCtx)
+	require.NoError(t, err)
+	err = sourceService.Restore(sourceCtx, data, RestoreOptions{
+		IncludeRequestLogs: true,
+		IncludeUsageStats:  true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, mustCountRequests(t, sourceClient, sourceCtx))
+	require.Equal(t, 1, mustCountRequestExecutions(t, sourceClient, sourceCtx))
+	restoredSourceUsage, err := sourceClient.UsageLog.Query().Only(sourceCtx)
+	require.NoError(t, err)
+	require.Equal(t, sourceRequest.ID, restoredSourceUsage.RequestID)
+	require.Equal(t, sourceExecution.ID, restoredSourceUsage.RequestExecutionID)
+
+	targetClient, targetService, targetCtx := setupBackupTestWithDSN(t, "file:external-target?mode=memory&_fk=1")
+	defer targetClient.Close()
+	targetUser, _ := targetClient.User.Query().First(targetCtx)
+	targetProject := createBackupTestProject(t, targetClient, targetCtx, sourceProject.Name, "Target Project")
+	targetChannel := createBackupTestChannel(t, targetClient, targetCtx, sourceChannel.Name, channel.TypeOpenai)
+	targetAPIKey := createBackupTestAPIKey(t, targetClient, targetCtx, targetUser, targetProject, "API Key 1", sourceAPIKey.Key)
+	_ = createBackupTestFSDataStorage(t, targetClient, targetCtx, sourceStorage.Name, t.TempDir())
+	createBackupTestUsage(t, targetClient, targetCtx, targetProject, targetChannel, targetAPIKey)
+
+	err = targetService.Restore(targetCtx, data, RestoreOptions{
+		IncludeRequestLogs: true,
+		IncludeUsageStats:  true,
+	})
+	require.NoError(t, err)
+	restoredUsage, err := targetClient.UsageLog.Query().
+		Where(usagelog.TotalTokensEQ(12)).
+		Only(targetCtx)
+	require.NoError(t, err)
+	restoredRequest, err := targetClient.Request.Get(targetCtx, restoredUsage.RequestID)
+	require.NoError(t, err)
+	restoredExecution, err := restoredUsage.QueryRequestExecution().Only(targetCtx)
+	require.NoError(t, err)
+	require.Zero(t, restoredRequest.DataStorageID)
+	require.Zero(t, restoredExecution.DataStorageID)
+	require.False(t, restoredRequest.ContentSaved)
+	require.Nil(t, restoredRequest.ContentStorageID)
+	require.Nil(t, restoredRequest.ContentStorageKey)
+	require.Nil(t, restoredRequest.ContentSavedAt)
+	require.JSONEq(t, string(requestBody), string(restoredRequest.RequestBody))
+	require.JSONEq(t, string(responseBody), string(restoredRequest.ResponseBody))
+	require.JSONEq(t, string(responseChunks), mustJSON(t, restoredRequest.ResponseChunks))
+	require.JSONEq(t, string(executionRequestBody), string(restoredExecution.RequestBody))
+	require.JSONEq(t, string(executionResponseBody), string(restoredExecution.ResponseBody))
+	require.JSONEq(t, string(executionResponseChunks), mustJSON(t, restoredExecution.ResponseChunks))
+}
+
+func TestBackupService_Backup_UsageStatsOnlyDoesNotReadExternalRequestContent(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+	_ = attachBackupTestDataStorageService(t, client, service)
+
+	user, _ := client.User.Query().First(ctx)
+	proj := createBackupTestProject(t, client, ctx, "Project1", "Test Project")
+	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	ak := createBackupTestAPIKey(t, client, ctx, user, proj, "API Key 1", "sk-test-key-1")
+	directory := t.TempDir()
+	storage := createBackupTestFSDataStorage(t, client, ctx, "request-storage", directory)
+	createBackupTestUsageWithDataStorage(t, client, ctx, proj, ch, ak, storage)
+	require.NoError(t, os.RemoveAll(directory))
+
+	data, err := service.Backup(ctx, BackupOptions{IncludeUsageStats: true})
+	require.NoError(t, err)
+	require.NotContains(t, string(data), "sensitive-header")
+	require.NotContains(t, string(data), "sensitive-tenant")
+
+	var backupData BackupData
+	require.NoError(t, json.Unmarshal(data, &backupData))
+	require.Len(t, backupData.RequestExecutions, 1)
+	require.JSONEq(t, `{}`, string(backupData.RequestExecutions[0].RequestBody))
+}
+
+func TestBackupService_Restore_LegacyModelPriceUsesLegacyTierValidation(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	zero := int64(0)
+	price := objects.ModelPrice{Items: []objects.ModelPriceItem{{
+		ItemCode: objects.PriceItemCodeUsage,
+		Pricing: objects.Pricing{
+			Mode: objects.PricingModeTiered,
+			UsageTiered: &objects.TieredPricing{Tiers: []objects.PriceTier{
+				{UpTo: &zero, PricePerUnit: decimal.NewFromFloat(0.01)},
+				{UpTo: nil, PricePerUnit: decimal.NewFromFloat(0.02)},
+			}},
+		},
+	}}}
+	data, err := json.Marshal(BackupData{
+		Version: BackupVersionV4,
+		ChannelModelPrices: []*BackupChannelModelPrice{{
+			ChannelName: ch.Name,
+			ModelID:     "gpt-4",
+			Price:       price,
+			ReferenceID: "legacy-price",
+		}},
+	})
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{IncludeModelPrices: true})
+	require.NoError(t, err)
+	restored, err := client.ChannelModelPrice.Query().Only(ctx)
+	require.NoError(t, err)
+	restoredUpTo := restored.Price.Items[0].Pricing.UsageTiered.Tiers[0].UpTo
+	require.NotNil(t, restoredUpTo)
+	require.EqualValues(t, 1, *restoredUpTo)
+	require.Nil(t, restored.Price.Items[0].Pricing.UsageTiered.Tiers[1].UpTo)
+}
+
+func mustCountRequests(t *testing.T, client *ent.Client, ctx context.Context) int {
+	t.Helper()
+	count, err := client.Request.Query().Count(ctx)
+	require.NoError(t, err)
+	return count
+}
+
+func mustCountRequestExecutions(t *testing.T, client *ent.Client, ctx context.Context) int {
+	t.Helper()
+	count, err := client.RequestExecution.Query().Count(ctx)
+	require.NoError(t, err)
+	return count
+}
+
+func mustCountUsageLogs(t *testing.T, client *ent.Client, ctx context.Context) int {
+	t.Helper()
+	count, err := client.UsageLog.Query().Count(ctx)
+	require.NoError(t, err)
+	return count
+}
+
+func mustJSON(t *testing.T, value any) string {
+	t.Helper()
+	data, err := json.Marshal(value)
+	require.NoError(t, err)
+	return string(data)
+}
+
+func TestBackupService_Restore_UsageStatsPreservesResolvableRequestExecution(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	user, _ := client.User.Query().First(ctx)
+	proj := createBackupTestProject(t, client, ctx, "Project1", "Test Project")
+	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	ak := createBackupTestAPIKey(t, client, ctx, user, proj, "API Key 1", "sk-test-key-1")
+	_, usage := createBackupTestUsage(t, client, ctx, proj, ch, ak)
+
+	data, err := service.Backup(ctx, BackupOptions{
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+
+	_, err = client.UsageLog.Delete().Exec(ctx)
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+
+	restoredUsage, err := client.UsageLog.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, usage.RequestExecutionID, restoredUsage.RequestExecutionID)
+	require.Equal(t, "priority", restoredUsage.RequestedServiceTier)
+	require.Equal(t, "priority", restoredUsage.AppliedServiceTier)
+	require.Equal(t, "priority", restoredUsage.ServiceTier)
+
+	restoredExecution, err := restoredUsage.QueryRequestExecution().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, usage.RequestExecutionID, restoredExecution.ID)
+
+	inverseUsage, err := restoredExecution.QueryUsageLog().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, restoredUsage.ID, inverseUsage.ID)
+}
+
+func TestBackupService_Restore_UsageStatsPreservesExecutionAfterChannelDeletion(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	user, _ := client.User.Query().First(ctx)
+	proj := createBackupTestProject(t, client, ctx, "Project1", "Test Project")
+	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	ak := createBackupTestAPIKey(t, client, ctx, user, proj, "API Key 1", "sk-test-key-1")
+	_, usage := createBackupTestUsage(t, client, ctx, proj, ch, ak)
+	originalExecution, err := usage.QueryRequestExecution().Only(ctx)
+	require.NoError(t, err)
+
+	err = client.Channel.DeleteOneID(ch.ID).Exec(ctx)
+	require.NoError(t, err)
+
+	usage, err = client.UsageLog.Get(ctx, usage.ID)
+	require.NoError(t, err)
+	require.Equal(t, ch.ID, usage.ChannelID)
+	originalExecution, err = client.RequestExecution.Get(ctx, originalExecution.ID)
+	require.NoError(t, err)
+	require.Equal(t, ch.ID, originalExecution.ChannelID)
+
+	data, err := service.Backup(ctx, BackupOptions{
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+
+	_, err = client.UsageLog.Delete().Exec(ctx)
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+
+	restoredUsage, err := client.UsageLog.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, originalExecution.ID, restoredUsage.RequestExecutionID)
+	require.Zero(t, restoredUsage.ChannelID)
+}
+
+func TestBackupService_Restore_UsageStatsPreservesExecutionAfterDataStorageDeletion(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	dataStorage, err := client.DataStorage.Create().
+		SetName("Deleted Storage").
+		SetDescription("Test storage").
+		SetPrimary(false).
+		SetType(datastorage.TypeDatabase).
+		SetSettings(&objects.DataStorageSettings{}).
+		SetStatus(datastorage.StatusActive).
+		Save(ctx)
+	require.NoError(t, err)
+
+	user, _ := client.User.Query().First(ctx)
+	proj := createBackupTestProject(t, client, ctx, "Project1", "Test Project")
+	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	ak := createBackupTestAPIKey(t, client, ctx, user, proj, "API Key 1", "sk-test-key-1")
+	_, usage := createBackupTestUsageWithDataStorage(t, client, ctx, proj, ch, ak, dataStorage)
+	originalExecution, err := usage.QueryRequestExecution().Only(ctx)
+	require.NoError(t, err)
+
+	err = client.DataStorage.DeleteOneID(dataStorage.ID).Exec(ctx)
+	require.NoError(t, err)
+
+	data, err := service.Backup(ctx, BackupOptions{
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+
+	_, err = client.UsageLog.Delete().Exec(ctx)
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+
+	restoredUsage, err := client.UsageLog.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, originalExecution.ID, restoredUsage.RequestExecutionID)
+}
+
+func TestBackupService_Restore_UsageStatsDoesNotReuseDeletedChannelIDAcrossDatabases(t *testing.T) {
+	sourceClient, sourceService, sourceCtx := setupBackupTestWithDSN(t, "file:backup-source?mode=memory&_fk=1")
+	defer sourceClient.Close()
+
+	sourceUser, _ := sourceClient.User.Query().First(sourceCtx)
+	sourceProject := createBackupTestProject(t, sourceClient, sourceCtx, "Project1", "Test Project")
+	sourceChannel := createBackupTestChannel(t, sourceClient, sourceCtx, "Deleted Source Channel", channel.TypeOpenai)
+	sourceAPIKey := createBackupTestAPIKey(t, sourceClient, sourceCtx, sourceUser, sourceProject, "API Key 1", "sk-test-key-1")
+	createBackupTestUsage(t, sourceClient, sourceCtx, sourceProject, sourceChannel, sourceAPIKey)
+
+	err := sourceClient.Channel.DeleteOneID(sourceChannel.ID).Exec(sourceCtx)
+	require.NoError(t, err)
+
+	data, err := sourceService.Backup(sourceCtx, BackupOptions{
+		IncludeProjects:    true,
+		IncludeAPIKeys:     true,
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+
+	var backupData BackupData
+	require.NoError(t, json.Unmarshal(data, &backupData))
+	require.Equal(t, sourceChannel.Name, backupData.UsageRequests[0].ChannelName)
+	require.NotZero(t, backupData.UsageRequests[0].ChannelDeletedAt)
+	require.Equal(t, sourceChannel.Name, backupData.UsageLogs[0].ChannelName)
+	require.NotZero(t, backupData.UsageLogs[0].ChannelDeletedAt)
+	require.Len(t, backupData.RequestExecutions, 1)
+	require.Equal(t, sourceChannel.Name, backupData.RequestExecutions[0].ChannelName)
+	require.NotZero(t, backupData.RequestExecutions[0].ChannelDeletedAt)
+
+	targetClient, targetService, targetCtx := setupBackupTestWithDSN(t, "file:backup-target?mode=memory&_fk=1")
+	defer targetClient.Close()
+
+	unrelatedChannel := createBackupTestChannel(t, targetClient, targetCtx, sourceChannel.Name, channel.TypeOpenai)
+	require.Equal(t, sourceChannel.ID, unrelatedChannel.ID)
+
+	err = targetService.Restore(targetCtx, data, RestoreOptions{
+		IncludeProjects:    true,
+		IncludeAPIKeys:     true,
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+
+	restoredRequest, err := targetClient.Request.Query().Only(targetCtx)
+	require.NoError(t, err)
+	require.Zero(t, restoredRequest.ChannelID)
+
+	restoredUsage, err := targetClient.UsageLog.Query().Only(targetCtx)
+	require.NoError(t, err)
+	require.Zero(t, restoredUsage.ChannelID)
+	require.NotZero(t, restoredUsage.RequestExecutionID)
+
+	restoredExecution, err := restoredUsage.QueryRequestExecution().Only(targetCtx)
+	require.NoError(t, err)
+	require.Equal(t, restoredRequest.ID, restoredExecution.RequestID)
+	require.Zero(t, restoredExecution.ChannelID)
+	require.JSONEq(t, `{"model":"gpt-4"}`, string(restoredExecution.RequestBody))
+}
+
+func TestBackupService_Restore_UsageStatsOnlyDoesNotRestoreExecutionContentFromFullBackup(t *testing.T) {
+	sourceClient, sourceService, sourceCtx := setupBackupTestWithDSN(t, "file:content-source?mode=memory&_fk=1")
+	defer sourceClient.Close()
+
+	sourceUser, _ := sourceClient.User.Query().First(sourceCtx)
+	sourceProject := createBackupTestProject(t, sourceClient, sourceCtx, "Project1", "Test Project")
+	sourceChannel := createBackupTestChannel(t, sourceClient, sourceCtx, "Channel 1", channel.TypeOpenai)
+	sourceAPIKey := createBackupTestAPIKey(t, sourceClient, sourceCtx, sourceUser, sourceProject, "API Key 1", "sk-test-key-1")
+	createBackupTestUsage(t, sourceClient, sourceCtx, sourceProject, sourceChannel, sourceAPIKey)
+
+	data, err := sourceService.Backup(sourceCtx, BackupOptions{
+		IncludeProjects:    true,
+		IncludeAPIKeys:     true,
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(data), "sensitive-header")
+	require.Contains(t, string(data), "sensitive-tenant")
+
+	targetClient, targetService, targetCtx := setupBackupTestWithDSN(t, "file:content-target?mode=memory&_fk=1")
+	defer targetClient.Close()
+
+	targetChannel := createBackupTestChannel(t, targetClient, targetCtx, sourceChannel.Name, channel.TypeOpenai)
+	require.Equal(t, sourceChannel.ID, targetChannel.ID)
+
+	err = targetService.Restore(targetCtx, data, RestoreOptions{
+		IncludeProjects:   true,
+		IncludeAPIKeys:    true,
+		IncludeUsageStats: true,
+	})
+	require.NoError(t, err)
+
+	restoredUsage, err := targetClient.UsageLog.Query().Only(targetCtx)
+	require.NoError(t, err)
+	restoredExecution, err := restoredUsage.QueryRequestExecution().Only(targetCtx)
+	require.NoError(t, err)
+	require.JSONEq(t, `{}`, string(restoredExecution.RequestBody))
+	require.Empty(t, restoredExecution.ExternalID)
+	require.Empty(t, restoredExecution.ResponseBody)
+	require.Empty(t, restoredExecution.ResponseChunks)
+	require.Empty(t, restoredExecution.ErrorMessage)
+	require.Empty(t, restoredExecution.RequestHeaders)
+	require.Empty(t, restoredExecution.RequestURL)
+}
+
+func TestBackupService_Restore_UsageStatsResolvesRequestExecutionIDCollisionByFingerprint(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	user, _ := client.User.Query().First(ctx)
+	proj := createBackupTestProject(t, client, ctx, "Project1", "Test Project")
+	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	ak := createBackupTestAPIKey(t, client, ctx, user, proj, "API Key 1", "sk-test-key-1")
+	_, usage := createBackupTestUsage(t, client, ctx, proj, ch, ak)
+	originalExecution, err := usage.QueryRequestExecution().Only(ctx)
+	require.NoError(t, err)
+
+	data, err := service.Backup(ctx, BackupOptions{
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+
+	collidingExecution, err := client.RequestExecution.Create().
+		SetCreatedAt(originalExecution.CreatedAt.Add(time.Second)).
+		SetProjectID(originalExecution.ProjectID).
+		SetRequestID(originalExecution.RequestID).
+		SetChannelID(originalExecution.ChannelID).
+		SetSource(requestexecution.SourceAPI).
+		SetModelID(originalExecution.ModelID).
+		SetFormat(originalExecution.Format).
+		SetRequestBody(originalExecution.RequestBody).
+		SetRequestURL(originalExecution.RequestURL).
+		SetStatus(requestexecution.StatusCompleted).
+		SetStream(originalExecution.Stream).
+		Save(ctx)
+	require.NoError(t, err)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(data, &payload))
+	requestExecutions := payload["request_executions"].([]any)
+	requestExecutions[0].(map[string]any)["id"] = collidingExecution.ID
+	usageLogs := payload["usage_logs"].([]any)
+	usageLogs[0].(map[string]any)["request_execution_id"] = collidingExecution.ID
+	data, err = json.Marshal(payload)
+	require.NoError(t, err)
+
+	_, err = client.UsageLog.Delete().Exec(ctx)
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+
+	restoredUsage, err := client.UsageLog.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, originalExecution.ID, restoredUsage.RequestExecutionID)
+	require.NotEqual(t, collidingExecution.ID, restoredUsage.RequestExecutionID)
+}
+
+func TestBackupService_Restore_UsageStatsWithoutAuditFields(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	user, _ := client.User.Query().First(ctx)
+	proj := createBackupTestProject(t, client, ctx, "Project1", "Test Project")
+	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	ak := createBackupTestAPIKey(t, client, ctx, user, proj, "API Key 1", "sk-test-key-1")
+	createBackupTestUsage(t, client, ctx, proj, ch, ak)
+
+	data, err := service.Backup(ctx, BackupOptions{
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+
+	var backupPayload map[string]any
+	require.NoError(t, json.Unmarshal(data, &backupPayload))
+	backupPayload["version"] = BackupVersionV4
+	delete(backupPayload, "request_executions")
+	usageLogs := backupPayload["usage_logs"].([]any)
+	usageLog := usageLogs[0].(map[string]any)
+	delete(usageLog, "request_execution_id")
+	delete(usageLog, "requested_service_tier")
+	delete(usageLog, "applied_service_tier")
+	delete(usageLog, "service_tier")
+	data, err = json.Marshal(backupPayload)
+	require.NoError(t, err)
+
+	_, err = client.UsageLog.Delete().Exec(ctx)
+	require.NoError(t, err)
+	_, err = client.Request.Delete().Exec(ctx)
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{
+		IncludeUsageStats:  true,
+		IncludeRequestLogs: true,
+	})
+	require.NoError(t, err)
+
+	restoredUsage, err := client.UsageLog.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Zero(t, restoredUsage.RequestExecutionID)
+	require.Empty(t, restoredUsage.RequestedServiceTier)
+	require.Empty(t, restoredUsage.AppliedServiceTier)
+	require.Empty(t, restoredUsage.ServiceTier)
 }
 
 func TestBackupService_Restore_UsageStatsWithRequestLogs(t *testing.T) {

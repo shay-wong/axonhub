@@ -14,6 +14,7 @@ import (
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/pipeline"
+	"github.com/looplj/axonhub/llm/streams"
 )
 
 type persistRequestMiddleware struct {
@@ -31,6 +32,17 @@ func persistRequest(inbound *PersistentInboundTransformer) pipeline.Middleware {
 
 func (m *persistRequestMiddleware) Name() string {
 	return "persist-request"
+}
+
+func (m *persistRequestMiddleware) OnOutboundRawRequest(
+	ctx context.Context,
+	request *httpclient.Request,
+) (*httpclient.Request, error) {
+	// The response cache is attempt-scoped. Clear it before every outbound request
+	// so a later streaming retry cannot reuse a rejected non-stream response.
+	m.llmResponse = nil
+
+	return request, nil
 }
 
 func (m *persistRequestMiddleware) OnInboundLlmRequest(ctx context.Context, llmRequest *llm.Request) (*llm.Request, error) {
@@ -62,19 +74,23 @@ func (m *persistRequestMiddleware) OnOutboundLlmResponse(ctx context.Context, ll
 	// Store LLM response locally for use in OnInboundRawResponse
 	m.llmResponse = llmResp
 
-	// Use context without cancellation to ensure persistence even if client canceled
-	persistCtx, cancel := xcontext.DetachWithTimeout(ctx, time.Second*10)
-	defer cancel()
-
-	// Determine usage to log - unified in Response.Usage for all request types.
-	usageToLog := llmResp.Usage
-
-	_, err := state.UsageLogService.CreateUsageLogFromRequest(persistCtx, state.Request, state.RequestExec, usageToLog)
-	if err != nil {
-		log.Warn(persistCtx, "Failed to create usage log from request", log.Cause(err))
-	}
+	state.AppliedServiceTier = llmResp.ServiceTier
 
 	return llmResp, nil
+}
+
+func (m *persistRequestMiddleware) OnInboundRawStream(
+	ctx context.Context,
+	stream streams.Stream[*httpclient.StreamEvent],
+) (streams.Stream[*httpclient.StreamEvent], error) {
+	m.inbound.state.UsageLogEligible = true
+
+	return stream, nil
+}
+
+func (m *persistRequestMiddleware) OnOutboundRawError(ctx context.Context, err error) {
+	m.llmResponse = nil
+	m.inbound.state.UsageLogEligible = false
 }
 
 func (m *persistRequestMiddleware) OnInboundRawResponse(ctx context.Context, httpResp *httpclient.Response) (*httpclient.Response, error) {
@@ -92,6 +108,18 @@ func (m *persistRequestMiddleware) OnInboundRawResponse(ctx context.Context, htt
 	// Use context without cancellation to ensure persistence even if client canceled
 	persistCtx, cancel := xcontext.DetachWithTimeout(ctx, time.Second*10)
 	defer cancel()
+
+	_, err := state.UsageLogService.CreateUsageLogFromRequest(
+		persistCtx,
+		state.Request,
+		state.RequestExec,
+		llmResp.Usage,
+		state.RequestedServiceTier,
+		state.AppliedServiceTier,
+	)
+	if err != nil {
+		log.Warn(persistCtx, "Failed to create usage log from request", log.Cause(err))
+	}
 
 	// Build latency metrics from performance record
 	var metrics *biz.LatencyMetrics
@@ -153,7 +181,7 @@ func (m *persistRequestMiddleware) OnInboundRawResponse(ctx context.Context, htt
 	// STT text/srt/vtt responses are non-JSON; wrap them so the JSON response_body column accepts them.
 	respBody := audioSafeResponseBody(llmResp.RequestType, httpResp.Headers.Get("Content-Type"), httpResp.Body)
 
-	err := state.RequestService.UpdateRequestCompleted(persistCtx, state.Request.ID, llmResp.ID, respBody, metrics)
+	err = state.RequestService.UpdateRequestCompleted(persistCtx, state.Request.ID, llmResp.ID, respBody, metrics)
 	if err != nil {
 		log.Warn(persistCtx, "Failed to update request status to completed", log.Cause(err))
 	}

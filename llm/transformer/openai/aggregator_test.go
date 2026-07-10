@@ -158,6 +158,21 @@ func TestAggregateStreamChunks_EmptyChunks(t *testing.T) {
 	require.Equal(t, llm.Response{}, got)
 }
 
+func TestAggregateStreamChunks_PreservesAppliedServiceTier(t *testing.T) {
+	chunks := []*httpclient.StreamEvent{
+		{Data: []byte(`{"id":"chatcmpl-tier","object":"chat.completion.chunk","created":1,"model":"gpt-5","service_tier":"priority","choices":[{"index":0,"delta":{"role":"assistant","content":"ok"},"finish_reason":null}]}`)},
+		{Data: []byte(`{"id":"chatcmpl-tier","object":"chat.completion.chunk","created":1,"model":"gpt-5","service_tier":"priority","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}`)},
+	}
+
+	body, meta, err := AggregateStreamChunks(t.Context(), chunks, DefaultTransformChunk)
+	require.NoError(t, err)
+	require.Equal(t, "priority", meta.ServiceTier)
+
+	var response llm.Response
+	require.NoError(t, json.Unmarshal(body, &response))
+	require.Equal(t, "priority", response.ServiceTier)
+}
+
 func TestAggregateStreamChunks_PreservesMetadataWithTrailingEmptyChoiceEvents(t *testing.T) {
 	chunks := []*httpclient.StreamEvent{
 		{

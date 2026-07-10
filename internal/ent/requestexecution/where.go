@@ -100,6 +100,11 @@ func Format(v string) predicate.RequestExecution {
 	return predicate.RequestExecution(sql.FieldEQ(FieldFormat, v))
 }
 
+// RequestedServiceTier applies equality check predicate on the "requested_service_tier" field. It's identical to RequestedServiceTierEQ.
+func RequestedServiceTier(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldEQ(FieldRequestedServiceTier, v))
+}
+
 // ErrorMessage applies equality check predicate on the "error_message" field. It's identical to ErrorMessageEQ.
 func ErrorMessage(v string) predicate.RequestExecution {
 	return predicate.RequestExecution(sql.FieldEQ(FieldErrorMessage, v))
@@ -563,6 +568,81 @@ func FormatEqualFold(v string) predicate.RequestExecution {
 // FormatContainsFold applies the ContainsFold predicate on the "format" field.
 func FormatContainsFold(v string) predicate.RequestExecution {
 	return predicate.RequestExecution(sql.FieldContainsFold(FieldFormat, v))
+}
+
+// RequestedServiceTierEQ applies the EQ predicate on the "requested_service_tier" field.
+func RequestedServiceTierEQ(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldEQ(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierNEQ applies the NEQ predicate on the "requested_service_tier" field.
+func RequestedServiceTierNEQ(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldNEQ(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierIn applies the In predicate on the "requested_service_tier" field.
+func RequestedServiceTierIn(vs ...string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldIn(FieldRequestedServiceTier, vs...))
+}
+
+// RequestedServiceTierNotIn applies the NotIn predicate on the "requested_service_tier" field.
+func RequestedServiceTierNotIn(vs ...string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldNotIn(FieldRequestedServiceTier, vs...))
+}
+
+// RequestedServiceTierGT applies the GT predicate on the "requested_service_tier" field.
+func RequestedServiceTierGT(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldGT(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierGTE applies the GTE predicate on the "requested_service_tier" field.
+func RequestedServiceTierGTE(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldGTE(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierLT applies the LT predicate on the "requested_service_tier" field.
+func RequestedServiceTierLT(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldLT(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierLTE applies the LTE predicate on the "requested_service_tier" field.
+func RequestedServiceTierLTE(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldLTE(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierContains applies the Contains predicate on the "requested_service_tier" field.
+func RequestedServiceTierContains(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldContains(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierHasPrefix applies the HasPrefix predicate on the "requested_service_tier" field.
+func RequestedServiceTierHasPrefix(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldHasPrefix(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierHasSuffix applies the HasSuffix predicate on the "requested_service_tier" field.
+func RequestedServiceTierHasSuffix(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldHasSuffix(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierIsNil applies the IsNil predicate on the "requested_service_tier" field.
+func RequestedServiceTierIsNil() predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldIsNull(FieldRequestedServiceTier))
+}
+
+// RequestedServiceTierNotNil applies the NotNil predicate on the "requested_service_tier" field.
+func RequestedServiceTierNotNil() predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldNotNull(FieldRequestedServiceTier))
+}
+
+// RequestedServiceTierEqualFold applies the EqualFold predicate on the "requested_service_tier" field.
+func RequestedServiceTierEqualFold(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldEqualFold(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierContainsFold applies the ContainsFold predicate on the "requested_service_tier" field.
+func RequestedServiceTierContainsFold(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldContainsFold(FieldRequestedServiceTier, v))
 }
 
 // ResponseBodyIsNil applies the IsNil predicate on the "response_body" field.
@@ -1046,6 +1126,29 @@ func HasDataStorage() predicate.RequestExecution {
 func HasDataStorageWith(preds ...predicate.DataStorage) predicate.RequestExecution {
 	return predicate.RequestExecution(func(s *sql.Selector) {
 		step := newDataStorageStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasUsageLog applies the HasEdge predicate on the "usage_log" edge.
+func HasUsageLog() predicate.RequestExecution {
+	return predicate.RequestExecution(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, false, UsageLogTable, UsageLogColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasUsageLogWith applies the HasEdge predicate on the "usage_log" edge with a given conditions (other predicates).
+func HasUsageLogWith(preds ...predicate.UsageLog) predicate.RequestExecution {
+	return predicate.RequestExecution(func(s *sql.Selector) {
+		step := newUsageLogStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

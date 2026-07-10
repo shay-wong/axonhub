@@ -37,6 +37,8 @@ const (
 	FieldModelID = "model_id"
 	// FieldFormat holds the string denoting the format field in the database.
 	FieldFormat = "format"
+	// FieldRequestedServiceTier holds the string denoting the requested_service_tier field in the database.
+	FieldRequestedServiceTier = "requested_service_tier"
 	// FieldRequestBody holds the string denoting the request_body field in the database.
 	FieldRequestBody = "request_body"
 	// FieldResponseBody holds the string denoting the response_body field in the database.
@@ -69,6 +71,8 @@ const (
 	EdgeChannel = "channel"
 	// EdgeDataStorage holds the string denoting the data_storage edge name in mutations.
 	EdgeDataStorage = "data_storage"
+	// EdgeUsageLog holds the string denoting the usage_log edge name in mutations.
+	EdgeUsageLog = "usage_log"
 	// Table holds the table name of the requestexecution in the database.
 	Table = "request_executions"
 	// RequestTable is the table that holds the request relation/edge.
@@ -92,6 +96,13 @@ const (
 	DataStorageInverseTable = "data_storages"
 	// DataStorageColumn is the table column denoting the data_storage relation/edge.
 	DataStorageColumn = "data_storage_id"
+	// UsageLogTable is the table that holds the usage_log relation/edge.
+	UsageLogTable = "usage_logs"
+	// UsageLogInverseTable is the table name for the UsageLog entity.
+	// It exists in this package in order to avoid circular dependency with the "usagelog" package.
+	UsageLogInverseTable = "usage_logs"
+	// UsageLogColumn is the table column denoting the usage_log relation/edge.
+	UsageLogColumn = "request_execution_id"
 )
 
 // Columns holds all SQL columns for requestexecution fields.
@@ -107,6 +118,7 @@ var Columns = []string{
 	FieldSource,
 	FieldModelID,
 	FieldFormat,
+	FieldRequestedServiceTier,
 	FieldRequestBody,
 	FieldResponseBody,
 	FieldResponseChunks,
@@ -262,6 +274,11 @@ func ByFormat(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFormat, opts...).ToFunc()
 }
 
+// ByRequestedServiceTier orders the results by the requested_service_tier field.
+func ByRequestedServiceTier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRequestedServiceTier, opts...).ToFunc()
+}
+
 // ByErrorMessage orders the results by the error_message field.
 func ByErrorMessage(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldErrorMessage, opts...).ToFunc()
@@ -327,6 +344,13 @@ func ByDataStorageField(field string, opts ...sql.OrderTermOption) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newDataStorageStep(), sql.OrderByField(field, opts...))
 	}
 }
+
+// ByUsageLogField orders the results by usage_log field.
+func ByUsageLogField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newUsageLogStep(), sql.OrderByField(field, opts...))
+	}
+}
 func newRequestStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -346,6 +370,13 @@ func newDataStorageStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(DataStorageInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, DataStorageTable, DataStorageColumn),
+	)
+}
+func newUsageLogStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(UsageLogInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2O, false, UsageLogTable, UsageLogColumn),
 	)
 }
 

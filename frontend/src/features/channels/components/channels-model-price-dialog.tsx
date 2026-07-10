@@ -6,7 +6,7 @@ import { IconPlus, IconTrash, IconCopy } from '@tabler/icons-react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { AutoCompleteSelect } from '@/components/auto-complete-select';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -14,17 +14,56 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AutoCompleteSelect } from '@/components/auto-complete-select';
 import { ModelPriceEditor } from '@/components/model-price-editor';
-import { type ProviderModel, type ProvidersData } from '@/features/models/data/providers.schema';
 import { useProvidersData } from '@/features/models/data/providers';
+import { type ProviderModel, type ProvidersData } from '@/features/models/data/providers.schema';
 import { useGeneralSettings } from '@/features/system/data/system';
 import { useChannels } from '../context/channels-context';
 import { useChannelModelPrices, useSaveChannelModelPrices } from '../data/channels';
-import { PricingMode, PriceItemCode } from '../data/schema';
+import { buildProviderModelPrice } from '../data/model-price-catalog';
+import {
+  collectPriceFormValidationIssues,
+  mapPriceFormDataToSaveInput,
+  mapServerPricesToFormData,
+  replaceCatalogServiceTierPrices,
+  type PriceFormData,
+} from '../data/model-price-form';
 
 const priceItemCodes = ['prompt_tokens', 'completion_tokens', 'prompt_cached_tokens', 'prompt_write_cached_tokens'] as const;
 const pricingModes = ['flat_fee', 'usage_per_unit', 'usage_tiered', 'usage_volume'] as const;
 const promptWriteCacheVariantCodes = ['five_min', 'one_hour'] as const;
+
+const pricePricingFormSchema = z.object({
+  mode: z.enum(pricingModes),
+  flatFee: z.string().optional().nullable(),
+  usagePerUnit: z.string().optional().nullable(),
+  usageTiered: z
+    .object({
+      tiers: z.array(
+        z.object({
+          upTo: z.number().nullable().optional(),
+          pricePerUnit: z.string(),
+        })
+      ),
+    })
+    .optional()
+    .nullable(),
+});
+
+const priceItemFormSchema = z.object({
+  itemCode: z.enum(priceItemCodes),
+  pricing: pricePricingFormSchema,
+  promptWriteCacheVariants: z
+    .array(
+      z.object({
+        variantCode: z.enum(promptWriteCacheVariantCodes),
+        pricing: pricePricingFormSchema,
+      })
+    )
+    .optional()
+    .nullable(),
+});
 
 const createPriceFormSchema = (t: (key: string) => string) =>
   z
@@ -33,196 +72,37 @@ const createPriceFormSchema = (t: (key: string) => string) =>
         z.object({
           modelId: z.string().min(1, { message: t('price.validation.modelRequired') }),
           price: z.object({
-            items: z.array(
-              z.object({
-                itemCode: z.enum(priceItemCodes),
-                pricing: z.object({
-                  mode: z.enum(pricingModes),
-                  flatFee: z.string().optional().nullable(),
-                  usagePerUnit: z.string().optional().nullable(),
-                  usageTiered: z
-                    .object({
-                      tiers: z.array(
-                        z.object({
-                          upTo: z.number().nullable().optional(),
-                          pricePerUnit: z.string(),
-                        })
-                      ),
-                    })
-                    .optional()
-                    .nullable(),
-                }),
-                promptWriteCacheVariants: z
-                  .array(
-                    z.object({
-                      variantCode: z.enum(promptWriteCacheVariantCodes),
-                      pricing: z.object({
-                        mode: z.enum(pricingModes),
-                        flatFee: z.string().optional().nullable(),
-                        usagePerUnit: z.string().optional().nullable(),
-                        usageTiered: z
-                          .object({
-                            tiers: z.array(
-                              z.object({
-                                upTo: z.number().nullable().optional(),
-                                pricePerUnit: z.string(),
-                              })
-                            ),
-                          })
-                          .optional()
-                          .nullable(),
-                      }),
-                    })
-                  )
-                  .optional()
-                  .nullable(),
-              })
-            ),
+            items: z.array(priceItemFormSchema),
+            serviceTierPrices: z
+              .array(
+                z.object({
+                  serviceTier: z.string(),
+                  items: z.array(priceItemFormSchema),
+                })
+              )
+              .optional()
+              .nullable(),
           }),
         })
       ),
     })
     .superRefine((data, ctx) => {
-      type UsageTier = {
-        upTo?: number | null;
-        pricePerUnit?: string;
-      };
-      type PricingLike = {
-        mode?: (typeof pricingModes)[number];
-        flatFee?: string | null;
-        usagePerUnit?: string | null;
-        usageTiered?: {
-          tiers: UsageTier[];
-        } | null;
+      const messageByCode = {
+        priceRequired: t('price.validation.priceRequired'),
+        duplicateItemCode: t('price.duplicateItemCode'),
+        duplicateVariantCode: t('price.duplicateVariantCode'),
+        serviceTierRequired: t('price.validation.serviceTierRequired'),
+        duplicateServiceTier: t('price.duplicateServiceTier'),
       };
 
-      const validatePricing = (pricing: PricingLike | null | undefined, pathPrefix: Array<string | number>) => {
-        const requiredMsg = t('price.validation.priceRequired');
-        const { mode, flatFee, usagePerUnit, usageTiered } = pricing || {};
-        if (mode === 'flat_fee' && !flatFee) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: requiredMsg,
-            path: [...pathPrefix, 'flatFee'],
-          });
-        }
-        if (mode === 'usage_per_unit' && !usagePerUnit) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: requiredMsg,
-            path: [...pathPrefix, 'usagePerUnit'],
-          });
-        }
-        if (mode === 'usage_tiered' || mode === 'usage_volume') {
-          const tiers = usageTiered?.tiers || [];
-          if (tiers.length === 0) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: requiredMsg,
-              path: [...pathPrefix, 'usageTiered'],
-            });
-          }
-
-          const lastTierIndex = tiers.length - 1;
-          tiers.forEach((tier: UsageTier, tierIndex: number) => {
-            if (!tier.pricePerUnit) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: requiredMsg,
-                path: [...pathPrefix, 'usageTiered', 'tiers', tierIndex, 'pricePerUnit'],
-              });
-            }
-
-            const isLastTier = tierIndex === lastTierIndex;
-            if (isLastTier) {
-              if (tier.upTo != null) {
-                ctx.addIssue({
-                  code: z.ZodIssueCode.custom,
-                  message: requiredMsg,
-                  path: [...pathPrefix, 'usageTiered', 'tiers', tierIndex, 'upTo'],
-                });
-              }
-            } else {
-              if (tier.upTo == null) {
-                ctx.addIssue({
-                  code: z.ZodIssueCode.custom,
-                  message: requiredMsg,
-                  path: [...pathPrefix, 'usageTiered', 'tiers', tierIndex, 'upTo'],
-                });
-              }
-            }
-          });
-        }
-      };
-
-      data.prices.forEach((price, priceIndex) => {
-        // Check for duplicate item codes
-        const itemCodes = new Map<string, number[]>();
-        price.price.items.forEach((item, itemIndex) => {
-          const code = item.itemCode;
-          if (!itemCodes.has(code)) {
-            itemCodes.set(code, []);
-          }
-          itemCodes.get(code)!.push(itemIndex);
-        });
-
-        itemCodes.forEach((indexes, _code) => {
-          if (indexes.length > 1) {
-            indexes.forEach((index) => {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: t('price.duplicateItemCode'),
-                path: ['prices', priceIndex, 'price', 'items', index, 'itemCode'],
-              });
-            });
-          }
-        });
-
-        // Check for duplicate variant codes and validate pricing fields
-        price.price.items.forEach((item, itemIndex) => {
-          const variantCodes = new Map<string, number[]>();
-          (item.promptWriteCacheVariants || []).forEach((variant, variantIndex) => {
-            const code = variant.variantCode;
-            if (!variantCodes.has(code)) {
-              variantCodes.set(code, []);
-            }
-            variantCodes.get(code)!.push(variantIndex);
-          });
-
-          variantCodes.forEach((indexes, _code) => {
-            if (indexes.length > 1) {
-              indexes.forEach((index) => {
-                ctx.addIssue({
-                  code: z.ZodIssueCode.custom,
-                  message: t('price.duplicateVariantCode'),
-                  path: ['prices', priceIndex, 'price', 'items', itemIndex, 'promptWriteCacheVariants', index, 'variantCode'],
-                });
-              });
-            }
-          });
-
-          // Validate item pricing based on mode
-          validatePricing(item.pricing, ['prices', priceIndex, 'price', 'items', itemIndex, 'pricing']);
-
-          // Validate variant pricing based on mode
-          (item.promptWriteCacheVariants || []).forEach((variant, variantIndex) => {
-            validatePricing(variant.pricing, [
-              'prices',
-              priceIndex,
-              'price',
-              'items',
-              itemIndex,
-              'promptWriteCacheVariants',
-              variantIndex,
-              'pricing',
-            ]);
-          });
+      collectPriceFormValidationIssues(data).forEach((issue) => {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: messageByCode[issue.code],
+          path: issue.path,
         });
       });
     });
-type PriceFormData = z.infer<ReturnType<typeof createPriceFormSchema>>;
-
-type ChannelModelPrices = NonNullable<ReturnType<typeof useChannelModelPrices>['data']>;
 
 function buildAvailableModelsByIndex(prices: Array<PriceFormData['prices'][number] | undefined>, supportedModels: string[]) {
   return prices.map((p, currentIndex) => {
@@ -235,49 +115,6 @@ function buildAvailableModelsByIndex(prices: Array<PriceFormData['prices'][numbe
 
     return available;
   });
-}
-
-function mapServerPricesToFormData(currentPrices: ChannelModelPrices): PriceFormData {
-  return {
-    prices: currentPrices.map((p) => ({
-      modelId: p.modelID,
-      price: {
-        items: p.price.items.map((item) => ({
-          itemCode: item.itemCode,
-          pricing: {
-            mode: item.pricing.mode,
-            flatFee: item.pricing.flatFee?.toString() || '',
-            usagePerUnit: item.pricing.usagePerUnit?.toString() || '',
-            usageTiered: item.pricing.usageTiered
-              ? {
-                  tiers: item.pricing.usageTiered.tiers.map((t) => ({
-                    upTo: t.upTo,
-                    pricePerUnit: t.pricePerUnit.toString(),
-                  })),
-                }
-              : null,
-          },
-          promptWriteCacheVariants:
-            item.promptWriteCacheVariants?.map((v) => ({
-              variantCode: v.variantCode,
-              pricing: {
-                mode: v.pricing.mode,
-                flatFee: v.pricing.flatFee?.toString() || '',
-                usagePerUnit: v.pricing.usagePerUnit?.toString() || '',
-                usageTiered: v.pricing.usageTiered
-                  ? {
-                      tiers: v.pricing.usageTiered.tiers.map((t) => ({
-                        upTo: t.upTo,
-                        pricePerUnit: t.pricePerUnit.toString(),
-                      })),
-                    }
-                  : null,
-              },
-            })) || [],
-        })),
-      },
-    })),
-  };
 }
 
 function normalizeProviderKeyFromChannelType(type?: string | null) {
@@ -308,32 +145,7 @@ function findProviderModelById(providersData: ProvidersData, modelId: string, pr
 }
 
 function buildItemsFromProviderModel(model: ProviderModel, multiplier: number = 1): PriceFormData['prices'][number]['price']['items'] {
-  const items: PriceFormData['prices'][number]['price']['items'] = [];
-  const cost = model.cost;
-
-  const pushUsagePerUnit = (itemCode: (typeof priceItemCodes)[number], value: number) => {
-    items.push({
-      itemCode,
-      pricing: {
-        mode: 'usage_per_unit',
-        usagePerUnit: (value * multiplier).toFixed(4),
-      },
-    });
-  };
-
-  if (cost?.input != null) pushUsagePerUnit('prompt_tokens', cost.input);
-  if (cost?.output != null) pushUsagePerUnit('completion_tokens', cost.output);
-  if (cost?.cache_read != null) pushUsagePerUnit('prompt_cached_tokens', cost.cache_read);
-  if (cost?.cache_write != null) pushUsagePerUnit('prompt_write_cached_tokens', cost.cache_write);
-
-  if (items.length === 0) {
-    items.push({
-      itemCode: 'prompt_tokens',
-      pricing: { mode: 'usage_per_unit', usagePerUnit: '0' },
-    });
-  }
-
-  return items;
+  return buildProviderModelPrice(model, multiplier).items;
 }
 
 function mergeItemsWithProviderCost(
@@ -375,8 +187,122 @@ function mergeItemsWithProviderCost(
   return Array.from(byCode.values());
 }
 
+const ServiceTierPricesEditor = memo(function ServiceTierPricesEditor({
+  catalogTierNames,
+  control,
+  currencyCode,
+  priceIndex,
+  onAddItem,
+  onAddVariant,
+  onRemoveItem,
+  onRemoveVariant,
+}: {
+  catalogTierNames: ReadonlySet<string>;
+  control: Control<PriceFormData>;
+  currencyCode?: string;
+  priceIndex: number;
+  onAddItem: (priceIndex: number, serviceTierIndex: number) => void;
+  onAddVariant: (priceIndex: number, serviceTierIndex: number, itemIndex: number) => void;
+  onRemoveItem: (priceIndex: number, serviceTierIndex: number, itemIndex: number) => void;
+  onRemoveVariant: (priceIndex: number, serviceTierIndex: number, itemIndex: number, variantIndex: number) => void;
+}) {
+  const { t } = useTranslation();
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: `prices.${priceIndex}.price.serviceTierPrices`,
+  });
+  const serviceTierPrices = useWatch({
+    control,
+    name: `prices.${priceIndex}.price.serviceTierPrices`,
+  });
+
+  return (
+    <div className='mt-5 space-y-3 border-t pt-4'>
+      <div className='flex flex-wrap items-start justify-between gap-3'>
+        <div className='min-w-0 space-y-1'>
+          <FormLabel>{t('price.serviceTier.title')}</FormLabel>
+          <p className='text-muted-foreground text-xs'>{t('price.serviceTier.description')}</p>
+        </div>
+        <Button
+          type='button'
+          variant='outline'
+          size='sm'
+          onClick={() =>
+            append({
+              serviceTier: '',
+              items: [
+                {
+                  itemCode: 'prompt_tokens',
+                  pricing: { mode: 'usage_per_unit', usagePerUnit: '0' },
+                },
+              ],
+            })
+          }
+        >
+          <IconPlus size={14} />
+          {t('price.serviceTier.add')}
+        </Button>
+      </div>
+
+      {fields.map((field, serviceTierIndex) => {
+        const serviceTier = serviceTierPrices?.[serviceTierIndex]?.serviceTier?.trim() || '';
+        const isCatalogTier = catalogTierNames.has(serviceTier);
+        const itemsPath = `prices.${priceIndex}.price.serviceTierPrices.${serviceTierIndex}.items`;
+
+        return (
+          <div key={field.id} className='min-w-0 space-y-4 rounded-md border p-3'>
+            <div className='flex min-w-0 items-start gap-2'>
+              <FormField
+                control={control}
+                name={`prices.${priceIndex}.price.serviceTierPrices.${serviceTierIndex}.serviceTier`}
+                render={({ field }) => (
+                  <FormItem className='min-w-0 flex-1'>
+                    <FormLabel className='text-xs'>{t('price.serviceTier.name')}</FormLabel>
+                    <FormControl>
+                      <Input {...field} value={field.value || ''} placeholder={t('price.serviceTier.namePlaceholder')} className='h-8' />
+                    </FormControl>
+                    <FormMessage className='text-[10px]' />
+                  </FormItem>
+                )}
+              />
+              {isCatalogTier && (
+                <Badge variant='secondary' className='mt-6 shrink-0'>
+                  {t('price.serviceTier.catalog')}
+                </Badge>
+              )}
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon-sm'
+                className='text-destructive mt-5 shrink-0'
+                onClick={() => remove(serviceTierIndex)}
+                title={t('common.buttons.remove')}
+              >
+                <IconTrash size={14} />
+              </Button>
+            </div>
+
+            <ModelPriceEditor
+              control={control}
+              priceIndex={priceIndex}
+              itemsPath={itemsPath}
+              currencyCode={currencyCode}
+              hideHeader
+              onAddItem={() => onAddItem(priceIndex, serviceTierIndex)}
+              onRemoveItem={(_, itemIndex) => onRemoveItem(priceIndex, serviceTierIndex, itemIndex)}
+              onAddVariant={(_, itemIndex) => onAddVariant(priceIndex, serviceTierIndex, itemIndex)}
+              onRemoveVariant={(_, itemIndex, variantIndex) => onRemoveVariant(priceIndex, serviceTierIndex, itemIndex, variantIndex)}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
 const PriceCard = memo(function PriceCard({
   availableModels,
+  catalogTierNames,
   control,
   t,
   priceIndex,
@@ -387,9 +313,14 @@ const PriceCard = memo(function PriceCard({
   onRemoveItem,
   onRemovePrice,
   onAddVariant,
+  onAddServiceTierItem,
+  onAddServiceTierVariant,
   onRemoveVariant,
+  onRemoveServiceTierItem,
+  onRemoveServiceTierVariant,
 }: {
   availableModels: string[];
+  catalogTierNames: ReadonlySet<string>;
   control: Control<PriceFormData>;
   t: TFunction;
   priceIndex: number;
@@ -400,7 +331,11 @@ const PriceCard = memo(function PriceCard({
   onRemoveItem: (priceIndex: number, itemIndex: number) => void;
   onRemovePrice: (priceIndex: number) => void;
   onAddVariant: (priceIndex: number, itemIndex: number) => void;
+  onAddServiceTierItem: (priceIndex: number, serviceTierIndex: number) => void;
+  onAddServiceTierVariant: (priceIndex: number, serviceTierIndex: number, itemIndex: number) => void;
   onRemoveVariant: (priceIndex: number, itemIndex: number, variantIndex: number) => void;
+  onRemoveServiceTierItem: (priceIndex: number, serviceTierIndex: number, itemIndex: number) => void;
+  onRemoveServiceTierVariant: (priceIndex: number, serviceTierIndex: number, itemIndex: number, variantIndex: number) => void;
 }) {
   return (
     <Card className='overflow-hidden'>
@@ -419,13 +354,7 @@ const PriceCard = memo(function PriceCard({
               >
                 <IconCopy size={14} />
               </Button>
-              <Button
-                type='button'
-                variant='ghost'
-                size='icon-sm'
-                className='text-destructive'
-                onClick={() => onRemovePrice(priceIndex)}
-              >
+              <Button type='button' variant='ghost' size='icon-sm' className='text-destructive' onClick={() => onRemovePrice(priceIndex)}>
                 <IconTrash size={16} />
               </Button>
             </div>
@@ -494,13 +423,7 @@ const PriceCard = memo(function PriceCard({
           </div>
 
           <div className='flex items-start justify-end'>
-            <Button
-              type='button'
-              variant='ghost'
-              size='icon-sm'
-              className='text-destructive'
-              onClick={() => onRemovePrice(priceIndex)}
-            >
+            <Button type='button' variant='ghost' size='icon-sm' className='text-destructive' onClick={() => onRemovePrice(priceIndex)}>
               <IconTrash size={16} />
             </Button>
           </div>
@@ -552,6 +475,17 @@ const PriceCard = memo(function PriceCard({
 
           <div />
         </div>
+
+        <ServiceTierPricesEditor
+          catalogTierNames={catalogTierNames}
+          control={control}
+          currencyCode={currencyCode}
+          priceIndex={priceIndex}
+          onAddItem={onAddServiceTierItem}
+          onAddVariant={onAddServiceTierVariant}
+          onRemoveItem={onRemoveServiceTierItem}
+          onRemoveVariant={onRemoveServiceTierVariant}
+        />
       </CardContent>
     </Card>
   );
@@ -629,6 +563,19 @@ export function ChannelsModelPriceDialog() {
     [providerModels]
   );
 
+  const catalogTierNamesByIndex = useMemo(
+    () =>
+      (watchedPrices || []).map((price) => {
+        if (!price?.modelId || !providersData) return new Set<string>();
+        const preferredProviderId =
+          defaultProviderId && providersData.providers[defaultProviderId] ? defaultProviderId : selectedProviderId;
+        const found = findProviderModelById(providersData, price.modelId, preferredProviderId);
+        if (!found) return new Set<string>();
+        return new Set(buildProviderModelPrice(found.model).serviceTierPrices.map((tier) => tier.serviceTier));
+      }),
+    [defaultProviderId, providersData, selectedProviderId, watchedPrices]
+  );
+
   useEffect(() => {
     if (isOpen && currentPrices) {
       reset(mapServerPricesToFormData(currentPrices));
@@ -645,48 +592,9 @@ export function ChannelsModelPriceDialog() {
       if (!currentRow) return;
 
       try {
-        const input = data.prices.map((p) => ({
-          modelId: p.modelId,
-          price: {
-            items: p.price.items.map((item) => ({
-              itemCode: item.itemCode as PriceItemCode,
-              pricing: {
-                mode: item.pricing.mode as PricingMode,
-                flatFee: item.pricing.flatFee || null,
-                usagePerUnit: item.pricing.usagePerUnit || null,
-                usageTiered: item.pricing.usageTiered
-                  ? {
-                      tiers: item.pricing.usageTiered.tiers.map((t) => ({
-                        upTo: t.upTo,
-                        pricePerUnit: t.pricePerUnit,
-                      })),
-                    }
-                  : null,
-              },
-              promptWriteCacheVariants:
-                item.promptWriteCacheVariants?.map((v) => ({
-                  variantCode: v.variantCode,
-                  pricing: {
-                    mode: v.pricing.mode as PricingMode,
-                    flatFee: v.pricing.flatFee || null,
-                    usagePerUnit: v.pricing.usagePerUnit || null,
-                    usageTiered: v.pricing.usageTiered
-                      ? {
-                          tiers: v.pricing.usageTiered.tiers.map((t) => ({
-                            upTo: t.upTo,
-                            pricePerUnit: t.pricePerUnit,
-                          })),
-                        }
-                      : null,
-                  },
-                })) || [],
-            })),
-          },
-        }));
-
         await savePrices.mutateAsync({
           channelId: currentRow.id,
-          input,
+          input: mapPriceFormDataToSaveInput(data),
         });
         handleClose();
       } catch (_error) {
@@ -706,6 +614,7 @@ export function ChannelsModelPriceDialog() {
             pricing: { mode: 'usage_per_unit', usagePerUnit: '0' },
           },
         ],
+        serviceTierPrices: [],
       },
     });
   }, [append]);
@@ -714,9 +623,14 @@ export function ChannelsModelPriceDialog() {
 
   const applyProviderModelToIndex = useCallback(
     (priceIndex: number, providerModel: ProviderModel) => {
+      const currentPrice = getValues(`prices.${priceIndex}.price`);
       const currentItems = getValues(`prices.${priceIndex}.price.items`) || [];
       const merged = mergeItemsWithProviderCost(currentItems, providerModel, multiplier);
-      setValue(`prices.${priceIndex}.price.items`, merged, { shouldDirty: true, shouldValidate: true });
+      const catalogPrice = buildProviderModelPrice(providerModel, multiplier);
+      setValue(`prices.${priceIndex}.price`, replaceCatalogServiceTierPrices({ ...currentPrice, items: merged }, catalogPrice), {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
     },
     [getValues, setValue, multiplier]
   );
@@ -740,7 +654,10 @@ export function ChannelsModelPriceDialog() {
 
       append({
         modelId,
-        price: { items: buildItemsFromProviderModel(found.model, multiplier) },
+        price: {
+          items: buildItemsFromProviderModel(found.model, multiplier),
+          serviceTierPrices: buildProviderModelPrice(found.model, multiplier).serviceTierPrices,
+        },
       });
       toast.success(t('price.apply.added', { modelId }));
     },
@@ -750,8 +667,7 @@ export function ChannelsModelPriceDialog() {
   const onModelSelected = useCallback(
     (priceIndex: number, modelId: string) => {
       if (!modelId || !providersData) return;
-      const preferredProviderId =
-        defaultProviderId && providersData.providers[defaultProviderId] ? defaultProviderId : selectedProviderId;
+      const preferredProviderId = defaultProviderId && providersData.providers[defaultProviderId] ? defaultProviderId : selectedProviderId;
       const found = findProviderModelById(providersData, modelId, preferredProviderId);
       if (!found) return;
       applyProviderModelToIndex(priceIndex, found.model);
@@ -830,6 +746,88 @@ export function ChannelsModelPriceDialog() {
     [clearErrors, getValues, setValue]
   );
 
+  const addServiceTierItem = useCallback(
+    (priceIndex: number, serviceTierIndex: number) => {
+      const path = `prices.${priceIndex}.price.serviceTierPrices.${serviceTierIndex}.items` as const;
+      const currentItems = getValues(path) || [];
+      const existingCodes = new Set(currentItems.map((item) => item.itemCode));
+      const nextCode = priceItemCodes.find((code) => !existingCodes.has(code));
+      if (!nextCode) return;
+
+      setValue(
+        path,
+        [
+          ...currentItems,
+          {
+            itemCode: nextCode,
+            pricing: { mode: 'usage_per_unit', usagePerUnit: '0' },
+          },
+        ],
+        { shouldDirty: true, shouldValidate: true }
+      );
+    },
+    [getValues, setValue]
+  );
+
+  const removeServiceTierItem = useCallback(
+    (priceIndex: number, serviceTierIndex: number, itemIndex: number) => {
+      const path = `prices.${priceIndex}.price.serviceTierPrices.${serviceTierIndex}.items` as const;
+      const currentItems = getValues(path) || [];
+      if (currentItems.length <= 1) return;
+
+      currentItems.forEach((_, index) => {
+        clearErrors(`prices.${priceIndex}.price.serviceTierPrices.${serviceTierIndex}.items.${index}.itemCode`);
+      });
+      setValue(
+        path,
+        currentItems.filter((_, index) => index !== itemIndex),
+        { shouldDirty: true, shouldValidate: true }
+      );
+    },
+    [clearErrors, getValues, setValue]
+  );
+
+  const addServiceTierVariant = useCallback(
+    (priceIndex: number, serviceTierIndex: number, itemIndex: number) => {
+      const path = `prices.${priceIndex}.price.serviceTierPrices.${serviceTierIndex}.items.${itemIndex}.promptWriteCacheVariants` as const;
+      const currentVariants = getValues(path) || [];
+      const existingCodes = new Set(currentVariants.map((variant) => variant.variantCode));
+      const nextCode = promptWriteCacheVariantCodes.find((code) => !existingCodes.has(code));
+      if (!nextCode) return;
+
+      setValue(
+        path,
+        [
+          ...currentVariants,
+          {
+            variantCode: nextCode,
+            pricing: { mode: 'usage_per_unit', usagePerUnit: '0' },
+          },
+        ],
+        { shouldDirty: true, shouldValidate: true }
+      );
+    },
+    [getValues, setValue]
+  );
+
+  const removeServiceTierVariant = useCallback(
+    (priceIndex: number, serviceTierIndex: number, itemIndex: number, variantIndex: number) => {
+      const path = `prices.${priceIndex}.price.serviceTierPrices.${serviceTierIndex}.items.${itemIndex}.promptWriteCacheVariants` as const;
+      const currentVariants = getValues(path) || [];
+      currentVariants.forEach((_, index) => {
+        clearErrors(
+          `prices.${priceIndex}.price.serviceTierPrices.${serviceTierIndex}.items.${itemIndex}.promptWriteCacheVariants.${index}.variantCode`
+        );
+      });
+      setValue(
+        path,
+        currentVariants.filter((_, index) => index !== variantIndex),
+        { shouldDirty: true, shouldValidate: true }
+      );
+    },
+    [clearErrors, getValues, setValue]
+  );
+
   const duplicatePrice = useCallback(
     (index: number) => {
       const priceData = getValues(`prices.${index}.price`);
@@ -844,10 +842,7 @@ export function ChannelsModelPriceDialog() {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent
-        ref={setDialogContent}
-        className='flex h-[85vh] max-h-[800px] flex-col overflow-hidden sm:max-w-4xl'
-      >
+      <DialogContent ref={setDialogContent} className='flex h-[85vh] max-h-[800px] flex-col overflow-hidden sm:max-w-4xl'>
         <DialogHeader>
           <DialogTitle>{t('price.title')}</DialogTitle>
           <DialogDescription>{t('price.description', { name: currentRow?.name })}</DialogDescription>
@@ -857,9 +852,7 @@ export function ChannelsModelPriceDialog() {
           <form onSubmit={form.handleSubmit(onSubmit)} className='flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'>
             <Card className='mb-4 max-h-[15vh] shrink-0 overflow-y-auto md:max-h-none md:overflow-visible'>
               <CardContent className='pt-0 md:pt-4'>
-                <div className='mb-3 text-xs text-muted-foreground'>
-                  {t('price.apply.usdHint')}
-                </div>
+                <div className='text-muted-foreground mb-3 text-xs'>{t('price.apply.usdHint')}</div>
                 <div className='grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_80px_auto] md:items-end'>
                   <div className='min-w-0'>
                     <FormLabel className='text-sm'>{t('price.apply.provider')}</FormLabel>
@@ -931,7 +924,10 @@ export function ChannelsModelPriceDialog() {
                           if (existingModelIds.has(modelId)) return;
                           append({
                             modelId,
-                            price: { items: buildItemsFromProviderModel(found.model, multiplier) },
+                            price: {
+                              items: buildItemsFromProviderModel(found.model, multiplier),
+                              serviceTierPrices: buildProviderModelPrice(found.model, multiplier).serviceTierPrices,
+                            },
                           });
                           added += 1;
                         });
@@ -952,12 +948,13 @@ export function ChannelsModelPriceDialog() {
                 </div>
               </CardContent>
             </Card>
-            <ScrollArea className='min-h-40 min-w-0 w-full flex-1 md:min-h-0 [&>[data-slot=scroll-area-viewport]]:!overflow-x-hidden'>
+            <ScrollArea className='min-h-40 w-full min-w-0 flex-1 md:min-h-0 [&>[data-slot=scroll-area-viewport]]:!overflow-x-hidden'>
               <div className='space-y-4 py-4 pr-4'>
                 {fields.map((field, index) => (
                   <PriceCard
                     key={field.id}
                     availableModels={availableModelsByIndex[index] || supportedModels}
+                    catalogTierNames={catalogTierNamesByIndex[index] || new Set<string>()}
                     control={control}
                     t={t}
                     priceIndex={index}
@@ -968,7 +965,11 @@ export function ChannelsModelPriceDialog() {
                     onRemoveItem={removeItem}
                     onRemovePrice={removePrice}
                     onAddVariant={addVariant}
+                    onAddServiceTierItem={addServiceTierItem}
+                    onAddServiceTierVariant={addServiceTierVariant}
                     onRemoveVariant={removeVariant}
+                    onRemoveServiceTierItem={removeServiceTierItem}
+                    onRemoveServiceTierVariant={removeServiceTierVariant}
                   />
                 ))}
 

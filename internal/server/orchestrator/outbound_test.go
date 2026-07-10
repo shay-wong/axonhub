@@ -715,7 +715,8 @@ func TestOutboundPersistentStream_Close_AggregatedResponsesCompletionHandling(t 
 			apiFormat:          llm.APIFormatOpenAIResponse,
 			aggregatedResponse: aggregated,
 			aggregatedMeta: llm.ResponseMeta{
-				ID: "resp_456",
+				ID:          "resp_456",
+				ServiceTier: "priority",
 				Usage: &llm.Usage{
 					PromptTokens:     10,
 					CompletionTokens: 2,
@@ -723,7 +724,10 @@ func TestOutboundPersistentStream_Close_AggregatedResponsesCompletionHandling(t 
 				},
 			},
 		}
-		state := &PersistenceState{}
+		state := &PersistenceState{
+			RequestedServiceTier: "default",
+			UsageLogEligible:     true,
+		}
 
 		persistentStream := NewOutboundPersistentStream(ctx, stream, req, exec, requestService, usageLogService, transformer, nil, state)
 		for persistentStream.Next() {
@@ -737,6 +741,14 @@ func TestOutboundPersistentStream_Close_AggregatedResponsesCompletionHandling(t 
 		require.JSONEq(t, string(aggregated), string(dbExec.ResponseBody))
 		require.Equal(t, "resp_456", dbExec.ExternalID)
 		require.True(t, state.StreamCompleted)
+		require.Equal(t, "priority", state.AppliedServiceTier)
+
+		usageLog, err := client.UsageLog.Query().Only(ctx)
+		require.NoError(t, err)
+		require.Equal(t, exec.ID, usageLog.RequestExecutionID)
+		require.Equal(t, "default", usageLog.RequestedServiceTier)
+		require.Equal(t, "priority", usageLog.AppliedServiceTier)
+		require.Equal(t, "priority", usageLog.ServiceTier)
 	})
 
 	t.Run("canceled client with aggregated completed response is still completed", func(t *testing.T) {
@@ -786,7 +798,10 @@ func TestOutboundPersistentStream_Close_AggregatedResponsesCompletionHandling(t 
 				},
 			},
 		}
-		state := &PersistenceState{}
+		state := &PersistenceState{
+			RequestedServiceTier: "priority",
+			UsageLogEligible:     true,
+		}
 
 		requestCtx, cancel := context.WithCancel(baseCtx)
 		cancel()
@@ -803,6 +818,14 @@ func TestOutboundPersistentStream_Close_AggregatedResponsesCompletionHandling(t 
 		require.JSONEq(t, string(aggregated), string(dbExec.ResponseBody))
 		require.Equal(t, "resp_codex_like", dbExec.ExternalID)
 		require.True(t, state.StreamCompleted)
+		require.Empty(t, state.AppliedServiceTier)
+
+		usageLog, err := client.UsageLog.Query().Only(baseCtx)
+		require.NoError(t, err)
+		require.Equal(t, exec.ID, usageLog.RequestExecutionID)
+		require.Equal(t, "priority", usageLog.RequestedServiceTier)
+		require.Empty(t, usageLog.AppliedServiceTier)
+		require.Equal(t, "priority", usageLog.ServiceTier)
 	})
 }
 

@@ -261,8 +261,11 @@ func (s *RequestService) CreateRequestExecution(
 	request *ent.Request,
 	channelRequest httpclient.Request,
 	format llm.APIFormat,
+	requestedServiceTier string,
 	passThroughApplied bool,
 ) (*ent.RequestExecution, error) {
+	requestedServiceTier = llm.CanonicalServiceTier(requestedServiceTier)
+
 	// Decide whether to store the channel request body
 	storeRequestBody := true
 	if policy, err := s.SystemService.StoragePolicy(ctx); err == nil {
@@ -277,16 +280,11 @@ func (s *RequestService) CreateRequestExecution(
 	)
 
 	if storeRequestBody {
-		if len(channelRequest.JSONBody) > 0 {
-			requestBodyBytes = channelRequest.JSONBody
-		} else {
-			b, err := xjson.Marshal(channelRequest.Body)
-			if err != nil {
-				log.Error(ctx, "Failed to marshal request body", log.Cause(err))
-				return nil, err
-			}
-
-			requestBodyBytes = b
+		var err error
+		requestBodyBytes, err = requestBodyForPersistence(channelRequest)
+		if err != nil {
+			log.Error(ctx, "Failed to marshal request body", log.Cause(err))
+			return nil, err
 		}
 
 		if len(channelRequest.Headers) > 0 {
@@ -333,6 +331,10 @@ func (s *RequestService) CreateRequestExecution(
 		SetRequestHeaders(requestHeadersBytes).
 		SetPassThroughApplied(passThroughApplied)
 
+	if requestedServiceTier != "" {
+		mut.SetRequestedServiceTier(requestedServiceTier)
+	}
+
 	if channelRequest.URL != "" {
 		mut = mut.SetRequestURL(channelRequest.URL)
 	}
@@ -371,6 +373,18 @@ func (s *RequestService) CreateRequestExecution(
 	}
 
 	return execution, nil
+}
+
+func requestBodyForPersistence(request httpclient.Request) (objects.JSONRawMessage, error) {
+	if len(request.Body) > 0 && json.Valid(request.Body) {
+		return request.Body, nil
+	}
+
+	if len(request.JSONBody) > 0 {
+		return request.JSONBody, nil
+	}
+
+	return xjson.Marshal(request.Body)
 }
 
 // LatencyMetrics holds latency metrics for a request.

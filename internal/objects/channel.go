@@ -110,7 +110,7 @@ type TransformOptions struct {
 	// ReplaceDeveloperRoleWithSystem replaces developer role with system in messages for Bailian compatibility.
 	ReplaceDeveloperRoleWithSystem bool `json:"replaceDeveloperRoleWithSystem"`
 
-	// CodexStyleResponses makes Codex channels emit a fuller native Codex Responses request shape.
+	// CodexStyleResponses emits the native Codex Responses shape and defaults a missing service tier to priority.
 	CodexStyleResponses bool `json:"codexStyleResponses"`
 }
 

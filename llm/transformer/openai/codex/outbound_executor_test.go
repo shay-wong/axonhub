@@ -513,6 +513,26 @@ func TestCodexOutbound_DoesNotInjectCLIInstructions(t *testing.T) {
 	assert.NotContains(t, string(hreq.Body), "You are a coding agent running in the Codex CLI")
 	assert.NotContains(t, string(hreq.Body), "You are Codex")
 	assert.Equal(t, false, body["store"])
+	assert.NotContains(t, body, "service_tier")
+}
+
+func TestCodexOutbound_PreservesExplicitPriorityWithoutStylePreset(t *testing.T) {
+	ctx := context.Background()
+	outbound := newTestCodexOutbound(t)
+	serviceTier := "priority"
+
+	hreq, err := outbound.TransformRequest(ctx, &llm.Request{
+		Model: "gpt-5-codex",
+		Messages: []llm.Message{{
+			Role:    "user",
+			Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
+		}},
+		ServiceTier: &serviceTier,
+	})
+	require.NoError(t, err)
+
+	body := decodeCodexRequestBody(t, hreq)
+	assert.Equal(t, "priority", body["service_tier"])
 }
 
 func TestCodexOutbound_PreservesMinimalCompatTransforms(t *testing.T) {
@@ -607,6 +627,28 @@ func TestCodexOutbound_AppliesCodexStyleResponsesDefaultsWhenEnabled(t *testing.
 	text, ok := body["text"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "low", text["verbosity"])
+}
+
+func TestCodexOutbound_ReplacesAnthropicTierWithCodexDefault(t *testing.T) {
+	outbound := newTestCodexOutbound(t)
+	standardOnly := "standard_only"
+
+	hreq, err := outbound.TransformRequest(t.Context(), &llm.Request{
+		APIFormat:   llm.APIFormatAnthropicMessage,
+		Model:       "gpt-5-codex",
+		ServiceTier: &standardOnly,
+		Messages: []llm.Message{{
+			Role:    "user",
+			Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
+		}},
+		TransformOptions: llm.TransformOptions{
+			CodexStyleResponses: lo.ToPtr(true),
+		},
+	})
+	require.NoError(t, err)
+
+	body := decodeCodexRequestBody(t, hreq)
+	require.Equal(t, "priority", body["service_tier"])
 }
 
 func TestCodexOutbound_CodexStyleResponsesPromptCacheKeySessionPrecedence(t *testing.T) {

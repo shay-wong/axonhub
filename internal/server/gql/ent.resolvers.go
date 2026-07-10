@@ -817,6 +817,19 @@ func (r *usageLogResolver) RequestID(ctx context.Context, obj *ent.UsageLog) (*o
 	}, nil
 }
 
+// RequestExecutionID is the resolver for the requestExecutionID field.
+func (r *usageLogResolver) RequestExecutionID(ctx context.Context, obj *ent.UsageLog) (*objects.GUID, error) {
+	if obj.RequestExecutionID == 0 {
+		//nolint:nilnil // Checked.
+		return nil, nil
+	}
+
+	return &objects.GUID{
+		Type: ent.TypeRequestExecution,
+		ID:   obj.RequestExecutionID,
+	}, nil
+}
+
 // ProjectID is the resolver for the projectID field.
 func (r *usageLogResolver) ProjectID(ctx context.Context, obj *ent.UsageLog) (*objects.GUID, error) {
 	return &objects.GUID{

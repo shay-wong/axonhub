@@ -138,11 +138,21 @@ func getUpToOrZero(v *int64) int64 {
 
 // ComputeUsageCost calculates total cost and cost items breakdown for the given usage and model price.
 func ComputeUsageCost(usage *llm.Usage, price objects.ModelPrice) ([]objects.CostItem, decimal.Decimal) {
+	return computeUsageCostForItems(usage, price.Items)
+}
+
+// ComputeUsageCostForServiceTier calculates usage cost using an exact service-tier price match.
+// Missing and unknown tiers use the model's base price items.
+func ComputeUsageCostForServiceTier(usage *llm.Usage, price objects.ModelPrice, serviceTier string) ([]objects.CostItem, decimal.Decimal) {
+	return computeUsageCostForItems(usage, price.ItemsForServiceTier(serviceTier))
+}
+
+func computeUsageCostForItems(usage *llm.Usage, priceItems []objects.ModelPriceItem) ([]objects.CostItem, decimal.Decimal) {
 	var items []objects.CostItem
 
 	total := decimal.Zero
 
-	for _, it := range price.Items {
+	for _, it := range priceItems {
 		var quantity int64
 
 		switch it.ItemCode {

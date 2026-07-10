@@ -77,6 +77,7 @@ func TestAggregateStreamChunks_WithTestData(t *testing.T) {
 		expectedFile     string
 		expectedMetaID   string
 		expectedHasUsage bool
+		expectedTier     string
 	}{
 		{
 			name:             "tool stream with text and multiple function calls",
@@ -84,6 +85,7 @@ func TestAggregateStreamChunks_WithTestData(t *testing.T) {
 			expectedFile:     "tool-2.response.json",
 			expectedMetaID:   "resp_020592949fb9ce090069355e9a54788196911d78a6360a88f2",
 			expectedHasUsage: true,
+			expectedTier:     "default",
 		},
 		{
 			name:             "custom tool call stream",
@@ -91,6 +93,7 @@ func TestAggregateStreamChunks_WithTestData(t *testing.T) {
 			expectedFile:     "custom_tool.stream.response.json",
 			expectedMetaID:   "resp_custom_tool_stream_001",
 			expectedHasUsage: true,
+			expectedTier:     "default",
 		},
 	}
 
@@ -119,7 +122,11 @@ func TestAggregateStreamChunks_WithTestData(t *testing.T) {
 			require.NoError(t, err)
 
 			// Compare using xtest.Equal with cmp.Diff output on mismatch
-			if !xtest.Equal(expected, actual) {
+			ignoreServiceTier := cmp.FilterPath(func(path cmp.Path) bool {
+				field, ok := path.Last().(cmp.StructField)
+				return ok && field.Name() == "ServiceTier"
+			}, cmp.Ignore())
+			if !xtest.Equal(expected, actual, ignoreServiceTier) {
 				t.Fatalf("response mismatch:\n%s", cmp.Diff(expected, actual))
 			}
 
@@ -129,6 +136,9 @@ func TestAggregateStreamChunks_WithTestData(t *testing.T) {
 			if tt.expectedHasUsage {
 				require.NotNil(t, meta.Usage)
 			}
+			require.Equal(t, tt.expectedTier, meta.ServiceTier)
+			require.NotNil(t, actual.ServiceTier)
+			require.Equal(t, tt.expectedTier, *actual.ServiceTier)
 		})
 	}
 }
@@ -285,6 +295,28 @@ func TestAggregateStreamChunks_BasicEvents(t *testing.T) {
 	require.NotNil(t, meta.Usage)
 	require.Equal(t, int64(10), meta.Usage.PromptTokens)
 	require.Equal(t, int64(5), meta.Usage.CompletionTokens)
+}
+
+func TestAggregateStreamChunks_PreservesAppliedServiceTier(t *testing.T) {
+	chunks := []*httpclient.StreamEvent{
+		{
+			Type: "response.created",
+			Data: []byte(`{"type":"response.created","response":{"id":"resp_tier","object":"response","created_at":1,"model":"gpt-5","status":"in_progress","output":[]}}`),
+		},
+		{
+			Type: "response.completed",
+			Data: []byte(`{"type":"response.completed","response":{"id":"resp_tier","object":"response","created_at":1,"model":"gpt-5","status":"completed","service_tier":"priority","output":[],"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}}`),
+		},
+	}
+
+	body, meta, err := AggregateStreamChunks(t.Context(), chunks)
+	require.NoError(t, err)
+	require.Equal(t, "priority", meta.ServiceTier)
+
+	var response Response
+	require.NoError(t, json.Unmarshal(body, &response))
+	require.NotNil(t, response.ServiceTier)
+	require.Equal(t, "priority", *response.ServiceTier)
 }
 
 func TestAggregateStreamChunks_PreservesAnnotationsFromFinalOutputItem(t *testing.T) {

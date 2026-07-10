@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
@@ -13,15 +14,23 @@ import (
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/datastorage"
 	"github.com/looplj/axonhub/internal/ent/enttest"
 	"github.com/looplj/axonhub/internal/ent/model"
 	"github.com/looplj/axonhub/internal/ent/request"
+	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/internal/pkg/xcache"
+	"github.com/looplj/axonhub/internal/server/biz"
 )
 
 func setupBackupTest(t *testing.T) (*ent.Client, *BackupService, context.Context) {
-	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=1")
+	return setupBackupTestWithDSN(t, "file:ent?mode=memory&_fk=1")
+}
+
+func setupBackupTestWithDSN(t *testing.T, dsn string) (*ent.Client, *BackupService, context.Context) {
+	client := enttest.NewEntClient(t, "sqlite3", dsn)
 
 	service := NewBackupService(BackupServiceParams{
 		Ent: client,
@@ -42,6 +51,49 @@ func setupBackupTest(t *testing.T) (*ent.Client, *BackupService, context.Context
 	ctx = contexts.WithUser(ctx, user)
 
 	return client, service, ctx
+}
+
+func attachBackupTestDataStorageService(t *testing.T, client *ent.Client, service *BackupService) *biz.DataStorageService {
+	t.Helper()
+
+	cacheConfig := xcache.Config{
+		Mode: xcache.ModeMemory,
+		Memory: xcache.MemoryConfig{
+			Expiration:      5 * time.Minute,
+			CleanupInterval: 10 * time.Minute,
+		},
+	}
+	systemService := biz.NewSystemService(biz.SystemServiceParams{CacheConfig: cacheConfig})
+	dataStorageService := biz.NewDataStorageService(biz.DataStorageServiceParams{
+		SystemService: systemService,
+		CacheConfig:   cacheConfig,
+		Client:        client,
+	})
+	service.dataStorageService = dataStorageService
+
+	return dataStorageService
+}
+
+func createBackupTestFSDataStorage(
+	t *testing.T,
+	client *ent.Client,
+	ctx context.Context,
+	name string,
+	directory string,
+) *ent.DataStorage {
+	t.Helper()
+
+	dataStorage, err := client.DataStorage.Create().
+		SetName(name).
+		SetDescription("backup test fs storage").
+		SetPrimary(false).
+		SetType(datastorage.TypeFs).
+		SetSettings(&objects.DataStorageSettings{Directory: &directory}).
+		SetStatus(datastorage.StatusActive).
+		Save(ctx)
+	require.NoError(t, err)
+
+	return dataStorage
 }
 
 func createBackupTestChannel(t *testing.T, client *ent.Client, ctx context.Context, name string, chType channel.Type) *ent.Channel {
@@ -172,7 +224,19 @@ func createBackupTestAPIKey(t *testing.T, client *ent.Client, ctx context.Contex
 }
 
 func createBackupTestUsage(t *testing.T, client *ent.Client, ctx context.Context, project *ent.Project, ch *ent.Channel, ak *ent.APIKey) (*ent.Request, *ent.UsageLog) {
-	req, err := client.Request.Create().
+	return createBackupTestUsageWithDataStorage(t, client, ctx, project, ch, ak, nil)
+}
+
+func createBackupTestUsageWithDataStorage(
+	t *testing.T,
+	client *ent.Client,
+	ctx context.Context,
+	project *ent.Project,
+	ch *ent.Channel,
+	ak *ent.APIKey,
+	dataStorage *ent.DataStorage,
+) (*ent.Request, *ent.UsageLog) {
+	requestBuilder := client.Request.Create().
 		SetProjectID(project.ID).
 		SetAPIKeyID(ak.ID).
 		SetChannelID(ch.ID).
@@ -182,13 +246,40 @@ func createBackupTestUsage(t *testing.T, client *ent.Client, ctx context.Context
 		SetRequestBody(objects.JSONRawMessage(`{"model":"gpt-4"}`)).
 		SetStatus(request.StatusCompleted).
 		SetStream(false).
-		SetClientIP("127.0.0.1").
-		Save(ctx)
+		SetClientIP("127.0.0.1")
+	if dataStorage != nil {
+		requestBuilder.SetDataStorageID(dataStorage.ID)
+	}
+	req, err := requestBuilder.Save(ctx)
+	require.NoError(t, err)
+
+	executionBuilder := client.RequestExecution.Create().
+		SetProjectID(project.ID).
+		SetRequestID(req.ID).
+		SetChannelID(ch.ID).
+		SetExternalID("execution-external-id").
+		SetSource(requestexecution.SourceAPI).
+		SetModelID("gpt-4").
+		SetFormat("openai/chat_completions").
+		SetRequestedServiceTier("priority").
+		SetRequestBody(objects.JSONRawMessage(`{"model":"gpt-4"}`)).
+		SetResponseBody(objects.JSONRawMessage(`{"id":"response-1"}`)).
+		SetResponseChunks([]objects.JSONRawMessage{objects.JSONRawMessage(`{"delta":"hello"}`)}).
+		SetErrorMessage("sensitive provider detail").
+		SetRequestHeaders(objects.JSONRawMessage(`{"Authorization":"Bearer sensitive-header"}`)).
+		SetRequestURL("https://api.example.com/v1/responses?tenant=sensitive-tenant").
+		SetStatus(requestexecution.StatusCompleted).
+		SetStream(false)
+	if dataStorage != nil {
+		executionBuilder.SetDataStorageID(dataStorage.ID)
+	}
+	execution, err := executionBuilder.Save(ctx)
 	require.NoError(t, err)
 
 	cost := 0.42
 	usage, err := client.UsageLog.Create().
 		SetRequestID(req.ID).
+		SetRequestExecutionID(execution.ID).
 		SetAPIKeyID(ak.ID).
 		SetProjectID(project.ID).
 		SetChannelID(ch.ID).
@@ -199,6 +290,9 @@ func createBackupTestUsage(t *testing.T, client *ent.Client, ctx context.Context
 		SetPromptCachedTokens(20).
 		SetSource(usagelog.SourceAPI).
 		SetFormat("openai/chat_completions").
+		SetRequestedServiceTier(" PRIORITY ").
+		SetAppliedServiceTier(" PRIORITY ").
+		SetServiceTier(" PRIORITY ").
 		SetTotalCost(cost).
 		SetCostPriceReferenceID("price-ref").
 		Save(ctx)
@@ -328,6 +422,8 @@ func TestBackupService_Backup_WithUsageStats(t *testing.T) {
 	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
 	ak := createBackupTestAPIKey(t, client, ctx, user, proj, "API Key 1", "sk-test-key-1")
 	req, usage := createBackupTestUsage(t, client, ctx, proj, ch, ak)
+	execution, err := usage.QueryRequestExecution().Only(ctx)
+	require.NoError(t, err)
 
 	data, err := service.Backup(ctx, BackupOptions{
 		IncludeUsageStats: true,
@@ -348,7 +444,25 @@ func TestBackupService_Backup_WithUsageStats(t *testing.T) {
 	require.Equal(t, "Channel 1", backupData.UsageLogs[0].ChannelName)
 	require.Empty(t, backupData.UsageLogs[0].APIKeyKey)
 	require.Equal(t, usage.RequestID, backupData.UsageLogs[0].RequestID)
+	require.Equal(t, usage.RequestExecutionID, backupData.UsageLogs[0].RequestExecutionID)
+	require.Len(t, backupData.RequestExecutions, 1)
+	require.Equal(t, execution.ID, backupData.RequestExecutions[0].ID)
+	require.Equal(t, execution.RequestID, backupData.RequestExecutions[0].RequestID)
+	require.Equal(t, execution.ChannelID, backupData.RequestExecutions[0].ChannelID)
+	require.Equal(t, "priority", backupData.RequestExecutions[0].RequestedServiceTier)
+	require.Equal(t, "Channel 1", backupData.RequestExecutions[0].ChannelName)
+	require.JSONEq(t, `{}`, string(backupData.RequestExecutions[0].RequestBody))
+	require.Empty(t, backupData.RequestExecutions[0].ResponseBody)
+	require.Empty(t, backupData.RequestExecutions[0].ResponseChunks)
+	require.Empty(t, backupData.RequestExecutions[0].RequestHeaders)
+	require.Empty(t, backupData.RequestExecutions[0].RequestURL)
+	require.Empty(t, backupData.UsageLogs[0].RequestExecutionRequestURL)
+	require.True(t, execution.CreatedAt.Equal(backupData.UsageLogs[0].RequestExecutionCreatedAt))
+	require.Equal(t, execution.Format, backupData.UsageLogs[0].RequestExecutionFormat)
 	require.Equal(t, int64(150), backupData.UsageLogs[0].TotalTokens)
+	require.Equal(t, "priority", backupData.UsageLogs[0].RequestedServiceTier)
+	require.Equal(t, "priority", backupData.UsageLogs[0].AppliedServiceTier)
+	require.Equal(t, "priority", backupData.UsageLogs[0].ServiceTier)
 	require.Equal(t, "price-ref", backupData.UsageLogs[0].CostPriceReferenceID)
 
 	data, err = service.Backup(ctx, BackupOptions{
@@ -389,6 +503,13 @@ func TestBackupService_Backup_WithRequestLogs(t *testing.T) {
 	require.Len(t, backupData.UsageRequests, 1)
 	require.Len(t, backupData.UsageLogs, 0)
 	require.Equal(t, req.ID, backupData.UsageRequests[0].ID)
+	require.Len(t, backupData.RequestExecutions, 1)
+	require.Equal(t, req.ID, backupData.RequestExecutions[0].RequestID)
+	require.JSONEq(t, `{"model":"gpt-4"}`, string(backupData.RequestExecutions[0].RequestBody))
+	require.JSONEq(t, `{"id":"response-1"}`, string(backupData.RequestExecutions[0].ResponseBody))
+	require.NotEmpty(t, backupData.RequestExecutions[0].ResponseChunks)
+	require.NotEmpty(t, backupData.RequestExecutions[0].RequestHeaders)
+	require.Contains(t, backupData.RequestExecutions[0].RequestURL, "sensitive-tenant")
 	require.Equal(t, "Project1", backupData.UsageRequests[0].ProjectName)
 	require.Equal(t, "Channel 1", backupData.UsageRequests[0].ChannelName)
 	require.Empty(t, backupData.UsageRequests[0].APIKeyKey)

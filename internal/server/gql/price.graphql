@@ -3,6 +3,7 @@ enum PricingMode {
   flat_fee
   usage_per_unit
   usage_tiered
+  usage_volume
 }
 
 enum PriceItemCode {
@@ -20,12 +21,18 @@ enum PromptWriteCacheVariantCode {
 # ModelPrice represents pricing configuration for a model
 type ModelPrice {
   items: [ModelPriceItem!]!
+  serviceTierPrices: [ServiceTierPrice!]!
 }
 
 type ModelPriceItem {
   itemCode: PriceItemCode!
   pricing: Pricing!
   promptWriteCacheVariants: [PromptWriteCacheVariant!]
+}
+
+type ServiceTierPrice {
+  serviceTier: String!
+  items: [ModelPriceItem!]!
 }
 
 type Pricing {
@@ -52,12 +59,18 @@ type PromptWriteCacheVariant {
 # Input types for ModelPrice
 input ModelPriceInput {
   items: [ModelPriceItemInput!]!
+  serviceTierPrices: [ServiceTierPriceInput!]
 }
 
 input ModelPriceItemInput {
   itemCode: PriceItemCode!
   pricing: PricingInput!
   promptWriteCacheVariants: [PromptWriteCacheVariantInput!]
+}
+
+input ServiceTierPriceInput {
+  serviceTier: String!
+  items: [ModelPriceItemInput!]!
 }
 
 input PricingInput {

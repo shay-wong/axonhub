@@ -4073,6 +4073,17 @@ func (_q *RequestExecutionQuery) collectField(ctx context.Context, oneNode bool,
 				selectedFields = append(selectedFields, requestexecution.FieldDataStorageID)
 				fieldSeen[requestexecution.FieldDataStorageID] = struct{}{}
 			}
+
+		case "usageLog":
+			var (
+				alias = field.Alias
+				path  = append(path, alias)
+				query = (&UsageLogClient{config: _q.config}).Query()
+			)
+			if err := query.collectField(ctx, oneNode, opCtx, field, path, mayAddCondition(satisfies, usagelogImplementors)...); err != nil {
+				return err
+			}
+			_q.withUsageLog = query
 		case "createdAt":
 			if _, ok := fieldSeen[requestexecution.FieldCreatedAt]; !ok {
 				selectedFields = append(selectedFields, requestexecution.FieldCreatedAt)
@@ -4122,6 +4133,11 @@ func (_q *RequestExecutionQuery) collectField(ctx context.Context, oneNode bool,
 			if _, ok := fieldSeen[requestexecution.FieldFormat]; !ok {
 				selectedFields = append(selectedFields, requestexecution.FieldFormat)
 				fieldSeen[requestexecution.FieldFormat] = struct{}{}
+			}
+		case "requestedServiceTier":
+			if _, ok := fieldSeen[requestexecution.FieldRequestedServiceTier]; !ok {
+				selectedFields = append(selectedFields, requestexecution.FieldRequestedServiceTier)
+				fieldSeen[requestexecution.FieldRequestedServiceTier] = struct{}{}
 			}
 		case "requestBody":
 			if _, ok := fieldSeen[requestexecution.FieldRequestBody]; !ok {
@@ -5139,6 +5155,21 @@ func (_q *UsageLogQuery) collectField(ctx context.Context, oneNode bool, opCtx *
 				fieldSeen[usagelog.FieldRequestID] = struct{}{}
 			}
 
+		case "requestExecution":
+			var (
+				alias = field.Alias
+				path  = append(path, alias)
+				query = (&RequestExecutionClient{config: _q.config}).Query()
+			)
+			if err := query.collectField(ctx, oneNode, opCtx, field, path, mayAddCondition(satisfies, requestexecutionImplementors)...); err != nil {
+				return err
+			}
+			_q.withRequestExecution = query
+			if _, ok := fieldSeen[usagelog.FieldRequestExecutionID]; !ok {
+				selectedFields = append(selectedFields, usagelog.FieldRequestExecutionID)
+				fieldSeen[usagelog.FieldRequestExecutionID] = struct{}{}
+			}
+
 		case "project":
 			var (
 				alias = field.Alias
@@ -5182,6 +5213,11 @@ func (_q *UsageLogQuery) collectField(ctx context.Context, oneNode bool, opCtx *
 			if _, ok := fieldSeen[usagelog.FieldRequestID]; !ok {
 				selectedFields = append(selectedFields, usagelog.FieldRequestID)
 				fieldSeen[usagelog.FieldRequestID] = struct{}{}
+			}
+		case "requestExecutionID":
+			if _, ok := fieldSeen[usagelog.FieldRequestExecutionID]; !ok {
+				selectedFields = append(selectedFields, usagelog.FieldRequestExecutionID)
+				fieldSeen[usagelog.FieldRequestExecutionID] = struct{}{}
 			}
 		case "apiKeyID":
 			if _, ok := fieldSeen[usagelog.FieldAPIKeyID]; !ok {
@@ -5272,6 +5308,21 @@ func (_q *UsageLogQuery) collectField(ctx context.Context, oneNode bool, opCtx *
 			if _, ok := fieldSeen[usagelog.FieldFormat]; !ok {
 				selectedFields = append(selectedFields, usagelog.FieldFormat)
 				fieldSeen[usagelog.FieldFormat] = struct{}{}
+			}
+		case "requestedServiceTier":
+			if _, ok := fieldSeen[usagelog.FieldRequestedServiceTier]; !ok {
+				selectedFields = append(selectedFields, usagelog.FieldRequestedServiceTier)
+				fieldSeen[usagelog.FieldRequestedServiceTier] = struct{}{}
+			}
+		case "appliedServiceTier":
+			if _, ok := fieldSeen[usagelog.FieldAppliedServiceTier]; !ok {
+				selectedFields = append(selectedFields, usagelog.FieldAppliedServiceTier)
+				fieldSeen[usagelog.FieldAppliedServiceTier] = struct{}{}
+			}
+		case "serviceTier":
+			if _, ok := fieldSeen[usagelog.FieldServiceTier]; !ok {
+				selectedFields = append(selectedFields, usagelog.FieldServiceTier)
+				fieldSeen[usagelog.FieldServiceTier] = struct{}{}
 			}
 		case "totalCost":
 			if _, ok := fieldSeen[usagelog.FieldTotalCost]; !ok {

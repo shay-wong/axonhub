@@ -495,3 +495,115 @@ func TestCalculatePriceChanges(t *testing.T) {
 		})
 	}
 }
+
+func TestChannelService_SaveChannelModelPrices_CanonicalizesServiceTierPrices(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Canonical tier channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "key"}).
+		SetSupportedModels([]string{"gpt-5-codex"}).
+		SetDefaultTestModel("gpt-5-codex").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	price := objects.ModelPrice{
+		Items: []objects.ModelPriceItem{{
+			ItemCode: objects.PriceItemCodeUsage,
+			Pricing:  objects.Pricing{Mode: objects.PricingModeUsagePerUnit, UsagePerUnit: loToDecimalPtr("1")},
+		}},
+		ServiceTierPrices: []objects.ServiceTierPrice{{
+			ServiceTier: " PRIORITY ",
+			Items: []objects.ModelPriceItem{{
+				ItemCode: objects.PriceItemCodeUsage,
+				Pricing:  objects.Pricing{Mode: objects.PricingModeUsagePerUnit, UsagePerUnit: loToDecimalPtr("2")},
+			}},
+		}},
+	}
+
+	results, err := svc.SaveChannelModelPrices(ctx, ch.ID, []SaveChannelModelPriceInput{{
+		ModelID: "gpt-5-codex",
+		Price:   price,
+	}})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Equal(t, "priority", results[0].Price.ServiceTierPrices[0].ServiceTier)
+	require.Equal(t, " PRIORITY ", price.ServiceTierPrices[0].ServiceTier)
+
+	version, err := client.ChannelModelPriceVersion.Query().
+		Where(channelmodelpriceversion.ChannelModelPriceID(results[0].ID)).
+		Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "priority", version.Price.ServiceTierPrices[0].ServiceTier)
+}
+
+func TestChannelService_SaveChannelModelPrices_PreservesOmittedServiceTierPrices(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Service tier compatibility channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKey: "key"}).
+		SetSupportedModels([]string{"gpt-5-codex"}).
+		SetDefaultTestModel("gpt-5-codex").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	basePrice := objects.ModelPrice{
+		Items: []objects.ModelPriceItem{{
+			ItemCode: objects.PriceItemCodeUsage,
+			Pricing:  objects.Pricing{Mode: objects.PricingModeUsagePerUnit, UsagePerUnit: loToDecimalPtr("1")},
+		}},
+		ServiceTierPrices: []objects.ServiceTierPrice{{
+			ServiceTier: "priority",
+			Items: []objects.ModelPriceItem{{
+				ItemCode: objects.PriceItemCodeUsage,
+				Pricing:  objects.Pricing{Mode: objects.PricingModeUsagePerUnit, UsagePerUnit: loToDecimalPtr("2")},
+			}},
+		}},
+	}
+
+	_, err = svc.SaveChannelModelPrices(ctx, ch.ID, []SaveChannelModelPriceInput{{
+		ModelID: "gpt-5-codex",
+		Price:   basePrice,
+	}})
+	require.NoError(t, err)
+
+	// Older GraphQL clients omit serviceTierPrices. Updating their base price must
+	// preserve the tier-specific price that they cannot represent yet.
+	omittedTierPrice := objects.ModelPrice{
+		Items: []objects.ModelPriceItem{{
+			ItemCode: objects.PriceItemCodeUsage,
+			Pricing:  objects.Pricing{Mode: objects.PricingModeUsagePerUnit, UsagePerUnit: loToDecimalPtr("3")},
+		}},
+	}
+	results, err := svc.SaveChannelModelPrices(ctx, ch.ID, []SaveChannelModelPriceInput{{
+		ModelID: "gpt-5-codex",
+		Price:   omittedTierPrice,
+	}})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Len(t, results[0].Price.ServiceTierPrices, 1)
+	require.Equal(t, "priority", results[0].Price.ServiceTierPrices[0].ServiceTier)
+	require.Equal(t, "2", results[0].Price.ServiceTierPrices[0].Items[0].Pricing.UsagePerUnit.String())
+
+	// A non-nil empty slice remains an explicit clear from a current client.
+	explicitClear := omittedTierPrice
+	explicitClear.ServiceTierPrices = []objects.ServiceTierPrice{}
+	results, err = svc.SaveChannelModelPrices(ctx, ch.ID, []SaveChannelModelPriceInput{{
+		ModelID: "gpt-5-codex",
+		Price:   explicitClear,
+	}})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Empty(t, results[0].Price.ServiceTierPrices)
+}

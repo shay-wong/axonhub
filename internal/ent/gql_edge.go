@@ -587,6 +587,14 @@ func (_m *RequestExecution) DataStorage(ctx context.Context) (*DataStorage, erro
 	return result, MaskNotFound(err)
 }
 
+func (_m *RequestExecution) UsageLog(ctx context.Context) (*UsageLog, error) {
+	result, err := _m.Edges.UsageLogOrErr()
+	if IsNotLoaded(err) {
+		result, err = _m.QueryUsageLog().Only(ctx)
+	}
+	return result, MaskNotFound(err)
+}
+
 func (_m *Role) Users(
 	ctx context.Context, after *Cursor, first *int, before *Cursor, last *int, orderBy *UserOrder, where *UserWhereInput,
 ) (*UserConnection, error) {
@@ -709,6 +717,14 @@ func (_m *UsageLog) Request(ctx context.Context) (*Request, error) {
 		result, err = _m.QueryRequest().Only(ctx)
 	}
 	return result, err
+}
+
+func (_m *UsageLog) RequestExecution(ctx context.Context) (*RequestExecution, error) {
+	result, err := _m.Edges.RequestExecutionOrErr()
+	if IsNotLoaded(err) {
+		result, err = _m.QueryRequestExecution().Only(ctx)
+	}
+	return result, MaskNotFound(err)
 }
 
 func (_m *UsageLog) Project(ctx context.Context) (*Project, error) {

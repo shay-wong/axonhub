@@ -2,7 +2,9 @@ package objects
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/looplj/axonhub/llm"
 	"github.com/shopspring/decimal"
 )
 
@@ -116,6 +118,7 @@ func (p *TieredPricing) Validate() error {
 	}
 
 	lastIdx := len(p.Tiers) - 1
+	var previousUpTo int64
 	for i := range p.Tiers {
 		tier := p.Tiers[i]
 		if i == lastIdx {
@@ -129,6 +132,16 @@ func (p *TieredPricing) Validate() error {
 		if tier.UpTo == nil {
 			return fmt.Errorf("tiers[%d].upTo is required", i)
 		}
+
+		if *tier.UpTo <= 0 {
+			return fmt.Errorf("tiers[%d].upTo must be greater than 0", i)
+		}
+
+		if i > 0 && *tier.UpTo <= previousUpTo {
+			return fmt.Errorf("tiers[%d].upTo must be greater than tiers[%d].upTo", i, i-1)
+		}
+
+		previousUpTo = *tier.UpTo
 	}
 
 	return nil
@@ -155,8 +168,15 @@ func (i *ModelPriceItem) Validate() error {
 		return fmt.Errorf("pricing: %w", err)
 	}
 
+	variantCodes := make(map[PromptWriteCacheVariantCode]struct{}, len(i.PromptWriteCacheVariants))
 	for idx := range i.PromptWriteCacheVariants {
-		if err := i.PromptWriteCacheVariants[idx].Validate(); err != nil {
+		variant := &i.PromptWriteCacheVariants[idx]
+		if _, ok := variantCodes[variant.VariantCode]; ok {
+			return fmt.Errorf("promptWriteCacheVariants[%d]: duplicate variantCode %q", idx, variant.VariantCode)
+		}
+		variantCodes[variant.VariantCode] = struct{}{}
+
+		if err := variant.Validate(); err != nil {
 			return fmt.Errorf("promptWriteCacheVariants[%d]: %w", idx, err)
 		}
 	}
@@ -169,9 +189,44 @@ func (p *ModelPrice) Validate() error {
 		return fmt.Errorf("modelPrice is nil")
 	}
 
+	itemCodes := make(map[PriceItemCode]struct{}, len(p.Items))
 	for idx := range p.Items {
+		if _, ok := itemCodes[p.Items[idx].ItemCode]; ok {
+			return fmt.Errorf("items[%d]: duplicate itemCode %q", idx, p.Items[idx].ItemCode)
+		}
+		itemCodes[p.Items[idx].ItemCode] = struct{}{}
+
 		if err := p.Items[idx].Validate(); err != nil {
 			return fmt.Errorf("items[%d]: %w", idx, err)
+		}
+	}
+
+	serviceTiers := make(map[string]struct{}, len(p.ServiceTierPrices))
+	for idx := range p.ServiceTierPrices {
+		serviceTierPrice := &p.ServiceTierPrices[idx]
+		serviceTier := llm.CanonicalServiceTier(serviceTierPrice.ServiceTier)
+		if serviceTier == "" {
+			return fmt.Errorf("serviceTierPrices[%d].serviceTier is required", idx)
+		}
+		if strings.TrimSpace(serviceTierPrice.ServiceTier) != serviceTierPrice.ServiceTier {
+			return fmt.Errorf("serviceTierPrices[%d].serviceTier must not contain surrounding whitespace", idx)
+		}
+
+		if _, ok := serviceTiers[serviceTier]; ok {
+			return fmt.Errorf("serviceTierPrices[%d]: duplicate serviceTier %q", idx, serviceTierPrice.ServiceTier)
+		}
+		serviceTiers[serviceTier] = struct{}{}
+
+		tierItemCodes := make(map[PriceItemCode]struct{}, len(serviceTierPrice.Items))
+		for itemIdx := range serviceTierPrice.Items {
+			if _, ok := tierItemCodes[serviceTierPrice.Items[itemIdx].ItemCode]; ok {
+				return fmt.Errorf("serviceTierPrices[%d].items[%d]: duplicate itemCode %q", idx, itemIdx, serviceTierPrice.Items[itemIdx].ItemCode)
+			}
+			tierItemCodes[serviceTierPrice.Items[itemIdx].ItemCode] = struct{}{}
+
+			if err := serviceTierPrice.Items[itemIdx].Validate(); err != nil {
+				return fmt.Errorf("serviceTierPrices[%d].items[%d]: %w", idx, itemIdx, err)
+			}
 		}
 	}
 
@@ -298,6 +353,30 @@ type ModelPriceItem struct {
 	PromptWriteCacheVariants []PromptWriteCacheVariant `json:"promptWriteCacheVariants,omitempty"`
 }
 
+// ServiceTierPrice is an alternative set of price items for a provider service tier.
+type ServiceTierPrice struct {
+	ServiceTier string           `json:"serviceTier"`
+	Items       []ModelPriceItem `json:"items"`
+}
+
+func (p *ServiceTierPrice) Equals(other *ServiceTierPrice) bool {
+	if p == nil || other == nil {
+		return p == other
+	}
+
+	if p.ServiceTier != other.ServiceTier || len(p.Items) != len(other.Items) {
+		return false
+	}
+
+	for idx := range p.Items {
+		if !p.Items[idx].Equals(&other.Items[idx]) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (i *ModelPriceItem) Equals(other *ModelPriceItem) bool {
 	if i == nil || other == nil {
 		return i == other
@@ -328,15 +407,70 @@ func (i *ModelPriceItem) Equals(other *ModelPriceItem) bool {
 type ModelPrice struct {
 	// Items is the list of price items for the price.
 	Items []ModelPriceItem `json:"items"`
+
+	// ServiceTierPrices contains alternative price items keyed by provider service tier.
+	ServiceTierPrices []ServiceTierPrice `json:"serviceTierPrices,omitempty"`
+}
+
+// CanonicalizedServiceTiers returns a copy whose service-tier price keys use the
+// canonical storage and matching representation.
+func (p ModelPrice) CanonicalizedServiceTiers() ModelPrice {
+	if len(p.ServiceTierPrices) == 0 {
+		return p
+	}
+
+	p.ServiceTierPrices = append([]ServiceTierPrice(nil), p.ServiceTierPrices...)
+	for idx := range p.ServiceTierPrices {
+		p.ServiceTierPrices[idx].ServiceTier = llm.CanonicalServiceTier(p.ServiceTierPrices[idx].ServiceTier)
+	}
+
+	return p
+}
+
+// ItemsForServiceTier merges canonical service-tier overrides over the base price items.
+// Missing and unknown tiers deliberately use the base price items.
+func (p *ModelPrice) ItemsForServiceTier(serviceTier string) []ModelPriceItem {
+	serviceTier = llm.CanonicalServiceTier(serviceTier)
+	for idx := range p.ServiceTierPrices {
+		if llm.CanonicalServiceTier(p.ServiceTierPrices[idx].ServiceTier) == serviceTier {
+			items := append([]ModelPriceItem(nil), p.Items...)
+			itemIndexes := make(map[PriceItemCode]int, len(items))
+			for itemIdx := range items {
+				if _, exists := itemIndexes[items[itemIdx].ItemCode]; !exists {
+					itemIndexes[items[itemIdx].ItemCode] = itemIdx
+				}
+			}
+
+			for _, override := range p.ServiceTierPrices[idx].Items {
+				if itemIdx, exists := itemIndexes[override.ItemCode]; exists {
+					items[itemIdx] = override
+					continue
+				}
+
+				itemIndexes[override.ItemCode] = len(items)
+				items = append(items, override)
+			}
+
+			return items
+		}
+	}
+
+	return p.Items
 }
 
 func (p *ModelPrice) Equals(other ModelPrice) bool {
-	if len(p.Items) != len(other.Items) {
+	if len(p.Items) != len(other.Items) || len(p.ServiceTierPrices) != len(other.ServiceTierPrices) {
 		return false
 	}
 
 	for i := range p.Items {
 		if !p.Items[i].Equals(&other.Items[i]) {
+			return false
+		}
+	}
+
+	for i := range p.ServiceTierPrices {
+		if !p.ServiceTierPrices[i].Equals(&other.ServiceTierPrices[i]) {
 			return false
 		}
 	}

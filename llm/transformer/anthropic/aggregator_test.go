@@ -839,6 +839,23 @@ func TestAggregateStreamChunks_EdgeCases(t *testing.T) {
 	})
 }
 
+func TestAggregateStreamChunks_PreservesAppliedServiceTier(t *testing.T) {
+	chunks := []*httpclient.StreamEvent{
+		{Data: []byte(`{"type":"message_start","message":{"id":"msg_tier","type":"message","role":"assistant","content":[],"model":"claude-sonnet-4-5","usage":{"input_tokens":10,"output_tokens":0}}}`)},
+		{Data: []byte(`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2,"service_tier":"priority"}}`)},
+		{Data: []byte(`{"type":"message_stop"}`)},
+	}
+
+	body, meta, err := AggregateStreamChunks(t.Context(), chunks, PlatformDirect)
+	require.NoError(t, err)
+	require.Equal(t, "priority", meta.ServiceTier)
+
+	var message Message
+	require.NoError(t, json.Unmarshal(body, &message))
+	require.NotNil(t, message.Usage)
+	require.Equal(t, "priority", message.Usage.ServiceTier)
+}
+
 func TestAggregateStreamChunks_WithCitationsDelta(t *testing.T) {
 	chunks := []*httpclient.StreamEvent{
 		{

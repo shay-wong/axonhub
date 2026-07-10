@@ -187,6 +187,10 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 					if event.Usage.CacheReadInputTokens > 0 {
 						usage.CacheReadInputTokens = event.Usage.CacheReadInputTokens
 					}
+
+					if event.Usage.ServiceTier != "" {
+						usage.ServiceTier = event.Usage.ServiceTier
+					}
 				}
 			}
 		case "content_block_stop":
@@ -277,8 +281,9 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 	// Convert and return usage if available
 	if usage != nil {
 		return data, llm.ResponseMeta{
-			ID:    message.ID,
-			Usage: convertToLlmUsage(usage, platformType),
+			ID:          message.ID,
+			Usage:       convertToLlmUsage(usage, platformType),
+			ServiceTier: usage.ServiceTier,
 		}, nil
 	}
 

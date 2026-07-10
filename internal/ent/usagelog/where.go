@@ -70,6 +70,11 @@ func RequestID(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldRequestID, v))
 }
 
+// RequestExecutionID applies equality check predicate on the "request_execution_id" field. It's identical to RequestExecutionIDEQ.
+func RequestExecutionID(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldRequestExecutionID, v))
+}
+
 // APIKeyID applies equality check predicate on the "api_key_id" field. It's identical to APIKeyIDEQ.
 func APIKeyID(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldAPIKeyID, v))
@@ -153,6 +158,21 @@ func CompletionRejectedPredictionTokens(v int64) predicate.UsageLog {
 // Format applies equality check predicate on the "format" field. It's identical to FormatEQ.
 func Format(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldFormat, v))
+}
+
+// RequestedServiceTier applies equality check predicate on the "requested_service_tier" field. It's identical to RequestedServiceTierEQ.
+func RequestedServiceTier(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldRequestedServiceTier, v))
+}
+
+// AppliedServiceTier applies equality check predicate on the "applied_service_tier" field. It's identical to AppliedServiceTierEQ.
+func AppliedServiceTier(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldAppliedServiceTier, v))
+}
+
+// ServiceTier applies equality check predicate on the "service_tier" field. It's identical to ServiceTierEQ.
+func ServiceTier(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldServiceTier, v))
 }
 
 // TotalCost applies equality check predicate on the "total_cost" field. It's identical to TotalCostEQ.
@@ -263,6 +283,36 @@ func RequestIDIn(vs ...int) predicate.UsageLog {
 // RequestIDNotIn applies the NotIn predicate on the "request_id" field.
 func RequestIDNotIn(vs ...int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotIn(FieldRequestID, vs...))
+}
+
+// RequestExecutionIDEQ applies the EQ predicate on the "request_execution_id" field.
+func RequestExecutionIDEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldRequestExecutionID, v))
+}
+
+// RequestExecutionIDNEQ applies the NEQ predicate on the "request_execution_id" field.
+func RequestExecutionIDNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldRequestExecutionID, v))
+}
+
+// RequestExecutionIDIn applies the In predicate on the "request_execution_id" field.
+func RequestExecutionIDIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldRequestExecutionID, vs...))
+}
+
+// RequestExecutionIDNotIn applies the NotIn predicate on the "request_execution_id" field.
+func RequestExecutionIDNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldRequestExecutionID, vs...))
+}
+
+// RequestExecutionIDIsNil applies the IsNil predicate on the "request_execution_id" field.
+func RequestExecutionIDIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldRequestExecutionID))
+}
+
+// RequestExecutionIDNotNil applies the NotNil predicate on the "request_execution_id" field.
+func RequestExecutionIDNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldRequestExecutionID))
 }
 
 // APIKeyIDEQ applies the EQ predicate on the "api_key_id" field.
@@ -1085,6 +1135,231 @@ func FormatContainsFold(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldContainsFold(FieldFormat, v))
 }
 
+// RequestedServiceTierEQ applies the EQ predicate on the "requested_service_tier" field.
+func RequestedServiceTierEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierNEQ applies the NEQ predicate on the "requested_service_tier" field.
+func RequestedServiceTierNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierIn applies the In predicate on the "requested_service_tier" field.
+func RequestedServiceTierIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldRequestedServiceTier, vs...))
+}
+
+// RequestedServiceTierNotIn applies the NotIn predicate on the "requested_service_tier" field.
+func RequestedServiceTierNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldRequestedServiceTier, vs...))
+}
+
+// RequestedServiceTierGT applies the GT predicate on the "requested_service_tier" field.
+func RequestedServiceTierGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierGTE applies the GTE predicate on the "requested_service_tier" field.
+func RequestedServiceTierGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierLT applies the LT predicate on the "requested_service_tier" field.
+func RequestedServiceTierLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierLTE applies the LTE predicate on the "requested_service_tier" field.
+func RequestedServiceTierLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierContains applies the Contains predicate on the "requested_service_tier" field.
+func RequestedServiceTierContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierHasPrefix applies the HasPrefix predicate on the "requested_service_tier" field.
+func RequestedServiceTierHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierHasSuffix applies the HasSuffix predicate on the "requested_service_tier" field.
+func RequestedServiceTierHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierIsNil applies the IsNil predicate on the "requested_service_tier" field.
+func RequestedServiceTierIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldRequestedServiceTier))
+}
+
+// RequestedServiceTierNotNil applies the NotNil predicate on the "requested_service_tier" field.
+func RequestedServiceTierNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldRequestedServiceTier))
+}
+
+// RequestedServiceTierEqualFold applies the EqualFold predicate on the "requested_service_tier" field.
+func RequestedServiceTierEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldRequestedServiceTier, v))
+}
+
+// RequestedServiceTierContainsFold applies the ContainsFold predicate on the "requested_service_tier" field.
+func RequestedServiceTierContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldRequestedServiceTier, v))
+}
+
+// AppliedServiceTierEQ applies the EQ predicate on the "applied_service_tier" field.
+func AppliedServiceTierEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldAppliedServiceTier, v))
+}
+
+// AppliedServiceTierNEQ applies the NEQ predicate on the "applied_service_tier" field.
+func AppliedServiceTierNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldAppliedServiceTier, v))
+}
+
+// AppliedServiceTierIn applies the In predicate on the "applied_service_tier" field.
+func AppliedServiceTierIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldAppliedServiceTier, vs...))
+}
+
+// AppliedServiceTierNotIn applies the NotIn predicate on the "applied_service_tier" field.
+func AppliedServiceTierNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldAppliedServiceTier, vs...))
+}
+
+// AppliedServiceTierGT applies the GT predicate on the "applied_service_tier" field.
+func AppliedServiceTierGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldAppliedServiceTier, v))
+}
+
+// AppliedServiceTierGTE applies the GTE predicate on the "applied_service_tier" field.
+func AppliedServiceTierGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldAppliedServiceTier, v))
+}
+
+// AppliedServiceTierLT applies the LT predicate on the "applied_service_tier" field.
+func AppliedServiceTierLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldAppliedServiceTier, v))
+}
+
+// AppliedServiceTierLTE applies the LTE predicate on the "applied_service_tier" field.
+func AppliedServiceTierLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldAppliedServiceTier, v))
+}
+
+// AppliedServiceTierContains applies the Contains predicate on the "applied_service_tier" field.
+func AppliedServiceTierContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldAppliedServiceTier, v))
+}
+
+// AppliedServiceTierHasPrefix applies the HasPrefix predicate on the "applied_service_tier" field.
+func AppliedServiceTierHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldAppliedServiceTier, v))
+}
+
+// AppliedServiceTierHasSuffix applies the HasSuffix predicate on the "applied_service_tier" field.
+func AppliedServiceTierHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldAppliedServiceTier, v))
+}
+
+// AppliedServiceTierIsNil applies the IsNil predicate on the "applied_service_tier" field.
+func AppliedServiceTierIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldAppliedServiceTier))
+}
+
+// AppliedServiceTierNotNil applies the NotNil predicate on the "applied_service_tier" field.
+func AppliedServiceTierNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldAppliedServiceTier))
+}
+
+// AppliedServiceTierEqualFold applies the EqualFold predicate on the "applied_service_tier" field.
+func AppliedServiceTierEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldAppliedServiceTier, v))
+}
+
+// AppliedServiceTierContainsFold applies the ContainsFold predicate on the "applied_service_tier" field.
+func AppliedServiceTierContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldAppliedServiceTier, v))
+}
+
+// ServiceTierEQ applies the EQ predicate on the "service_tier" field.
+func ServiceTierEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldServiceTier, v))
+}
+
+// ServiceTierNEQ applies the NEQ predicate on the "service_tier" field.
+func ServiceTierNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldServiceTier, v))
+}
+
+// ServiceTierIn applies the In predicate on the "service_tier" field.
+func ServiceTierIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldServiceTier, vs...))
+}
+
+// ServiceTierNotIn applies the NotIn predicate on the "service_tier" field.
+func ServiceTierNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldServiceTier, vs...))
+}
+
+// ServiceTierGT applies the GT predicate on the "service_tier" field.
+func ServiceTierGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldServiceTier, v))
+}
+
+// ServiceTierGTE applies the GTE predicate on the "service_tier" field.
+func ServiceTierGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldServiceTier, v))
+}
+
+// ServiceTierLT applies the LT predicate on the "service_tier" field.
+func ServiceTierLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldServiceTier, v))
+}
+
+// ServiceTierLTE applies the LTE predicate on the "service_tier" field.
+func ServiceTierLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldServiceTier, v))
+}
+
+// ServiceTierContains applies the Contains predicate on the "service_tier" field.
+func ServiceTierContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldServiceTier, v))
+}
+
+// ServiceTierHasPrefix applies the HasPrefix predicate on the "service_tier" field.
+func ServiceTierHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldServiceTier, v))
+}
+
+// ServiceTierHasSuffix applies the HasSuffix predicate on the "service_tier" field.
+func ServiceTierHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldServiceTier, v))
+}
+
+// ServiceTierIsNil applies the IsNil predicate on the "service_tier" field.
+func ServiceTierIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldServiceTier))
+}
+
+// ServiceTierNotNil applies the NotNil predicate on the "service_tier" field.
+func ServiceTierNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldServiceTier))
+}
+
+// ServiceTierEqualFold applies the EqualFold predicate on the "service_tier" field.
+func ServiceTierEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldServiceTier, v))
+}
+
+// ServiceTierContainsFold applies the ContainsFold predicate on the "service_tier" field.
+func ServiceTierContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldServiceTier, v))
+}
+
 // TotalCostEQ applies the EQ predicate on the "total_cost" field.
 func TotalCostEQ(v float64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldTotalCost, v))
@@ -1235,6 +1510,29 @@ func HasRequest() predicate.UsageLog {
 func HasRequestWith(preds ...predicate.Request) predicate.UsageLog {
 	return predicate.UsageLog(func(s *sql.Selector) {
 		step := newRequestStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasRequestExecution applies the HasEdge predicate on the "request_execution" edge.
+func HasRequestExecution() predicate.UsageLog {
+	return predicate.UsageLog(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, true, RequestExecutionTable, RequestExecutionColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasRequestExecutionWith applies the HasEdge predicate on the "request_execution" edge with a given conditions (other predicates).
+func HasRequestExecutionWith(preds ...predicate.RequestExecution) predicate.UsageLog {
+	return predicate.UsageLog(func(s *sql.Selector) {
+		step := newRequestExecutionStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

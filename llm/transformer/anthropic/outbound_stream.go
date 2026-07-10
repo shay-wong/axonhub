@@ -69,6 +69,7 @@ type streamState struct {
 	streamID     string
 	streamModel  string
 	streamUsage  *llm.Usage
+	serviceTier  string
 	platformType PlatformType
 	// Tool call tracking
 	toolIndex    int
@@ -147,10 +148,11 @@ func (s *outboundStream) transformStreamChunk(event *httpclient.StreamEvent) (*l
 
 	// Convert the stream event to ChatCompletionResponse
 	resp := &llm.Response{
-		Object:  "chat.completion.chunk",
-		ID:      state.streamID,    // Use stored ID from message_start
-		Model:   state.streamModel, // Use stored model from message_start
-		Created: 0,
+		Object:      "chat.completion.chunk",
+		ID:          state.streamID,    // Use stored ID from message_start
+		Model:       state.streamModel, // Use stored model from message_start
+		Created:     0,
+		ServiceTier: state.serviceTier,
 	}
 
 	switch streamEvent.Type {
@@ -166,7 +168,8 @@ func (s *outboundStream) transformStreamChunk(event *httpclient.StreamEvent) (*l
 
 			if streamEvent.Message.Usage != nil {
 				state.streamUsage = convertToLlmUsage(streamEvent.Message.Usage, state.platformType)
-				resp.ServiceTier = streamEvent.Message.Usage.ServiceTier
+				state.serviceTier = streamEvent.Message.Usage.ServiceTier
+				resp.ServiceTier = state.serviceTier
 				resp.Usage = state.streamUsage
 			}
 		}
@@ -416,6 +419,10 @@ func (s *outboundStream) transformStreamChunk(event *httpclient.StreamEvent) (*l
 			usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 
 			state.streamUsage = usage
+			if streamEvent.Usage.ServiceTier != "" {
+				state.serviceTier = streamEvent.Usage.ServiceTier
+				resp.ServiceTier = state.serviceTier
+			}
 		}
 
 		if streamEvent.Delta != nil && streamEvent.Delta.StopReason != nil {

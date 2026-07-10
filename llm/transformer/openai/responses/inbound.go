@@ -984,6 +984,9 @@ func convertToResponsesAPIResponse(chatResp *llm.Response) *Response {
 		Status:             lo.ToPtr("completed"),
 		PreviousResponseID: chatResp.PreviousResponseID,
 	}
+	if chatResp.ServiceTier != "" {
+		resp.ServiceTier = lo.ToPtr(chatResp.ServiceTier)
+	}
 
 	// Convert usage
 	resp.Usage = ConvertLLMUsageToResponsesUsage(chatResp.Usage)

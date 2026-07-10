@@ -55,11 +55,12 @@ func (svc *ChannelService) DuplicateChannel(ctx context.Context, sourceID int, i
 		now := time.Now()
 		for _, price := range prices {
 			refID := generateReferenceID()
+			canonicalPrice := price.Price.CanonicalizedServiceTiers()
 
 			copiedPrice, err := db.ChannelModelPrice.Create().
 				SetChannelID(ch.ID).
 				SetModelID(price.ModelID).
-				SetPrice(price.Price).
+				SetPrice(canonicalPrice).
 				SetReferenceID(refID).
 				Save(ctx)
 			if err != nil {
@@ -70,7 +71,7 @@ func (svc *ChannelService) DuplicateChannel(ctx context.Context, sourceID int, i
 				SetChannelID(ch.ID).
 				SetModelID(price.ModelID).
 				SetChannelModelPriceID(copiedPrice.ID).
-				SetPrice(price.Price).
+				SetPrice(canonicalPrice).
 				SetStatus(channelmodelpriceversion.StatusActive).
 				SetEffectiveStartAt(now).
 				SetReferenceID(refID).

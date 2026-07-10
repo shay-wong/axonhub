@@ -31,7 +31,7 @@ func RequestFromLLM(r *llm.Request, reasoningField ReasoningField) *Request {
 		Metadata:            r.Metadata,
 		Modalities:          r.Modalities,
 		ReasoningEffort:     r.ReasoningEffort,
-		ServiceTier:         r.ServiceTier,
+		ServiceTier:         llm.OpenAIServiceTier(r.APIFormat, r.ServiceTier),
 		Stream:              r.Stream,
 		ParallelToolCalls:   r.ParallelToolCalls,
 		Verbosity:           r.Verbosity,

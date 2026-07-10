@@ -75,6 +75,22 @@ func TestRequestFromLLM(t *testing.T) {
 	}
 }
 
+func TestRequestFromLLM_ServiceTierStaysWithinOpenAIFormats(t *testing.T) {
+	tier := "priority"
+
+	openAIRequest := RequestFromLLM(&llm.Request{
+		APIFormat:   llm.APIFormatOpenAIResponse,
+		ServiceTier: &tier,
+	}, ReasoningFieldAll)
+	require.Equal(t, &tier, openAIRequest.ServiceTier)
+
+	anthropicRequest := RequestFromLLM(&llm.Request{
+		APIFormat:   llm.APIFormatAnthropicMessage,
+		ServiceTier: &tier,
+	}, ReasoningFieldAll)
+	require.Nil(t, anthropicRequest.ServiceTier)
+}
+
 func TestRequestFromLLM_FiltersResponsesCustomTools(t *testing.T) {
 	req := RequestFromLLM(&llm.Request{
 		Model:    "gpt-4o",
