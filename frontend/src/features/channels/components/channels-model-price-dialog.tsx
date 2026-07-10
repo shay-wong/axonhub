@@ -223,16 +223,6 @@ const createPriceFormSchema = (t: (key: string) => string) =>
 type PriceFormData = z.infer<ReturnType<typeof createPriceFormSchema>>;
 
 type ChannelModelPrices = NonNullable<ReturnType<typeof useChannelModelPrices>['data']>;
-type PriceItemForm = PriceFormData['prices'][number]['price']['items'][number];
-type PriceItemCodeValue = (typeof priceItemCodes)[number];
-type ProviderCostKey = 'input' | 'output' | 'cache_read' | 'cache_write';
-
-const providerCostItems = [
-  ['prompt_tokens', 'input'],
-  ['completion_tokens', 'output'],
-  ['prompt_cached_tokens', 'cache_read'],
-  ['prompt_write_cached_tokens', 'cache_write'],
-] as const satisfies ReadonlyArray<readonly [PriceItemCodeValue, ProviderCostKey]>;
 
 function buildAvailableModelsByIndex(prices: Array<PriceFormData['prices'][number] | undefined>, supportedModels: string[]) {
   return prices.map((p, currentIndex) => {
@@ -317,62 +307,24 @@ function findProviderModelById(providersData: ProvidersData, modelId: string, pr
   return null;
 }
 
-function formatProviderCost(value: number, multiplier: number) {
-  return (value * multiplier).toFixed(4);
-}
-
-function buildPricingFromProviderCost(
-  cost: ProviderModel['cost'],
-  costKey: ProviderCostKey,
-  multiplier: number
-): PriceItemForm['pricing'] | null {
-  const baseValue = cost?.[costKey];
-  if (baseValue == null) return null;
-
-  const contextTiers = (cost?.tiers || [])
-    .flatMap((tier) => {
-      const size = tier.tier?.type === 'context' ? tier.tier.size : undefined;
-      const value = tier[costKey];
-      if (typeof size !== 'number' || value == null) return [];
-      return [{ size, value }];
-    })
-    .sort((a, b) => a.size - b.size);
-
-  if (contextTiers.length === 0) {
-    return {
-      mode: 'usage_per_unit',
-      usagePerUnit: formatProviderCost(baseValue, multiplier),
-    };
-  }
-
-  return {
-    mode: 'usage_tiered',
-    flatFee: '',
-    usagePerUnit: null,
-    usageTiered: {
-      tiers: [
-        {
-          upTo: contextTiers[0].size,
-          pricePerUnit: formatProviderCost(baseValue, multiplier),
-        },
-        ...contextTiers.map((tier, index) => ({
-          upTo: contextTiers[index + 1]?.size ?? null,
-          pricePerUnit: formatProviderCost(tier.value, multiplier),
-        })),
-      ],
-    },
-  };
-}
-
 function buildItemsFromProviderModel(model: ProviderModel, multiplier: number = 1): PriceFormData['prices'][number]['price']['items'] {
   const items: PriceFormData['prices'][number]['price']['items'] = [];
   const cost = model.cost;
 
-  providerCostItems.forEach(([itemCode, costKey]) => {
-    const pricing = buildPricingFromProviderCost(cost, costKey, multiplier);
-    if (!pricing) return;
-    items.push({ itemCode, pricing });
-  });
+  const pushUsagePerUnit = (itemCode: (typeof priceItemCodes)[number], value: number) => {
+    items.push({
+      itemCode,
+      pricing: {
+        mode: 'usage_per_unit',
+        usagePerUnit: (value * multiplier).toFixed(4),
+      },
+    });
+  };
+
+  if (cost?.input != null) pushUsagePerUnit('prompt_tokens', cost.input);
+  if (cost?.output != null) pushUsagePerUnit('completion_tokens', cost.output);
+  if (cost?.cache_read != null) pushUsagePerUnit('prompt_cached_tokens', cost.cache_read);
+  if (cost?.cache_write != null) pushUsagePerUnit('prompt_write_cached_tokens', cost.cache_write);
 
   if (items.length === 0) {
     items.push({
@@ -394,24 +346,31 @@ function mergeItemsWithProviderCost(
     byCode.set(item.itemCode, item);
   });
 
-  const applyProviderPricing = (itemCode: PriceItemCodeValue, costKey: ProviderCostKey) => {
-    const pricing = buildPricingFromProviderCost(model.cost, costKey, multiplier);
-    if (!pricing) return;
-
+  const applyUsagePerUnit = (itemCode: (typeof priceItemCodes)[number], value: number) => {
     const existing = byCode.get(itemCode);
     if (existing) {
       byCode.set(itemCode, {
         ...existing,
-        pricing,
+        pricing: {
+          mode: 'usage_per_unit',
+          usagePerUnit: (value * multiplier).toFixed(4),
+          flatFee: '',
+          usageTiered: null,
+        },
       });
       return;
     }
-    byCode.set(itemCode, { itemCode, pricing });
+    byCode.set(itemCode, {
+      itemCode,
+      pricing: { mode: 'usage_per_unit', usagePerUnit: (value * multiplier).toFixed(4) },
+    });
   };
 
-  providerCostItems.forEach(([itemCode, costKey]) => {
-    applyProviderPricing(itemCode, costKey);
-  });
+  const cost = model.cost;
+  if (cost?.input != null) applyUsagePerUnit('prompt_tokens', cost.input);
+  if (cost?.output != null) applyUsagePerUnit('completion_tokens', cost.output);
+  if (cost?.cache_read != null) applyUsagePerUnit('prompt_cached_tokens', cost.cache_read);
+  if (cost?.cache_write != null) applyUsagePerUnit('prompt_write_cached_tokens', cost.cache_write);
 
   return Array.from(byCode.values());
 }
