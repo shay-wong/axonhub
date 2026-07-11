@@ -115,8 +115,8 @@ func TestTransformRequestWithMessageToolCalls(t *testing.T) {
 				},
 			},
 			{
-				Role:    "tool",
-				Content: llm.MessageContent{Content: lo.ToPtr("22°C")},
+				Role:       "tool",
+				Content:    llm.MessageContent{Content: lo.ToPtr("22°C")},
 				ToolCallID: lo.ToPtr("call-1"),
 			},
 		},
@@ -128,8 +128,7 @@ func TestTransformRequestWithMessageToolCalls(t *testing.T) {
 	require.Len(t, got.Messages, 2)
 	require.Len(t, got.Messages[0].ToolCalls, 1)
 	require.Equal(t, "get_current_weather", got.Messages[0].ToolCalls[0].Function.Name)
-	require.Equal(t, "Paris", got.Messages[0].ToolCalls[0].Function.Arguments["location"])
-	require.Equal(t, "celsius", got.Messages[0].ToolCalls[0].Function.Arguments["format"])
+	require.JSONEq(t, `{"location":"Paris","format":"celsius"}`, string(got.Messages[0].ToolCalls[0].Function.Arguments))
 }
 
 func TestTransformRequestWithMessageToolCallsEmptyArguments(t *testing.T) {
@@ -167,6 +166,114 @@ func TestTransformRequestWithMessageToolCallsEmptyArguments(t *testing.T) {
 	require.Len(t, got.Messages, 1)
 	require.Len(t, got.Messages[0].ToolCalls, 1)
 	require.Equal(t, "noop", got.Messages[0].ToolCalls[0].Function.Name)
+}
+
+func TestToolCallArgumentsPreserveLargeInteger(t *testing.T) {
+	const arguments = `{"request_id":9007199254740993}`
+	const eventData = `{"model":"qwen3","message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"lookup","arguments":` + arguments + `}}]},"done":true}`
+
+	t.Run("request", func(t *testing.T) {
+		transformer, err := NewOutboundTransformerWithConfig(&Config{BaseURL: "http://localhost:11434"})
+		require.NoError(t, err)
+
+		req, err := transformer.TransformRequest(t.Context(), &llm.Request{
+			Model: "qwen3",
+			Messages: []llm.Message{{
+				Role: "assistant",
+				ToolCalls: []llm.ToolCall{{
+					Type:     "function",
+					Function: llm.FunctionCall{Name: "lookup", Arguments: arguments},
+				}},
+			}},
+		})
+		require.NoError(t, err)
+
+		var got ChatRequest
+		require.NoError(t, json.Unmarshal(req.Body, &got))
+		require.Equal(t, arguments, string(got.Messages[0].ToolCalls[0].Function.Arguments))
+	})
+
+	t.Run("response", func(t *testing.T) {
+		transformer, err := NewOutboundTransformerWithConfig(&Config{BaseURL: "http://localhost:11434"})
+		require.NoError(t, err)
+
+		resp, err := transformer.TransformResponse(t.Context(), &httpclient.Response{Body: []byte(eventData)})
+		require.NoError(t, err)
+		require.Equal(t, arguments, resp.Choices[0].Message.ToolCalls[0].Function.Arguments)
+	})
+
+	t.Run("stream chunk", func(t *testing.T) {
+		outbound, err := NewOutboundTransformerWithConfig(&Config{BaseURL: "http://localhost:11434"})
+		require.NoError(t, err)
+		transformer := outbound.(*OutboundTransformer)
+
+		resp, err := transformer.TransformStreamChunk(t.Context(), &httpclient.StreamEvent{Data: []byte(eventData)})
+		require.NoError(t, err)
+		require.Equal(t, arguments, resp.Choices[0].Delta.ToolCalls[0].Function.Arguments)
+	})
+
+	t.Run("stream aggregate", func(t *testing.T) {
+		outbound, err := NewOutboundTransformerWithConfig(&Config{BaseURL: "http://localhost:11434"})
+		require.NoError(t, err)
+		transformer := outbound.(*OutboundTransformer)
+
+		body, _, err := transformer.AggregateStreamChunks(t.Context(), nil, []*httpclient.StreamEvent{{Data: []byte(eventData)}})
+		require.NoError(t, err)
+
+		var got llm.Response
+		require.NoError(t, json.Unmarshal(body, &got))
+		require.Equal(t, arguments, got.Choices[0].Message.ToolCalls[0].Function.Arguments)
+	})
+}
+
+func TestToolCallArgumentsRejectNonObjectJSON(t *testing.T) {
+	const invalidArguments = `[]`
+	const eventData = `{"model":"qwen3","message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"lookup","arguments":` + invalidArguments + `}}]},"done":true}`
+
+	t.Run("request", func(t *testing.T) {
+		transformer, err := NewOutboundTransformerWithConfig(&Config{BaseURL: "http://localhost:11434"})
+		require.NoError(t, err)
+
+		for _, arguments := range []string{invalidArguments, `{"request_id":`} {
+			_, err = transformer.TransformRequest(t.Context(), &llm.Request{
+				Model: "qwen3",
+				Messages: []llm.Message{{
+					Role: "assistant",
+					ToolCalls: []llm.ToolCall{{
+						Type:     "function",
+						Function: llm.FunctionCall{Name: "lookup", Arguments: arguments},
+					}},
+				}},
+			})
+			require.ErrorContains(t, err, "failed to parse tool call arguments for lookup")
+		}
+	})
+
+	t.Run("response", func(t *testing.T) {
+		transformer, err := NewOutboundTransformerWithConfig(&Config{BaseURL: "http://localhost:11434"})
+		require.NoError(t, err)
+
+		_, err = transformer.TransformResponse(t.Context(), &httpclient.Response{Body: []byte(eventData)})
+		require.ErrorContains(t, err, "failed to parse tool call arguments for lookup")
+	})
+
+	t.Run("stream chunk", func(t *testing.T) {
+		outbound, err := NewOutboundTransformerWithConfig(&Config{BaseURL: "http://localhost:11434"})
+		require.NoError(t, err)
+		transformer := outbound.(*OutboundTransformer)
+
+		_, err = transformer.TransformStreamChunk(t.Context(), &httpclient.StreamEvent{Data: []byte(eventData)})
+		require.ErrorContains(t, err, "failed to parse tool call arguments for lookup")
+	})
+
+	t.Run("stream aggregate", func(t *testing.T) {
+		outbound, err := NewOutboundTransformerWithConfig(&Config{BaseURL: "http://localhost:11434"})
+		require.NoError(t, err)
+		transformer := outbound.(*OutboundTransformer)
+
+		_, _, err = transformer.AggregateStreamChunks(t.Context(), nil, []*httpclient.StreamEvent{{Data: []byte(eventData)}})
+		require.ErrorContains(t, err, "failed to parse tool call arguments for lookup")
+	})
 }
 
 func TestTransformResponseWithToolCalls(t *testing.T) {

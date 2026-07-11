@@ -74,9 +74,9 @@ type ollamaToolCall struct {
 }
 
 type ollamaToolCallFunction struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	Arguments   map[string]any `json:"arguments"`
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Arguments   json.RawMessage `json:"arguments"`
 }
 
 type Options struct {
@@ -139,13 +139,8 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 		if len(msg.ToolCalls) > 0 {
 			chatMsg.ToolCalls = make([]ollamaToolCall, 0, len(msg.ToolCalls))
 			for _, tc := range msg.ToolCalls {
-				rawArgs := tc.Function.Arguments
-				if rawArgs == "" {
-					rawArgs = "{}"
-				}
-
-				var args map[string]any
-				if err := json.Unmarshal([]byte(rawArgs), &args); err != nil {
+				args, err := parseToolCallArguments(tc.Function.Arguments)
+				if err != nil {
 					return nil, fmt.Errorf("failed to parse tool call arguments for %s: %w", tc.Function.Name, err)
 				}
 
@@ -222,6 +217,46 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 		Auth:      authConfig,
 		APIFormat: string(llm.APIFormatOllamaChat),
 	}, nil
+}
+
+func parseToolCallArguments(rawArgs string) (json.RawMessage, error) {
+	if rawArgs == "" {
+		return json.RawMessage("{}"), nil
+	}
+
+	args := json.RawMessage(rawArgs)
+	if err := validateToolCallArguments(args); err != nil {
+		return nil, err
+	}
+
+	return args, nil
+}
+
+func toolCallArgumentsString(args json.RawMessage) (string, error) {
+	// Ollama may omit arguments altogether. Keep the established empty-object
+	// representation while rejecting explicit non-object JSON values.
+	if len(args) == 0 {
+		return "{}", nil
+	}
+
+	if err := validateToolCallArguments(args); err != nil {
+		return "", err
+	}
+
+	return string(args), nil
+}
+
+func validateToolCallArguments(args json.RawMessage) error {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(args, &object); err != nil {
+		return err
+	}
+
+	if object == nil {
+		return fmt.Errorf("tool call arguments must be a JSON object")
+	}
+
+	return nil
 }
 
 func getContentString(content llm.MessageContent) string {
@@ -345,9 +380,9 @@ func (t *OutboundTransformer) TransformResponse(ctx context.Context, httpResp *h
 		if len(ollamaResp.Message.ToolCalls) > 0 {
 			toolCalls = make([]llm.ToolCall, 0, len(ollamaResp.Message.ToolCalls))
 			for i, tc := range ollamaResp.Message.ToolCalls {
-				args, _ := json.Marshal(tc.Function.Arguments)
-				if string(args) == "null" {
-					args = []byte("{}")
+				args, err := toolCallArgumentsString(tc.Function.Arguments)
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse tool call arguments for %s: %w", tc.Function.Name, err)
 				}
 
 				toolCalls = append(toolCalls, llm.ToolCall{
@@ -355,7 +390,7 @@ func (t *OutboundTransformer) TransformResponse(ctx context.Context, httpResp *h
 					Type: "function",
 					Function: llm.FunctionCall{
 						Name:      tc.Function.Name,
-						Arguments: string(args),
+						Arguments: args,
 					},
 					Index: i,
 				})
@@ -430,9 +465,9 @@ func (t *OutboundTransformer) TransformStreamChunk(ctx context.Context, event *h
 		if len(ollamaResp.Message.ToolCalls) > 0 {
 			toolCalls = make([]llm.ToolCall, 0, len(ollamaResp.Message.ToolCalls))
 			for i, tc := range ollamaResp.Message.ToolCalls {
-				args, _ := json.Marshal(tc.Function.Arguments)
-				if string(args) == "null" {
-					args = []byte("{}")
+				args, err := toolCallArgumentsString(tc.Function.Arguments)
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse tool call arguments for %s: %w", tc.Function.Name, err)
 				}
 
 				toolCalls = append(toolCalls, llm.ToolCall{
@@ -440,7 +475,7 @@ func (t *OutboundTransformer) TransformStreamChunk(ctx context.Context, event *h
 					Type: "function",
 					Function: llm.FunctionCall{
 						Name:      tc.Function.Name,
-						Arguments: string(args),
+						Arguments: args,
 					},
 					Index: i,
 				})
@@ -567,9 +602,9 @@ func (t *OutboundTransformer) AggregateStreamChunks(ctx context.Context, _ *http
 	if len(lastToolCalls) > 0 {
 		toolCalls = make([]llm.ToolCall, 0, len(lastToolCalls))
 		for i, tc := range lastToolCalls {
-			args, _ := json.Marshal(tc.Function.Arguments)
-			if string(args) == "null" {
-				args = []byte("{}")
+			args, err := toolCallArgumentsString(tc.Function.Arguments)
+			if err != nil {
+				return nil, llm.ResponseMeta{}, fmt.Errorf("failed to parse tool call arguments for %s: %w", tc.Function.Name, err)
 			}
 
 			toolCalls = append(toolCalls, llm.ToolCall{
@@ -577,7 +612,7 @@ func (t *OutboundTransformer) AggregateStreamChunks(ctx context.Context, _ *http
 				Type: "function",
 				Function: llm.FunctionCall{
 					Name:      tc.Function.Name,
-					Arguments: string(args),
+					Arguments: args,
 				},
 				Index: i,
 			})
