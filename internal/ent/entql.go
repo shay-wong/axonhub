@@ -423,6 +423,9 @@ var schemaGraph = func() *sqlgraph.Schema {
 			requestexecution.FieldModelID:                    {Type: field.TypeString, Column: requestexecution.FieldModelID},
 			requestexecution.FieldFormat:                     {Type: field.TypeString, Column: requestexecution.FieldFormat},
 			requestexecution.FieldRequestedServiceTier:       {Type: field.TypeString, Column: requestexecution.FieldRequestedServiceTier},
+			requestexecution.FieldChannelAPIKeyName:          {Type: field.TypeString, Column: requestexecution.FieldChannelAPIKeyName},
+			requestexecution.FieldChannelAPIKeySuffix:        {Type: field.TypeString, Column: requestexecution.FieldChannelAPIKeySuffix},
+			requestexecution.FieldChannelAPIKeyHeaders:       {Type: field.TypeJSON, Column: requestexecution.FieldChannelAPIKeyHeaders},
 			requestexecution.FieldRequestBody:                {Type: field.TypeJSON, Column: requestexecution.FieldRequestBody},
 			requestexecution.FieldResponseBody:               {Type: field.TypeJSON, Column: requestexecution.FieldResponseBody},
 			requestexecution.FieldResponseChunks:             {Type: field.TypeJSON, Column: requestexecution.FieldResponseChunks},
@@ -3441,6 +3444,21 @@ func (f *RequestExecutionFilter) WhereFormat(p entql.StringP) {
 // WhereRequestedServiceTier applies the entql string predicate on the requested_service_tier field.
 func (f *RequestExecutionFilter) WhereRequestedServiceTier(p entql.StringP) {
 	f.Where(p.Field(requestexecution.FieldRequestedServiceTier))
+}
+
+// WhereChannelAPIKeyName applies the entql string predicate on the channel_api_key_name field.
+func (f *RequestExecutionFilter) WhereChannelAPIKeyName(p entql.StringP) {
+	f.Where(p.Field(requestexecution.FieldChannelAPIKeyName))
+}
+
+// WhereChannelAPIKeySuffix applies the entql string predicate on the channel_api_key_suffix field.
+func (f *RequestExecutionFilter) WhereChannelAPIKeySuffix(p entql.StringP) {
+	f.Where(p.Field(requestexecution.FieldChannelAPIKeySuffix))
+}
+
+// WhereChannelAPIKeyHeaders applies the entql json.RawMessage predicate on the channel_api_key_headers field.
+func (f *RequestExecutionFilter) WhereChannelAPIKeyHeaders(p entql.BytesP) {
+	f.Where(p.Field(requestexecution.FieldChannelAPIKeyHeaders))
 }
 
 // WhereRequestBody applies the entql json.RawMessage predicate on the request_body field.

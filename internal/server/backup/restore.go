@@ -1680,6 +1680,9 @@ func requestExecutionMetadataFields() []string {
 		requestexecution.FieldModelID,
 		requestexecution.FieldFormat,
 		requestexecution.FieldRequestedServiceTier,
+		requestexecution.FieldChannelAPIKeyName,
+		requestexecution.FieldChannelAPIKeySuffix,
+		requestexecution.FieldChannelAPIKeyHeaders,
 		requestexecution.FieldResponseStatusCode,
 		requestexecution.FieldStatus,
 		requestexecution.FieldStream,
@@ -1708,6 +1711,8 @@ func newRequestExecutionRestoreBuilder(db *ent.Client, plan requestExecutionRest
 		SetModelID(data.ModelID).
 		SetFormat(data.Format).
 		SetNillableRequestedServiceTier(nilIfEmpty(llm.CanonicalServiceTier(data.RequestedServiceTier))).
+		SetNillableChannelAPIKeyName(nilIfEmpty(data.ChannelAPIKeyName)).
+		SetNillableChannelAPIKeySuffix(nilIfEmpty(data.ChannelAPIKeySuffix)).
 		SetRequestBody(requestBody).
 		SetNillableErrorMessage(nilIfEmpty(data.ErrorMessage)).
 		SetNillableResponseStatusCode(data.ResponseStatusCode).
@@ -1718,6 +1723,9 @@ func newRequestExecutionRestoreBuilder(db *ent.Client, plan requestExecutionRest
 		SetNillableMetricsReasoningDurationMs(data.MetricsReasoningDurationMs).
 		SetNillableRequestURL(nilIfEmpty(data.RequestURL)).
 		SetPassThroughApplied(data.PassThroughApplied)
+	if len(data.ChannelAPIKeyHeaders) > 0 {
+		builder.SetChannelAPIKeyHeaders(data.ChannelAPIKeyHeaders)
+	}
 
 	if len(data.ResponseBody) > 0 {
 		builder.SetResponseBody(data.ResponseBody)
@@ -1762,6 +1770,12 @@ func requestExecutionFingerprint(
 	writeRequestExecutionFingerprintField(h, execution.ModelID)
 	writeRequestExecutionFingerprintField(h, execution.Format)
 	writeRequestExecutionFingerprintField(h, llm.CanonicalServiceTier(execution.RequestedServiceTier))
+	writeRequestExecutionFingerprintField(h, execution.ChannelAPIKeyName)
+	writeRequestExecutionFingerprintField(h, execution.ChannelAPIKeySuffix)
+	writeRequestExecutionFingerprintField(h, fmt.Sprintf("%d", len(execution.ChannelAPIKeyHeaders)))
+	for _, headerName := range execution.ChannelAPIKeyHeaders {
+		writeRequestExecutionFingerprintField(h, headerName)
+	}
 	writeRequestExecutionFingerprintField(h, optionalIntFingerprint(execution.ResponseStatusCode))
 	writeRequestExecutionFingerprintField(h, string(execution.Status))
 	writeRequestExecutionFingerprintField(h, fmt.Sprintf("%t", execution.Stream))

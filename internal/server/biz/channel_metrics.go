@@ -499,6 +499,8 @@ func deriveErrorMessage(errorCode int) string {
 type PerformanceRecord struct {
 	ChannelID          int
 	APIKey             string // API key used for the request (sensitive, do not log full value)
+	APIKeyName         string
+	APIKeySuffix       string
 	StartTime          time.Time
 	FirstTokenTime     *time.Time
 	ReasoningStartTime *time.Time

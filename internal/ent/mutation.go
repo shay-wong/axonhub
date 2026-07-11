@@ -17904,6 +17904,10 @@ type RequestExecutionMutation struct {
 	model_id                          *string
 	format                            *string
 	requested_service_tier            *string
+	channel_api_key_name              *string
+	channel_api_key_suffix            *string
+	channel_api_key_headers           *[]string
+	appendchannel_api_key_headers     []string
 	request_body                      *objects.JSONRawMessage
 	appendrequest_body                objects.JSONRawMessage
 	response_body                     *objects.JSONRawMessage
@@ -18503,6 +18507,169 @@ func (m *RequestExecutionMutation) RequestedServiceTierCleared() bool {
 func (m *RequestExecutionMutation) ResetRequestedServiceTier() {
 	m.requested_service_tier = nil
 	delete(m.clearedFields, requestexecution.FieldRequestedServiceTier)
+}
+
+// SetChannelAPIKeyName sets the "channel_api_key_name" field.
+func (m *RequestExecutionMutation) SetChannelAPIKeyName(s string) {
+	m.channel_api_key_name = &s
+}
+
+// ChannelAPIKeyName returns the value of the "channel_api_key_name" field in the mutation.
+func (m *RequestExecutionMutation) ChannelAPIKeyName() (r string, exists bool) {
+	v := m.channel_api_key_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChannelAPIKeyName returns the old "channel_api_key_name" field's value of the RequestExecution entity.
+// If the RequestExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestExecutionMutation) OldChannelAPIKeyName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChannelAPIKeyName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChannelAPIKeyName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChannelAPIKeyName: %w", err)
+	}
+	return oldValue.ChannelAPIKeyName, nil
+}
+
+// ClearChannelAPIKeyName clears the value of the "channel_api_key_name" field.
+func (m *RequestExecutionMutation) ClearChannelAPIKeyName() {
+	m.channel_api_key_name = nil
+	m.clearedFields[requestexecution.FieldChannelAPIKeyName] = struct{}{}
+}
+
+// ChannelAPIKeyNameCleared returns if the "channel_api_key_name" field was cleared in this mutation.
+func (m *RequestExecutionMutation) ChannelAPIKeyNameCleared() bool {
+	_, ok := m.clearedFields[requestexecution.FieldChannelAPIKeyName]
+	return ok
+}
+
+// ResetChannelAPIKeyName resets all changes to the "channel_api_key_name" field.
+func (m *RequestExecutionMutation) ResetChannelAPIKeyName() {
+	m.channel_api_key_name = nil
+	delete(m.clearedFields, requestexecution.FieldChannelAPIKeyName)
+}
+
+// SetChannelAPIKeySuffix sets the "channel_api_key_suffix" field.
+func (m *RequestExecutionMutation) SetChannelAPIKeySuffix(s string) {
+	m.channel_api_key_suffix = &s
+}
+
+// ChannelAPIKeySuffix returns the value of the "channel_api_key_suffix" field in the mutation.
+func (m *RequestExecutionMutation) ChannelAPIKeySuffix() (r string, exists bool) {
+	v := m.channel_api_key_suffix
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChannelAPIKeySuffix returns the old "channel_api_key_suffix" field's value of the RequestExecution entity.
+// If the RequestExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestExecutionMutation) OldChannelAPIKeySuffix(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChannelAPIKeySuffix is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChannelAPIKeySuffix requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChannelAPIKeySuffix: %w", err)
+	}
+	return oldValue.ChannelAPIKeySuffix, nil
+}
+
+// ClearChannelAPIKeySuffix clears the value of the "channel_api_key_suffix" field.
+func (m *RequestExecutionMutation) ClearChannelAPIKeySuffix() {
+	m.channel_api_key_suffix = nil
+	m.clearedFields[requestexecution.FieldChannelAPIKeySuffix] = struct{}{}
+}
+
+// ChannelAPIKeySuffixCleared returns if the "channel_api_key_suffix" field was cleared in this mutation.
+func (m *RequestExecutionMutation) ChannelAPIKeySuffixCleared() bool {
+	_, ok := m.clearedFields[requestexecution.FieldChannelAPIKeySuffix]
+	return ok
+}
+
+// ResetChannelAPIKeySuffix resets all changes to the "channel_api_key_suffix" field.
+func (m *RequestExecutionMutation) ResetChannelAPIKeySuffix() {
+	m.channel_api_key_suffix = nil
+	delete(m.clearedFields, requestexecution.FieldChannelAPIKeySuffix)
+}
+
+// SetChannelAPIKeyHeaders sets the "channel_api_key_headers" field.
+func (m *RequestExecutionMutation) SetChannelAPIKeyHeaders(s []string) {
+	m.channel_api_key_headers = &s
+	m.appendchannel_api_key_headers = nil
+}
+
+// ChannelAPIKeyHeaders returns the value of the "channel_api_key_headers" field in the mutation.
+func (m *RequestExecutionMutation) ChannelAPIKeyHeaders() (r []string, exists bool) {
+	v := m.channel_api_key_headers
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChannelAPIKeyHeaders returns the old "channel_api_key_headers" field's value of the RequestExecution entity.
+// If the RequestExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestExecutionMutation) OldChannelAPIKeyHeaders(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChannelAPIKeyHeaders is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChannelAPIKeyHeaders requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChannelAPIKeyHeaders: %w", err)
+	}
+	return oldValue.ChannelAPIKeyHeaders, nil
+}
+
+// AppendChannelAPIKeyHeaders adds s to the "channel_api_key_headers" field.
+func (m *RequestExecutionMutation) AppendChannelAPIKeyHeaders(s []string) {
+	m.appendchannel_api_key_headers = append(m.appendchannel_api_key_headers, s...)
+}
+
+// AppendedChannelAPIKeyHeaders returns the list of values that were appended to the "channel_api_key_headers" field in this mutation.
+func (m *RequestExecutionMutation) AppendedChannelAPIKeyHeaders() ([]string, bool) {
+	if len(m.appendchannel_api_key_headers) == 0 {
+		return nil, false
+	}
+	return m.appendchannel_api_key_headers, true
+}
+
+// ClearChannelAPIKeyHeaders clears the value of the "channel_api_key_headers" field.
+func (m *RequestExecutionMutation) ClearChannelAPIKeyHeaders() {
+	m.channel_api_key_headers = nil
+	m.appendchannel_api_key_headers = nil
+	m.clearedFields[requestexecution.FieldChannelAPIKeyHeaders] = struct{}{}
+}
+
+// ChannelAPIKeyHeadersCleared returns if the "channel_api_key_headers" field was cleared in this mutation.
+func (m *RequestExecutionMutation) ChannelAPIKeyHeadersCleared() bool {
+	_, ok := m.clearedFields[requestexecution.FieldChannelAPIKeyHeaders]
+	return ok
+}
+
+// ResetChannelAPIKeyHeaders resets all changes to the "channel_api_key_headers" field.
+func (m *RequestExecutionMutation) ResetChannelAPIKeyHeaders() {
+	m.channel_api_key_headers = nil
+	m.appendchannel_api_key_headers = nil
+	delete(m.clearedFields, requestexecution.FieldChannelAPIKeyHeaders)
 }
 
 // SetRequestBody sets the "request_body" field.
@@ -19391,7 +19558,7 @@ func (m *RequestExecutionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RequestExecutionMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 27)
 	if m.created_at != nil {
 		fields = append(fields, requestexecution.FieldCreatedAt)
 	}
@@ -19424,6 +19591,15 @@ func (m *RequestExecutionMutation) Fields() []string {
 	}
 	if m.requested_service_tier != nil {
 		fields = append(fields, requestexecution.FieldRequestedServiceTier)
+	}
+	if m.channel_api_key_name != nil {
+		fields = append(fields, requestexecution.FieldChannelAPIKeyName)
+	}
+	if m.channel_api_key_suffix != nil {
+		fields = append(fields, requestexecution.FieldChannelAPIKeySuffix)
+	}
+	if m.channel_api_key_headers != nil {
+		fields = append(fields, requestexecution.FieldChannelAPIKeyHeaders)
 	}
 	if m.request_body != nil {
 		fields = append(fields, requestexecution.FieldRequestBody)
@@ -19494,6 +19670,12 @@ func (m *RequestExecutionMutation) Field(name string) (ent.Value, bool) {
 		return m.Format()
 	case requestexecution.FieldRequestedServiceTier:
 		return m.RequestedServiceTier()
+	case requestexecution.FieldChannelAPIKeyName:
+		return m.ChannelAPIKeyName()
+	case requestexecution.FieldChannelAPIKeySuffix:
+		return m.ChannelAPIKeySuffix()
+	case requestexecution.FieldChannelAPIKeyHeaders:
+		return m.ChannelAPIKeyHeaders()
 	case requestexecution.FieldRequestBody:
 		return m.RequestBody()
 	case requestexecution.FieldResponseBody:
@@ -19551,6 +19733,12 @@ func (m *RequestExecutionMutation) OldField(ctx context.Context, name string) (e
 		return m.OldFormat(ctx)
 	case requestexecution.FieldRequestedServiceTier:
 		return m.OldRequestedServiceTier(ctx)
+	case requestexecution.FieldChannelAPIKeyName:
+		return m.OldChannelAPIKeyName(ctx)
+	case requestexecution.FieldChannelAPIKeySuffix:
+		return m.OldChannelAPIKeySuffix(ctx)
+	case requestexecution.FieldChannelAPIKeyHeaders:
+		return m.OldChannelAPIKeyHeaders(ctx)
 	case requestexecution.FieldRequestBody:
 		return m.OldRequestBody(ctx)
 	case requestexecution.FieldResponseBody:
@@ -19662,6 +19850,27 @@ func (m *RequestExecutionMutation) SetField(name string, value ent.Value) error 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRequestedServiceTier(v)
+		return nil
+	case requestexecution.FieldChannelAPIKeyName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChannelAPIKeyName(v)
+		return nil
+	case requestexecution.FieldChannelAPIKeySuffix:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChannelAPIKeySuffix(v)
+		return nil
+	case requestexecution.FieldChannelAPIKeyHeaders:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChannelAPIKeyHeaders(v)
 		return nil
 	case requestexecution.FieldRequestBody:
 		v, ok := value.(objects.JSONRawMessage)
@@ -19859,6 +20068,15 @@ func (m *RequestExecutionMutation) ClearedFields() []string {
 	if m.FieldCleared(requestexecution.FieldRequestedServiceTier) {
 		fields = append(fields, requestexecution.FieldRequestedServiceTier)
 	}
+	if m.FieldCleared(requestexecution.FieldChannelAPIKeyName) {
+		fields = append(fields, requestexecution.FieldChannelAPIKeyName)
+	}
+	if m.FieldCleared(requestexecution.FieldChannelAPIKeySuffix) {
+		fields = append(fields, requestexecution.FieldChannelAPIKeySuffix)
+	}
+	if m.FieldCleared(requestexecution.FieldChannelAPIKeyHeaders) {
+		fields = append(fields, requestexecution.FieldChannelAPIKeyHeaders)
+	}
 	if m.FieldCleared(requestexecution.FieldResponseBody) {
 		fields = append(fields, requestexecution.FieldResponseBody)
 	}
@@ -19911,6 +20129,15 @@ func (m *RequestExecutionMutation) ClearField(name string) error {
 		return nil
 	case requestexecution.FieldRequestedServiceTier:
 		m.ClearRequestedServiceTier()
+		return nil
+	case requestexecution.FieldChannelAPIKeyName:
+		m.ClearChannelAPIKeyName()
+		return nil
+	case requestexecution.FieldChannelAPIKeySuffix:
+		m.ClearChannelAPIKeySuffix()
+		return nil
+	case requestexecution.FieldChannelAPIKeyHeaders:
+		m.ClearChannelAPIKeyHeaders()
 		return nil
 	case requestexecution.FieldResponseBody:
 		m.ClearResponseBody()
@@ -19979,6 +20206,15 @@ func (m *RequestExecutionMutation) ResetField(name string) error {
 		return nil
 	case requestexecution.FieldRequestedServiceTier:
 		m.ResetRequestedServiceTier()
+		return nil
+	case requestexecution.FieldChannelAPIKeyName:
+		m.ResetChannelAPIKeyName()
+		return nil
+	case requestexecution.FieldChannelAPIKeySuffix:
+		m.ResetChannelAPIKeySuffix()
+		return nil
+	case requestexecution.FieldChannelAPIKeyHeaders:
+		m.ResetChannelAPIKeyHeaders()
 		return nil
 	case requestexecution.FieldRequestBody:
 		m.ResetRequestBody()

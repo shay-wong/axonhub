@@ -4139,6 +4139,21 @@ func (_q *RequestExecutionQuery) collectField(ctx context.Context, oneNode bool,
 				selectedFields = append(selectedFields, requestexecution.FieldRequestedServiceTier)
 				fieldSeen[requestexecution.FieldRequestedServiceTier] = struct{}{}
 			}
+		case "channelAPIKeyName":
+			if _, ok := fieldSeen[requestexecution.FieldChannelAPIKeyName]; !ok {
+				selectedFields = append(selectedFields, requestexecution.FieldChannelAPIKeyName)
+				fieldSeen[requestexecution.FieldChannelAPIKeyName] = struct{}{}
+			}
+		case "channelAPIKeySuffix":
+			if _, ok := fieldSeen[requestexecution.FieldChannelAPIKeySuffix]; !ok {
+				selectedFields = append(selectedFields, requestexecution.FieldChannelAPIKeySuffix)
+				fieldSeen[requestexecution.FieldChannelAPIKeySuffix] = struct{}{}
+			}
+		case "channelAPIKeyHeaders":
+			if _, ok := fieldSeen[requestexecution.FieldChannelAPIKeyHeaders]; !ok {
+				selectedFields = append(selectedFields, requestexecution.FieldChannelAPIKeyHeaders)
+				fieldSeen[requestexecution.FieldChannelAPIKeyHeaders] = struct{}{}
+			}
 		case "requestBody":
 			if _, ok := fieldSeen[requestexecution.FieldRequestBody]; !ok {
 				selectedFields = append(selectedFields, requestexecution.FieldRequestBody)

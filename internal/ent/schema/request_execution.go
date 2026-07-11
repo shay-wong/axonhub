@@ -56,6 +56,30 @@ func (RequestExecution) Fields() []ent.Field {
 		//  The format of the request, e.g: openai/chat_completions, claude/messages, openai/response.
 		field.String("format").Immutable().Default("openai/chat_completions"),
 		field.String("requested_service_tier").Optional().Immutable().Comment("Canonical service tier sent to the provider for this execution"),
+		field.String("channel_api_key_name").
+			Optional().
+			Immutable().
+			Comment("Alias snapshot of the upstream channel API key used for this execution").
+			Annotations(
+				entgql.Skip(entgql.SkipWhereInput),
+				entgql.Directives(forceResolver()),
+			),
+		field.String("channel_api_key_suffix").
+			Optional().
+			Immutable().
+			Comment("Non-sensitive suffix of the upstream channel API key used for this execution").
+			Annotations(
+				entgql.Skip(entgql.SkipWhereInput),
+				entgql.Directives(forceResolver()),
+			),
+		field.Strings("channel_api_key_headers").
+			Optional().
+			Immutable().
+			Comment("Header names that carried the upstream channel API key for this execution").
+			Annotations(
+				entgql.Skip(entgql.SkipWhereInput),
+				entgql.Directives(forceResolver()),
+			),
 		// The original request to the provider.
 		// e.g: the user request via OpenAI request format, but the actual request to the provider with Claude format, the request_body is the Claude request format.
 		field.JSON("request_body", objects.JSONRawMessage{}).Immutable().Annotations(

@@ -50,6 +50,7 @@ func (svc *ChannelService) ApplyAPIKeyDisableAction(
 	if err != nil {
 		return fmt.Errorf("failed to get channel: %w", err)
 	}
+	identity := (&Channel{Channel: ch}).APIKeyIdentity(key)
 
 	// 检查 key 是否在 credentials 中
 	allKeys := ch.Credentials.GetAllAPIKeys()
@@ -104,21 +105,23 @@ func (svc *ChannelService) ApplyAPIKeyDisableAction(
 	if channelDisabled {
 		update.SetStatus(channel.StatusDisabled)
 		update.SetErrorMessage(fmt.Sprintf("%s (last error: %d)", allAPIKeysPermanentlyDisabledMessagePrefix, errorCode))
-		log.Warn(ctx, "Channel disabled because all API keys are permanently disabled",
+		fields := []log.Field{
 			log.Int("channel_id", channelID),
 			log.String("channel_name", ch.Name),
-		)
+		}
+		log.Warn(ctx, "Channel disabled because all API keys are permanently disabled", append(fields, apiKeyIdentityLogFields(identity)...)...)
 	}
 
 	if _, err := update.Save(ctx); err != nil {
 		return fmt.Errorf("failed to disable api key: %w", err)
 	}
 
-	log.Info(ctx, "API key disabled",
+	fields := []log.Field{
 		log.Int("channel_id", channelID),
 		log.Int("error_code", errorCode),
 		log.String("action", action),
-	)
+	}
+	log.Info(ctx, "API key disabled", append(fields, apiKeyIdentityLogFields(identity)...)...)
 
 	reloadCtx, cancel := xcontext.DetachWithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -219,6 +222,10 @@ func (svc *ChannelService) EnableAPIKey(ctx context.Context, channelID int, key 
 		return fmt.Errorf("failed to enable api key: %w", err)
 	}
 
+	fields := []log.Field{log.Int("channel_id", channelID)}
+	identity := (&Channel{Channel: ch}).APIKeyIdentity(key)
+	log.Info(ctx, "API key enabled", append(fields, apiKeyIdentityLogFields(identity)...)...)
+
 	svc.asyncReloadChannels()
 
 	return nil
@@ -303,6 +310,7 @@ func (svc *ChannelService) EnableSelectedAPIKeys(ctx context.Context, channelID 
 	log.Info(ctx, "Selected API keys enabled",
 		log.Int("channel_id", channelID),
 		log.Int("count", len(keys)),
+		log.Any("api_keys", (&Channel{Channel: ch}).APIKeyIdentities(keys)),
 	)
 
 	svc.asyncReloadChannels()
@@ -383,7 +391,14 @@ func (svc *ChannelService) DeleteDisabledAPIKeys(ctx context.Context, channelID 
 		// Prefer the first key that was supposed to be deleted
 		restoredKey := keys[0]
 		if len(ch.Credentials.APIKeyConfigs) > 0 {
-			newCredentials.APIKeyConfigs = []objects.ChannelAPIKeyConfig{{Key: restoredKey, Weight: 100}}
+			restoredConfig := objects.ChannelAPIKeyConfig{Key: restoredKey, Weight: 100}
+			for _, config := range ch.Credentials.APIKeyConfigs {
+				if config.Key == restoredKey {
+					restoredConfig = config
+					break
+				}
+			}
+			newCredentials.APIKeyConfigs = []objects.ChannelAPIKeyConfig{restoredConfig}
 		} else {
 			newCredentials.APIKeys = []string{restoredKey}
 		}
@@ -400,6 +415,7 @@ func (svc *ChannelService) DeleteDisabledAPIKeys(ctx context.Context, channelID 
 	log.Info(ctx, "Disabled API keys deleted",
 		log.Int("channel_id", channelID),
 		log.Int("count", len(keys)),
+		log.Any("api_keys", (&Channel{Channel: ch}).APIKeyIdentities(keys)),
 	)
 
 	// Check if we had to preserve a key

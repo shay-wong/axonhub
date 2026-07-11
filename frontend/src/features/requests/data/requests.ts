@@ -210,7 +210,7 @@ function buildRequestDetailPollingQuery(permissions: { canViewApiKeys: boolean; 
   `;
 }
 
-function buildRequestExecutionsQuery(permissions: { canViewChannels: boolean }) {
+function buildRequestExecutionsQuery(permissions: { canViewChannels: boolean; canWriteChannels: boolean }) {
   const channelFields = permissions.canViewChannels
     ? `
               channel {
@@ -219,6 +219,12 @@ function buildRequestExecutionsQuery(permissions: { canViewChannels: boolean }) 
                   type
                   baseURL
               }`
+    : '';
+  const channelAPIKeyFields = permissions.canWriteChannels
+    ? `
+                channelAPIKeyName
+                channelAPIKeySuffix
+                channelAPIKeyHeaders`
     : '';
 
   return `
@@ -240,7 +246,7 @@ function buildRequestExecutionsQuery(permissions: { canViewChannels: boolean }) 
                 requestID${channelFields}
                 modelID
                 projectID
-                dataStorageID
+                dataStorageID${channelAPIKeyFields}
                 requestHeaders
                 requestBody
                 responseBody

@@ -760,6 +760,9 @@ func TestBackupService_Restore_UsageStats(t *testing.T) {
 	require.Equal(t, restoredRequest.ID, restoredExecution.RequestID)
 	require.Equal(t, ch.ID, restoredExecution.ChannelID)
 	require.Equal(t, "priority", restoredExecution.RequestedServiceTier)
+	require.Equal(t, "Primary Account", restoredExecution.ChannelAPIKeyName)
+	require.Equal(t, "1234", restoredExecution.ChannelAPIKeySuffix)
+	require.Equal(t, []string{"Authorization"}, restoredExecution.ChannelAPIKeyHeaders)
 	require.JSONEq(t, `{}`, string(restoredExecution.RequestBody))
 
 	expectedExecution := *backupData.RequestExecutions[0]

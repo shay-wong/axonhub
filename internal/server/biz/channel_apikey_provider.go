@@ -105,6 +105,7 @@ func (p *TraceStickyKeyProvider) Get(ctx context.Context) string {
 	}
 
 	if len(enabled) == 1 {
+		logSelectedAPIKey(ctx, "Single key selected", p.channel, enabled[0])
 		recordSelectedAPIKey(ctx, enabled[0])
 
 		return enabled[0]
@@ -120,20 +121,11 @@ func (p *TraceStickyKeyProvider) Get(ctx context.Context) string {
 			p.cache.Add(trace.TraceID, selectedKey)
 		}
 
-		if log.DebugEnabled(ctx) {
-			log.Debug(ctx, "Trace sticky key selected",
-				log.String("trace_id", trace.TraceID),
-				log.String("key_prefix", safeAPIKeyPrefix(selectedKey)),
-			)
-		}
+		logSelectedAPIKey(ctx, "Trace sticky key selected", p.channel, selectedKey, log.String("trace_id", trace.TraceID))
 	} else {
 		//nolint:gosec // not a security issue, just a random selection.
 		selectedKey = enabled[rand.IntN(len(enabled))]
-		if log.DebugEnabled(ctx) {
-			log.Debug(ctx, "Random key selected",
-				log.String("key_prefix", safeAPIKeyPrefix(selectedKey)),
-			)
-		}
+		logSelectedAPIKey(ctx, "Random key selected", p.channel, selectedKey)
 	}
 
 	recordSelectedAPIKey(ctx, selectedKey)
@@ -157,6 +149,11 @@ func (p *WeightedTraceStickyKeyProvider) Get(ctx context.Context) string {
 		}
 	} else {
 		selectedKey = weightedRandomSelect(enabled)
+	}
+	if trace, ok := contexts.GetTrace(ctx); ok && trace != nil {
+		logSelectedAPIKey(ctx, "Weighted trace sticky key selected", p.channel, selectedKey, log.String("trace_id", trace.TraceID))
+	} else {
+		logSelectedAPIKey(ctx, "Weighted random key selected", p.channel, selectedKey)
 	}
 
 	recordSelectedAPIKey(ctx, selectedKey)
@@ -196,6 +193,11 @@ func (p *FailoverAPIKeyProvider) Get(ctx context.Context) string {
 	} else {
 		//nolint:gosec // not a security issue, just a random selection.
 		selectedKey = keys[rand.IntN(len(keys))]
+	}
+	if trace, ok := contexts.GetTrace(ctx); ok && trace != nil {
+		logSelectedAPIKey(ctx, "Failover trace sticky key selected", p.channel, selectedKey, log.String("trace_id", trace.TraceID))
+	} else {
+		logSelectedAPIKey(ctx, "Failover random key selected", p.channel, selectedKey)
 	}
 
 	recordSelectedAPIKey(ctx, selectedKey)
@@ -321,10 +323,11 @@ func panicNoEnabledAPIKey(ch *Channel) {
 	panic("no enabled api key configured for channel " + ch.Name)
 }
 
-func safeAPIKeyPrefix(key string) string {
-	if len(key) >= 2 {
-		return key[:2]
+func logSelectedAPIKey(ctx context.Context, message string, channel *Channel, key string, fields ...log.Field) {
+	if !log.DebugEnabled(ctx) {
+		return
 	}
 
-	return key
+	fields = append(fields, apiKeyIdentityLogFields(channel.APIKeyIdentity(key))...)
+	log.Debug(ctx, message, fields...)
 }

@@ -973,6 +973,31 @@ func TestChannelService_DeleteDisabledAPIKeys_PreserveAtLeastOneKey(t *testing.T
 	require.Len(t, updatedCh.DisabledAPIKeys, 0)
 }
 
+func TestChannelService_DeleteDisabledAPIKeys_PreservesStructuredKeyMetadata(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	config := objects.ChannelAPIKeyConfig{Key: "only-structured-key", Name: "Primary Account", Weight: 250}
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Structured Key Channel").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKeyConfigs: []objects.ChannelAPIKeyConfig{config}}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		Save(ctx)
+	require.NoError(t, err)
+
+	result, err := svc.DeleteDisabledAPIKeys(ctx, ch.ID, []string{config.Key})
+	require.NoError(t, err)
+	require.Equal(t, "ONE_KEY_PRESERVED", result.Message)
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, []objects.ChannelAPIKeyConfig{config}, updatedCh.Credentials.APIKeyConfigs)
+}
+
 func TestChannelService_DeleteDisabledAPIKeys_WithLegacyAPIKey(t *testing.T) {
 	svc, client := setupTestChannelService(t)
 	defer client.Close()

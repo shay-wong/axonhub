@@ -39,6 +39,12 @@ const (
 	FieldFormat = "format"
 	// FieldRequestedServiceTier holds the string denoting the requested_service_tier field in the database.
 	FieldRequestedServiceTier = "requested_service_tier"
+	// FieldChannelAPIKeyName holds the string denoting the channel_api_key_name field in the database.
+	FieldChannelAPIKeyName = "channel_api_key_name"
+	// FieldChannelAPIKeySuffix holds the string denoting the channel_api_key_suffix field in the database.
+	FieldChannelAPIKeySuffix = "channel_api_key_suffix"
+	// FieldChannelAPIKeyHeaders holds the string denoting the channel_api_key_headers field in the database.
+	FieldChannelAPIKeyHeaders = "channel_api_key_headers"
 	// FieldRequestBody holds the string denoting the request_body field in the database.
 	FieldRequestBody = "request_body"
 	// FieldResponseBody holds the string denoting the response_body field in the database.
@@ -119,6 +125,9 @@ var Columns = []string{
 	FieldModelID,
 	FieldFormat,
 	FieldRequestedServiceTier,
+	FieldChannelAPIKeyName,
+	FieldChannelAPIKeySuffix,
+	FieldChannelAPIKeyHeaders,
 	FieldRequestBody,
 	FieldResponseBody,
 	FieldResponseChunks,
@@ -277,6 +286,16 @@ func ByFormat(opts ...sql.OrderTermOption) OrderOption {
 // ByRequestedServiceTier orders the results by the requested_service_tier field.
 func ByRequestedServiceTier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRequestedServiceTier, opts...).ToFunc()
+}
+
+// ByChannelAPIKeyName orders the results by the channel_api_key_name field.
+func ByChannelAPIKeyName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldChannelAPIKeyName, opts...).ToFunc()
+}
+
+// ByChannelAPIKeySuffix orders the results by the channel_api_key_suffix field.
+func ByChannelAPIKeySuffix(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldChannelAPIKeySuffix, opts...).ToFunc()
 }
 
 // ByErrorMessage orders the results by the error_message field.

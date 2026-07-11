@@ -282,35 +282,42 @@ func (svc *ChannelService) checkAndHandleAPIKeyError(ctx context.Context, perf *
 
 		if count >= statusConfig.Times {
 			reason := fmt.Sprintf("Auto-disabled after %d consecutive errors with status %d", count, perf.ResponseStatusCode)
+			identityFields := apiKeyIdentityLogFields(ChannelAPIKeyIdentity{
+				Name:   perf.APIKeyName,
+				Suffix: perf.APIKeySuffix,
+			})
 			switch statusConfig.Action {
 			case DisableActionNone:
 			case DisableActionPermanent:
 				if err := svc.DisableAPIKey(ctx, perf.ChannelID, perf.APIKey, perf.ResponseStatusCode, reason); err != nil {
-					log.Error(ctx, "Failed to disable API key",
+					fields := []log.Field{
 						log.Int("channel_id", perf.ChannelID),
 						log.Int("error_code", perf.ResponseStatusCode),
 						log.Cause(err),
-					)
+					}
+					log.Error(ctx, "Failed to disable API key", append(fields, identityFields...)...)
 
 					return false
 				}
 			case DisableActionTemporary:
 				duration := resolveAutoDisableDuration(statusConfig, perf)
 				if err := svc.ApplyAPIKeyDisableAction(ctx, perf.ChannelID, perf.APIKey, DisableActionTemporary, &duration, perf.ResponseStatusCode, reason); err != nil {
-					log.Error(ctx, "Failed to temporarily disable API key",
+					fields := []log.Field{
 						log.Int("channel_id", perf.ChannelID),
 						log.Int("error_code", perf.ResponseStatusCode),
 						log.Cause(err),
-					)
+					}
+					log.Error(ctx, "Failed to temporarily disable API key", append(fields, identityFields...)...)
 
 					return false
 				}
 			default:
-				log.Warn(ctx, "Unknown API key auto-disable action",
+				fields := []log.Field{
 					log.Int("channel_id", perf.ChannelID),
 					log.Int("error_code", perf.ResponseStatusCode),
 					log.String("action", statusConfig.Action),
-				)
+				}
+				log.Warn(ctx, "Unknown API key auto-disable action", append(fields, identityFields...)...)
 				return false
 			}
 

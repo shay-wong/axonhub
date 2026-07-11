@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useChannels } from '../context/channels-context';
+import { createAPIKeyNameMap, formatAPIKeyIdentity, maskAPIKeySuffix } from '../data/api-key-display';
 import {
   useChannelDisabledAPIKeys,
   useEnableChannelAPIKey,
@@ -28,7 +29,6 @@ interface ChannelsDisabledAPIKeysDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
-
 export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDisabledAPIKeysDialogProps) {
   const { t } = useTranslation();
   const { currentRow, setOpen } = useChannels();
@@ -152,6 +152,20 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
     [disabledKeys.length, selectedKeys.size]
   );
 
+  const apiKeyNames = useMemo(
+    () => createAPIKeyNameMap(currentRow?.credentials?.apiKeyConfigs),
+    [currentRow?.credentials?.apiKeyConfigs]
+  );
+
+  const selectedKeyIdentities = useMemo(
+    () =>
+      [...selectedKeys].map((key) => ({
+        key,
+        label: formatAPIKeyIdentity(key, apiKeyNames.get(key.trim())),
+      })),
+    [apiKeyNames, selectedKeys]
+  );
+
   if (!currentRow) {
     return null;
   }
@@ -210,6 +224,13 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
                           <p className='text-sm'>
                             {t('channels.dialogs.disabledAPIKeys.confirmEnableSelected', { count: selectedKeys.size })}
                           </p>
+                          <div className='max-h-32 space-y-1 overflow-y-auto'>
+                            {selectedKeyIdentities.map((identity) => (
+                              <code key={identity.key} className='bg-muted block truncate rounded px-2 py-1 text-xs' title={identity.label}>
+                                {identity.label}
+                              </code>
+                            ))}
+                          </div>
                           <div className='flex justify-end gap-2'>
                             <Button size='sm' variant='outline' onClick={() => setConfirmEnableSelected(false)}>
                               {t('common.buttons.cancel')}
@@ -235,6 +256,13 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
                           <p className='text-sm'>
                             {t('channels.dialogs.disabledAPIKeys.confirmDeleteSelected', { count: selectedKeys.size })}
                           </p>
+                          <div className='max-h-32 space-y-1 overflow-y-auto'>
+                            {selectedKeyIdentities.map((identity) => (
+                              <code key={identity.key} className='bg-muted block truncate rounded px-2 py-1 text-xs' title={identity.label}>
+                                {identity.label}
+                              </code>
+                            ))}
+                          </div>
                           <div className='flex justify-end gap-2'>
                             <Button size='sm' variant='outline' onClick={() => setConfirmDeleteSelected(false)}>
                               {t('common.buttons.cancel')}
@@ -255,7 +283,7 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
                 <div className='divide-y'>
                   {disabledKeys.map((dk) => (
                     <div key={dk.key} className='flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/50'>
-                      <div className='flex items-center gap-3'>
+                      <div className='flex min-w-0 items-center gap-3'>
                         <Checkbox
                           checked={selectedKeys.has(dk.key)}
                           onCheckedChange={(checked) => {
@@ -270,9 +298,17 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
                             });
                           }}
                         />
-                        <div className='flex flex-col gap-1'>
-                          <div className='flex items-center gap-2'>
-                            <code className='bg-muted rounded px-2 py-0.5 font-mono text-sm'>****{dk.key.slice(-4)}</code>
+                        <div className='flex min-w-0 flex-col gap-1'>
+                          <div className='flex min-w-0 items-center gap-2'>
+                            {apiKeyNames.get(dk.key.trim()) && (
+                              <span
+                                className='max-w-[180px] truncate text-sm font-medium'
+                                title={apiKeyNames.get(dk.key.trim())}
+                              >
+                                {apiKeyNames.get(dk.key.trim())}
+                              </span>
+                            )}
+                            <code className='bg-muted rounded px-2 py-0.5 font-mono text-sm'>{maskAPIKeySuffix(dk.key)}</code>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span className='text-destructive flex items-center gap-1 text-xs'>
@@ -311,6 +347,9 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
                           <PopoverContent className='w-64'>
                             <div className='flex flex-col gap-3'>
                               <p className='text-sm'>{t('channels.dialogs.disabledAPIKeys.confirmEnable')}</p>
+                              <code className='bg-muted rounded px-2 py-1 text-xs'>
+                                {formatAPIKeyIdentity(dk.key, apiKeyNames.get(dk.key.trim()))}
+                              </code>
                               <div className='flex justify-end gap-2'>
                                 <Button size='sm' variant='outline' onClick={() => setConfirmPopoverKey(null)}>
                                   {t('common.buttons.cancel')}
@@ -336,6 +375,9 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
                           <PopoverContent className='w-64'>
                             <div className='flex flex-col gap-3'>
                               <p className='text-sm'>{t('channels.dialogs.disabledAPIKeys.confirmDelete')}</p>
+                              <code className='bg-muted rounded px-2 py-1 text-xs'>
+                                {formatAPIKeyIdentity(dk.key, apiKeyNames.get(dk.key.trim()))}
+                              </code>
                               <div className='flex justify-end gap-2'>
                                 <Button size='sm' variant='outline' onClick={() => setConfirmDeletePopoverKey(null)}>
                                   {t('common.buttons.cancel')}

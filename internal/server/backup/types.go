@@ -73,6 +73,9 @@ type BackupRequestExecution struct {
 	ModelID                    string                   `json:"model_id,omitempty"`
 	Format                     string                   `json:"format,omitempty"`
 	RequestedServiceTier       string                   `json:"requested_service_tier,omitempty"`
+	ChannelAPIKeyName          string                   `json:"channel_api_key_name,omitempty"`
+	ChannelAPIKeySuffix        string                   `json:"channel_api_key_suffix,omitempty"`
+	ChannelAPIKeyHeaders       []string                 `json:"channel_api_key_headers,omitempty"`
 	RequestBody                objects.JSONRawMessage   `json:"request_body,omitempty"`
 	ResponseBody               objects.JSONRawMessage   `json:"response_body,omitempty"`
 	ResponseChunks             []objects.JSONRawMessage `json:"response_chunks,omitempty"`

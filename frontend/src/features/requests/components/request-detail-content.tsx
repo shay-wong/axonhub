@@ -21,6 +21,7 @@ import { getStatusColor } from './help';
 import { ResponseFlow } from './response-flow';
 import { parseResponse } from '../utils/response-parser';
 import { generateRequestCurl, generateExecutionCurl } from '../utils/curl-generator';
+import { formatExecutionRequestHeaders } from '../utils/execution-request-headers';
 
 interface RequestDetailContentProps {
   requestId: string;
@@ -728,6 +729,12 @@ export function RequestDetailContent({ requestId, projectId, previewRequest, isP
                 <div className='space-y-6'>
                   {executions.edges.map((edge: any, index: number) => {
                     const execution = edge.node;
+                    const executionRequestHeaders = formatExecutionRequestHeaders(
+						execution.requestHeaders,
+						execution.channelAPIKeyName,
+						execution.channelAPIKeySuffix,
+						execution.channelAPIKeyHeaders
+					);
                     return (
                       <Card key={execution.id} className='bg-muted/20 border-0 shadow-sm'>
                         <CardHeader className='pb-4'>
@@ -814,16 +821,16 @@ export function RequestDetailContent({ requestId, projectId, previewRequest, isP
                             </div>
                           )}
 
-                          {(execution.requestHeaders || execution.requestBody) && (
+                          {(executionRequestHeaders || execution.requestBody) && (
                             <div className='flex justify-end'>
-                              <Button variant='outline' size='sm' onClick={() => showExecutionCurlPreview(execution.requestHeaders, execution.requestBody, execution.channel, execution.format, execution.requestURL)} className='hover:bg-primary hover:text-primary-foreground'>
+                              <Button variant='outline' size='sm' onClick={() => showExecutionCurlPreview(executionRequestHeaders, execution.requestBody, execution.channel, execution.format, execution.requestURL)} className='hover:bg-primary hover:text-primary-foreground'>
                                 <Terminal className='mr-2 h-4 w-4' />
                                 {t('requests.actions.copyCurl')}
                               </Button>
                             </div>
                           )}
 
-                          {execution.requestHeaders && (
+                          {executionRequestHeaders && (
                             <div className='space-y-3'>
                               <div className='flex items-center justify-between'>
                                 <span className='flex items-center gap-2 text-sm font-semibold'>
@@ -831,18 +838,18 @@ export function RequestDetailContent({ requestId, projectId, previewRequest, isP
                                   {t('requests.columns.requestHeaders')}
                                 </span>
                                 <div className='flex gap-2'>
-                                  <Button variant='outline' size='sm' onClick={() => copyToClipboard(formatJson(execution.requestHeaders))} className='hover:bg-primary hover:text-primary-foreground'>
+                                  <Button variant='outline' size='sm' onClick={() => copyToClipboard(formatJson(executionRequestHeaders))} className='hover:bg-primary hover:text-primary-foreground'>
                                     <Copy className='mr-2 h-4 w-4' />
                                     {t('requests.dialogs.jsonViewer.copy')}
                                   </Button>
-                                  <Button variant='outline' size='sm' onClick={() => downloadFile(formatJson(execution.requestHeaders), `execution-${execution.id}-request-headers.json`)} className='hover:bg-primary hover:text-primary-foreground'>
+                                  <Button variant='outline' size='sm' onClick={() => downloadFile(formatJson(executionRequestHeaders), `execution-${execution.id}-request-headers.json`)} className='hover:bg-primary hover:text-primary-foreground'>
                                     <Download className='mr-2 h-4 w-4' />
                                     {t('requests.dialogs.jsonViewer.download')}
                                   </Button>
                                 </div>
                               </div>
                               <div className='bg-background h-64 w-full overflow-auto rounded-lg border p-3'>
-                                <JsonViewer data={execution.requestHeaders} rootName='' defaultExpanded={false} hideArrayIndices={true} className='text-xs' />
+                                <JsonViewer data={executionRequestHeaders} rootName='' defaultExpanded={false} hideArrayIndices={true} className='text-xs' />
                               </div>
                             </div>
                           )}

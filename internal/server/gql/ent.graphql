@@ -4656,6 +4656,18 @@ type RequestExecution implements Node {
   Canonical service tier sent to the provider for this execution
   """
   requestedServiceTier: String
+  """
+  Alias snapshot of the upstream channel API key used for this execution
+  """
+  channelAPIKeyName: String @goField(forceResolver: true)
+  """
+  Non-sensitive suffix of the upstream channel API key used for this execution
+  """
+  channelAPIKeySuffix: String @goField(forceResolver: true)
+  """
+  Header names that carried the upstream channel API key for this execution
+  """
+  channelAPIKeyHeaders: [String!] @goField(forceResolver: true)
   requestBody: JSONRawMessage! @goField(forceResolver: true)
   responseBody: JSONRawMessage @goField(forceResolver: true)
   responseChunks: [JSONRawMessage!] @goField(forceResolver: true)

@@ -41,6 +41,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { useChannels } from '../context/channels-context';
+import { createAPIKeyNameMap, formatAPIKeyIdentity } from '../data/api-key-display';
 import {
   ChannelStatusActionID,
   ChannelStatusTone,
@@ -95,6 +96,25 @@ function getConfiguredAPIKeys(channel: Channel): string[] {
   const keys = channel.credentials?.apiKeys?.filter((key) => key.trim().length > 0) ?? [];
   if (keys.length > 0) return keys;
   return channel.credentials?.apiKeyConfigs?.map((config) => config.key.trim()).filter((key) => key.length > 0) ?? [];
+}
+
+function DisabledAPIKeysTooltipContent({ channel, label }: { channel: Channel; label: string }) {
+  const apiKeyNames = createAPIKeyNameMap(channel.credentials?.apiKeyConfigs);
+  const identities = (channel.disabledAPIKeys ?? []).map((item) => ({
+    key: item.key,
+    label: formatAPIKeyIdentity(item.key, apiKeyNames.get(item.key.trim())),
+  }));
+
+  return (
+    <div className='max-w-72 space-y-1.5'>
+      <p className='text-sm text-amber-500'>{label}</p>
+      {identities.map((identity) => (
+        <code key={identity.key} className='bg-muted block truncate rounded px-1.5 py-0.5 text-xs' title={identity.label}>
+          {identity.label}
+        </code>
+      ))}
+    </div>
+  );
 }
 
 // Status Switch Cell Component to handle status toggle with confirmation dialog
@@ -507,9 +527,19 @@ function renderChannelStatusTooltipContent(
         </div>
       );
     case 'disabledKeys':
-      return <p className='text-sm text-amber-500'>{t('channels.actions.disabledAPIKeys', { count: disabledKeysCount })}</p>;
+      return (
+        <DisabledAPIKeysTooltipContent
+          channel={channel}
+          label={t('channels.actions.disabledAPIKeys', { count: disabledKeysCount })}
+        />
+      );
     case 'disabledKeysReadOnly':
-      return <p className='text-sm text-amber-500'>{t('channels.actions.disabledAPIKeysReadOnly', { count: disabledKeysCount })}</p>;
+      return (
+        <DisabledAPIKeysTooltipContent
+          channel={channel}
+          label={t('channels.actions.disabledAPIKeysReadOnly', { count: disabledKeysCount })}
+        />
+      );
     default:
       return assertNever(icon.tooltipKind);
   }

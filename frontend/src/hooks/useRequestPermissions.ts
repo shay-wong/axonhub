@@ -7,6 +7,7 @@ export interface RequestPermissions {
   canViewUsers: boolean;
   canViewApiKeys: boolean;
   canViewChannels: boolean;
+  canWriteChannels: boolean;
   canViewRoles: boolean;
 }
 
@@ -32,6 +33,7 @@ export function useRequestPermissions(): RequestPermissions {
   const permissions = useMemo(() => {
     // 合并系统级和项目级权限
     const userScopes = [...systemScopes, ...projectScopes];
+    const canWriteChannels = isOwner || systemScopes.includes('*') || systemScopes.includes('write_channels');
 
     // Owner用户拥有所有权限
     if (isOwner || userScopes.includes('*')) {
@@ -39,6 +41,7 @@ export function useRequestPermissions(): RequestPermissions {
         canViewUsers: true,
         canViewApiKeys: true,
         canViewChannels: true,
+        canWriteChannels,
         canViewRoles: true,
       };
     }
@@ -47,6 +50,7 @@ export function useRequestPermissions(): RequestPermissions {
       canViewUsers: userScopes.includes('read_users'),
       canViewApiKeys: userScopes.includes('read_api_keys'),
       canViewChannels: userScopes.includes('read_channels'),
+      canWriteChannels,
       canViewRoles: userScopes.includes('read_roles'),
     };
   }, [systemScopes, projectScopes, isOwner]);

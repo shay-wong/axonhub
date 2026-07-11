@@ -165,6 +165,40 @@ func (_c *RequestExecutionCreate) SetNillableRequestedServiceTier(v *string) *Re
 	return _c
 }
 
+// SetChannelAPIKeyName sets the "channel_api_key_name" field.
+func (_c *RequestExecutionCreate) SetChannelAPIKeyName(v string) *RequestExecutionCreate {
+	_c.mutation.SetChannelAPIKeyName(v)
+	return _c
+}
+
+// SetNillableChannelAPIKeyName sets the "channel_api_key_name" field if the given value is not nil.
+func (_c *RequestExecutionCreate) SetNillableChannelAPIKeyName(v *string) *RequestExecutionCreate {
+	if v != nil {
+		_c.SetChannelAPIKeyName(*v)
+	}
+	return _c
+}
+
+// SetChannelAPIKeySuffix sets the "channel_api_key_suffix" field.
+func (_c *RequestExecutionCreate) SetChannelAPIKeySuffix(v string) *RequestExecutionCreate {
+	_c.mutation.SetChannelAPIKeySuffix(v)
+	return _c
+}
+
+// SetNillableChannelAPIKeySuffix sets the "channel_api_key_suffix" field if the given value is not nil.
+func (_c *RequestExecutionCreate) SetNillableChannelAPIKeySuffix(v *string) *RequestExecutionCreate {
+	if v != nil {
+		_c.SetChannelAPIKeySuffix(*v)
+	}
+	return _c
+}
+
+// SetChannelAPIKeyHeaders sets the "channel_api_key_headers" field.
+func (_c *RequestExecutionCreate) SetChannelAPIKeyHeaders(v []string) *RequestExecutionCreate {
+	_c.mutation.SetChannelAPIKeyHeaders(v)
+	return _c
+}
+
 // SetRequestBody sets the "request_body" field.
 func (_c *RequestExecutionCreate) SetRequestBody(v objects.JSONRawMessage) *RequestExecutionCreate {
 	_c.mutation.SetRequestBody(v)
@@ -511,6 +545,18 @@ func (_c *RequestExecutionCreate) createSpec() (*RequestExecution, *sqlgraph.Cre
 	if value, ok := _c.mutation.RequestedServiceTier(); ok {
 		_spec.SetField(requestexecution.FieldRequestedServiceTier, field.TypeString, value)
 		_node.RequestedServiceTier = value
+	}
+	if value, ok := _c.mutation.ChannelAPIKeyName(); ok {
+		_spec.SetField(requestexecution.FieldChannelAPIKeyName, field.TypeString, value)
+		_node.ChannelAPIKeyName = value
+	}
+	if value, ok := _c.mutation.ChannelAPIKeySuffix(); ok {
+		_spec.SetField(requestexecution.FieldChannelAPIKeySuffix, field.TypeString, value)
+		_node.ChannelAPIKeySuffix = value
+	}
+	if value, ok := _c.mutation.ChannelAPIKeyHeaders(); ok {
+		_spec.SetField(requestexecution.FieldChannelAPIKeyHeaders, field.TypeJSON, value)
+		_node.ChannelAPIKeyHeaders = value
 	}
 	if value, ok := _c.mutation.RequestBody(); ok {
 		_spec.SetField(requestexecution.FieldRequestBody, field.TypeJSON, value)
@@ -960,6 +1006,15 @@ func (u *RequestExecutionUpsertOne) UpdateNewValues() *RequestExecutionUpsertOne
 		}
 		if _, exists := u.create.mutation.RequestedServiceTier(); exists {
 			s.SetIgnore(requestexecution.FieldRequestedServiceTier)
+		}
+		if _, exists := u.create.mutation.ChannelAPIKeyName(); exists {
+			s.SetIgnore(requestexecution.FieldChannelAPIKeyName)
+		}
+		if _, exists := u.create.mutation.ChannelAPIKeySuffix(); exists {
+			s.SetIgnore(requestexecution.FieldChannelAPIKeySuffix)
+		}
+		if _, exists := u.create.mutation.ChannelAPIKeyHeaders(); exists {
+			s.SetIgnore(requestexecution.FieldChannelAPIKeyHeaders)
 		}
 		if _, exists := u.create.mutation.RequestBody(); exists {
 			s.SetIgnore(requestexecution.FieldRequestBody)
@@ -1480,6 +1535,15 @@ func (u *RequestExecutionUpsertBulk) UpdateNewValues() *RequestExecutionUpsertBu
 			}
 			if _, exists := b.mutation.RequestedServiceTier(); exists {
 				s.SetIgnore(requestexecution.FieldRequestedServiceTier)
+			}
+			if _, exists := b.mutation.ChannelAPIKeyName(); exists {
+				s.SetIgnore(requestexecution.FieldChannelAPIKeyName)
+			}
+			if _, exists := b.mutation.ChannelAPIKeySuffix(); exists {
+				s.SetIgnore(requestexecution.FieldChannelAPIKeySuffix)
+			}
+			if _, exists := b.mutation.ChannelAPIKeyHeaders(); exists {
+				s.SetIgnore(requestexecution.FieldChannelAPIKeyHeaders)
 			}
 			if _, exists := b.mutation.RequestBody(); exists {
 				s.SetIgnore(requestexecution.FieldRequestBody)

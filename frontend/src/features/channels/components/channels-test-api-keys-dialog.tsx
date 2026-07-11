@@ -11,19 +11,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useChannels } from '../context/channels-context';
-import { useDeleteDisabledChannelAPIKeys, useDisableChannelAPIKey, useTestChannelAPIKey, useUpdateChannel } from '../data/channels';
+import { createAPIKeyNameMap, formatAPIKeyIdentity, maskAPIKeySuffix } from '../data/api-key-display';
+import { useDeleteDisabledChannelAPIKeys, useDisableChannelAPIKey, useTestChannelAPIKey } from '../data/channels';
 import { TestAPIKeyResult } from '../data/schema';
 
 interface ChannelsTestAPIKeysDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function maskAPIKey(key: string) {
-  if (key.length <= 8) {
-    return '****';
-  }
-  return `${key.slice(0, 4)}****${key.slice(-4)}`;
 }
 
 export function ChannelsTestAPIKeysDialog({ open, onOpenChange }: ChannelsTestAPIKeysDialogProps) {
@@ -38,10 +32,16 @@ export function ChannelsTestAPIKeysDialog({ open, onOpenChange }: ChannelsTestAP
 
   const testSingleKey = useTestChannelAPIKey();
   const disableAPIKey = useDisableChannelAPIKey();
-  const updateChannel = useUpdateChannel();
   const deleteDisabledAPIKeys = useDeleteDisabledChannelAPIKeys();
 
-  const allKeys = useMemo(() => currentRow?.credentials?.apiKeys ?? [], [currentRow?.credentials?.apiKeys]);
+  const allKeys = useMemo(() => {
+    const configuredKeys = currentRow?.credentials?.apiKeyConfigs?.map((config) => config.key.trim()).filter(Boolean) ?? [];
+    return configuredKeys.length > 0 ? configuredKeys : (currentRow?.credentials?.apiKeys ?? []);
+  }, [currentRow?.credentials?.apiKeyConfigs, currentRow?.credentials?.apiKeys]);
+  const apiKeyNames = useMemo(
+    () => createAPIKeyNameMap(currentRow?.credentials?.apiKeyConfigs),
+    [currentRow?.credentials?.apiKeyConfigs]
+  );
   const disabledKeySet = useMemo(
     () => new Set(currentRow?.disabledAPIKeys?.map((item) => item.key) ?? []),
     [currentRow?.disabledAPIKeys]
@@ -88,7 +88,16 @@ export function ChannelsTestAPIKeysDialog({ open, onOpenChange }: ChannelsTestAP
   const isAllSelected = selectableKeys.size > 0 && [...selectableKeys].every((key) => selectedKeys.has(key));
   const isSomeSelected = [...selectableKeys].some((key) => selectedKeys.has(key)) && !isAllSelected;
 
-  const isPending = isTesting || disableAPIKey.isPending || updateChannel.isPending || deleteDisabledAPIKeys.isPending;
+  const isPending = isTesting || disableAPIKey.isPending || deleteDisabledAPIKeys.isPending;
+
+  const selectedKeyIdentities = useMemo(
+    () =>
+      [...selectedKeys].map((key) => ({
+        key,
+        label: formatAPIKeyIdentity(key, apiKeyNames.get(key.trim())),
+      })),
+    [apiKeyNames, selectedKeys]
+  );
 
   if (!currentRow) {
     return null;
@@ -157,7 +166,7 @@ export function ChannelsTestAPIKeysDialog({ open, onOpenChange }: ChannelsTestAP
         setResults([...newResults]);
       } catch {
         newResults.push({
-          keyPrefix: maskAPIKey(key),
+          keyPrefix: maskAPIKeySuffix(key),
           success: false,
           latency: 0,
           error: t('channels.dialogs.testAPIKeys.requestFailed'),
@@ -210,25 +219,7 @@ export function ChannelsTestAPIKeysDialog({ open, onOpenChange }: ChannelsTestAP
     }
 
     try {
-      const disabledKeys = failedKeysToDelete.filter((key) => disabledKeySet.has(key));
-      const activeKeys = failedKeysToDelete.filter((key) => !disabledKeys.includes(key));
-
-      if (disabledKeys.length > 0) {
-        await deleteDisabledAPIKeys.mutateAsync({ channelID: currentRow.id, keys: disabledKeys });
-      }
-
-      if (activeKeys.length > 0) {
-        const remainingKeys = (currentRow.credentials?.apiKeys ?? []).filter((key) => !activeKeys.includes(key));
-        await updateChannel.mutateAsync({
-          id: currentRow.id,
-          input: {
-            credentials: {
-              apiKeys: remainingKeys,
-            },
-          },
-        });
-      }
-
+      await deleteDisabledAPIKeys.mutateAsync({ channelID: currentRow.id, keys: failedKeysToDelete });
       handleClose();
     } catch {
       // handled by hooks
@@ -241,9 +232,12 @@ export function ChannelsTestAPIKeysDialog({ open, onOpenChange }: ChannelsTestAP
         {isTesting && testingKey === key && (
           <IconLoader2 className='h-3 w-3 animate-spin text-muted-foreground' />
         )}
-        <code className='bg-muted rounded px-2 py-0.5 font-mono text-sm'>
-          {result ? result.keyPrefix : maskAPIKey(key)}
-        </code>
+        {apiKeyNames.get(key.trim()) && (
+          <span className='max-w-[180px] truncate text-sm font-medium' title={apiKeyNames.get(key.trim())}>
+            {apiKeyNames.get(key.trim())}
+          </span>
+        )}
+        <code className='bg-muted rounded px-2 py-0.5 font-mono text-sm'>{maskAPIKeySuffix(key)}</code>
         {(result ? result.disabled : disabledKeySet.has(key)) && (
           <Badge variant='secondary'>{t('channels.dialogs.testAPIKeys.disabledBadge')}</Badge>
         )}
@@ -389,6 +383,13 @@ export function ChannelsTestAPIKeysDialog({ open, onOpenChange }: ChannelsTestAP
                       <p className='text-sm'>
                         {t('channels.dialogs.testAPIKeys.confirmDeleteFailed', { count: selectedKeys.size })}
                       </p>
+                      <div className='max-h-32 space-y-1 overflow-y-auto'>
+                        {selectedKeyIdentities.map((identity) => (
+                          <code key={identity.key} className='bg-muted block truncate rounded px-2 py-1 text-xs' title={identity.label}>
+                            {identity.label}
+                          </code>
+                        ))}
+                      </div>
                       <div className='flex justify-end gap-2'>
                         <Button size='sm' variant='outline' onClick={() => setConfirmDeleteFailed(false)}>
                           {t('common.buttons.cancel')}

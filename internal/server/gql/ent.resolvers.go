@@ -685,6 +685,21 @@ func (r *requestExecutionResolver) DataStorageID(ctx context.Context, obj *ent.R
 	}, nil
 }
 
+// ChannelAPIKeyName is the resolver for the channelAPIKeyName field.
+func (r *requestExecutionResolver) ChannelAPIKeyName(ctx context.Context, obj *ent.RequestExecution) (*string, error) {
+	return requestExecutionChannelAPIKeyName(ctx, obj), nil
+}
+
+// ChannelAPIKeySuffix is the resolver for the channelAPIKeySuffix field.
+func (r *requestExecutionResolver) ChannelAPIKeySuffix(ctx context.Context, obj *ent.RequestExecution) (*string, error) {
+	return requestExecutionChannelAPIKeySuffix(ctx, obj), nil
+}
+
+// ChannelAPIKeyHeaders is the resolver for the channelAPIKeyHeaders field.
+func (r *requestExecutionResolver) ChannelAPIKeyHeaders(ctx context.Context, obj *ent.RequestExecution) ([]string, error) {
+	return requestExecutionChannelAPIKeyHeaders(ctx, obj), nil
+}
+
 // RequestBody is the resolver for the requestBody field.
 func (r *requestExecutionResolver) RequestBody(ctx context.Context, obj *ent.RequestExecution) (objects.JSONRawMessage, error) {
 	value, err := r.requestService.LoadRequestExecutionRequestBody(ctx, obj)

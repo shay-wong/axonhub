@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -277,6 +279,8 @@ func (s *RequestService) CreateRequestExecution(
 	var (
 		requestBodyBytes    objects.JSONRawMessage = []byte("{}")
 		requestHeadersBytes objects.JSONRawMessage = []byte("{}")
+		apiKeyIdentity      ChannelAPIKeyIdentity
+		apiKeyHeaderNames   []string
 	)
 
 	if storeRequestBody {
@@ -288,7 +292,17 @@ func (s *RequestService) CreateRequestExecution(
 		}
 
 		if len(channelRequest.Headers) > 0 {
-			requestHeadersBytes, _ = xjson.Marshal(httpclient.MaskSensitiveHeaders(channelRequest.Headers))
+			maskedHeaders := httpclient.MaskSensitiveHeaders(channelRequest.Headers)
+			if apiKey, ok := contexts.GetChannelAPIKey(ctx); ok {
+				apiKeyHeaderNames = requestHeaderNamesUsingAPIKey(channelRequest.Headers, apiKey)
+				if len(apiKeyHeaderNames) > 0 {
+					apiKeyIdentity = channel.APIKeyIdentity(apiKey)
+					for _, headerName := range apiKeyHeaderNames {
+						maskedHeaders[headerName] = []string{"******"}
+					}
+				}
+			}
+			requestHeadersBytes, _ = xjson.Marshal(maskedHeaders)
 		}
 	}
 
@@ -330,6 +344,16 @@ func (s *RequestService) CreateRequestExecution(
 		SetStream(request.Stream).
 		SetRequestHeaders(requestHeadersBytes).
 		SetPassThroughApplied(passThroughApplied)
+
+	if len(apiKeyHeaderNames) > 0 {
+		mut.SetChannelAPIKeyHeaders(apiKeyHeaderNames)
+		if apiKeyIdentity.Name != "" {
+			mut.SetChannelAPIKeyName(apiKeyIdentity.Name)
+		}
+		if apiKeyIdentity.Suffix != "" {
+			mut.SetChannelAPIKeySuffix(apiKeyIdentity.Suffix)
+		}
+	}
 
 	if requestedServiceTier != "" {
 		mut.SetRequestedServiceTier(requestedServiceTier)
@@ -373,6 +397,36 @@ func (s *RequestService) CreateRequestExecution(
 	}
 
 	return execution, nil
+}
+
+func requestHeaderNamesUsingAPIKey(headers http.Header, apiKey string) []string {
+	if apiKey == "" {
+		return nil
+	}
+
+	headerNames := make([]string, 0, 1)
+	for headerName, values := range headers {
+		for _, value := range values {
+			if requestHeaderValueUsesAPIKey(value, apiKey) {
+				headerNames = append(headerNames, headerName)
+				break
+			}
+		}
+	}
+	sort.Strings(headerNames)
+
+	return headerNames
+}
+
+func requestHeaderValueUsesAPIKey(value string, apiKey string) bool {
+	value = strings.TrimSpace(value)
+	if value == apiKey {
+		return true
+	}
+
+	parts := strings.Fields(value)
+
+	return len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") && parts[1] == apiKey
 }
 
 func requestBodyForPersistence(request httpclient.Request) (objects.JSONRawMessage, error) {

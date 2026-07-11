@@ -262,6 +262,9 @@ func createBackupTestUsageWithDataStorage(
 		SetModelID("gpt-4").
 		SetFormat("openai/chat_completions").
 		SetRequestedServiceTier("priority").
+		SetChannelAPIKeyName("Primary Account").
+		SetChannelAPIKeySuffix("1234").
+		SetChannelAPIKeyHeaders([]string{"Authorization"}).
 		SetRequestBody(objects.JSONRawMessage(`{"model":"gpt-4"}`)).
 		SetResponseBody(objects.JSONRawMessage(`{"id":"response-1"}`)).
 		SetResponseChunks([]objects.JSONRawMessage{objects.JSONRawMessage(`{"delta":"hello"}`)}).
@@ -450,6 +453,9 @@ func TestBackupService_Backup_WithUsageStats(t *testing.T) {
 	require.Equal(t, execution.RequestID, backupData.RequestExecutions[0].RequestID)
 	require.Equal(t, execution.ChannelID, backupData.RequestExecutions[0].ChannelID)
 	require.Equal(t, "priority", backupData.RequestExecutions[0].RequestedServiceTier)
+	require.Equal(t, "Primary Account", backupData.RequestExecutions[0].ChannelAPIKeyName)
+	require.Equal(t, "1234", backupData.RequestExecutions[0].ChannelAPIKeySuffix)
+	require.Equal(t, []string{"Authorization"}, backupData.RequestExecutions[0].ChannelAPIKeyHeaders)
 	require.Equal(t, "Channel 1", backupData.RequestExecutions[0].ChannelName)
 	require.JSONEq(t, `{}`, string(backupData.RequestExecutions[0].RequestBody))
 	require.Empty(t, backupData.RequestExecutions[0].ResponseBody)

@@ -27,6 +27,7 @@ import { AutoCompleteSelect } from '@/components/auto-complete-select';
 import { SelectDropdown } from '@/components/select-dropdown';
 import { useProxyPresets, useSaveProxyPreset } from '@/features/system/data/system';
 import { antigravityOAuthExchange, antigravityOAuthStart } from '../data/antigravity';
+import { formatAPIKeyIdentity, maskAPIKeySuffix } from '../data/api-key-display';
 import {
   useCreateChannel,
   useDuplicateChannel,
@@ -3194,7 +3195,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                           const keyName = config?.name || '';
                           const weight = config?.weight || DEFAULT_API_KEY_WEIGHT;
                           const isSavedKey = savedAPIKeySet.has(key);
-                          const masked = key.length > 8 ? `${key.slice(0, 4)}****${key.slice(-4)}` : `****${key.slice(-4)}`;
+                          const masked = maskAPIKeySuffix(key);
 
                           return (
                             <div key={key} className='hover:bg-accent flex items-center justify-between gap-2 rounded-md p-2 text-sm'>
@@ -3273,6 +3274,9 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                       <PopoverContent className='w-72'>
                                         <div className='flex flex-col gap-3'>
                                           <p className='text-sm'>{t('channels.dialogs.fields.apiKey.confirmEnable')}</p>
+                                          <code className='bg-muted rounded px-2 py-1 text-xs'>
+                                            {formatAPIKeyIdentity(key, keyName)}
+                                          </code>
                                           <div className='flex justify-end gap-2'>
                                             <Button size='sm' variant='outline' onClick={() => setConfirmDisableKey(null)}>
                                               {t('common.buttons.cancel')}
@@ -3317,6 +3321,9 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                       <PopoverContent className='w-72'>
                                         <div className='flex flex-col gap-3'>
                                           <p className='text-sm'>{t('channels.dialogs.fields.apiKey.confirmDisable')}</p>
+                                          <code className='bg-muted rounded px-2 py-1 text-xs'>
+                                            {formatAPIKeyIdentity(key, keyName)}
+                                          </code>
                                           <div className='flex justify-end gap-2'>
                                             <Button size='sm' variant='outline' onClick={() => setConfirmDisableKey(null)}>
                                               {t('common.buttons.cancel')}
