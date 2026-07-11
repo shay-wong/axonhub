@@ -724,16 +724,26 @@ func validateBackupModelPrice(price *objects.ModelPrice, backupVersion string) e
 	return price.Validate()
 }
 
-// validateLegacyModelPrice preserves the 1.0-1.3 backup contract. Those
-// versions permitted non-positive or non-increasing finite bounds, so applying
-// the current editor validation would make valid historical backups unrestorable.
+// validateLegacyModelPrice preserves the 1.0-1.3 backup contract where its
+// behavior is unambiguous. Invalid tier boundaries are rejected instead of
+// being rewritten, because changing them would change future billing.
 func validateLegacyModelPrice(price *objects.ModelPrice) error {
 	if price == nil {
 		return fmt.Errorf("modelPrice is nil")
 	}
 
+	itemCodes := make(map[objects.PriceItemCode]struct{}, len(price.Items))
 	for itemIndex := range price.Items {
 		item := &price.Items[itemIndex]
+		if _, exists := itemCodes[item.ItemCode]; exists {
+			return fmt.Errorf(
+				"items[%d]: duplicate itemCode %q cannot be restored because historical billing summed duplicate items; combine the items in the backup before restoring",
+				itemIndex,
+				item.ItemCode,
+			)
+		}
+		itemCodes[item.ItemCode] = struct{}{}
+
 		if err := validateLegacyPricing(&item.Pricing); err != nil {
 			return fmt.Errorf("items[%d]: pricing: %w", itemIndex, err)
 		}
@@ -780,6 +790,15 @@ func validateLegacyPricing(pricing *objects.Pricing) error {
 			if upTo == nil {
 				return fmt.Errorf("tiers[%d].upTo is required", tierIndex)
 			}
+			if *upTo <= 0 {
+				return fmt.Errorf("tiers[%d].upTo must be greater than 0; repair the legacy backup before restoring", tierIndex)
+			}
+			if tierIndex > 0 {
+				previousUpTo := pricing.UsageTiered.Tiers[tierIndex-1].UpTo
+				if previousUpTo != nil && *upTo <= *previousUpTo {
+					return fmt.Errorf("tiers[%d].upTo must be greater than tiers[%d].upTo; repair the legacy backup before restoring", tierIndex, tierIndex-1)
+				}
+			}
 		}
 	default:
 		return fmt.Errorf("unknown pricing mode: %s", pricing.Mode)
@@ -788,53 +807,33 @@ func validateLegacyPricing(pricing *objects.Pricing) error {
 	return nil
 }
 
-// normalizeLegacyModelPrice makes formerly accepted finite bounds valid for
-// the current schema. Legacy invalid bounds were already ambiguous to the
-// calculator; this keeps every tier and its price while assigning the smallest
-// strictly increasing positive boundary that can be persisted.
+// normalizeLegacyModelPrice removes duplicate cache variants while preserving
+// the historical first-match lookup behavior. Tier boundaries are validated,
+// not rewritten, because changing them would alter billing semantics.
 func normalizeLegacyModelPrice(price *objects.ModelPrice) {
+	if price == nil {
+		return
+	}
+
 	for itemIndex := range price.Items {
-		normalizeLegacyPricing(&price.Items[itemIndex].Pricing)
-		for variantIndex := range price.Items[itemIndex].PromptWriteCacheVariants {
-			normalizeLegacyPricing(&price.Items[itemIndex].PromptWriteCacheVariants[variantIndex].Pricing)
-		}
-	}
-}
+		item := &price.Items[itemIndex]
 
-func normalizeLegacyPricing(pricing *objects.Pricing) {
-	if pricing == nil || pricing.UsageTiered == nil {
-		return
-	}
-
-	tiers := pricing.UsageTiered.Tiers
-	if len(tiers) < 2 {
-		return
-	}
-
-	const maxInt64 = int64(^uint64(0) >> 1)
-	normalized := make([]objects.PriceTier, 0, len(tiers))
-	var previousUpTo int64
-	for index := range tiers {
-		tier := tiers[index]
-		if index == len(tiers)-1 {
-			normalized = append(normalized, tier)
-			break
-		}
-		if tier.UpTo == nil {
-			continue
-		}
-		if *tier.UpTo <= previousUpTo {
-			if previousUpTo == maxInt64 {
+		// Cache variant lookup has always returned the first matching variant.
+		// Keep that historical behavior while producing data accepted by the
+		// current schema. Duplicate base item codes are rejected above because
+		// the old calculator summed them and cannot be safely collapsed.
+		variantIndexes := make(map[objects.PromptWriteCacheVariantCode]struct{}, len(item.PromptWriteCacheVariants))
+		normalizedVariants := make([]objects.PromptWriteCacheVariant, 0, len(item.PromptWriteCacheVariants))
+		for _, variant := range item.PromptWriteCacheVariants {
+			if _, exists := variantIndexes[variant.VariantCode]; exists {
 				continue
 			}
-			normalizedUpTo := previousUpTo + 1
-			tier.UpTo = &normalizedUpTo
-		}
-		previousUpTo = *tier.UpTo
-		normalized = append(normalized, tier)
-	}
+			variantIndexes[variant.VariantCode] = struct{}{}
 
-	pricing.UsageTiered.Tiers = normalized
+			normalizedVariants = append(normalizedVariants, variant)
+		}
+		item.PromptWriteCacheVariants = normalizedVariants
+	}
 }
 
 func (svc *BackupService) restoreModels(ctx context.Context, db *ent.Client, models []*BackupModel, opts RestoreOptions, channelIDMap map[int]int) error {

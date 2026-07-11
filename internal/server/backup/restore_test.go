@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
@@ -1086,7 +1087,87 @@ func TestBackupService_Backup_UsageStatsOnlyDoesNotReadExternalRequestContent(t 
 	require.JSONEq(t, `{}`, string(backupData.RequestExecutions[0].RequestBody))
 }
 
-func TestBackupService_Restore_LegacyModelPriceUsesLegacyTierValidation(t *testing.T) {
+func TestBackupService_Restore_LegacyModelPriceNormalizesVariantCodes(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	firstTierBound := int64(1)
+	price := objects.ModelPrice{Items: []objects.ModelPriceItem{{
+		ItemCode: objects.PriceItemCodeUsage,
+		Pricing: objects.Pricing{
+			Mode: objects.PricingModeTiered,
+			UsageTiered: &objects.TieredPricing{Tiers: []objects.PriceTier{
+				{UpTo: &firstTierBound, PricePerUnit: decimal.NewFromFloat(0.01)},
+				{UpTo: nil, PricePerUnit: decimal.NewFromFloat(0.02)},
+			}},
+		},
+	}, {
+		ItemCode: objects.PriceItemCodeWriteCachedTokens,
+		Pricing: objects.Pricing{
+			Mode:         objects.PricingModeUsagePerUnit,
+			UsagePerUnit: lo.ToPtr(decimal.NewFromFloat(0.03)),
+		},
+		PromptWriteCacheVariants: []objects.PromptWriteCacheVariant{
+			{
+				VariantCode: objects.PromptWriteCacheVariantCode5Min,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: lo.ToPtr(decimal.NewFromFloat(0.04)),
+				},
+			},
+			{
+				VariantCode: objects.PromptWriteCacheVariantCode5Min,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: lo.ToPtr(decimal.NewFromFloat(0.99)),
+				},
+			},
+			{
+				VariantCode: objects.PromptWriteCacheVariantCode1Hour,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: lo.ToPtr(decimal.NewFromFloat(0.05)),
+				},
+			},
+			{
+				VariantCode: objects.PromptWriteCacheVariantCode1Hour,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: lo.ToPtr(decimal.NewFromFloat(0.98)),
+				},
+			},
+		},
+	}}}
+	data, err := json.Marshal(BackupData{
+		Version: BackupVersionV4,
+		ChannelModelPrices: []*BackupChannelModelPrice{{
+			ChannelName: ch.Name,
+			ModelID:     "gpt-4",
+			Price:       price,
+			ReferenceID: "legacy-price",
+		}},
+	})
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{IncludeModelPrices: true})
+	require.NoError(t, err)
+	restored, err := client.ChannelModelPrice.Query().Only(ctx)
+	require.NoError(t, err)
+	require.NoError(t, restored.Price.Validate())
+	require.Len(t, restored.Price.Items, 2)
+	restoredUpTo := restored.Price.Items[0].Pricing.UsageTiered.Tiers[0].UpTo
+	require.NotNil(t, restoredUpTo)
+	require.EqualValues(t, firstTierBound, *restoredUpTo)
+	require.Nil(t, restored.Price.Items[0].Pricing.UsageTiered.Tiers[1].UpTo)
+	require.Len(t, restored.Price.Items[1].PromptWriteCacheVariants, 2)
+	require.Equal(t, objects.PromptWriteCacheVariantCode5Min, restored.Price.Items[1].PromptWriteCacheVariants[0].VariantCode)
+	require.True(t, restored.Price.Items[1].PromptWriteCacheVariants[0].Pricing.UsagePerUnit.Equal(decimal.NewFromFloat(0.04)))
+	require.Equal(t, objects.PromptWriteCacheVariantCode1Hour, restored.Price.Items[1].PromptWriteCacheVariants[1].VariantCode)
+	require.True(t, restored.Price.Items[1].PromptWriteCacheVariants[1].Pricing.UsagePerUnit.Equal(decimal.NewFromFloat(0.05)))
+}
+
+func TestBackupService_Restore_LegacyModelPriceRejectsInvalidTierBounds(t *testing.T) {
 	client, service, ctx := setupBackupTest(t)
 	defer client.Close()
 
@@ -1114,13 +1195,160 @@ func TestBackupService_Restore_LegacyModelPriceUsesLegacyTierValidation(t *testi
 	require.NoError(t, err)
 
 	err = service.Restore(ctx, data, RestoreOptions{IncludeModelPrices: true})
+	require.ErrorContains(t, err, "repair the legacy backup before restoring")
+	count, err := client.ChannelModelPrice.Query().Count(ctx)
 	require.NoError(t, err)
-	restored, err := client.ChannelModelPrice.Query().Only(ctx)
+	require.Zero(t, count)
+}
+
+func TestBackupService_Restore_LegacyModelPriceRejectsNonIncreasingTierBounds(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	firstTierBound := int64(2)
+	secondTierBound := int64(1)
+	price := objects.ModelPrice{Items: []objects.ModelPriceItem{{
+		ItemCode: objects.PriceItemCodeUsage,
+		Pricing: objects.Pricing{
+			Mode: objects.PricingModeTiered,
+			UsageTiered: &objects.TieredPricing{Tiers: []objects.PriceTier{
+				{UpTo: &firstTierBound, PricePerUnit: decimal.NewFromFloat(0.01)},
+				{UpTo: &secondTierBound, PricePerUnit: decimal.NewFromFloat(0.02)},
+				{UpTo: nil, PricePerUnit: decimal.NewFromFloat(0.03)},
+			}},
+		},
+	}}}
+	data, err := json.Marshal(BackupData{
+		Version: BackupVersionV4,
+		ChannelModelPrices: []*BackupChannelModelPrice{{
+			ChannelName: ch.Name,
+			ModelID:     "gpt-4",
+			Price:       price,
+			ReferenceID: "legacy-price",
+		}},
+	})
 	require.NoError(t, err)
-	restoredUpTo := restored.Price.Items[0].Pricing.UsageTiered.Tiers[0].UpTo
-	require.NotNil(t, restoredUpTo)
-	require.EqualValues(t, 1, *restoredUpTo)
-	require.Nil(t, restored.Price.Items[0].Pricing.UsageTiered.Tiers[1].UpTo)
+
+	err = service.Restore(ctx, data, RestoreOptions{IncludeModelPrices: true})
+	require.ErrorContains(t, err, "tiers[1].upTo must be greater than tiers[0].upTo")
+	count, err := client.ChannelModelPrice.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+func TestBackupService_Restore_LegacyModelPriceRejectsDuplicateItemCodes(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	price := objects.ModelPrice{Items: []objects.ModelPriceItem{{
+		ItemCode: objects.PriceItemCodeUsage,
+		Pricing: objects.Pricing{
+			Mode:         objects.PricingModeUsagePerUnit,
+			UsagePerUnit: lo.ToPtr(decimal.NewFromFloat(0.01)),
+		},
+	}, {
+		ItemCode: objects.PriceItemCodeUsage,
+		Pricing: objects.Pricing{
+			Mode:         objects.PricingModeUsagePerUnit,
+			UsagePerUnit: lo.ToPtr(decimal.NewFromFloat(0.02)),
+		},
+	}}}
+	data, err := json.Marshal(BackupData{
+		Version: BackupVersionV4,
+		ChannelModelPrices: []*BackupChannelModelPrice{{
+			ChannelName: ch.Name,
+			ModelID:     "gpt-4",
+			Price:       price,
+			ReferenceID: "legacy-price",
+		}},
+	})
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{IncludeModelPrices: true})
+	require.ErrorContains(t, err, "historical billing summed duplicate items")
+	require.ErrorContains(t, err, "combine the items in the backup")
+	count, err := client.ChannelModelPrice.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+func TestBackupService_Restore_CurrentModelPriceRejectsDuplicateCodes(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	ch := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
+	for _, test := range []struct {
+		name  string
+		price objects.ModelPrice
+		want  string
+	}{
+		{
+			name: "items",
+			price: objects.ModelPrice{Items: []objects.ModelPriceItem{{
+				ItemCode: objects.PriceItemCodeUsage,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: lo.ToPtr(decimal.NewFromFloat(0.01)),
+				},
+			}, {
+				ItemCode: objects.PriceItemCodeUsage,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: lo.ToPtr(decimal.NewFromFloat(0.02)),
+				},
+			}}},
+			want: "duplicate itemCode",
+		},
+		{
+			name: "variants",
+			price: objects.ModelPrice{Items: []objects.ModelPriceItem{{
+				ItemCode: objects.PriceItemCodeWriteCachedTokens,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: lo.ToPtr(decimal.NewFromFloat(0.01)),
+				},
+				PromptWriteCacheVariants: []objects.PromptWriteCacheVariant{
+					{
+						VariantCode: objects.PromptWriteCacheVariantCode5Min,
+						Pricing: objects.Pricing{
+							Mode:         objects.PricingModeUsagePerUnit,
+							UsagePerUnit: lo.ToPtr(decimal.NewFromFloat(0.02)),
+						},
+					},
+					{
+						VariantCode: objects.PromptWriteCacheVariantCode5Min,
+						Pricing: objects.Pricing{
+							Mode:         objects.PricingModeUsagePerUnit,
+							UsagePerUnit: lo.ToPtr(decimal.NewFromFloat(0.03)),
+						},
+					},
+				},
+			}}},
+			want: "duplicate variantCode",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			data, err := json.Marshal(BackupData{
+				Version: BackupVersion,
+				ChannelModelPrices: []*BackupChannelModelPrice{{
+					ChannelName: ch.Name,
+					ModelID:     "gpt-4-" + test.name,
+					Price:       test.price,
+					ReferenceID: "current-price",
+				}},
+			})
+			require.NoError(t, err)
+
+			err = service.Restore(ctx, data, RestoreOptions{IncludeModelPrices: true})
+			require.ErrorContains(t, err, test.want)
+		})
+	}
+
+	count, err := client.ChannelModelPrice.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, count)
 }
 
 func mustCountRequests(t *testing.T, client *ent.Client, ctx context.Context) int {
