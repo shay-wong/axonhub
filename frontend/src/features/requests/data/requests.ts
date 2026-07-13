@@ -69,6 +69,7 @@ function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChann
                 node {
                   modelID
                   status
+                  requestedServiceTier
                   passThroughApplied${executionChannelFields}
                 }
                 cursor

@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { ColumnDef } from '@tanstack/react-table';
 import { IconRoute, IconArrowsJoin2 } from '@tabler/icons-react';
 import { zhCN, enUS } from 'date-fns/locale';
-import { ArrowLeftRight, Ban, FileText } from 'lucide-react';
+import { ArrowLeftRight, Ban, FileText, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { extractNumberID } from '@/lib/utils';
@@ -18,6 +18,7 @@ import { useGeneralSettings, useSecuritySettings, useUpdateSecuritySettings } fr
 import { usePermissions } from '@/hooks/usePermissions';
 import { useRequestPermissions } from '../../../hooks/useRequestPermissions';
 import { Request } from '../data/schema';
+import { getRequestedServiceTier } from '../utils/service-tier';
 import { calculateTokensPerSecond, useDisplayMode } from '../utils/tokens-per-second';
 import { getStatusColor } from './help';
 
@@ -189,6 +190,32 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
             {reasoningEffort}
           </Badge>
         );
+      },
+    },
+
+    {
+      id: 'requestedServiceTier',
+      accessorFn: getRequestedServiceTier,
+      header: ({ column }) => <DataTableColumnHeader column={column} title={t('requests.columns.requestedServiceTier')} />,
+      enableSorting: false,
+      enableHiding: true,
+      cell: ({ row }) => {
+        const serviceTier = getRequestedServiceTier(row.original);
+
+        if (!serviceTier || serviceTier === 'default') {
+          return <div className='text-muted-foreground text-xs'>-</div>;
+        }
+
+        if (serviceTier === 'priority') {
+          return (
+            <Badge className='border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300'>
+              <Zap className='h-3 w-3' />
+              {t('requests.serviceTier.fast')}
+            </Badge>
+          );
+        }
+
+        return <Badge variant='outline'>{serviceTier}</Badge>;
       },
     },
 
