@@ -216,6 +216,47 @@ type ComplexityRoot struct {
 		TopModels       func(childComplexity int) int
 	}
 
+	AnalyticsDailyStat struct {
+		CachedInputTokens   func(childComplexity int) int
+		Cost                func(childComplexity int) int
+		Date                func(childComplexity int) int
+		InputTokens         func(childComplexity int) int
+		OutputTokens        func(childComplexity int) int
+		RequestCount        func(childComplexity int) int
+		TotalTokens         func(childComplexity int) int
+		UncachedInputTokens func(childComplexity int) int
+	}
+
+	AnalyticsDimensionStat struct {
+		CachedInputTokens func(childComplexity int) int
+		Cost              func(childComplexity int) int
+		ID                func(childComplexity int) int
+		InputTokens       func(childComplexity int) int
+		Name              func(childComplexity int) int
+		OutputTokens      func(childComplexity int) int
+		RequestCount      func(childComplexity int) int
+		TotalTokens       func(childComplexity int) int
+	}
+
+	AnalyticsFilterOption struct {
+		ID    func(childComplexity int) int
+		Label func(childComplexity int) int
+	}
+
+	AnalyticsMetadata struct {
+		EarliestDate func(childComplexity int) int
+	}
+
+	AnalyticsOverview struct {
+		TotalCachedInputTokens   func(childComplexity int) int
+		TotalCost                func(childComplexity int) int
+		TotalInputTokens         func(childComplexity int) int
+		TotalOutputTokens        func(childComplexity int) int
+		TotalRequests            func(childComplexity int) int
+		TotalTokens              func(childComplexity int) int
+		TotalUncachedInputTokens func(childComplexity int) int
+	}
+
 	ApplyChannelOverrideTemplatePayload struct {
 		Channels func(childComplexity int) int
 		Success  func(childComplexity int) int
@@ -1261,6 +1302,11 @@ type ComplexityRoot struct {
 		AllChannelSummarys            func(childComplexity int, includeArchived *bool) int
 		AllChannelTags                func(childComplexity int) int
 		AllScopes                     func(childComplexity int, level *string) int
+		AnalyticsDailyStats           func(childComplexity int, filter *AnalyticsFilter) int
+		AnalyticsDimensionStats       func(childComplexity int, filter *AnalyticsFilter, dimension AnalyticsDimension, first *int) int
+		AnalyticsFilterOptions        func(childComplexity int, dimension AnalyticsFilterDimension, search *string, first *int, startTime *string, endTime *string) int
+		AnalyticsMetadata             func(childComplexity int) int
+		AnalyticsOverview             func(childComplexity int, filter *AnalyticsFilter) int
 		AutoBackupSettings            func(childComplexity int) int
 		BrandSettings                 func(childComplexity int) int
 		ChannelOverrideTemplates      func(childComplexity int, after *entgql.Cursor[int], first *int, before *entgql.Cursor[int], last *int, orderBy *ent.ChannelOverrideTemplateOrder, where *ent.ChannelOverrideTemplateWhereInput) int
@@ -2313,6 +2359,11 @@ type QueryResolver interface {
 	QueryUnassociatedChannels(ctx context.Context) ([]*biz.UnassociatedChannel, error)
 	AutoBackupSettings(ctx context.Context) (*biz.AutoBackupSettings, error)
 	ChannelProbeData(ctx context.Context, input biz.GetChannelProbeDataInput) ([]*biz.ChannelProbeData, error)
+	AnalyticsMetadata(ctx context.Context) (*AnalyticsMetadata, error)
+	AnalyticsOverview(ctx context.Context, filter *AnalyticsFilter) (*AnalyticsOverview, error)
+	AnalyticsDailyStats(ctx context.Context, filter *AnalyticsFilter) ([]*AnalyticsDailyStat, error)
+	AnalyticsFilterOptions(ctx context.Context, dimension AnalyticsFilterDimension, search *string, first *int, startTime *string, endTime *string) ([]*AnalyticsFilterOption, error)
+	AnalyticsDimensionStats(ctx context.Context, filter *AnalyticsFilter, dimension AnalyticsDimension, first *int) ([]*AnalyticsDimensionStat, error)
 }
 type RequestResolver interface {
 	ID(ctx context.Context, obj *ent.Request) (*objects.GUID, error)
@@ -2853,6 +2904,167 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.APIKeyTokenUsageStats.TopModels(childComplexity), true
+
+	case "AnalyticsDailyStat.cachedInputTokens":
+		if e.complexity.AnalyticsDailyStat.CachedInputTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDailyStat.CachedInputTokens(childComplexity), true
+	case "AnalyticsDailyStat.cost":
+		if e.complexity.AnalyticsDailyStat.Cost == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDailyStat.Cost(childComplexity), true
+	case "AnalyticsDailyStat.date":
+		if e.complexity.AnalyticsDailyStat.Date == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDailyStat.Date(childComplexity), true
+	case "AnalyticsDailyStat.inputTokens":
+		if e.complexity.AnalyticsDailyStat.InputTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDailyStat.InputTokens(childComplexity), true
+	case "AnalyticsDailyStat.outputTokens":
+		if e.complexity.AnalyticsDailyStat.OutputTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDailyStat.OutputTokens(childComplexity), true
+	case "AnalyticsDailyStat.requestCount":
+		if e.complexity.AnalyticsDailyStat.RequestCount == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDailyStat.RequestCount(childComplexity), true
+	case "AnalyticsDailyStat.totalTokens":
+		if e.complexity.AnalyticsDailyStat.TotalTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDailyStat.TotalTokens(childComplexity), true
+	case "AnalyticsDailyStat.uncachedInputTokens":
+		if e.complexity.AnalyticsDailyStat.UncachedInputTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDailyStat.UncachedInputTokens(childComplexity), true
+
+	case "AnalyticsDimensionStat.cachedInputTokens":
+		if e.complexity.AnalyticsDimensionStat.CachedInputTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDimensionStat.CachedInputTokens(childComplexity), true
+	case "AnalyticsDimensionStat.cost":
+		if e.complexity.AnalyticsDimensionStat.Cost == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDimensionStat.Cost(childComplexity), true
+	case "AnalyticsDimensionStat.id":
+		if e.complexity.AnalyticsDimensionStat.ID == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDimensionStat.ID(childComplexity), true
+	case "AnalyticsDimensionStat.inputTokens":
+		if e.complexity.AnalyticsDimensionStat.InputTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDimensionStat.InputTokens(childComplexity), true
+	case "AnalyticsDimensionStat.name":
+		if e.complexity.AnalyticsDimensionStat.Name == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDimensionStat.Name(childComplexity), true
+	case "AnalyticsDimensionStat.outputTokens":
+		if e.complexity.AnalyticsDimensionStat.OutputTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDimensionStat.OutputTokens(childComplexity), true
+	case "AnalyticsDimensionStat.requestCount":
+		if e.complexity.AnalyticsDimensionStat.RequestCount == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDimensionStat.RequestCount(childComplexity), true
+	case "AnalyticsDimensionStat.totalTokens":
+		if e.complexity.AnalyticsDimensionStat.TotalTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsDimensionStat.TotalTokens(childComplexity), true
+
+	case "AnalyticsFilterOption.id":
+		if e.complexity.AnalyticsFilterOption.ID == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsFilterOption.ID(childComplexity), true
+	case "AnalyticsFilterOption.label":
+		if e.complexity.AnalyticsFilterOption.Label == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsFilterOption.Label(childComplexity), true
+
+	case "AnalyticsMetadata.earliestDate":
+		if e.complexity.AnalyticsMetadata.EarliestDate == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsMetadata.EarliestDate(childComplexity), true
+
+	case "AnalyticsOverview.totalCachedInputTokens":
+		if e.complexity.AnalyticsOverview.TotalCachedInputTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsOverview.TotalCachedInputTokens(childComplexity), true
+	case "AnalyticsOverview.totalCost":
+		if e.complexity.AnalyticsOverview.TotalCost == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsOverview.TotalCost(childComplexity), true
+	case "AnalyticsOverview.totalInputTokens":
+		if e.complexity.AnalyticsOverview.TotalInputTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsOverview.TotalInputTokens(childComplexity), true
+	case "AnalyticsOverview.totalOutputTokens":
+		if e.complexity.AnalyticsOverview.TotalOutputTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsOverview.TotalOutputTokens(childComplexity), true
+	case "AnalyticsOverview.totalRequests":
+		if e.complexity.AnalyticsOverview.TotalRequests == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsOverview.TotalRequests(childComplexity), true
+	case "AnalyticsOverview.totalTokens":
+		if e.complexity.AnalyticsOverview.TotalTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsOverview.TotalTokens(childComplexity), true
+	case "AnalyticsOverview.totalUncachedInputTokens":
+		if e.complexity.AnalyticsOverview.TotalUncachedInputTokens == nil {
+			break
+		}
+
+		return e.complexity.AnalyticsOverview.TotalUncachedInputTokens(childComplexity), true
 
 	case "ApplyChannelOverrideTemplatePayload.channels":
 		if e.complexity.ApplyChannelOverrideTemplatePayload.Channels == nil {
@@ -7619,6 +7831,56 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.AllScopes(childComplexity, args["level"].(*string)), true
+	case "Query.analyticsDailyStats":
+		if e.complexity.Query.AnalyticsDailyStats == nil {
+			break
+		}
+
+		args, err := ec.field_Query_analyticsDailyStats_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.AnalyticsDailyStats(childComplexity, args["filter"].(*AnalyticsFilter)), true
+	case "Query.analyticsDimensionStats":
+		if e.complexity.Query.AnalyticsDimensionStats == nil {
+			break
+		}
+
+		args, err := ec.field_Query_analyticsDimensionStats_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.AnalyticsDimensionStats(childComplexity, args["filter"].(*AnalyticsFilter), args["dimension"].(AnalyticsDimension), args["first"].(*int)), true
+	case "Query.analyticsFilterOptions":
+		if e.complexity.Query.AnalyticsFilterOptions == nil {
+			break
+		}
+
+		args, err := ec.field_Query_analyticsFilterOptions_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.AnalyticsFilterOptions(childComplexity, args["dimension"].(AnalyticsFilterDimension), args["search"].(*string), args["first"].(*int), args["startTime"].(*string), args["endTime"].(*string)), true
+	case "Query.analyticsMetadata":
+		if e.complexity.Query.AnalyticsMetadata == nil {
+			break
+		}
+
+		return e.complexity.Query.AnalyticsMetadata(childComplexity), true
+	case "Query.analyticsOverview":
+		if e.complexity.Query.AnalyticsOverview == nil {
+			break
+		}
+
+		args, err := ec.field_Query_analyticsOverview_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.AnalyticsOverview(childComplexity, args["filter"].(*AnalyticsFilter)), true
 	case "Query.autoBackupSettings":
 		if e.complexity.Query.AutoBackupSettings == nil {
 			break
@@ -11026,6 +11288,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputAPIKeyTokenUsageStatsInput,
 		ec.unmarshalInputAPIKeyWhereInput,
 		ec.unmarshalInputAddUserToProjectInput,
+		ec.unmarshalInputAnalyticsFilter,
 		ec.unmarshalInputApplyChannelOverrideTemplateInput,
 		ec.unmarshalInputAutoDisableAPIKeyInput,
 		ec.unmarshalInputAutoDisableAPIKeyStatusInput,
@@ -11313,7 +11576,7 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 	return introspection.WrapTypeFromDef(ec.Schema(), ec.Schema().Types[name]), nil
 }
 
-//go:embed "axonhub.graphql" "ent.graphql" "dashboard.graphql" "scopes.graphql" "me.graphql" "system.graphql" "filter.graphql" "model.graphql" "backup.graphql" "channel_probe.graphql" "prompt.graphql" "prompt_protection_rule.graphql" "price.graphql" "cost.graphql"
+//go:embed "axonhub.graphql" "ent.graphql" "dashboard.graphql" "scopes.graphql" "me.graphql" "system.graphql" "filter.graphql" "model.graphql" "backup.graphql" "channel_probe.graphql" "prompt.graphql" "prompt_protection_rule.graphql" "price.graphql" "cost.graphql" "analytics.graphql"
 var sourcesFS embed.FS
 
 func sourceData(filename string) string {
@@ -11339,6 +11602,7 @@ var sources = []*ast.Source{
 	{Name: "prompt_protection_rule.graphql", Input: sourceData("prompt_protection_rule.graphql"), BuiltIn: false},
 	{Name: "price.graphql", Input: sourceData("price.graphql"), BuiltIn: false},
 	{Name: "cost.graphql", Input: sourceData("cost.graphql"), BuiltIn: false},
+	{Name: "analytics.graphql", Input: sourceData("analytics.graphql"), BuiltIn: false},
 }
 var parsedSchema = gqlparser.MustLoadSchema(sources...)
 
@@ -13338,6 +13602,80 @@ func (ec *executionContext) field_Query_allScopes_args(ctx context.Context, rawA
 		return nil, err
 	}
 	args["level"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_analyticsDailyStats_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filter", ec.unmarshalOAnalyticsFilter2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsFilter)
+	if err != nil {
+		return nil, err
+	}
+	args["filter"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_analyticsDimensionStats_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filter", ec.unmarshalOAnalyticsFilter2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsFilter)
+	if err != nil {
+		return nil, err
+	}
+	args["filter"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "dimension", ec.unmarshalNAnalyticsDimension2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsDimension)
+	if err != nil {
+		return nil, err
+	}
+	args["dimension"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_analyticsFilterOptions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "dimension", ec.unmarshalNAnalyticsFilterDimension2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsFilterDimension)
+	if err != nil {
+		return nil, err
+	}
+	args["dimension"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "search", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["search"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "startTime", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["startTime"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "endTime", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["endTime"] = arg4
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_analyticsOverview_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filter", ec.unmarshalOAnalyticsFilter2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsFilter)
+	if err != nil {
+		return nil, err
+	}
+	args["filter"] = arg0
 	return args, nil
 }
 
@@ -16905,6 +17243,760 @@ func (ec *executionContext) fieldContext_APIKeyTokenUsageStats_topModels(_ conte
 				return ec.fieldContext_ModelTokenUsageStats_reasoningTokens(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ModelTokenUsageStats", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDailyStat_date(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDailyStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDailyStat_date,
+		func(ctx context.Context) (any, error) {
+			return obj.Date, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDailyStat_date(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDailyStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDailyStat_inputTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDailyStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDailyStat_inputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.InputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDailyStat_inputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDailyStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDailyStat_cachedInputTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDailyStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDailyStat_cachedInputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.CachedInputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDailyStat_cachedInputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDailyStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDailyStat_uncachedInputTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDailyStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDailyStat_uncachedInputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.UncachedInputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDailyStat_uncachedInputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDailyStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDailyStat_outputTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDailyStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDailyStat_outputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.OutputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDailyStat_outputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDailyStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDailyStat_totalTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDailyStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDailyStat_totalTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDailyStat_totalTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDailyStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDailyStat_requestCount(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDailyStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDailyStat_requestCount,
+		func(ctx context.Context) (any, error) {
+			return obj.RequestCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDailyStat_requestCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDailyStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDailyStat_cost(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDailyStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDailyStat_cost,
+		func(ctx context.Context) (any, error) {
+			return obj.Cost, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDailyStat_cost(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDailyStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDimensionStat_id(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDimensionStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDimensionStat_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDimensionStat_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDimensionStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDimensionStat_name(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDimensionStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDimensionStat_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDimensionStat_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDimensionStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDimensionStat_requestCount(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDimensionStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDimensionStat_requestCount,
+		func(ctx context.Context) (any, error) {
+			return obj.RequestCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDimensionStat_requestCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDimensionStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDimensionStat_inputTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDimensionStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDimensionStat_inputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.InputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDimensionStat_inputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDimensionStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDimensionStat_cachedInputTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDimensionStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDimensionStat_cachedInputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.CachedInputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDimensionStat_cachedInputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDimensionStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDimensionStat_outputTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDimensionStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDimensionStat_outputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.OutputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDimensionStat_outputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDimensionStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDimensionStat_totalTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDimensionStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDimensionStat_totalTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDimensionStat_totalTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDimensionStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsDimensionStat_cost(ctx context.Context, field graphql.CollectedField, obj *AnalyticsDimensionStat) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsDimensionStat_cost,
+		func(ctx context.Context) (any, error) {
+			return obj.Cost, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsDimensionStat_cost(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsDimensionStat",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsFilterOption_id(ctx context.Context, field graphql.CollectedField, obj *AnalyticsFilterOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsFilterOption_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsFilterOption_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsFilterOption",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsFilterOption_label(ctx context.Context, field graphql.CollectedField, obj *AnalyticsFilterOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsFilterOption_label,
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsFilterOption_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsFilterOption",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsMetadata_earliestDate(ctx context.Context, field graphql.CollectedField, obj *AnalyticsMetadata) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsMetadata_earliestDate,
+		func(ctx context.Context) (any, error) {
+			return obj.EarliestDate, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsMetadata_earliestDate(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsMetadata",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsOverview_totalTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsOverview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsOverview_totalTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsOverview_totalTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsOverview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsOverview_totalInputTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsOverview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsOverview_totalInputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalInputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsOverview_totalInputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsOverview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsOverview_totalCachedInputTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsOverview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsOverview_totalCachedInputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCachedInputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsOverview_totalCachedInputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsOverview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsOverview_totalUncachedInputTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsOverview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsOverview_totalUncachedInputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalUncachedInputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsOverview_totalUncachedInputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsOverview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsOverview_totalOutputTokens(ctx context.Context, field graphql.CollectedField, obj *AnalyticsOverview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsOverview_totalOutputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalOutputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsOverview_totalOutputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsOverview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsOverview_totalRequests(ctx context.Context, field graphql.CollectedField, obj *AnalyticsOverview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsOverview_totalRequests,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalRequests, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsOverview_totalRequests(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsOverview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AnalyticsOverview_totalCost(ctx context.Context, field graphql.CollectedField, obj *AnalyticsOverview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AnalyticsOverview_totalCost,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCost, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AnalyticsOverview_totalCost(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AnalyticsOverview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
 		},
 	}
 	return fc, nil
@@ -44489,6 +45581,261 @@ func (ec *executionContext) fieldContext_Query_channelProbeData(ctx context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_analyticsMetadata(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_analyticsMetadata,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().AnalyticsMetadata(ctx)
+		},
+		nil,
+		ec.marshalNAnalyticsMetadata2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsMetadata,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_analyticsMetadata(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "earliestDate":
+				return ec.fieldContext_AnalyticsMetadata_earliestDate(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AnalyticsMetadata", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_analyticsOverview(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_analyticsOverview,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().AnalyticsOverview(ctx, fc.Args["filter"].(*AnalyticsFilter))
+		},
+		nil,
+		ec.marshalNAnalyticsOverview2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsOverview,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_analyticsOverview(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "totalTokens":
+				return ec.fieldContext_AnalyticsOverview_totalTokens(ctx, field)
+			case "totalInputTokens":
+				return ec.fieldContext_AnalyticsOverview_totalInputTokens(ctx, field)
+			case "totalCachedInputTokens":
+				return ec.fieldContext_AnalyticsOverview_totalCachedInputTokens(ctx, field)
+			case "totalUncachedInputTokens":
+				return ec.fieldContext_AnalyticsOverview_totalUncachedInputTokens(ctx, field)
+			case "totalOutputTokens":
+				return ec.fieldContext_AnalyticsOverview_totalOutputTokens(ctx, field)
+			case "totalRequests":
+				return ec.fieldContext_AnalyticsOverview_totalRequests(ctx, field)
+			case "totalCost":
+				return ec.fieldContext_AnalyticsOverview_totalCost(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AnalyticsOverview", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_analyticsOverview_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_analyticsDailyStats(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_analyticsDailyStats,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().AnalyticsDailyStats(ctx, fc.Args["filter"].(*AnalyticsFilter))
+		},
+		nil,
+		ec.marshalNAnalyticsDailyStat2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsDailyStatᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_analyticsDailyStats(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "date":
+				return ec.fieldContext_AnalyticsDailyStat_date(ctx, field)
+			case "inputTokens":
+				return ec.fieldContext_AnalyticsDailyStat_inputTokens(ctx, field)
+			case "cachedInputTokens":
+				return ec.fieldContext_AnalyticsDailyStat_cachedInputTokens(ctx, field)
+			case "uncachedInputTokens":
+				return ec.fieldContext_AnalyticsDailyStat_uncachedInputTokens(ctx, field)
+			case "outputTokens":
+				return ec.fieldContext_AnalyticsDailyStat_outputTokens(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_AnalyticsDailyStat_totalTokens(ctx, field)
+			case "requestCount":
+				return ec.fieldContext_AnalyticsDailyStat_requestCount(ctx, field)
+			case "cost":
+				return ec.fieldContext_AnalyticsDailyStat_cost(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AnalyticsDailyStat", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_analyticsDailyStats_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_analyticsFilterOptions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_analyticsFilterOptions,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().AnalyticsFilterOptions(ctx, fc.Args["dimension"].(AnalyticsFilterDimension), fc.Args["search"].(*string), fc.Args["first"].(*int), fc.Args["startTime"].(*string), fc.Args["endTime"].(*string))
+		},
+		nil,
+		ec.marshalNAnalyticsFilterOption2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsFilterOptionᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_analyticsFilterOptions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_AnalyticsFilterOption_id(ctx, field)
+			case "label":
+				return ec.fieldContext_AnalyticsFilterOption_label(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AnalyticsFilterOption", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_analyticsFilterOptions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_analyticsDimensionStats(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_analyticsDimensionStats,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().AnalyticsDimensionStats(ctx, fc.Args["filter"].(*AnalyticsFilter), fc.Args["dimension"].(AnalyticsDimension), fc.Args["first"].(*int))
+		},
+		nil,
+		ec.marshalNAnalyticsDimensionStat2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsDimensionStatᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_analyticsDimensionStats(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_AnalyticsDimensionStat_id(ctx, field)
+			case "name":
+				return ec.fieldContext_AnalyticsDimensionStat_name(ctx, field)
+			case "requestCount":
+				return ec.fieldContext_AnalyticsDimensionStat_requestCount(ctx, field)
+			case "inputTokens":
+				return ec.fieldContext_AnalyticsDimensionStat_inputTokens(ctx, field)
+			case "cachedInputTokens":
+				return ec.fieldContext_AnalyticsDimensionStat_cachedInputTokens(ctx, field)
+			case "outputTokens":
+				return ec.fieldContext_AnalyticsDimensionStat_outputTokens(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_AnalyticsDimensionStat_totalTokens(ctx, field)
+			case "cost":
+				return ec.fieldContext_AnalyticsDimensionStat_cost(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AnalyticsDimensionStat", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_analyticsDimensionStats_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -62421,6 +63768,75 @@ func (ec *executionContext) unmarshalInputAddUserToProjectInput(ctx context.Cont
 				return it, err
 			}
 			it.RoleIDs = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputAnalyticsFilter(ctx context.Context, obj any) (AnalyticsFilter, error) {
+	var it AnalyticsFilter
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"startTime", "endTime", "projectIDs", "channelIDs", "modelIDs", "apiKeyIDs", "userIDs"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "startTime":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("startTime"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StartTime = data
+		case "endTime":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("endTime"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.EndTime = data
+		case "projectIDs":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectIDs"))
+			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectIDs = data
+		case "channelIDs":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelIDs"))
+			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ChannelIDs = data
+		case "modelIDs":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelIDs"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ModelIDs = data
+		case "apiKeyIDs":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("apiKeyIDs"))
+			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.APIKeyIDs = data
+		case "userIDs":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("userIDs"))
+			data, err := ec.unmarshalOID2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UserIDs = data
 		}
 	}
 
@@ -88850,6 +90266,303 @@ func (ec *executionContext) _APIKeyTokenUsageStats(ctx context.Context, sel ast.
 	return out
 }
 
+var analyticsDailyStatImplementors = []string{"AnalyticsDailyStat"}
+
+func (ec *executionContext) _AnalyticsDailyStat(ctx context.Context, sel ast.SelectionSet, obj *AnalyticsDailyStat) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, analyticsDailyStatImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AnalyticsDailyStat")
+		case "date":
+			out.Values[i] = ec._AnalyticsDailyStat_date(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "inputTokens":
+			out.Values[i] = ec._AnalyticsDailyStat_inputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cachedInputTokens":
+			out.Values[i] = ec._AnalyticsDailyStat_cachedInputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "uncachedInputTokens":
+			out.Values[i] = ec._AnalyticsDailyStat_uncachedInputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "outputTokens":
+			out.Values[i] = ec._AnalyticsDailyStat_outputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalTokens":
+			out.Values[i] = ec._AnalyticsDailyStat_totalTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requestCount":
+			out.Values[i] = ec._AnalyticsDailyStat_requestCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cost":
+			out.Values[i] = ec._AnalyticsDailyStat_cost(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var analyticsDimensionStatImplementors = []string{"AnalyticsDimensionStat"}
+
+func (ec *executionContext) _AnalyticsDimensionStat(ctx context.Context, sel ast.SelectionSet, obj *AnalyticsDimensionStat) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, analyticsDimensionStatImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AnalyticsDimensionStat")
+		case "id":
+			out.Values[i] = ec._AnalyticsDimensionStat_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._AnalyticsDimensionStat_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requestCount":
+			out.Values[i] = ec._AnalyticsDimensionStat_requestCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "inputTokens":
+			out.Values[i] = ec._AnalyticsDimensionStat_inputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cachedInputTokens":
+			out.Values[i] = ec._AnalyticsDimensionStat_cachedInputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "outputTokens":
+			out.Values[i] = ec._AnalyticsDimensionStat_outputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalTokens":
+			out.Values[i] = ec._AnalyticsDimensionStat_totalTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cost":
+			out.Values[i] = ec._AnalyticsDimensionStat_cost(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var analyticsFilterOptionImplementors = []string{"AnalyticsFilterOption"}
+
+func (ec *executionContext) _AnalyticsFilterOption(ctx context.Context, sel ast.SelectionSet, obj *AnalyticsFilterOption) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, analyticsFilterOptionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AnalyticsFilterOption")
+		case "id":
+			out.Values[i] = ec._AnalyticsFilterOption_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "label":
+			out.Values[i] = ec._AnalyticsFilterOption_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var analyticsMetadataImplementors = []string{"AnalyticsMetadata"}
+
+func (ec *executionContext) _AnalyticsMetadata(ctx context.Context, sel ast.SelectionSet, obj *AnalyticsMetadata) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, analyticsMetadataImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AnalyticsMetadata")
+		case "earliestDate":
+			out.Values[i] = ec._AnalyticsMetadata_earliestDate(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var analyticsOverviewImplementors = []string{"AnalyticsOverview"}
+
+func (ec *executionContext) _AnalyticsOverview(ctx context.Context, sel ast.SelectionSet, obj *AnalyticsOverview) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, analyticsOverviewImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AnalyticsOverview")
+		case "totalTokens":
+			out.Values[i] = ec._AnalyticsOverview_totalTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalInputTokens":
+			out.Values[i] = ec._AnalyticsOverview_totalInputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCachedInputTokens":
+			out.Values[i] = ec._AnalyticsOverview_totalCachedInputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalUncachedInputTokens":
+			out.Values[i] = ec._AnalyticsOverview_totalUncachedInputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalOutputTokens":
+			out.Values[i] = ec._AnalyticsOverview_totalOutputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalRequests":
+			out.Values[i] = ec._AnalyticsOverview_totalRequests(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCost":
+			out.Values[i] = ec._AnalyticsOverview_totalCost(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var applyChannelOverrideTemplatePayloadImplementors = []string{"ApplyChannelOverrideTemplatePayload"}
 
 func (ec *executionContext) _ApplyChannelOverrideTemplatePayload(ctx context.Context, sel ast.SelectionSet, obj *ApplyChannelOverrideTemplatePayload) graphql.Marshaler {
@@ -99560,6 +101273,116 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "analyticsMetadata":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_analyticsMetadata(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "analyticsOverview":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_analyticsOverview(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "analyticsDailyStats":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_analyticsDailyStats(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "analyticsFilterOptions":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_analyticsFilterOptions(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "analyticsDimensionStats":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_analyticsDimensionStats(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -107577,6 +109400,216 @@ func (ec *executionContext) unmarshalNAddUserToProjectInput2githubᚗcomᚋloopl
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalNAnalyticsDailyStat2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsDailyStatᚄ(ctx context.Context, sel ast.SelectionSet, v []*AnalyticsDailyStat) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNAnalyticsDailyStat2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsDailyStat(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNAnalyticsDailyStat2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsDailyStat(ctx context.Context, sel ast.SelectionSet, v *AnalyticsDailyStat) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AnalyticsDailyStat(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNAnalyticsDimension2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsDimension(ctx context.Context, v any) (AnalyticsDimension, error) {
+	var res AnalyticsDimension
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNAnalyticsDimension2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsDimension(ctx context.Context, sel ast.SelectionSet, v AnalyticsDimension) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNAnalyticsDimensionStat2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsDimensionStatᚄ(ctx context.Context, sel ast.SelectionSet, v []*AnalyticsDimensionStat) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNAnalyticsDimensionStat2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsDimensionStat(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNAnalyticsDimensionStat2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsDimensionStat(ctx context.Context, sel ast.SelectionSet, v *AnalyticsDimensionStat) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AnalyticsDimensionStat(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNAnalyticsFilterDimension2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsFilterDimension(ctx context.Context, v any) (AnalyticsFilterDimension, error) {
+	var res AnalyticsFilterDimension
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNAnalyticsFilterDimension2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsFilterDimension(ctx context.Context, sel ast.SelectionSet, v AnalyticsFilterDimension) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNAnalyticsFilterOption2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsFilterOptionᚄ(ctx context.Context, sel ast.SelectionSet, v []*AnalyticsFilterOption) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNAnalyticsFilterOption2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsFilterOption(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNAnalyticsFilterOption2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsFilterOption(ctx context.Context, sel ast.SelectionSet, v *AnalyticsFilterOption) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AnalyticsFilterOption(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAnalyticsMetadata2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsMetadata(ctx context.Context, sel ast.SelectionSet, v AnalyticsMetadata) graphql.Marshaler {
+	return ec._AnalyticsMetadata(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAnalyticsMetadata2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsMetadata(ctx context.Context, sel ast.SelectionSet, v *AnalyticsMetadata) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AnalyticsMetadata(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAnalyticsOverview2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsOverview(ctx context.Context, sel ast.SelectionSet, v AnalyticsOverview) graphql.Marshaler {
+	return ec._AnalyticsOverview(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAnalyticsOverview2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsOverview(ctx context.Context, sel ast.SelectionSet, v *AnalyticsOverview) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AnalyticsOverview(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNApplyChannelOverrideTemplateInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐApplyChannelOverrideTemplateInput(ctx context.Context, v any) (ApplyChannelOverrideTemplateInput, error) {
 	res, err := ec.unmarshalInputApplyChannelOverrideTemplateInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -114033,6 +116066,14 @@ func (ec *executionContext) unmarshalOAPIKeyWhereInput2ᚖgithubᚗcomᚋlooplj�
 		return nil, nil
 	}
 	res, err := ec.unmarshalInputAPIKeyWhereInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalOAnalyticsFilter2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋgqlᚐAnalyticsFilter(ctx context.Context, v any) (*AnalyticsFilter, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputAnalyticsFilter(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 

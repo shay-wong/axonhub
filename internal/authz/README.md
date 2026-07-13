@@ -38,8 +38,12 @@ Defined in [scope.go](./scope.go):
 
 - `WithScopeDecision(ctx, scope)` - Inject Allow/Deny decision based on principal scope
 - `RunWithScopeDecision(ctx, scope, fn)` - Closure mode, recommended usage
+- `WithSystemScopeDecision(ctx, scope)` - Inject Allow/Deny using system-level user scopes only
+- `RunWithSystemScopeDecision(ctx, scope, fn)` - Closure mode for system-level scope decisions
 - `HasScope(ctx, scope)` - Pure scope check without injecting DecisionContext
+- `HasSystemScope(ctx, scope)` - Pure system-level scope check that ignores project scopes
 - `RequireScope(ctx, scope)` - Require principal to have specified scope, otherwise return error
+- `RequireSystemScope(ctx, scope)` - Require a system-level scope, otherwise return error
 - Unified support for three principal types: System (always Allow), User, APIKey
 
 ## Usage Examples
@@ -77,6 +81,11 @@ result, err := authz.RunWithScopeDecision(ctx, scopes.ScopeReadDashboard, func(s
     return client.Request.Query().All(scopeCtx)
 })
 
+// System-level closure mode ignores project membership and project-role scopes.
+result, err := authz.RunWithSystemScopeDecision(ctx, scopes.ScopeReadAPIKeys, func(scopeCtx context.Context) (T, error) {
+    return client.APIKey.Query().All(scopeCtx)
+})
+
 // Explicit mode
 ctx = authz.WithScopeDecision(ctx, scopes.ScopeReadDashboard)
 
@@ -95,9 +104,9 @@ if err := authz.RequireScope(ctx, scopes.ScopeWriteSettings); err != nil {
 
 1. **Prohibited** from directly using `privacy.DecisionContext(ctx, privacy.Allow)` outside of `internal/authz`
 2. All unconditional bypasses must go through `authz.WithBypassPrivacy` or `authz.RunWithBypass`
-3. All scope authorization decisions must go through `authz.WithScopeDecision` or `authz.RunWithScopeDecision`
-4. Pure scope checks (without injecting DecisionContext) use `authz.HasScope`
-5. **Prefer closure mode** (`RunWithBypass` / `RunWithScopeDecision`), limiting Allow/Deny to the smallest operation scope
+3. All scope authorization decisions must go through `authz.WithScopeDecision`, `authz.RunWithScopeDecision`, or their `SystemScope` variants
+4. Pure scope checks (without injecting DecisionContext) use `authz.HasScope` or `authz.HasSystemScope`
+5. **Prefer closure mode** (`RunWithBypass` / `RunWithScopeDecision` / `RunWithSystemScopeDecision`), limiting Allow/Deny to the smallest operation scope
 6. When `WithBypassPrivacy` must be used, return value variable must be named `bypassCtx`, never assign to `ctx`
 7. All bypass usage must carry concise and stable reasons (for audit aggregation)
 8. Middleware must ensure Principal uniqueness via `authz.WithPrincipal`

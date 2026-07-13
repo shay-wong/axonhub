@@ -8,6 +8,7 @@ import (
 
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
+	"github.com/looplj/axonhub/internal/ent/privacy"
 	"github.com/looplj/axonhub/internal/scopes"
 )
 
@@ -116,6 +117,35 @@ func TestHasScope_UserPrincipal_ProjectMembershipScope(t *testing.T) {
 
 	if HasScope(ctx, scopes.ScopeWriteAPIKeys) {
 		t.Error("user without write scope should not have it")
+	}
+}
+
+func TestHasSystemScope_UserPrincipal_RejectsProjectMembershipScope(t *testing.T) {
+	ctx := NewUserContext(context.Background(), 1)
+	ctx = contexts.WithUser(ctx, &ent.User{
+		ID:     1,
+		Scopes: []string{string(scopes.ScopeReadDashboard)},
+		Edges: ent.UserEdges{
+			ProjectUsers: []*ent.UserProject{
+				{
+					ProjectID: 100,
+					Scopes:    []string{string(scopes.ScopeReadAPIKeys)},
+				},
+			},
+		},
+	})
+	ctx = contexts.WithProjectID(ctx, 100)
+
+	if HasSystemScope(ctx, scopes.ScopeReadAPIKeys) {
+		t.Error("project membership scope must not satisfy a system scope check")
+	}
+
+	if err := RequireSystemScope(ctx, scopes.ScopeReadAPIKeys); err == nil {
+		t.Error("RequireSystemScope should reject project membership scope")
+	}
+
+	if !HasSystemScope(ctx, scopes.ScopeReadDashboard) {
+		t.Error("direct system scope should satisfy a system scope check")
 	}
 }
 
@@ -306,6 +336,31 @@ func TestRunWithScopeDecision(t *testing.T) {
 
 	if result != "success" {
 		t.Errorf("result = %v, want %v", result, "success")
+	}
+}
+
+func TestRunWithSystemScopeDecisionRejectsProjectScope(t *testing.T) {
+	ctx := NewUserContext(context.Background(), 1)
+	ctx = contexts.WithUser(ctx, &ent.User{
+		ID: 1,
+		Edges: ent.UserEdges{
+			ProjectUsers: []*ent.UserProject{{
+				ProjectID: 100,
+				Scopes:    []string{string(scopes.ScopeReadAPIKeys)},
+			}},
+		},
+	})
+	ctx = contexts.WithProjectID(ctx, 100)
+
+	allowed, err := RunWithSystemScopeDecision(ctx, scopes.ScopeReadAPIKeys, func(scopeCtx context.Context) (bool, error) {
+		decision, ok := privacy.DecisionFromContext(scopeCtx)
+		return ok && decision == privacy.Allow, nil
+	})
+	if err != nil {
+		t.Fatalf("RunWithSystemScopeDecision failed: %v", err)
+	}
+	if allowed {
+		t.Error("project scope must not produce a system-scope allow decision")
 	}
 }
 

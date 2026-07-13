@@ -31,8 +31,31 @@ func WithScopeDecision(ctx context.Context, requiredScope scopes.ScopeSlug) cont
 	return privacy.DecisionContext(ctx, privacy.Deny)
 }
 
+func WithSystemScopeDecision(ctx context.Context, requiredScope scopes.ScopeSlug) context.Context {
+	has := HasSystemScope(ctx, requiredScope)
+
+	p, _ := GetPrincipal(ctx)
+
+	log.Debug(ctx, "authz: system scope decision",
+		log.String("principal", p.String()),
+		log.String("scope", string(requiredScope)),
+		log.String("decision", lo.Ternary(has, "allow", "deny")),
+	)
+
+	if has {
+		return privacy.DecisionContext(ctx, privacy.Allow)
+	}
+
+	return privacy.DecisionContext(ctx, privacy.Deny)
+}
+
 func RunWithScopeDecision[T any](ctx context.Context, requiredScope scopes.ScopeSlug, fn func(ctx context.Context) (T, error)) (T, error) {
 	scopeCtx := WithScopeDecision(ctx, requiredScope)
+	return fn(scopeCtx)
+}
+
+func RunWithSystemScopeDecision[T any](ctx context.Context, requiredScope scopes.ScopeSlug, fn func(ctx context.Context) (T, error)) (T, error) {
+	scopeCtx := WithSystemScopeDecision(ctx, requiredScope)
 	return fn(scopeCtx)
 }
 
@@ -56,10 +79,38 @@ func HasScope(ctx context.Context, requiredScope scopes.ScopeSlug) bool {
 	}
 }
 
+func HasSystemScope(ctx context.Context, requiredScope scopes.ScopeSlug) bool {
+	p, ok := GetPrincipal(ctx)
+	if !ok {
+		return false
+	}
+
+	switch p.Type {
+	case PrincipalTypeSystem, PrincipalTypeTest:
+		return true
+	case PrincipalTypeUser:
+		user, exists := contexts.GetUser(ctx)
+		return exists && user != nil && scopes.HasSystemScope(user, requiredScope)
+	case PrincipalTypeAPIKey, PrincipalTypeUnknown:
+		return false
+	default:
+		return false
+	}
+}
+
 func RequireScope(ctx context.Context, requiredScope scopes.ScopeSlug) error {
 	if !HasScope(ctx, requiredScope) {
 		p, _ := GetPrincipal(ctx)
 		return fmt.Errorf("authz: principal %s does not have required scope %s", p.String(), requiredScope)
+	}
+
+	return nil
+}
+
+func RequireSystemScope(ctx context.Context, requiredScope scopes.ScopeSlug) error {
+	if !HasSystemScope(ctx, requiredScope) {
+		p, _ := GetPrincipal(ctx)
+		return fmt.Errorf("authz: principal %s does not have required system scope %s", p.String(), requiredScope)
 	}
 
 	return nil

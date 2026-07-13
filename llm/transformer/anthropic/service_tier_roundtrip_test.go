@@ -96,6 +96,41 @@ func TestAnthropicInboundStreamPreservesServiceTier(t *testing.T) {
 	require.Equal(t, "priority", deltaTier)
 }
 
+func TestAnthropicInboundStreamPreservesServiceTierWithoutFinishReason(t *testing.T) {
+	content := "ok"
+	source := streams.SliceStream([]*llm.Response{
+		{
+			ID:          "msg_tier",
+			Model:       "claude-sonnet",
+			ServiceTier: "priority",
+			Choices: []llm.Choice{{
+				Delta: &llm.Message{Content: llm.MessageContent{Content: &content}},
+			}},
+		},
+		{
+			ID:          "msg_tier",
+			Model:       "claude-sonnet",
+			ServiceTier: "priority",
+			Usage:       &llm.Usage{PromptTokens: 10, CompletionTokens: 2, TotalTokens: 12},
+		},
+	})
+
+	stream, err := (&InboundTransformer{}).TransformStream(t.Context(), source)
+	require.NoError(t, err)
+
+	var deltaTier string
+	for stream.Next() {
+		var event StreamEvent
+		require.NoError(t, json.Unmarshal(stream.Current().Data, &event))
+		if event.Type == "message_delta" {
+			deltaTier = event.Usage.ServiceTier
+		}
+	}
+
+	require.NoError(t, stream.Err())
+	require.Equal(t, "priority", deltaTier)
+}
+
 func TestAnthropicOutboundStreamPreservesFinalServiceTier(t *testing.T) {
 	stream := newOutboundStream(streams.SliceStream([]*httpclient.StreamEvent{
 		{
