@@ -22,7 +22,7 @@ test('maps Codex fast mode to the priority provider tier price', () => {
         modes: {
           fast: {
             cost: { input: 10, output: 60, cache_read: 1, cache_write: 12.5 },
-	            provider: { body: { service_tier: ' PRIORITY ' } },
+            provider: { body: { service_tier: ' PRIORITY ' } },
           },
           pro: {
             provider: { body: { reasoning: { mode: 'pro' } } },
@@ -50,6 +50,34 @@ test('maps Codex fast mode to the priority provider tier price', () => {
         { itemCode: 'completion_tokens', pricing: { mode: 'usage_per_unit', usagePerUnit: '90.0000' } },
         { itemCode: 'prompt_cached_tokens', pricing: { mode: 'usage_per_unit', usagePerUnit: '1.5000' } },
         { itemCode: 'prompt_write_cached_tokens', pricing: { mode: 'usage_per_unit', usagePerUnit: '18.7500' } },
+      ],
+    },
+  ]);
+});
+
+test('maps Anthropic fast mode to the priority provider tier price', () => {
+  const price = buildProviderModelPrice({
+    id: 'claude-test',
+    cost: { input: 5, output: 25 },
+    experimental: {
+      modes: {
+        fast: {
+          cost: { input: 10, output: 50 },
+          provider: {
+            body: { speed: 'fast' },
+            headers: { 'anthropic-beta': 'fast-mode-2026-02-01' },
+          },
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(price.serviceTierPrices, [
+    {
+      serviceTier: 'priority',
+      items: [
+        { itemCode: 'prompt_tokens', pricing: { mode: 'usage_per_unit', usagePerUnit: '10.0000' } },
+        { itemCode: 'completion_tokens', pricing: { mode: 'usage_per_unit', usagePerUnit: '50.0000' } },
       ],
     },
   ]);

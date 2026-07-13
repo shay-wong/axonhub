@@ -17904,6 +17904,7 @@ type RequestExecutionMutation struct {
 	model_id                          *string
 	format                            *string
 	requested_service_tier            *string
+	speed_mode                        *string
 	channel_api_key_name              *string
 	channel_api_key_suffix            *string
 	channel_api_key_headers           *[]string
@@ -18507,6 +18508,55 @@ func (m *RequestExecutionMutation) RequestedServiceTierCleared() bool {
 func (m *RequestExecutionMutation) ResetRequestedServiceTier() {
 	m.requested_service_tier = nil
 	delete(m.clearedFields, requestexecution.FieldRequestedServiceTier)
+}
+
+// SetSpeedMode sets the "speed_mode" field.
+func (m *RequestExecutionMutation) SetSpeedMode(s string) {
+	m.speed_mode = &s
+}
+
+// SpeedMode returns the value of the "speed_mode" field in the mutation.
+func (m *RequestExecutionMutation) SpeedMode() (r string, exists bool) {
+	v := m.speed_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSpeedMode returns the old "speed_mode" field's value of the RequestExecution entity.
+// If the RequestExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestExecutionMutation) OldSpeedMode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSpeedMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSpeedMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSpeedMode: %w", err)
+	}
+	return oldValue.SpeedMode, nil
+}
+
+// ClearSpeedMode clears the value of the "speed_mode" field.
+func (m *RequestExecutionMutation) ClearSpeedMode() {
+	m.speed_mode = nil
+	m.clearedFields[requestexecution.FieldSpeedMode] = struct{}{}
+}
+
+// SpeedModeCleared returns if the "speed_mode" field was cleared in this mutation.
+func (m *RequestExecutionMutation) SpeedModeCleared() bool {
+	_, ok := m.clearedFields[requestexecution.FieldSpeedMode]
+	return ok
+}
+
+// ResetSpeedMode resets all changes to the "speed_mode" field.
+func (m *RequestExecutionMutation) ResetSpeedMode() {
+	m.speed_mode = nil
+	delete(m.clearedFields, requestexecution.FieldSpeedMode)
 }
 
 // SetChannelAPIKeyName sets the "channel_api_key_name" field.
@@ -19558,7 +19608,7 @@ func (m *RequestExecutionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RequestExecutionMutation) Fields() []string {
-	fields := make([]string, 0, 27)
+	fields := make([]string, 0, 28)
 	if m.created_at != nil {
 		fields = append(fields, requestexecution.FieldCreatedAt)
 	}
@@ -19591,6 +19641,9 @@ func (m *RequestExecutionMutation) Fields() []string {
 	}
 	if m.requested_service_tier != nil {
 		fields = append(fields, requestexecution.FieldRequestedServiceTier)
+	}
+	if m.speed_mode != nil {
+		fields = append(fields, requestexecution.FieldSpeedMode)
 	}
 	if m.channel_api_key_name != nil {
 		fields = append(fields, requestexecution.FieldChannelAPIKeyName)
@@ -19670,6 +19723,8 @@ func (m *RequestExecutionMutation) Field(name string) (ent.Value, bool) {
 		return m.Format()
 	case requestexecution.FieldRequestedServiceTier:
 		return m.RequestedServiceTier()
+	case requestexecution.FieldSpeedMode:
+		return m.SpeedMode()
 	case requestexecution.FieldChannelAPIKeyName:
 		return m.ChannelAPIKeyName()
 	case requestexecution.FieldChannelAPIKeySuffix:
@@ -19733,6 +19788,8 @@ func (m *RequestExecutionMutation) OldField(ctx context.Context, name string) (e
 		return m.OldFormat(ctx)
 	case requestexecution.FieldRequestedServiceTier:
 		return m.OldRequestedServiceTier(ctx)
+	case requestexecution.FieldSpeedMode:
+		return m.OldSpeedMode(ctx)
 	case requestexecution.FieldChannelAPIKeyName:
 		return m.OldChannelAPIKeyName(ctx)
 	case requestexecution.FieldChannelAPIKeySuffix:
@@ -19850,6 +19907,13 @@ func (m *RequestExecutionMutation) SetField(name string, value ent.Value) error 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRequestedServiceTier(v)
+		return nil
+	case requestexecution.FieldSpeedMode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSpeedMode(v)
 		return nil
 	case requestexecution.FieldChannelAPIKeyName:
 		v, ok := value.(string)
@@ -20068,6 +20132,9 @@ func (m *RequestExecutionMutation) ClearedFields() []string {
 	if m.FieldCleared(requestexecution.FieldRequestedServiceTier) {
 		fields = append(fields, requestexecution.FieldRequestedServiceTier)
 	}
+	if m.FieldCleared(requestexecution.FieldSpeedMode) {
+		fields = append(fields, requestexecution.FieldSpeedMode)
+	}
 	if m.FieldCleared(requestexecution.FieldChannelAPIKeyName) {
 		fields = append(fields, requestexecution.FieldChannelAPIKeyName)
 	}
@@ -20129,6 +20196,9 @@ func (m *RequestExecutionMutation) ClearField(name string) error {
 		return nil
 	case requestexecution.FieldRequestedServiceTier:
 		m.ClearRequestedServiceTier()
+		return nil
+	case requestexecution.FieldSpeedMode:
+		m.ClearSpeedMode()
 		return nil
 	case requestexecution.FieldChannelAPIKeyName:
 		m.ClearChannelAPIKeyName()
@@ -20206,6 +20276,9 @@ func (m *RequestExecutionMutation) ResetField(name string) error {
 		return nil
 	case requestexecution.FieldRequestedServiceTier:
 		m.ResetRequestedServiceTier()
+		return nil
+	case requestexecution.FieldSpeedMode:
+		m.ResetSpeedMode()
 		return nil
 	case requestexecution.FieldChannelAPIKeyName:
 		m.ResetChannelAPIKeyName()

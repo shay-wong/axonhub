@@ -264,9 +264,11 @@ func (s *RequestService) CreateRequestExecution(
 	channelRequest httpclient.Request,
 	format llm.APIFormat,
 	requestedServiceTier string,
+	speedMode string,
 	passThroughApplied bool,
 ) (*ent.RequestExecution, error) {
 	requestedServiceTier = llm.CanonicalServiceTier(requestedServiceTier)
+	speedMode = strings.ToLower(strings.TrimSpace(speedMode))
 
 	// Decide whether to store the channel request body
 	storeRequestBody := true
@@ -357,6 +359,9 @@ func (s *RequestService) CreateRequestExecution(
 
 	if requestedServiceTier != "" {
 		mut.SetRequestedServiceTier(requestedServiceTier)
+	}
+	if speedMode != "" {
+		mut.SetSpeedMode(speedMode)
 	}
 
 	if channelRequest.URL != "" {

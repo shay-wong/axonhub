@@ -116,6 +116,8 @@ func (m *persistRequestMiddleware) OnInboundRawResponse(ctx context.Context, htt
 		llmResp.Usage,
 		state.RequestedServiceTier,
 		state.AppliedServiceTier,
+		state.RequestPricingOverride,
+		state.RequestPricingOverridePolicy,
 	)
 	if err != nil {
 		log.Warn(persistCtx, "Failed to create usage log from request", log.Cause(err))

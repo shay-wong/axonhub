@@ -1680,6 +1680,7 @@ func requestExecutionMetadataFields() []string {
 		requestexecution.FieldModelID,
 		requestexecution.FieldFormat,
 		requestexecution.FieldRequestedServiceTier,
+		requestexecution.FieldSpeedMode,
 		requestexecution.FieldChannelAPIKeyName,
 		requestexecution.FieldChannelAPIKeySuffix,
 		requestexecution.FieldChannelAPIKeyHeaders,
@@ -1711,6 +1712,7 @@ func newRequestExecutionRestoreBuilder(db *ent.Client, plan requestExecutionRest
 		SetModelID(data.ModelID).
 		SetFormat(data.Format).
 		SetNillableRequestedServiceTier(nilIfEmpty(llm.CanonicalServiceTier(data.RequestedServiceTier))).
+		SetNillableSpeedMode(nilIfEmpty(strings.ToLower(strings.TrimSpace(data.SpeedMode)))).
 		SetNillableChannelAPIKeyName(nilIfEmpty(data.ChannelAPIKeyName)).
 		SetNillableChannelAPIKeySuffix(nilIfEmpty(data.ChannelAPIKeySuffix)).
 		SetRequestBody(requestBody).
@@ -1770,6 +1772,7 @@ func requestExecutionFingerprint(
 	writeRequestExecutionFingerprintField(h, execution.ModelID)
 	writeRequestExecutionFingerprintField(h, execution.Format)
 	writeRequestExecutionFingerprintField(h, llm.CanonicalServiceTier(execution.RequestedServiceTier))
+	writeRequestExecutionFingerprintField(h, strings.ToLower(strings.TrimSpace(execution.SpeedMode)))
 	writeRequestExecutionFingerprintField(h, execution.ChannelAPIKeyName)
 	writeRequestExecutionFingerprintField(h, execution.ChannelAPIKeySuffix)
 	writeRequestExecutionFingerprintField(h, fmt.Sprintf("%d", len(execution.ChannelAPIKeyHeaders)))

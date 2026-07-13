@@ -70,6 +70,7 @@ function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChann
                   modelID
                   status
                   requestedServiceTier
+                  speedMode
                   passThroughApplied${executionChannelFields}
                 }
                 cursor

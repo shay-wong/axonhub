@@ -262,6 +262,7 @@ func createBackupTestUsageWithDataStorage(
 		SetModelID("gpt-4").
 		SetFormat("openai/chat_completions").
 		SetRequestedServiceTier("priority").
+		SetSpeedMode("fast").
 		SetChannelAPIKeyName("Primary Account").
 		SetChannelAPIKeySuffix("1234").
 		SetChannelAPIKeyHeaders([]string{"Authorization"}).
@@ -453,6 +454,7 @@ func TestBackupService_Backup_WithUsageStats(t *testing.T) {
 	require.Equal(t, execution.RequestID, backupData.RequestExecutions[0].RequestID)
 	require.Equal(t, execution.ChannelID, backupData.RequestExecutions[0].ChannelID)
 	require.Equal(t, "priority", backupData.RequestExecutions[0].RequestedServiceTier)
+	require.Equal(t, "fast", backupData.RequestExecutions[0].SpeedMode)
 	require.Equal(t, "Primary Account", backupData.RequestExecutions[0].ChannelAPIKeyName)
 	require.Equal(t, "1234", backupData.RequestExecutions[0].ChannelAPIKeySuffix)
 	require.Equal(t, []string{"Authorization"}, backupData.RequestExecutions[0].ChannelAPIKeyHeaders)

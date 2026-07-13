@@ -587,6 +587,7 @@ var (
 		{Name: "model_id", Type: field.TypeString},
 		{Name: "format", Type: field.TypeString, Default: "openai/chat_completions"},
 		{Name: "requested_service_tier", Type: field.TypeString, Nullable: true},
+		{Name: "speed_mode", Type: field.TypeString, Nullable: true},
 		{Name: "channel_api_key_name", Type: field.TypeString, Nullable: true},
 		{Name: "channel_api_key_suffix", Type: field.TypeString, Nullable: true},
 		{Name: "channel_api_key_headers", Type: field.TypeJSON, Nullable: true},
@@ -615,19 +616,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "request_executions_channels_executions",
-				Columns:    []*schema.Column{RequestExecutionsColumns[25]},
+				Columns:    []*schema.Column{RequestExecutionsColumns[26]},
 				RefColumns: []*schema.Column{ChannelsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "request_executions_data_storages_executions",
-				Columns:    []*schema.Column{RequestExecutionsColumns[26]},
+				Columns:    []*schema.Column{RequestExecutionsColumns[27]},
 				RefColumns: []*schema.Column{DataStoragesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "request_executions_requests_executions",
-				Columns:    []*schema.Column{RequestExecutionsColumns[27]},
+				Columns:    []*schema.Column{RequestExecutionsColumns[28]},
 				RefColumns: []*schema.Column{RequestsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -636,17 +637,17 @@ var (
 			{
 				Name:    "request_executions_by_request_id_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{RequestExecutionsColumns[27], RequestExecutionsColumns[17], RequestExecutionsColumns[1]},
+				Columns: []*schema.Column{RequestExecutionsColumns[28], RequestExecutionsColumns[18], RequestExecutionsColumns[1]},
 			},
 			{
 				Name:    "request_executions_by_request_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{RequestExecutionsColumns[27], RequestExecutionsColumns[1]},
+				Columns: []*schema.Column{RequestExecutionsColumns[28], RequestExecutionsColumns[1]},
 			},
 			{
 				Name:    "request_executions_by_channel_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{RequestExecutionsColumns[25], RequestExecutionsColumns[1]},
+				Columns: []*schema.Column{RequestExecutionsColumns[26], RequestExecutionsColumns[1]},
 			},
 		},
 	}

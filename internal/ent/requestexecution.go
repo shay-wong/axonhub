@@ -45,6 +45,8 @@ type RequestExecution struct {
 	Format string `json:"format,omitempty"`
 	// Canonical service tier sent to the provider for this execution
 	RequestedServiceTier string `json:"requested_service_tier,omitempty"`
+	// Provider-independent processing speed mode requested for this execution
+	SpeedMode string `json:"speed_mode,omitempty"`
 	// Alias snapshot of the upstream channel API key used for this execution
 	ChannelAPIKeyName string `json:"channel_api_key_name,omitempty"`
 	// Non-sensitive suffix of the upstream channel API key used for this execution
@@ -155,7 +157,7 @@ func (*RequestExecution) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case requestexecution.FieldID, requestexecution.FieldProjectID, requestexecution.FieldRequestID, requestexecution.FieldChannelID, requestexecution.FieldDataStorageID, requestexecution.FieldResponseStatusCode, requestexecution.FieldMetricsLatencyMs, requestexecution.FieldMetricsFirstTokenLatencyMs, requestexecution.FieldMetricsReasoningDurationMs:
 			values[i] = new(sql.NullInt64)
-		case requestexecution.FieldExternalID, requestexecution.FieldSource, requestexecution.FieldModelID, requestexecution.FieldFormat, requestexecution.FieldRequestedServiceTier, requestexecution.FieldChannelAPIKeyName, requestexecution.FieldChannelAPIKeySuffix, requestexecution.FieldErrorMessage, requestexecution.FieldStatus, requestexecution.FieldRequestURL:
+		case requestexecution.FieldExternalID, requestexecution.FieldSource, requestexecution.FieldModelID, requestexecution.FieldFormat, requestexecution.FieldRequestedServiceTier, requestexecution.FieldSpeedMode, requestexecution.FieldChannelAPIKeyName, requestexecution.FieldChannelAPIKeySuffix, requestexecution.FieldErrorMessage, requestexecution.FieldStatus, requestexecution.FieldRequestURL:
 			values[i] = new(sql.NullString)
 		case requestexecution.FieldCreatedAt, requestexecution.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -245,6 +247,12 @@ func (_m *RequestExecution) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field requested_service_tier", values[i])
 			} else if value.Valid {
 				_m.RequestedServiceTier = value.String
+			}
+		case requestexecution.FieldSpeedMode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field speed_mode", values[i])
+			} else if value.Valid {
+				_m.SpeedMode = value.String
 			}
 		case requestexecution.FieldChannelAPIKeyName:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -444,6 +452,9 @@ func (_m *RequestExecution) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("requested_service_tier=")
 	builder.WriteString(_m.RequestedServiceTier)
+	builder.WriteString(", ")
+	builder.WriteString("speed_mode=")
+	builder.WriteString(_m.SpeedMode)
 	builder.WriteString(", ")
 	builder.WriteString("channel_api_key_name=")
 	builder.WriteString(_m.ChannelAPIKeyName)

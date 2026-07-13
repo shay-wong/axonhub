@@ -7773,6 +7773,23 @@ type RequestExecutionWhereInput struct {
 	RequestedServiceTierEqualFold    *string  `json:"requestedServiceTierEqualFold,omitempty"`
 	RequestedServiceTierContainsFold *string  `json:"requestedServiceTierContainsFold,omitempty"`
 
+	// "speed_mode" field predicates.
+	SpeedMode             *string  `json:"speedMode,omitempty"`
+	SpeedModeNEQ          *string  `json:"speedModeNEQ,omitempty"`
+	SpeedModeIn           []string `json:"speedModeIn,omitempty"`
+	SpeedModeNotIn        []string `json:"speedModeNotIn,omitempty"`
+	SpeedModeGT           *string  `json:"speedModeGT,omitempty"`
+	SpeedModeGTE          *string  `json:"speedModeGTE,omitempty"`
+	SpeedModeLT           *string  `json:"speedModeLT,omitempty"`
+	SpeedModeLTE          *string  `json:"speedModeLTE,omitempty"`
+	SpeedModeContains     *string  `json:"speedModeContains,omitempty"`
+	SpeedModeHasPrefix    *string  `json:"speedModeHasPrefix,omitempty"`
+	SpeedModeHasSuffix    *string  `json:"speedModeHasSuffix,omitempty"`
+	SpeedModeIsNil        bool     `json:"speedModeIsNil,omitempty"`
+	SpeedModeNotNil       bool     `json:"speedModeNotNil,omitempty"`
+	SpeedModeEqualFold    *string  `json:"speedModeEqualFold,omitempty"`
+	SpeedModeContainsFold *string  `json:"speedModeContainsFold,omitempty"`
+
 	// "error_message" field predicates.
 	ErrorMessage             *string  `json:"errorMessage,omitempty"`
 	ErrorMessageNEQ          *string  `json:"errorMessageNEQ,omitempty"`
@@ -8280,6 +8297,51 @@ func (i *RequestExecutionWhereInput) P() (predicate.RequestExecution, error) {
 	}
 	if i.RequestedServiceTierContainsFold != nil {
 		predicates = append(predicates, requestexecution.RequestedServiceTierContainsFold(*i.RequestedServiceTierContainsFold))
+	}
+	if i.SpeedMode != nil {
+		predicates = append(predicates, requestexecution.SpeedModeEQ(*i.SpeedMode))
+	}
+	if i.SpeedModeNEQ != nil {
+		predicates = append(predicates, requestexecution.SpeedModeNEQ(*i.SpeedModeNEQ))
+	}
+	if len(i.SpeedModeIn) > 0 {
+		predicates = append(predicates, requestexecution.SpeedModeIn(i.SpeedModeIn...))
+	}
+	if len(i.SpeedModeNotIn) > 0 {
+		predicates = append(predicates, requestexecution.SpeedModeNotIn(i.SpeedModeNotIn...))
+	}
+	if i.SpeedModeGT != nil {
+		predicates = append(predicates, requestexecution.SpeedModeGT(*i.SpeedModeGT))
+	}
+	if i.SpeedModeGTE != nil {
+		predicates = append(predicates, requestexecution.SpeedModeGTE(*i.SpeedModeGTE))
+	}
+	if i.SpeedModeLT != nil {
+		predicates = append(predicates, requestexecution.SpeedModeLT(*i.SpeedModeLT))
+	}
+	if i.SpeedModeLTE != nil {
+		predicates = append(predicates, requestexecution.SpeedModeLTE(*i.SpeedModeLTE))
+	}
+	if i.SpeedModeContains != nil {
+		predicates = append(predicates, requestexecution.SpeedModeContains(*i.SpeedModeContains))
+	}
+	if i.SpeedModeHasPrefix != nil {
+		predicates = append(predicates, requestexecution.SpeedModeHasPrefix(*i.SpeedModeHasPrefix))
+	}
+	if i.SpeedModeHasSuffix != nil {
+		predicates = append(predicates, requestexecution.SpeedModeHasSuffix(*i.SpeedModeHasSuffix))
+	}
+	if i.SpeedModeIsNil {
+		predicates = append(predicates, requestexecution.SpeedModeIsNil())
+	}
+	if i.SpeedModeNotNil {
+		predicates = append(predicates, requestexecution.SpeedModeNotNil())
+	}
+	if i.SpeedModeEqualFold != nil {
+		predicates = append(predicates, requestexecution.SpeedModeEqualFold(*i.SpeedModeEqualFold))
+	}
+	if i.SpeedModeContainsFold != nil {
+		predicates = append(predicates, requestexecution.SpeedModeContainsFold(*i.SpeedModeContainsFold))
 	}
 	if i.ErrorMessage != nil {
 		predicates = append(predicates, requestexecution.ErrorMessageEQ(*i.ErrorMessage))

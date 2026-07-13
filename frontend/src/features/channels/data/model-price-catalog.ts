@@ -61,8 +61,14 @@ function serviceTierFromProvider(provider: Record<string, unknown> | undefined):
   const body = provider?.body;
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
 
-	const serviceTier = (body as Record<string, unknown>).service_tier;
-	return typeof serviceTier === 'string' && serviceTier.trim() ? serviceTier.trim().toLowerCase() : null;
+  const providerBody = body as Record<string, unknown>;
+  const serviceTier = providerBody.service_tier;
+  if (typeof serviceTier === 'string' && serviceTier.trim()) return serviceTier.trim().toLowerCase();
+
+  const speed = providerBody.speed;
+  // Anthropic Fast reuses the existing priority price bucket internally; the
+  // request log still persists and displays the provider-native speed=fast mode.
+  return typeof speed === 'string' && speed.trim().toLowerCase() === 'fast' ? 'priority' : null;
 }
 
 export function buildProviderModelPrice(model: ProviderModel, multiplier: number = 1): CatalogModelPrice {

@@ -73,6 +73,7 @@ type BackupRequestExecution struct {
 	ModelID                    string                   `json:"model_id,omitempty"`
 	Format                     string                   `json:"format,omitempty"`
 	RequestedServiceTier       string                   `json:"requested_service_tier,omitempty"`
+	SpeedMode                  string                   `json:"speed_mode,omitempty"`
 	ChannelAPIKeyName          string                   `json:"channel_api_key_name,omitempty"`
 	ChannelAPIKeySuffix        string                   `json:"channel_api_key_suffix,omitempty"`
 	ChannelAPIKeyHeaders       []string                 `json:"channel_api_key_headers,omitempty"`

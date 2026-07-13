@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/samber/lo"
@@ -377,6 +378,7 @@ func (svc *BackupService) backupRequestExecutions(
 				requestexecution.FieldModelID,
 				requestexecution.FieldFormat,
 				requestexecution.FieldRequestedServiceTier,
+				requestexecution.FieldSpeedMode,
 				requestexecution.FieldChannelAPIKeyName,
 				requestexecution.FieldChannelAPIKeySuffix,
 				requestexecution.FieldChannelAPIKeyHeaders,
@@ -463,6 +465,7 @@ func backupRequestExecution(
 		ModelID:                    execution.ModelID,
 		Format:                     execution.Format,
 		RequestedServiceTier:       llm.CanonicalServiceTier(execution.RequestedServiceTier),
+		SpeedMode:                  strings.ToLower(strings.TrimSpace(execution.SpeedMode)),
 		ChannelAPIKeyName:          execution.ChannelAPIKeyName,
 		ChannelAPIKeySuffix:        execution.ChannelAPIKeySuffix,
 		ChannelAPIKeyHeaders:       execution.ChannelAPIKeyHeaders,

@@ -105,6 +105,11 @@ func RequestedServiceTier(v string) predicate.RequestExecution {
 	return predicate.RequestExecution(sql.FieldEQ(FieldRequestedServiceTier, v))
 }
 
+// SpeedMode applies equality check predicate on the "speed_mode" field. It's identical to SpeedModeEQ.
+func SpeedMode(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldEQ(FieldSpeedMode, v))
+}
+
 // ChannelAPIKeyName applies equality check predicate on the "channel_api_key_name" field. It's identical to ChannelAPIKeyNameEQ.
 func ChannelAPIKeyName(v string) predicate.RequestExecution {
 	return predicate.RequestExecution(sql.FieldEQ(FieldChannelAPIKeyName, v))
@@ -653,6 +658,81 @@ func RequestedServiceTierEqualFold(v string) predicate.RequestExecution {
 // RequestedServiceTierContainsFold applies the ContainsFold predicate on the "requested_service_tier" field.
 func RequestedServiceTierContainsFold(v string) predicate.RequestExecution {
 	return predicate.RequestExecution(sql.FieldContainsFold(FieldRequestedServiceTier, v))
+}
+
+// SpeedModeEQ applies the EQ predicate on the "speed_mode" field.
+func SpeedModeEQ(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldEQ(FieldSpeedMode, v))
+}
+
+// SpeedModeNEQ applies the NEQ predicate on the "speed_mode" field.
+func SpeedModeNEQ(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldNEQ(FieldSpeedMode, v))
+}
+
+// SpeedModeIn applies the In predicate on the "speed_mode" field.
+func SpeedModeIn(vs ...string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldIn(FieldSpeedMode, vs...))
+}
+
+// SpeedModeNotIn applies the NotIn predicate on the "speed_mode" field.
+func SpeedModeNotIn(vs ...string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldNotIn(FieldSpeedMode, vs...))
+}
+
+// SpeedModeGT applies the GT predicate on the "speed_mode" field.
+func SpeedModeGT(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldGT(FieldSpeedMode, v))
+}
+
+// SpeedModeGTE applies the GTE predicate on the "speed_mode" field.
+func SpeedModeGTE(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldGTE(FieldSpeedMode, v))
+}
+
+// SpeedModeLT applies the LT predicate on the "speed_mode" field.
+func SpeedModeLT(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldLT(FieldSpeedMode, v))
+}
+
+// SpeedModeLTE applies the LTE predicate on the "speed_mode" field.
+func SpeedModeLTE(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldLTE(FieldSpeedMode, v))
+}
+
+// SpeedModeContains applies the Contains predicate on the "speed_mode" field.
+func SpeedModeContains(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldContains(FieldSpeedMode, v))
+}
+
+// SpeedModeHasPrefix applies the HasPrefix predicate on the "speed_mode" field.
+func SpeedModeHasPrefix(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldHasPrefix(FieldSpeedMode, v))
+}
+
+// SpeedModeHasSuffix applies the HasSuffix predicate on the "speed_mode" field.
+func SpeedModeHasSuffix(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldHasSuffix(FieldSpeedMode, v))
+}
+
+// SpeedModeIsNil applies the IsNil predicate on the "speed_mode" field.
+func SpeedModeIsNil() predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldIsNull(FieldSpeedMode))
+}
+
+// SpeedModeNotNil applies the NotNil predicate on the "speed_mode" field.
+func SpeedModeNotNil() predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldNotNull(FieldSpeedMode))
+}
+
+// SpeedModeEqualFold applies the EqualFold predicate on the "speed_mode" field.
+func SpeedModeEqualFold(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldEqualFold(FieldSpeedMode, v))
+}
+
+// SpeedModeContainsFold applies the ContainsFold predicate on the "speed_mode" field.
+func SpeedModeContainsFold(v string) predicate.RequestExecution {
+	return predicate.RequestExecution(sql.FieldContainsFold(FieldSpeedMode, v))
 }
 
 // ChannelAPIKeyNameEQ applies the EQ predicate on the "channel_api_key_name" field.

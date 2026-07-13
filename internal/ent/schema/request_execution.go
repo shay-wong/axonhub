@@ -56,6 +56,7 @@ func (RequestExecution) Fields() []ent.Field {
 		//  The format of the request, e.g: openai/chat_completions, claude/messages, openai/response.
 		field.String("format").Immutable().Default("openai/chat_completions"),
 		field.String("requested_service_tier").Optional().Immutable().Comment("Canonical service tier sent to the provider for this execution"),
+		field.String("speed_mode").Optional().Immutable().Comment("Provider-independent processing speed mode requested for this execution"),
 		field.String("channel_api_key_name").
 			Optional().
 			Immutable().

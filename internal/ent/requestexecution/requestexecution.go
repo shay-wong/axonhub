@@ -39,6 +39,8 @@ const (
 	FieldFormat = "format"
 	// FieldRequestedServiceTier holds the string denoting the requested_service_tier field in the database.
 	FieldRequestedServiceTier = "requested_service_tier"
+	// FieldSpeedMode holds the string denoting the speed_mode field in the database.
+	FieldSpeedMode = "speed_mode"
 	// FieldChannelAPIKeyName holds the string denoting the channel_api_key_name field in the database.
 	FieldChannelAPIKeyName = "channel_api_key_name"
 	// FieldChannelAPIKeySuffix holds the string denoting the channel_api_key_suffix field in the database.
@@ -125,6 +127,7 @@ var Columns = []string{
 	FieldModelID,
 	FieldFormat,
 	FieldRequestedServiceTier,
+	FieldSpeedMode,
 	FieldChannelAPIKeyName,
 	FieldChannelAPIKeySuffix,
 	FieldChannelAPIKeyHeaders,
@@ -286,6 +289,11 @@ func ByFormat(opts ...sql.OrderTermOption) OrderOption {
 // ByRequestedServiceTier orders the results by the requested_service_tier field.
 func ByRequestedServiceTier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRequestedServiceTier, opts...).ToFunc()
+}
+
+// BySpeedMode orders the results by the speed_mode field.
+func BySpeedMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSpeedMode, opts...).ToFunc()
 }
 
 // ByChannelAPIKeyName orders the results by the channel_api_key_name field.

@@ -72,7 +72,7 @@ func (UsageLog) Fields() []ent.Field {
 		field.String("format").Immutable().Default("openai/chat_completions").Comment("Request format used"),
 		field.String("requested_service_tier").Optional().Immutable().Comment("Service tier sent in the provider request"),
 		field.String("applied_service_tier").Optional().Immutable().Comment("Service tier reported by the provider response"),
-		field.String("service_tier").Optional().Immutable().Comment("Effective service tier used for billing: applied when reported, otherwise requested"),
+		field.String("service_tier").Optional().Immutable().Comment("Effective price key used for service-tier billing; provider-specific Fast modes may override unreliable or unrelated response tiers"),
 
 		// Cost fields
 		field.Float("total_cost").

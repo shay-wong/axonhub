@@ -423,6 +423,7 @@ var schemaGraph = func() *sqlgraph.Schema {
 			requestexecution.FieldModelID:                    {Type: field.TypeString, Column: requestexecution.FieldModelID},
 			requestexecution.FieldFormat:                     {Type: field.TypeString, Column: requestexecution.FieldFormat},
 			requestexecution.FieldRequestedServiceTier:       {Type: field.TypeString, Column: requestexecution.FieldRequestedServiceTier},
+			requestexecution.FieldSpeedMode:                  {Type: field.TypeString, Column: requestexecution.FieldSpeedMode},
 			requestexecution.FieldChannelAPIKeyName:          {Type: field.TypeString, Column: requestexecution.FieldChannelAPIKeyName},
 			requestexecution.FieldChannelAPIKeySuffix:        {Type: field.TypeString, Column: requestexecution.FieldChannelAPIKeySuffix},
 			requestexecution.FieldChannelAPIKeyHeaders:       {Type: field.TypeJSON, Column: requestexecution.FieldChannelAPIKeyHeaders},
@@ -3444,6 +3445,11 @@ func (f *RequestExecutionFilter) WhereFormat(p entql.StringP) {
 // WhereRequestedServiceTier applies the entql string predicate on the requested_service_tier field.
 func (f *RequestExecutionFilter) WhereRequestedServiceTier(p entql.StringP) {
 	f.Where(p.Field(requestexecution.FieldRequestedServiceTier))
+}
+
+// WhereSpeedMode applies the entql string predicate on the speed_mode field.
+func (f *RequestExecutionFilter) WhereSpeedMode(p entql.StringP) {
+	f.Where(p.Field(requestexecution.FieldSpeedMode))
 }
 
 // WhereChannelAPIKeyName applies the entql string predicate on the channel_api_key_name field.

@@ -102,14 +102,48 @@ type CreateUsageLogParams struct {
 	RequestedServiceTier string
 	// AppliedServiceTier is the provider-reported tier and may be empty.
 	AppliedServiceTier string
+	// RequestPricingOverride is a provider-specific price key used when the response
+	// tier is unreliable or unrelated to the requested Fast mode.
+	RequestPricingOverride string
+	// RequestPricingOverridePolicy controls when the request-derived price key
+	// may replace a provider-applied tier.
+	RequestPricingOverridePolicy RequestPricingOverridePolicy
 }
 
-func effectiveServiceTier(requested, applied string) string {
-	if applied != "" {
-		return llm.CanonicalServiceTier(applied)
+type RequestPricingOverridePolicy uint8
+
+const (
+	RequestPricingOverrideDisabled RequestPricingOverridePolicy = iota
+	RequestPricingOverrideWhenAppliedDefault
+	RequestPricingOverrideAlways
+)
+
+func effectiveServiceTier(
+	requestOverride string,
+	overridePolicy RequestPricingOverridePolicy,
+	requested string,
+	applied string,
+) string {
+	requestOverride = llm.CanonicalServiceTier(requestOverride)
+	requested = llm.CanonicalServiceTier(requested)
+	applied = llm.CanonicalServiceTier(applied)
+
+	if requestOverride != "" {
+		switch overridePolicy {
+		case RequestPricingOverrideAlways:
+			return requestOverride
+		case RequestPricingOverrideWhenAppliedDefault:
+			if applied == "" || applied == llm.ServiceTierDefault {
+				return requestOverride
+			}
+		}
 	}
 
-	return llm.CanonicalServiceTier(requested)
+	if applied != "" {
+		return applied
+	}
+
+	return requested
 }
 
 // CreateUsageLog creates a new usage log record from LLM response usage data.
@@ -119,6 +153,7 @@ func (s *UsageLogService) CreateUsageLog(ctx context.Context, params CreateUsage
 	}
 	params.RequestedServiceTier = llm.CanonicalServiceTier(params.RequestedServiceTier)
 	params.AppliedServiceTier = llm.CanonicalServiceTier(params.AppliedServiceTier)
+	params.RequestPricingOverride = llm.CanonicalServiceTier(params.RequestPricingOverride)
 
 	client := s.entFromContext(ctx)
 
@@ -151,7 +186,12 @@ func (s *UsageLogService) CreateUsageLog(ctx context.Context, params CreateUsage
 		mut = mut.SetAppliedServiceTier(params.AppliedServiceTier)
 	}
 
-	serviceTier := effectiveServiceTier(params.RequestedServiceTier, params.AppliedServiceTier)
+	serviceTier := effectiveServiceTier(
+		params.RequestPricingOverride,
+		params.RequestPricingOverridePolicy,
+		params.RequestedServiceTier,
+		params.AppliedServiceTier,
+	)
 	if serviceTier != "" {
 		mut = mut.SetServiceTier(serviceTier)
 	}
@@ -227,22 +267,26 @@ func (s *UsageLogService) CreateUsageLogFromRequest(
 	usage *llm.Usage,
 	requestedServiceTier string,
 	appliedServiceTier string,
+	requestPricingOverride string,
+	requestPricingOverridePolicy RequestPricingOverridePolicy,
 ) (*ent.UsageLog, error) {
 	if request == nil || requestExec == nil || usage == nil {
 		return nil, nil
 	}
 
 	return s.CreateUsageLog(ctx, CreateUsageLogParams{
-		RequestID:            request.ID,
-		RequestExecutionID:   lo.ToPtr(requestExec.ID),
-		ProjectID:            request.ProjectID,
-		ChannelID:            requestExec.ChannelID,
-		ActualModelID:        requestExec.ModelID,
-		Usage:                usage,
-		Source:               usagelog.Source(request.Source),
-		Format:               request.Format,
-		APIKeyID:             lo.ToPtr(request.APIKeyID),
-		RequestedServiceTier: requestedServiceTier,
-		AppliedServiceTier:   appliedServiceTier,
+		RequestID:                    request.ID,
+		RequestExecutionID:           lo.ToPtr(requestExec.ID),
+		ProjectID:                    request.ProjectID,
+		ChannelID:                    requestExec.ChannelID,
+		ActualModelID:                requestExec.ModelID,
+		Usage:                        usage,
+		Source:                       usagelog.Source(request.Source),
+		Format:                       request.Format,
+		APIKeyID:                     lo.ToPtr(request.APIKeyID),
+		RequestedServiceTier:         requestedServiceTier,
+		AppliedServiceTier:           appliedServiceTier,
+		RequestPricingOverride:       requestPricingOverride,
+		RequestPricingOverridePolicy: requestPricingOverridePolicy,
 	})
 }

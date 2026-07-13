@@ -71,9 +71,20 @@ type PersistenceState struct {
 	RequestedServiceTier string
 
 	// AppliedServiceTier is the actual tier reported by the provider response.
-	// It remains empty when the provider does not report a tier; billing then falls
-	// back to RequestedServiceTier without treating that fallback as provider-applied.
+	// It remains empty when the provider does not report a tier and is kept separate
+	// from the request-derived pricing decision.
 	AppliedServiceTier string
+
+	// RequestPricingOverride is a provider-specific price key derived from the
+	// final outbound request when the response tier is unreliable or unrelated.
+	RequestPricingOverride string
+	// RequestPricingOverridePolicy controls whether the request-derived price key
+	// replaces only default responses or every provider-applied tier.
+	RequestPricingOverridePolicy biz.RequestPricingOverridePolicy
+
+	// SpeedMode is a provider-independent display mode derived from the final
+	// outbound request, such as OpenAI priority or Anthropic fast.
+	SpeedMode string
 
 	// UsageLogEligible is true only after the pipeline accepts the current
 	// streaming attempt as the request response.

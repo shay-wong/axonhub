@@ -1997,7 +1997,7 @@ input CreateUsageLogInput {
   """
   appliedServiceTier: String
   """
-  Effective service tier used for billing: applied when reported, otherwise requested
+  Effective price key used for service-tier billing; provider-specific Fast modes may override unreliable or unrelated response tiers
   """
   serviceTier: String
   """
@@ -4657,6 +4657,10 @@ type RequestExecution implements Node {
   """
   requestedServiceTier: String
   """
+  Provider-independent processing speed mode requested for this execution
+  """
+  speedMode: String
+  """
   Alias snapshot of the upstream channel API key used for this execution
   """
   channelAPIKeyName: String @goField(forceResolver: true)
@@ -4921,6 +4925,24 @@ input RequestExecutionWhereInput {
   requestedServiceTierNotNil: Boolean
   requestedServiceTierEqualFold: String
   requestedServiceTierContainsFold: String
+  """
+  speed_mode field predicates
+  """
+  speedMode: String
+  speedModeNEQ: String
+  speedModeIn: [String!]
+  speedModeNotIn: [String!]
+  speedModeGT: String
+  speedModeGTE: String
+  speedModeLT: String
+  speedModeLTE: String
+  speedModeContains: String
+  speedModeHasPrefix: String
+  speedModeHasSuffix: String
+  speedModeIsNil: Boolean
+  speedModeNotNil: Boolean
+  speedModeEqualFold: String
+  speedModeContainsFold: String
   """
   error_message field predicates
   """
@@ -6655,7 +6677,7 @@ type UsageLog implements Node {
   """
   appliedServiceTier: String
   """
-  Effective service tier used for billing: applied when reported, otherwise requested
+  Effective price key used for service-tier billing; provider-specific Fast modes may override unreliable or unrelated response tiers
   """
   serviceTier: String
   """

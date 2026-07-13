@@ -217,9 +217,13 @@ func TestUsageLogService_CreateUsageLog_WithPriceReferenceIDAndServiceTier(t *te
 }
 
 func TestEffectiveServiceTier(t *testing.T) {
-	require.Equal(t, "priority", effectiveServiceTier("default", "priority"))
-	require.Equal(t, "priority", effectiveServiceTier("priority", ""))
-	require.Empty(t, effectiveServiceTier("", ""))
+	require.Equal(t, "priority", effectiveServiceTier("priority", RequestPricingOverrideWhenAppliedDefault, "priority", "default"))
+	require.Equal(t, "priority", effectiveServiceTier("priority", RequestPricingOverrideWhenAppliedDefault, "priority", ""))
+	require.Equal(t, "flex", effectiveServiceTier("priority", RequestPricingOverrideWhenAppliedDefault, "priority", "flex"))
+	require.Equal(t, "priority", effectiveServiceTier("priority", RequestPricingOverrideAlways, "", "standard"))
+	require.Equal(t, "priority", effectiveServiceTier("", RequestPricingOverrideDisabled, "default", "priority"))
+	require.Equal(t, "priority", effectiveServiceTier("", RequestPricingOverrideDisabled, "priority", ""))
+	require.Empty(t, effectiveServiceTier("", RequestPricingOverrideDisabled, "", ""))
 }
 
 func TestUsageLogService_CreateUsageLog_WithCachedTokens(t *testing.T) {

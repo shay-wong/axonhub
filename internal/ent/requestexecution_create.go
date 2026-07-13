@@ -165,6 +165,20 @@ func (_c *RequestExecutionCreate) SetNillableRequestedServiceTier(v *string) *Re
 	return _c
 }
 
+// SetSpeedMode sets the "speed_mode" field.
+func (_c *RequestExecutionCreate) SetSpeedMode(v string) *RequestExecutionCreate {
+	_c.mutation.SetSpeedMode(v)
+	return _c
+}
+
+// SetNillableSpeedMode sets the "speed_mode" field if the given value is not nil.
+func (_c *RequestExecutionCreate) SetNillableSpeedMode(v *string) *RequestExecutionCreate {
+	if v != nil {
+		_c.SetSpeedMode(*v)
+	}
+	return _c
+}
+
 // SetChannelAPIKeyName sets the "channel_api_key_name" field.
 func (_c *RequestExecutionCreate) SetChannelAPIKeyName(v string) *RequestExecutionCreate {
 	_c.mutation.SetChannelAPIKeyName(v)
@@ -545,6 +559,10 @@ func (_c *RequestExecutionCreate) createSpec() (*RequestExecution, *sqlgraph.Cre
 	if value, ok := _c.mutation.RequestedServiceTier(); ok {
 		_spec.SetField(requestexecution.FieldRequestedServiceTier, field.TypeString, value)
 		_node.RequestedServiceTier = value
+	}
+	if value, ok := _c.mutation.SpeedMode(); ok {
+		_spec.SetField(requestexecution.FieldSpeedMode, field.TypeString, value)
+		_node.SpeedMode = value
 	}
 	if value, ok := _c.mutation.ChannelAPIKeyName(); ok {
 		_spec.SetField(requestexecution.FieldChannelAPIKeyName, field.TypeString, value)
@@ -1006,6 +1024,9 @@ func (u *RequestExecutionUpsertOne) UpdateNewValues() *RequestExecutionUpsertOne
 		}
 		if _, exists := u.create.mutation.RequestedServiceTier(); exists {
 			s.SetIgnore(requestexecution.FieldRequestedServiceTier)
+		}
+		if _, exists := u.create.mutation.SpeedMode(); exists {
+			s.SetIgnore(requestexecution.FieldSpeedMode)
 		}
 		if _, exists := u.create.mutation.ChannelAPIKeyName(); exists {
 			s.SetIgnore(requestexecution.FieldChannelAPIKeyName)
@@ -1535,6 +1556,9 @@ func (u *RequestExecutionUpsertBulk) UpdateNewValues() *RequestExecutionUpsertBu
 			}
 			if _, exists := b.mutation.RequestedServiceTier(); exists {
 				s.SetIgnore(requestexecution.FieldRequestedServiceTier)
+			}
+			if _, exists := b.mutation.SpeedMode(); exists {
+				s.SetIgnore(requestexecution.FieldSpeedMode)
 			}
 			if _, exists := b.mutation.ChannelAPIKeyName(); exists {
 				s.SetIgnore(requestexecution.FieldChannelAPIKeyName)

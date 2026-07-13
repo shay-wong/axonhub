@@ -18,7 +18,7 @@ import { useGeneralSettings, useSecuritySettings, useUpdateSecuritySettings } fr
 import { usePermissions } from '@/hooks/usePermissions';
 import { useRequestPermissions } from '../../../hooks/useRequestPermissions';
 import { Request } from '../data/schema';
-import { getRequestedServiceTier } from '../utils/service-tier';
+import { getSpeedMode } from '../utils/service-tier';
 import { calculateTokensPerSecond, useDisplayMode } from '../utils/tokens-per-second';
 import { getStatusColor } from './help';
 
@@ -195,18 +195,18 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
 
     {
       id: 'requestedServiceTier',
-      accessorFn: getRequestedServiceTier,
+      accessorFn: getSpeedMode,
       header: ({ column }) => <DataTableColumnHeader column={column} title={t('requests.columns.requestedServiceTier')} />,
       enableSorting: false,
       enableHiding: true,
       cell: ({ row }) => {
-        const serviceTier = getRequestedServiceTier(row.original);
+        const speedMode = getSpeedMode(row.original);
 
-        if (!serviceTier || serviceTier === 'default') {
+        if (!speedMode || speedMode === 'default' || speedMode === 'standard') {
           return <div className='text-muted-foreground text-xs'>-</div>;
         }
 
-        if (serviceTier === 'priority') {
+        if (speedMode === 'fast') {
           return (
             <Badge className='border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300'>
               <Zap className='h-3 w-3' />
@@ -215,7 +215,7 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
           );
         }
 
-        return <Badge variant='outline'>{serviceTier}</Badge>;
+        return <Badge variant='outline'>{speedMode}</Badge>;
       },
     },
 

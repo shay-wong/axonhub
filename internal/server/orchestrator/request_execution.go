@@ -97,6 +97,7 @@ func (m *persistRequestExecutionMiddleware) OnOutboundRawRequest(ctx context.Con
 		*request,
 		format,
 		state.RequestedServiceTier,
+		state.SpeedMode,
 		state.PassThroughApplied,
 	)
 	if err != nil {

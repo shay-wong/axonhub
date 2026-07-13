@@ -35,12 +35,14 @@ type OutboundPersistentStream struct {
 	request     *ent.Request
 	requestExec *ent.RequestExecution
 
-	transformer          transformer.Outbound
-	perf                 *biz.PerformanceRecord
-	responseChunks       []*httpclient.StreamEvent
-	closed               bool
-	state                *PersistenceState
-	requestedServiceTier string
+	transformer                  transformer.Outbound
+	perf                         *biz.PerformanceRecord
+	responseChunks               []*httpclient.StreamEvent
+	closed                       bool
+	state                        *PersistenceState
+	requestedServiceTier         string
+	requestPricingOverride       string
+	requestPricingOverridePolicy biz.RequestPricingOverridePolicy
 }
 
 var _ streams.Stream[*httpclient.StreamEvent] = (*OutboundPersistentStream)(nil)
@@ -57,18 +59,20 @@ func NewOutboundPersistentStream(
 	state *PersistenceState,
 ) *OutboundPersistentStream {
 	s := &OutboundPersistentStream{
-		ctx:                  ctx,
-		stream:               stream,
-		request:              request,
-		requestExec:          requestExec,
-		RequestService:       requestService,
-		UsageLogService:      usageLogService,
-		transformer:          outboundTransformer,
-		perf:                 perf,
-		responseChunks:       make([]*httpclient.StreamEvent, 0),
-		closed:               false,
-		state:                state,
-		requestedServiceTier: state.RequestedServiceTier,
+		ctx:                          ctx,
+		stream:                       stream,
+		request:                      request,
+		requestExec:                  requestExec,
+		RequestService:               requestService,
+		UsageLogService:              usageLogService,
+		transformer:                  outboundTransformer,
+		perf:                         perf,
+		responseChunks:               make([]*httpclient.StreamEvent, 0),
+		closed:                       false,
+		state:                        state,
+		requestedServiceTier:         state.RequestedServiceTier,
+		requestPricingOverride:       state.RequestPricingOverride,
+		requestPricingOverridePolicy: state.RequestPricingOverridePolicy,
 	}
 
 	return s
@@ -273,6 +277,8 @@ func (ts *OutboundPersistentStream) persistAggregatedResponse(ctx context.Contex
 			usage,
 			ts.requestedServiceTier,
 			meta.ServiceTier,
+			ts.requestPricingOverride,
+			ts.requestPricingOverridePolicy,
 		)
 		if err != nil {
 			log.Warn(ctx, "Failed to create usage log from request", log.Cause(err))

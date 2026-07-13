@@ -4139,6 +4139,11 @@ func (_q *RequestExecutionQuery) collectField(ctx context.Context, oneNode bool,
 				selectedFields = append(selectedFields, requestexecution.FieldRequestedServiceTier)
 				fieldSeen[requestexecution.FieldRequestedServiceTier] = struct{}{}
 			}
+		case "speedMode":
+			if _, ok := fieldSeen[requestexecution.FieldSpeedMode]; !ok {
+				selectedFields = append(selectedFields, requestexecution.FieldSpeedMode)
+				fieldSeen[requestexecution.FieldSpeedMode] = struct{}{}
+			}
 		case "channelAPIKeyName":
 			if _, ok := fieldSeen[requestexecution.FieldChannelAPIKeyName]; !ok {
 				selectedFields = append(selectedFields, requestexecution.FieldChannelAPIKeyName)

@@ -1469,6 +1469,7 @@ type ComplexityRoot struct {
 		ResponseChunks             func(childComplexity int) int
 		ResponseStatusCode         func(childComplexity int) int
 		Source                     func(childComplexity int) int
+		SpeedMode                  func(childComplexity int) int
 		Status                     func(childComplexity int) int
 		Stream                     func(childComplexity int) int
 		UpdatedAt                  func(childComplexity int) int
@@ -8934,6 +8935,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.RequestExecution.Source(childComplexity), true
+	case "RequestExecution.speedMode":
+		if e.complexity.RequestExecution.SpeedMode == nil {
+			break
+		}
+
+		return e.complexity.RequestExecution.SpeedMode(childComplexity), true
 	case "RequestExecution.status":
 		if e.complexity.RequestExecution.Status == nil {
 			break
@@ -47919,6 +47926,35 @@ func (ec *executionContext) fieldContext_RequestExecution_requestedServiceTier(_
 	return fc, nil
 }
 
+func (ec *executionContext) _RequestExecution_speedMode(ctx context.Context, field graphql.CollectedField, obj *ent.RequestExecution) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RequestExecution_speedMode,
+		func(ctx context.Context) (any, error) {
+			return obj.SpeedMode, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RequestExecution_speedMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RequestExecution",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _RequestExecution_channelAPIKeyName(ctx context.Context, field graphql.CollectedField, obj *ent.RequestExecution) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -48880,6 +48916,8 @@ func (ec *executionContext) fieldContext_RequestExecutionEdge_node(_ context.Con
 				return ec.fieldContext_RequestExecution_format(ctx, field)
 			case "requestedServiceTier":
 				return ec.fieldContext_RequestExecution_requestedServiceTier(ctx, field)
+			case "speedMode":
+				return ec.fieldContext_RequestExecution_speedMode(ctx, field)
 			case "channelAPIKeyName":
 				return ec.fieldContext_RequestExecution_channelAPIKeyName(ctx, field)
 			case "channelAPIKeySuffix":
@@ -57357,6 +57395,8 @@ func (ec *executionContext) fieldContext_UsageLog_requestExecution(_ context.Con
 				return ec.fieldContext_RequestExecution_format(ctx, field)
 			case "requestedServiceTier":
 				return ec.fieldContext_RequestExecution_requestedServiceTier(ctx, field)
+			case "speedMode":
+				return ec.fieldContext_RequestExecution_speedMode(ctx, field)
 			case "channelAPIKeyName":
 				return ec.fieldContext_RequestExecution_channelAPIKeyName(ctx, field)
 			case "channelAPIKeySuffix":
@@ -77052,7 +77092,7 @@ func (ec *executionContext) unmarshalInputRequestExecutionWhereInput(ctx context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "projectID", "projectIDNEQ", "projectIDIn", "projectIDNotIn", "projectIDGT", "projectIDGTE", "projectIDLT", "projectIDLTE", "requestID", "requestIDNEQ", "requestIDIn", "requestIDNotIn", "channelID", "channelIDNEQ", "channelIDIn", "channelIDNotIn", "channelIDIsNil", "channelIDNotNil", "dataStorageID", "dataStorageIDNEQ", "dataStorageIDIn", "dataStorageIDNotIn", "dataStorageIDIsNil", "dataStorageIDNotNil", "externalID", "externalIDNEQ", "externalIDIn", "externalIDNotIn", "externalIDGT", "externalIDGTE", "externalIDLT", "externalIDLTE", "externalIDContains", "externalIDHasPrefix", "externalIDHasSuffix", "externalIDIsNil", "externalIDNotNil", "externalIDEqualFold", "externalIDContainsFold", "source", "sourceNEQ", "sourceIn", "sourceNotIn", "modelID", "modelIDNEQ", "modelIDIn", "modelIDNotIn", "modelIDGT", "modelIDGTE", "modelIDLT", "modelIDLTE", "modelIDContains", "modelIDHasPrefix", "modelIDHasSuffix", "modelIDEqualFold", "modelIDContainsFold", "format", "formatNEQ", "formatIn", "formatNotIn", "formatGT", "formatGTE", "formatLT", "formatLTE", "formatContains", "formatHasPrefix", "formatHasSuffix", "formatEqualFold", "formatContainsFold", "requestedServiceTier", "requestedServiceTierNEQ", "requestedServiceTierIn", "requestedServiceTierNotIn", "requestedServiceTierGT", "requestedServiceTierGTE", "requestedServiceTierLT", "requestedServiceTierLTE", "requestedServiceTierContains", "requestedServiceTierHasPrefix", "requestedServiceTierHasSuffix", "requestedServiceTierIsNil", "requestedServiceTierNotNil", "requestedServiceTierEqualFold", "requestedServiceTierContainsFold", "errorMessage", "errorMessageNEQ", "errorMessageIn", "errorMessageNotIn", "errorMessageGT", "errorMessageGTE", "errorMessageLT", "errorMessageLTE", "errorMessageContains", "errorMessageHasPrefix", "errorMessageHasSuffix", "errorMessageIsNil", "errorMessageNotNil", "errorMessageEqualFold", "errorMessageContainsFold", "responseStatusCode", "responseStatusCodeNEQ", "responseStatusCodeIn", "responseStatusCodeNotIn", "responseStatusCodeGT", "responseStatusCodeGTE", "responseStatusCodeLT", "responseStatusCodeLTE", "responseStatusCodeIsNil", "responseStatusCodeNotNil", "status", "statusNEQ", "statusIn", "statusNotIn", "stream", "streamNEQ", "metricsLatencyMs", "metricsLatencyMsNEQ", "metricsLatencyMsIn", "metricsLatencyMsNotIn", "metricsLatencyMsGT", "metricsLatencyMsGTE", "metricsLatencyMsLT", "metricsLatencyMsLTE", "metricsLatencyMsIsNil", "metricsLatencyMsNotNil", "metricsFirstTokenLatencyMs", "metricsFirstTokenLatencyMsNEQ", "metricsFirstTokenLatencyMsIn", "metricsFirstTokenLatencyMsNotIn", "metricsFirstTokenLatencyMsGT", "metricsFirstTokenLatencyMsGTE", "metricsFirstTokenLatencyMsLT", "metricsFirstTokenLatencyMsLTE", "metricsFirstTokenLatencyMsIsNil", "metricsFirstTokenLatencyMsNotNil", "metricsReasoningDurationMs", "metricsReasoningDurationMsNEQ", "metricsReasoningDurationMsIn", "metricsReasoningDurationMsNotIn", "metricsReasoningDurationMsGT", "metricsReasoningDurationMsGTE", "metricsReasoningDurationMsLT", "metricsReasoningDurationMsLTE", "metricsReasoningDurationMsIsNil", "metricsReasoningDurationMsNotNil", "requestURL", "requestURLNEQ", "requestURLIn", "requestURLNotIn", "requestURLGT", "requestURLGTE", "requestURLLT", "requestURLLTE", "requestURLContains", "requestURLHasPrefix", "requestURLHasSuffix", "requestURLIsNil", "requestURLNotNil", "requestURLEqualFold", "requestURLContainsFold", "passThroughApplied", "passThroughAppliedNEQ", "hasRequest", "hasRequestWith", "hasChannel", "hasChannelWith", "hasDataStorage", "hasDataStorageWith", "hasUsageLog", "hasUsageLogWith"}
+	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "createdAt", "createdAtNEQ", "createdAtIn", "createdAtNotIn", "createdAtGT", "createdAtGTE", "createdAtLT", "createdAtLTE", "updatedAt", "updatedAtNEQ", "updatedAtIn", "updatedAtNotIn", "updatedAtGT", "updatedAtGTE", "updatedAtLT", "updatedAtLTE", "projectID", "projectIDNEQ", "projectIDIn", "projectIDNotIn", "projectIDGT", "projectIDGTE", "projectIDLT", "projectIDLTE", "requestID", "requestIDNEQ", "requestIDIn", "requestIDNotIn", "channelID", "channelIDNEQ", "channelIDIn", "channelIDNotIn", "channelIDIsNil", "channelIDNotNil", "dataStorageID", "dataStorageIDNEQ", "dataStorageIDIn", "dataStorageIDNotIn", "dataStorageIDIsNil", "dataStorageIDNotNil", "externalID", "externalIDNEQ", "externalIDIn", "externalIDNotIn", "externalIDGT", "externalIDGTE", "externalIDLT", "externalIDLTE", "externalIDContains", "externalIDHasPrefix", "externalIDHasSuffix", "externalIDIsNil", "externalIDNotNil", "externalIDEqualFold", "externalIDContainsFold", "source", "sourceNEQ", "sourceIn", "sourceNotIn", "modelID", "modelIDNEQ", "modelIDIn", "modelIDNotIn", "modelIDGT", "modelIDGTE", "modelIDLT", "modelIDLTE", "modelIDContains", "modelIDHasPrefix", "modelIDHasSuffix", "modelIDEqualFold", "modelIDContainsFold", "format", "formatNEQ", "formatIn", "formatNotIn", "formatGT", "formatGTE", "formatLT", "formatLTE", "formatContains", "formatHasPrefix", "formatHasSuffix", "formatEqualFold", "formatContainsFold", "requestedServiceTier", "requestedServiceTierNEQ", "requestedServiceTierIn", "requestedServiceTierNotIn", "requestedServiceTierGT", "requestedServiceTierGTE", "requestedServiceTierLT", "requestedServiceTierLTE", "requestedServiceTierContains", "requestedServiceTierHasPrefix", "requestedServiceTierHasSuffix", "requestedServiceTierIsNil", "requestedServiceTierNotNil", "requestedServiceTierEqualFold", "requestedServiceTierContainsFold", "speedMode", "speedModeNEQ", "speedModeIn", "speedModeNotIn", "speedModeGT", "speedModeGTE", "speedModeLT", "speedModeLTE", "speedModeContains", "speedModeHasPrefix", "speedModeHasSuffix", "speedModeIsNil", "speedModeNotNil", "speedModeEqualFold", "speedModeContainsFold", "errorMessage", "errorMessageNEQ", "errorMessageIn", "errorMessageNotIn", "errorMessageGT", "errorMessageGTE", "errorMessageLT", "errorMessageLTE", "errorMessageContains", "errorMessageHasPrefix", "errorMessageHasSuffix", "errorMessageIsNil", "errorMessageNotNil", "errorMessageEqualFold", "errorMessageContainsFold", "responseStatusCode", "responseStatusCodeNEQ", "responseStatusCodeIn", "responseStatusCodeNotIn", "responseStatusCodeGT", "responseStatusCodeGTE", "responseStatusCodeLT", "responseStatusCodeLTE", "responseStatusCodeIsNil", "responseStatusCodeNotNil", "status", "statusNEQ", "statusIn", "statusNotIn", "stream", "streamNEQ", "metricsLatencyMs", "metricsLatencyMsNEQ", "metricsLatencyMsIn", "metricsLatencyMsNotIn", "metricsLatencyMsGT", "metricsLatencyMsGTE", "metricsLatencyMsLT", "metricsLatencyMsLTE", "metricsLatencyMsIsNil", "metricsLatencyMsNotNil", "metricsFirstTokenLatencyMs", "metricsFirstTokenLatencyMsNEQ", "metricsFirstTokenLatencyMsIn", "metricsFirstTokenLatencyMsNotIn", "metricsFirstTokenLatencyMsGT", "metricsFirstTokenLatencyMsGTE", "metricsFirstTokenLatencyMsLT", "metricsFirstTokenLatencyMsLTE", "metricsFirstTokenLatencyMsIsNil", "metricsFirstTokenLatencyMsNotNil", "metricsReasoningDurationMs", "metricsReasoningDurationMsNEQ", "metricsReasoningDurationMsIn", "metricsReasoningDurationMsNotIn", "metricsReasoningDurationMsGT", "metricsReasoningDurationMsGTE", "metricsReasoningDurationMsLT", "metricsReasoningDurationMsLTE", "metricsReasoningDurationMsIsNil", "metricsReasoningDurationMsNotNil", "requestURL", "requestURLNEQ", "requestURLIn", "requestURLNotIn", "requestURLGT", "requestURLGTE", "requestURLLT", "requestURLLTE", "requestURLContains", "requestURLHasPrefix", "requestURLHasSuffix", "requestURLIsNil", "requestURLNotNil", "requestURLEqualFold", "requestURLContainsFold", "passThroughApplied", "passThroughAppliedNEQ", "hasRequest", "hasRequestWith", "hasChannel", "hasChannelWith", "hasDataStorage", "hasDataStorageWith", "hasUsageLog", "hasUsageLogWith"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -77916,6 +77956,111 @@ func (ec *executionContext) unmarshalInputRequestExecutionWhereInput(ctx context
 				return it, err
 			}
 			it.RequestedServiceTierContainsFold = data
+		case "speedMode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedMode"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedMode = data
+		case "speedModeNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeNEQ"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeNEQ = data
+		case "speedModeIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeIn = data
+		case "speedModeNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeNotIn"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeNotIn = data
+		case "speedModeGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeGT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeGT = data
+		case "speedModeGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeGTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeGTE = data
+		case "speedModeLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeLT"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeLT = data
+		case "speedModeLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeLTE"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeLTE = data
+		case "speedModeContains":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeContains"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeContains = data
+		case "speedModeHasPrefix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeHasPrefix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeHasPrefix = data
+		case "speedModeHasSuffix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeHasSuffix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeHasSuffix = data
+		case "speedModeIsNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeIsNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeIsNil = data
+		case "speedModeNotNil":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeNotNil"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeNotNil = data
+		case "speedModeEqualFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeEqualFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeEqualFold = data
+		case "speedModeContainsFold":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("speedModeContainsFold"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SpeedModeContainsFold = data
 		case "errorMessage":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("errorMessage"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -102456,6 +102601,8 @@ func (ec *executionContext) _RequestExecution(ctx context.Context, sel ast.Selec
 			}
 		case "requestedServiceTier":
 			out.Values[i] = ec._RequestExecution_requestedServiceTier(ctx, field, obj)
+		case "speedMode":
+			out.Values[i] = ec._RequestExecution_speedMode(ctx, field, obj)
 		case "channelAPIKeyName":
 			field := field
 

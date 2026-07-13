@@ -71,7 +71,7 @@ type UsageLog struct {
 	RequestedServiceTier string `json:"requested_service_tier,omitempty"`
 	// Service tier reported by the provider response
 	AppliedServiceTier string `json:"applied_service_tier,omitempty"`
-	// Effective service tier used for billing: applied when reported, otherwise requested
+	// Effective price key used for service-tier billing; provider-specific Fast modes may override unreliable or unrelated response tiers
 	ServiceTier string `json:"service_tier,omitempty"`
 	// Total cost calculated based on channel model price
 	TotalCost *float64 `json:"total_cost,omitempty"`

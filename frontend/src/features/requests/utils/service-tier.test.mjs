@@ -1,43 +1,51 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { getRequestedServiceTier } = await import('./service-tier.ts');
+const { getSpeedMode } = await import('./service-tier.ts');
 
-test('uses the tier requested by the latest execution', () => {
+test('uses the speed mode captured from the latest execution', () => {
   const request = {
     executions: {
-      edges: [{ node: { requestedServiceTier: ' Priority ' } }, { node: { requestedServiceTier: 'default' } }],
+      edges: [{ node: { speedMode: ' Fast ' } }, { node: { speedMode: 'standard' } }],
     },
   };
 
-  assert.equal(getRequestedServiceTier(request), 'priority');
+  assert.equal(getSpeedMode(request), 'fast');
 });
 
-test('does not reuse a tier from an older execution', () => {
+test('does not reuse a speed mode from an older execution', () => {
   const request = {
     executions: {
-      edges: [{ node: { requestedServiceTier: null } }, { node: { requestedServiceTier: 'priority' } }],
+      edges: [{ node: { speedMode: null } }, { node: { speedMode: 'fast' } }],
     },
   };
 
-  assert.equal(getRequestedServiceTier(request), '');
+  assert.equal(getSpeedMode(request), '');
 });
 
-test('ignores the provider-applied or billing-effective tier', () => {
-  const fastRequestWithDefaultBilling = {
-    executions: { edges: [{ node: { requestedServiceTier: 'priority' } }] },
-    usageLogs: { edges: [{ node: { appliedServiceTier: 'default', serviceTier: 'default' } }] },
+test('supports Anthropic fast without a requested service tier', () => {
+  const request = {
+    executions: { edges: [{ node: { speedMode: 'fast', requestedServiceTier: null } }] },
   };
-  const defaultRequestWithPriorityBilling = {
-    executions: { edges: [{ node: { requestedServiceTier: 'default' } }] },
+
+  assert.equal(getSpeedMode(request), 'fast');
+});
+
+test('ignores standard provider and billing tiers', () => {
+  const request = {
+    executions: { edges: [{ node: { speedMode: null, requestedServiceTier: 'default' } }] },
     usageLogs: { edges: [{ node: { appliedServiceTier: 'priority', serviceTier: 'priority' } }] },
   };
 
-  assert.equal(getRequestedServiceTier(fastRequestWithDefaultBilling), 'priority');
-  assert.equal(getRequestedServiceTier(defaultRequestWithPriorityBilling), 'default');
+  assert.equal(getSpeedMode(request), '');
 });
 
-test('preserves unknown requested tiers and supports old records', () => {
-  assert.equal(getRequestedServiceTier({ executions: { edges: [{ node: { requestedServiceTier: ' Flex ' } }] } }), 'flex');
-  assert.equal(getRequestedServiceTier({}), '');
+test('derives speed mode from requested service tier for old records', () => {
+  assert.equal(getSpeedMode({ executions: { edges: [{ node: { requestedServiceTier: ' Priority ' } }] } }), 'fast');
+  assert.equal(getSpeedMode({ executions: { edges: [{ node: { requestedServiceTier: ' Flex ' } }] } }), '');
+  assert.equal(getSpeedMode({}), '');
+});
+
+test('does not expose non-speed service tiers from captured speed mode', () => {
+  assert.equal(getSpeedMode({ executions: { edges: [{ node: { speedMode: 'flex' } }] } }), '');
 });

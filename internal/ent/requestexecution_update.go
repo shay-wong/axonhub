@@ -402,6 +402,9 @@ func (_u *RequestExecutionUpdate) sqlSave(ctx context.Context) (_node int, err e
 	if _u.mutation.RequestedServiceTierCleared() {
 		_spec.ClearField(requestexecution.FieldRequestedServiceTier, field.TypeString)
 	}
+	if _u.mutation.SpeedModeCleared() {
+		_spec.ClearField(requestexecution.FieldSpeedMode, field.TypeString)
+	}
 	if _u.mutation.ChannelAPIKeyNameCleared() {
 		_spec.ClearField(requestexecution.FieldChannelAPIKeyName, field.TypeString)
 	}
@@ -948,6 +951,9 @@ func (_u *RequestExecutionUpdateOne) sqlSave(ctx context.Context) (_node *Reques
 	}
 	if _u.mutation.RequestedServiceTierCleared() {
 		_spec.ClearField(requestexecution.FieldRequestedServiceTier, field.TypeString)
+	}
+	if _u.mutation.SpeedModeCleared() {
+		_spec.ClearField(requestexecution.FieldSpeedMode, field.TypeString)
 	}
 	if _u.mutation.ChannelAPIKeyNameCleared() {
 		_spec.ClearField(requestexecution.FieldChannelAPIKeyName, field.TypeString)

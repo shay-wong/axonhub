@@ -111,6 +111,7 @@ func TestCreateRequestExecutionPersistsAPIKeyIdentityAndMasksHeader(t *testing.T
 		},
 		llm.APIFormatOpenAIChatCompletion,
 		"",
+		"",
 		false,
 	)
 	require.NoError(t, err)

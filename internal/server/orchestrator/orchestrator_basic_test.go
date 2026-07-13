@@ -1076,6 +1076,8 @@ func TestChatCompletionOrchestrator_Process_EmptyResponseRetryBillsFinalExecutio
 	require.Equal(t, requestexecution.StatusCompleted, executions[1].Status)
 	require.Equal(t, llm.ServiceTierPriority, executions[0].RequestedServiceTier)
 	require.Equal(t, llm.ServiceTierPriority, executions[1].RequestedServiceTier)
+	require.Equal(t, "fast", executions[0].SpeedMode)
+	require.Equal(t, "fast", executions[1].SpeedMode)
 
 	usageLog, err := client.UsageLog.Query().Only(ctx)
 	require.NoError(t, err)
