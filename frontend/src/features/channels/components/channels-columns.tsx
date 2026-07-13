@@ -109,7 +109,7 @@ function DisabledAPIKeysTooltipContent({ channel, label }: { channel: Channel; l
     <div className='max-w-72 space-y-1.5'>
       <p className='text-sm text-amber-500'>{label}</p>
       {identities.map((identity) => (
-        <code key={identity.key} className='bg-muted block truncate rounded px-1.5 py-0.5 text-xs' title={identity.label}>
+        <code key={identity.key} className='bg-muted text-foreground block truncate rounded px-1.5 py-0.5 text-xs' title={identity.label}>
           {identity.label}
         </code>
       ))}
