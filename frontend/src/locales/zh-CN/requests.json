@@ -5,7 +5,7 @@
   "requests.columns.apiFormat": "API 格式",
   "requests.columns.passThrough": "透传",
   "requests.columns.reasoningEffort": "推理强度",
-  "requests.columns.requestedServiceTier": "请求等级",
+  "requests.columns.requestedServiceTier": "加速模式",
   "requests.columns.stream": "流式",
   "requests.columns.source": "来源",
   "requests.columns.channel": "渠道",

@@ -5,7 +5,7 @@
   "requests.columns.apiFormat": "API Format",
   "requests.columns.passThrough": "Pass-through",
   "requests.columns.reasoningEffort": "Reasoning Effort",
-  "requests.columns.requestedServiceTier": "Requested Tier",
+  "requests.columns.requestedServiceTier": "Speed Mode",
   "requests.columns.stream": "Stream",
   "requests.columns.source": "Source",
   "requests.columns.channel": "Channel",
