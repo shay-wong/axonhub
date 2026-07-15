@@ -248,6 +248,16 @@ func TestChannelService_DuplicateChannelCopiesModelPrices(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, sourcePrices, 1)
 
+	legacyPrice := price
+	legacyPrice.ServiceTierPrices = []objects.ServiceTierPrice{
+		{ServiceTier: "PRIORITY", Items: price.Items},
+	}
+	_, err = client.ChannelModelPrice.UpdateOne(sourcePrices[0]).
+		SetPrice(legacyPrice).
+		Save(ctx)
+	require.NoError(t, err)
+	expectedPrice := legacyPrice.CanonicalizedServiceTiers()
+
 	duplicated, err := svc.DuplicateChannel(ctx, source.ID, ent.CreateChannelInput{
 		Type:             channel.TypeOpenai,
 		BaseURL:          lo.ToPtr("https://api.openai.com/v1"),
@@ -266,7 +276,7 @@ func TestChannelService_DuplicateChannelCopiesModelPrices(t *testing.T) {
 
 	copiedPrice := copiedPrices[0]
 	require.Equal(t, "gpt-4", copiedPrice.ModelID)
-	require.Equal(t, price, copiedPrice.Price)
+	require.Equal(t, expectedPrice, copiedPrice.Price)
 	require.NotEqual(t, sourcePrices[0].ReferenceID, copiedPrice.ReferenceID)
 	require.Len(t, copiedPrice.ReferenceID, 8)
 
@@ -276,7 +286,7 @@ func TestChannelService_DuplicateChannelCopiesModelPrices(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, duplicated.ID, copiedVersion.ChannelID)
 	require.Equal(t, "gpt-4", copiedVersion.ModelID)
-	require.Equal(t, price, copiedVersion.Price)
+	require.Equal(t, expectedPrice, copiedVersion.Price)
 	require.Equal(t, channelmodelpriceversion.StatusActive, copiedVersion.Status)
 	require.Nil(t, copiedVersion.EffectiveEndAt)
 	require.Equal(t, copiedPrice.ReferenceID, copiedVersion.ReferenceID)

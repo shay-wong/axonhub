@@ -405,6 +405,8 @@
   "quota.label.cline_balance": "Cline credits balance",
   "quota.label.cline_mixed_pool_note": "This channel has both ClinePass and Cline (usage-billing) models. If ClinePass is exhausted, the whole channel is treated as exhausted because quota enforcement is channel-based.",
   "quota.label.cline_direct_pool_note": "This channel uses Cline (usage-billing) models. Cline credits balance is shown for reference only and does not enforce routing.",
+  "quota.label.booster_balance": "Booster balance",
+  "quota.label.monthly_spend": "Monthly spend",
   "quota.provider.apertis": "Apertis",
   "system.providerQuota.refresh.label": "Refresh quotas",
   "system.tabs.proxy": "Proxy",

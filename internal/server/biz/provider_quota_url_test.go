@@ -296,6 +296,16 @@ func TestHasCredentialsForProvider_ClineAPIKeys(t *testing.T) {
 	require.True(t, hasCredentialsForProvider(ch))
 }
 
+func TestHasCredentialsForProvider_KimiCodeAPIKeyConfigs(t *testing.T) {
+	ch := &ent.Channel{
+		Type: channel.TypeMoonshotCoding,
+		Credentials: objects.ChannelCredentials{APIKeyConfigs: []objects.ChannelAPIKeyConfig{
+			{Key: "kimi-key", Weight: 100},
+		}},
+	}
+	require.True(t, hasCredentialsForProvider(ch))
+}
+
 func TestHasCredentialsForProvider_ClineNoKey(t *testing.T) {
 	ch := &ent.Channel{Type: channel.TypeCline, Credentials: objects.ChannelCredentials{}}
 	require.False(t, hasCredentialsForProvider(ch))
