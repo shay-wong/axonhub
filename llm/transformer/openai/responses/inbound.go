@@ -95,6 +95,7 @@ type ResponseErrorDetail struct {
 	Message   string `json:"message"`
 	Type      string `json:"type"`
 	Code      string `json:"code,omitempty"`
+	Param     string `json:"param,omitempty"`
 	Truncated bool   `json:"truncated,omitempty"`
 }
 
@@ -122,6 +123,7 @@ func (t *InboundTransformer) TransformError(ctx context.Context, rawErr error) *
 				Message:   llmErr.Detail.Message,
 				Type:      llmErr.Detail.Type,
 				Code:      llmErr.Detail.Code,
+				Param:     llmErr.Detail.Param,
 				Truncated: llmErr.Detail.Truncated,
 			},
 		}
@@ -975,13 +977,14 @@ func attachAnnotationsToFirstTextItem(items []Item, annotations []llm.Annotation
 
 // convertToResponsesAPIResponse converts llm.Response to Responses API Response.
 func convertToResponsesAPIResponse(chatResp *llm.Response) *Response {
+	status := "completed"
 	resp := &Response{
 		Object:             "response",
 		ID:                 chatResp.ID,
 		Model:              chatResp.Model,
 		CreatedAt:          chatResp.Created,
 		Output:             append([]Item(nil), getResponseWebSearchCallsFromMetadata(chatResp.TransformerMetadata)...),
-		Status:             lo.ToPtr("completed"),
+		Status:             &status,
 		PreviousResponseID: chatResp.PreviousResponseID,
 	}
 	if chatResp.ServiceTier != "" {
@@ -990,6 +993,24 @@ func convertToResponsesAPIResponse(chatResp *llm.Response) *Response {
 
 	// Convert usage
 	resp.Usage = ConvertLLMUsageToResponsesUsage(chatResp.Usage)
+	switch chatResp.TerminalOutcome() {
+	case llm.ResponseTerminalOutcomeFailed:
+		status = "failed"
+	case llm.ResponseTerminalOutcomeCanceled:
+		status = "canceled"
+	case llm.ResponseTerminalOutcomeIncomplete:
+		status = "incomplete"
+	}
+	if chatResp.Error != nil {
+		status = "failed"
+		resp.Error = &Error{
+			Type:      chatResp.Error.Detail.Type,
+			Code:      chatResp.Error.Detail.Code,
+			Message:   chatResp.Error.Detail.Message,
+			Param:     lo.EmptyableToPtr(chatResp.Error.Detail.Param),
+			RequestID: chatResp.Error.Detail.RequestID,
+		}
+	}
 
 	// Convert choices to output items
 	for _, choice := range chatResp.Choices {
@@ -1119,19 +1140,36 @@ func convertToResponsesAPIResponse(chatResp *llm.Response) *Response {
 		if choice.FinishReason != nil {
 			switch *choice.FinishReason {
 			case "stop":
-				resp.Status = lo.ToPtr("completed")
-			case "length":
-				resp.Status = lo.ToPtr("incomplete")
+				// Keep a previously observed non-success terminal state.
+			case "length", "content_filter":
+				if status == "completed" {
+					status = "incomplete"
+				}
+				if status == "incomplete" {
+					reason := "max_output_tokens"
+					if *choice.FinishReason == "content_filter" {
+						reason = "content_filter"
+					}
+					resp.IncompleteDetails = &ResponseIncompleteDetails{Reason: reason}
+				}
 			case "tool_calls":
-				resp.Status = lo.ToPtr("completed")
+				// Tool calls are a successful terminal state.
 			case "error":
-				resp.Status = lo.ToPtr("failed")
+				status = "failed"
+				if resp.Error == nil {
+					resp.Error = &Error{Type: "server_error", Code: "response_failed", Message: "upstream response failed"}
+				}
+			case "cancelled", "canceled":
+				if status != "failed" {
+					status = "canceled"
+					resp.IncompleteDetails = nil
+				}
 			}
 		}
 	}
 
 	// If no output items were created, create an empty message
-	if len(resp.Output) == 0 {
+	if len(resp.Output) == 0 && status == "completed" {
 		emptyText := ""
 		resp.Output = []Item{
 			{

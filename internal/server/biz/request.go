@@ -731,6 +731,54 @@ func (s *RequestService) UpdateRequestExecutionCompleted(
 	responseBody any,
 	metrics *LatencyMetrics,
 ) error {
+	return s.updateRequestExecutionResponse(
+		ctx,
+		executionID,
+		requestexecution.StatusCompleted,
+		"",
+		externalId,
+		responseBody,
+		metrics,
+		nil,
+	)
+}
+
+// UpdateRequestExecutionTerminated persists an application-level terminal stream response.
+func (s *RequestService) UpdateRequestExecutionTerminated(
+	ctx context.Context,
+	executionID int,
+	rawErr error,
+	externalId string,
+	responseBody any,
+	metrics *LatencyMetrics,
+) error {
+	status := requestexecution.StatusFailed
+	if errors.Is(rawErr, context.Canceled) {
+		status = requestexecution.StatusCanceled
+	}
+
+	return s.updateRequestExecutionResponse(
+		ctx,
+		executionID,
+		status,
+		rawErr.Error(),
+		externalId,
+		responseBody,
+		metrics,
+		executionErrorInfoFromError(rawErr),
+	)
+}
+
+func (s *RequestService) updateRequestExecutionResponse(
+	ctx context.Context,
+	executionID int,
+	status requestexecution.Status,
+	errorMessage string,
+	externalId string,
+	responseBody any,
+	metrics *LatencyMetrics,
+	errorInfo *ExecutionErrorInfo,
+) error {
 	// Decide whether to store the final response body for execution
 	storeResponseBody := true
 	if policy, err := s.SystemService.StoragePolicy(ctx); err == nil {
@@ -758,8 +806,14 @@ func (s *RequestService) UpdateRequestExecutionCompleted(
 	}
 
 	upd := client.RequestExecution.UpdateOneID(executionID).
-		SetStatus(requestexecution.StatusCompleted).
+		SetStatus(status).
 		SetExternalID(externalId)
+	if errorMessage != "" {
+		upd = upd.SetErrorMessage(errorMessage)
+	}
+	if errorInfo != nil && errorInfo.StatusCode != nil {
+		upd = upd.SetResponseStatusCode(*errorInfo.StatusCode)
+	}
 
 	// Set latency metrics if provided
 	if metrics != nil {
@@ -799,7 +853,7 @@ func (s *RequestService) UpdateRequestExecutionCompleted(
 
 	_, err = upd.Save(ctx)
 	if err != nil {
-		log.Error(ctx, "Failed to update request execution status to completed", log.Cause(err))
+		log.Error(ctx, "Failed to update request execution response", log.Cause(err))
 		return err
 	}
 
@@ -818,6 +872,17 @@ func (s *RequestService) UpdateRequestExecutionCanceled(
 // ExecutionErrorInfo holds error details for a failed request execution.
 type ExecutionErrorInfo struct {
 	StatusCode *int
+}
+
+func executionErrorInfoFromError(rawErr error) *ExecutionErrorInfo {
+	var responseErr *llm.ResponseError
+	if !errors.As(rawErr, &responseErr) || responseErr.StatusCode == 0 {
+		return nil
+	}
+
+	statusCode := responseErr.StatusCode
+
+	return &ExecutionErrorInfo{StatusCode: &statusCode}
 }
 
 // UpdateRequestExecutionFailed updates request execution status to failed with error message and optional error details.
@@ -866,7 +931,7 @@ func (s *RequestService) UpdateRequestExecutionStatusFromError(ctx context.Conte
 		status = requestexecution.StatusCanceled
 	}
 
-	return s.UpdateRequestExecutionStatus(ctx, executionID, status, rawErr.Error(), nil)
+	return s.UpdateRequestExecutionStatus(ctx, executionID, status, rawErr.Error(), executionErrorInfoFromError(rawErr))
 }
 
 type jsonStreamEvent struct {

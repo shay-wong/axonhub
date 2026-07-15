@@ -399,7 +399,7 @@ func (t *OutboundTransformer) transformStandardResponse(
 	}
 
 	// Validate that we got a valid response
-	if resp.ID == "" && resp.Model == "" && len(resp.Output) == 0 {
+	if resp.ID == "" && resp.Model == "" && len(resp.Output) == 0 && resp.Status == nil && resp.Error == nil {
 		return nil, fmt.Errorf("responses api returned empty response: body=%s", string(httpResp.Body))
 	}
 
@@ -413,10 +413,23 @@ func (t *OutboundTransformer) transformStandardResponse(
 		Choices:             make([]llm.Choice, 0),
 		TransformerMetadata: map[string]any{},
 	}
+	if resp.Status != nil {
+		switch *resp.Status {
+		case "failed":
+			llmResp.ProviderTerminalOutcome = llm.ResponseTerminalOutcomeFailed
+		case "canceled", "cancelled":
+			llmResp.ProviderTerminalOutcome = llm.ResponseTerminalOutcomeCanceled
+		case "incomplete":
+			llmResp.ProviderTerminalOutcome = llm.ResponseTerminalOutcomeIncomplete
+		}
+	}
 
 	// Convert usage if present
 	if resp.Usage != nil {
 		llmResp.Usage = resp.Usage.ToUsage()
+	}
+	if resp.Error != nil {
+		llmResp.Error = newStreamResponseError(http.StatusInternalServerError, resp.Error)
 	}
 
 	if httpResp.Request != nil && httpResp.Request.TransformerMetadata != nil {
@@ -433,19 +446,23 @@ func (t *OutboundTransformer) transformStandardResponse(
 		Message: &msg,
 	}
 
-	if len(msg.ToolCalls) > 0 {
-		choice.FinishReason = lo.ToPtr("tool_calls")
-	} else if resp.Status != nil {
+	if resp.Status != nil && *resp.Status != "completed" {
 		switch *resp.Status {
-		case "completed":
-			choice.FinishReason = lo.ToPtr("stop")
 		case "failed":
 			choice.FinishReason = lo.ToPtr("error")
 		case "incomplete":
-			choice.FinishReason = lo.ToPtr("length")
+			finishReason := "length"
+			if resp.IncompleteDetails != nil && resp.IncompleteDetails.Reason == "content_filter" {
+				finishReason = "content_filter"
+			}
+			choice.FinishReason = &finishReason
 		case "canceled", "cancelled":
 			choice.FinishReason = lo.ToPtr("cancelled")
 		}
+	} else if len(msg.ToolCalls) > 0 {
+		choice.FinishReason = lo.ToPtr("tool_calls")
+	} else if resp.Status != nil {
+		choice.FinishReason = lo.ToPtr("stop")
 	}
 
 	llmResp.Choices = append(llmResp.Choices, choice)

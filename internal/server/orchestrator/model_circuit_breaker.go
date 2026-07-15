@@ -79,11 +79,25 @@ func (m *modelCircuitBreakerTracker) OnOutboundLlmResponse(ctx context.Context, 
 		return response, nil
 	}
 
-	m.releaseProbeLease()
-
 	channel := m.outbound.GetCurrentChannel()
 	modelID := m.outbound.GetRequestedModel()
-	m.modelCircuitBreaker.RecordSuccess(ctx, channel.ID, modelID)
+	if channel == nil || modelID == "" {
+		m.releaseProbeLease()
+		return response, nil
+	}
+	wasProbe := m.probeActive
+	m.releaseProbeLease()
+
+	switch response.TerminalOutcome() {
+	case llm.ResponseTerminalOutcomeFailed, llm.ResponseTerminalOutcomeIncomplete:
+		m.modelCircuitBreaker.RecordError(ctx, channel.ID, modelID, wasProbe)
+	case llm.ResponseTerminalOutcomeCanceled:
+		m.outbound.state.ModelCircuitBreakerRecorded = true
+		return response, nil
+	default:
+		m.modelCircuitBreaker.RecordSuccess(ctx, channel.ID, modelID)
+	}
+	m.outbound.state.ModelCircuitBreakerRecorded = true
 
 	return response, nil
 }
@@ -95,6 +109,10 @@ func (m *modelCircuitBreakerTracker) OnOutboundRawError(ctx context.Context, err
 	if shouldSkipHealthStateTrackingForState(ctx, m.outbound.state) {
 		return
 	}
+	if m.outbound.state.ModelCircuitBreakerRecorded {
+		m.releaseProbeLease()
+		return
+	}
 
 	// Capture whether this attempt was an active probe BEFORE releasing the lease,
 	// so RecordError can decide whether to apply exponential backoff.
@@ -102,6 +120,7 @@ func (m *modelCircuitBreakerTracker) OnOutboundRawError(ctx context.Context, err
 	m.releaseProbeLease()
 
 	if errors.Is(err, context.Canceled) {
+		m.outbound.state.ModelCircuitBreakerRecorded = true
 		return
 	}
 
@@ -112,7 +131,11 @@ func (m *modelCircuitBreakerTracker) OnOutboundRawError(ctx context.Context, err
 
 	channel := m.outbound.GetCurrentChannel()
 	modelID := m.outbound.GetRequestedModel()
+	if channel == nil || modelID == "" {
+		return
+	}
 	m.modelCircuitBreaker.RecordError(ctx, channel.ID, modelID, wasProbe)
+	m.outbound.state.ModelCircuitBreakerRecorded = true
 }
 
 func (m *modelCircuitBreakerTracker) OnOutboundLlmStream(ctx context.Context, stream streams.Stream[*llm.Response]) (streams.Stream[*llm.Response], error) {
@@ -122,12 +145,18 @@ func (m *modelCircuitBreakerTracker) OnOutboundLlmStream(ctx context.Context, st
 	if shouldSkipHealthStateTrackingForState(ctx, m.outbound.state) {
 		return stream, nil
 	}
+	channel := m.outbound.GetCurrentChannel()
+	modelID := m.outbound.GetRequestedModel()
+	if channel == nil || modelID == "" {
+		return stream, nil
+	}
 	return &probeReleasingStream{
-		ctx:            ctx,
-		stream:         stream,
-		state:          m.outbound.state,
-		probeChannelID: m.probeChannelID,
-		probeModelID:   m.probeModelID,
+		ctx:       ctx,
+		stream:    stream,
+		state:     m.outbound.state,
+		channelID: channel.ID,
+		modelID:   modelID,
+		wasProbe:  m.probeActive,
 		release: func() {
 			if m.outbound != nil {
 				m.releaseProbeLease()
@@ -154,20 +183,39 @@ func (m *modelCircuitBreakerTracker) releaseProbeLease() {
 
 //nolint:containedctx // Checked.
 type probeReleasingStream struct {
-	ctx      context.Context
-	stream   streams.Stream[*llm.Response]
-	state    *PersistenceState
-	release  func()
-	released bool
-	recorded bool
+	ctx            context.Context
+	stream         streams.Stream[*llm.Response]
+	state          *PersistenceState
+	release        func()
+	released       bool
+	recorded       bool
+	successPending bool
 
 	modelCircuitBreaker *biz.ModelCircuitBreaker
-	probeChannelID      int
-	probeModelID        string
+	channelID           int
+	modelID             string
+	wasProbe            bool
 }
 
 func (s *probeReleasingStream) Next() bool {
-	return s.stream.Next()
+	hasNext := s.stream.Next()
+	if hasNext || s.recorded || s.modelCircuitBreaker == nil {
+		return hasNext
+	}
+
+	if err := s.stream.Err(); err != nil {
+		if !errors.Is(err, context.Canceled) {
+			s.modelCircuitBreaker.RecordError(s.ctx, s.channelID, s.modelID, s.wasProbe)
+		}
+		s.recorded = true
+		s.state.ModelCircuitBreakerRecorded = true
+	} else if s.successPending {
+		s.modelCircuitBreaker.RecordSuccess(s.ctx, s.channelID, s.modelID)
+		s.recorded = true
+		s.state.ModelCircuitBreakerRecorded = true
+	}
+
+	return hasNext
 }
 
 func (s *probeReleasingStream) Current() *llm.Response {
@@ -181,12 +229,18 @@ func (s *probeReleasingStream) Current() *llm.Response {
 	}
 
 	if !s.recorded {
-		if tokenCount := event.Usage.GetCompletionTokens(); tokenCount != nil && *tokenCount > 0 {
-			channelID := s.probeChannelID
-			modelID := s.probeModelID
-
-			s.modelCircuitBreaker.RecordSuccess(s.ctx, channelID, modelID)
+		switch event.TerminalOutcome() {
+		case llm.ResponseTerminalOutcomeFailed, llm.ResponseTerminalOutcomeIncomplete:
+			s.modelCircuitBreaker.RecordError(s.ctx, s.channelID, s.modelID, s.wasProbe)
 			s.recorded = true
+			s.state.ModelCircuitBreakerRecorded = true
+		case llm.ResponseTerminalOutcomeCanceled:
+			s.recorded = true
+			s.state.ModelCircuitBreakerRecorded = true
+		default:
+			if tokenCount := event.Usage.GetCompletionTokens(); tokenCount != nil && *tokenCount > 0 {
+				s.successPending = true
+			}
 		}
 	}
 

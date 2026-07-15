@@ -111,6 +111,9 @@ type StreamEvent struct {
 	LastEventID string `json:"last_event_id,omitempty"`
 	Type        string `json:"type"`
 	Data        []byte `json:"data"`
+	// StatusCode carries protocol-internal HTTP status metadata without changing
+	// the provider event payload sent to clients.
+	StatusCode int `json:"-"`
 	// Size optionally carries the byte size of a binary chunk that was elided
 	// from Data for persistence (e.g. raw TTS audio chunks). It lets stream
 	// aggregators report total bytes without retaining the audio payload.

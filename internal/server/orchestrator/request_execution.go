@@ -170,6 +170,27 @@ func (m *persistRequestExecutionMiddleware) OnOutboundLlmResponse(ctx context.Co
 		}
 	}
 
+	if terminalErr := responsePersistenceTerminalError(llmResp); terminalErr != nil {
+		var responseBody []byte
+		if m.rawResponse != nil {
+			responseBody = m.rawResponse.Body
+		}
+
+		err := state.RequestService.UpdateRequestExecutionTerminated(
+			persistCtx,
+			state.RequestExec.ID,
+			terminalErr,
+			llmResp.ID,
+			responseBody,
+			metrics,
+		)
+		if err != nil {
+			log.Warn(persistCtx, "Failed to persist terminal request execution response", log.Cause(err))
+		}
+
+		return llmResp, nil
+	}
+
 	// Audio responses (binary TTS / non-JSON STT) must be converted to JSON-safe payloads
 	// before persisting into the JSON response_body column.
 	respBody := audioSafeResponseBody(llmResp.RequestType, m.rawResponse.Headers.Get("Content-Type"), m.rawResponse.Body)

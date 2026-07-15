@@ -10,9 +10,47 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/looplj/axonhub/llm"
+	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/internal/pkg/xtest"
 	"github.com/looplj/axonhub/llm/streams"
 )
+
+func TestResponsesStreamRoundTrip_UsesTerminalMetadataSnapshot(t *testing.T) {
+	outbound, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+	providerEvents := []*httpclient.StreamEvent{
+		{
+			Type: "response.created",
+			Data: []byte(`{"type":"response.created","response":{"id":"resp_early","object":"response","created_at":1700000000,"model":"gpt-5-early","previous_response_id":"resp_prev_early","service_tier":"default","status":"in_progress","output":[]}}`),
+		},
+		{
+			Type: "response.completed",
+			Data: []byte(`{"type":"response.completed","response":{"id":"resp_final","object":"response","created_at":1700000001,"model":"gpt-5-final","previous_response_id":"resp_prev_final","service_tier":"priority","status":"completed","output":[],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}}`),
+		},
+	}
+
+	unified, err := outbound.TransformStream(t.Context(), nil, streams.SliceStream(providerEvents))
+	require.NoError(t, err)
+	inbound, err := NewInboundTransformer().TransformStream(t.Context(), unified)
+	require.NoError(t, err)
+
+	events, err := streams.All(inbound)
+	require.NoError(t, err)
+	require.NotEmpty(t, events)
+	var terminal StreamEvent
+	require.NoError(t, json.Unmarshal(events[len(events)-1].Data, &terminal))
+	require.Equal(t, StreamEventTypeResponseCompleted, terminal.Type)
+	require.NotNil(t, terminal.Response)
+	require.Equal(t, "resp_final", terminal.Response.ID)
+	require.Equal(t, "gpt-5-final", terminal.Response.Model)
+	require.Equal(t, int64(1700000001), terminal.Response.CreatedAt)
+	require.NotNil(t, terminal.Response.PreviousResponseID)
+	require.Equal(t, "resp_prev_final", *terminal.Response.PreviousResponseID)
+	require.NotNil(t, terminal.Response.ServiceTier)
+	require.Equal(t, "priority", *terminal.Response.ServiceTier)
+	require.NotNil(t, terminal.Response.Usage)
+	require.Equal(t, int64(5), terminal.Response.Usage.TotalTokens)
+}
 
 // Compare each event.
 var ignoreFields = cmp.FilterPath(func(p cmp.Path) bool {
@@ -480,6 +518,32 @@ func TestInboundTransformer_TransformStream_EmitsUpstreamErrorEvents(t *testing.
 				require.NotNil(t, failed.Response.Error)
 				require.Equal(t, "stream_error", failed.Response.Error.Code)
 				require.Equal(t, "upstream boom", failed.Response.Error.Message)
+			},
+		},
+		{
+			name: "preserves typed response errors",
+			source: streams.SliceStream([]*llm.Response{{
+				ID:      "resp_context_limit",
+				Model:   "gpt-test",
+				Created: 123,
+				Error: &llm.ResponseError{Detail: llm.ErrorDetail{
+					Type:    "invalid_request_error",
+					Code:    "context_length_exceeded",
+					Message: "Your input exceeds the context window of this model.",
+				}},
+			}}),
+			wantTypes: []StreamEventType{
+				StreamEventTypeResponseCreated,
+				StreamEventTypeResponseInProgress,
+				StreamEventTypeResponseFailed,
+			},
+			assert: func(t *testing.T, events []StreamEvent) {
+				failed := events[len(events)-1]
+				require.NotNil(t, failed.Response)
+				require.NotNil(t, failed.Response.Error)
+				require.Equal(t, "invalid_request_error", failed.Response.Error.Type)
+				require.Equal(t, "context_length_exceeded", failed.Response.Error.Code)
+				require.Equal(t, "Your input exceeds the context window of this model.", failed.Response.Error.Message)
 			},
 		},
 	}

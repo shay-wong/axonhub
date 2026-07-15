@@ -80,6 +80,15 @@ func (t *InboundTransformer) TransformResponse(
 	if chatResp == nil {
 		return nil, fmt.Errorf("chat completion response is nil")
 	}
+	if terminalErr := chatResp.TerminalError(); terminalErr != nil {
+		httpErr := t.TransformError(ctx, terminalErr)
+
+		return &httpclient.Response{
+			StatusCode: httpErr.StatusCode,
+			Body:       httpErr.Body,
+			Headers:    http.Header{"Content-Type": []string{"application/json"}},
+		}, nil
+	}
 
 	// Convert to OpenAI Response format
 	oaiResp := ResponseFromLLM(chatResp)
@@ -121,6 +130,17 @@ func (t *InboundTransformer) TransformStreamChunk(
 		return &httpclient.StreamEvent{
 			Data: []byte("[DONE]"),
 		}, nil
+	}
+	if terminalErr := chatResp.TerminalError(); terminalErr != nil {
+		eventData, err := json.Marshal(&OpenAIError{
+			StatusCode: terminalErr.StatusCode,
+			Detail:     terminalErr.Detail,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal chat completion stream error: %w", err)
+		}
+
+		return &httpclient.StreamEvent{Type: "error", Data: eventData, StatusCode: terminalErr.StatusCode}, nil
 	}
 
 	// Skip events that only contain ReasoningSignature (used by Anthropic inbound)

@@ -1,7 +1,9 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -119,6 +121,49 @@ func TestResponseError_Error(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestResponseTerminalError_CancellationWrapsContextCanceled(t *testing.T) {
+	response := &Response{Choices: []Choice{{FinishReason: lo.ToPtr("cancelled")}}}
+
+	terminalErr := response.TerminalError()
+	require.Error(t, terminalErr)
+	require.ErrorIs(t, terminalErr, context.Canceled)
+	require.Equal(t, "response_cancelled", terminalErr.Detail.Code)
+	require.True(t, errors.Is(terminalErr, context.Canceled))
+}
+
+func TestResponse_TerminalError(t *testing.T) {
+	t.Run("normalizes explicit error status", func(t *testing.T) {
+		original := &ResponseError{Detail: ErrorDetail{Code: "provider_error", Message: "failed", Type: "api_error"}}
+		err := (&Response{Error: original}).TerminalError()
+
+		require.Equal(t, 500, err.StatusCode)
+		require.Equal(t, original.Detail, err.Detail)
+		require.Zero(t, original.StatusCode)
+	})
+
+	t.Run("maps provider cancellation", func(t *testing.T) {
+		err := (&Response{Choices: []Choice{{FinishReason: lo.ToPtr("cancelled")}}}).TerminalError()
+
+		require.Equal(t, 500, err.StatusCode)
+		require.Equal(t, "response_cancelled", err.Detail.Code)
+		require.Equal(t, "upstream response cancelled", err.Detail.Message)
+	})
+
+	t.Run("keeps incomplete response successful", func(t *testing.T) {
+		require.Nil(t, (&Response{Choices: []Choice{{FinishReason: lo.ToPtr("length")}}}).TerminalError())
+		require.Equal(
+			t,
+			ResponseTerminalOutcomeNone,
+			(&Response{Choices: []Choice{{FinishReason: lo.ToPtr("length")}}}).TerminalOutcome(),
+		)
+		require.Equal(
+			t,
+			ResponseTerminalOutcomeIncomplete,
+			(&Response{ProviderTerminalOutcome: ResponseTerminalOutcomeIncomplete}).TerminalOutcome(),
+		)
+	})
 }
 
 func TestMessage_JSONOmitZero(t *testing.T) {

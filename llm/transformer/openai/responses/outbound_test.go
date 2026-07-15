@@ -82,6 +82,100 @@ func TestOutboundTransformer_TransformResponse_CanceledFinishReason(t *testing.T
 	require.Equal(t, "cancelled", *result.Choices[0].FinishReason)
 }
 
+func TestResponsesNonStreamTerminalRoundTrip(t *testing.T) {
+	outbound, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+	inbound := NewInboundTransformer()
+
+	tests := []struct {
+		name           string
+		body           string
+		wantStatus     string
+		wantErrorCode  string
+		wantIncomplete string
+		wantOutputType string
+	}{
+		{
+			name:          "failed",
+			body:          `{"id":"resp_failed","object":"response","created_at":1700000001,"status":"failed","model":"gpt-5","output":[],"error":{"type":"invalid_request_error","code":"bad_input","message":"bad input"}}`,
+			wantStatus:    "failed",
+			wantErrorCode: "bad_input",
+		},
+		{
+			name:           "incomplete max output tokens",
+			body:           `{"id":"resp_incomplete","object":"response","created_at":1700000002,"status":"incomplete","model":"gpt-5","output":[],"incomplete_details":{"reason":"max_output_tokens"}}`,
+			wantStatus:     "incomplete",
+			wantIncomplete: "max_output_tokens",
+		},
+		{
+			name:           "incomplete content filter",
+			body:           `{"id":"resp_filtered","object":"response","created_at":1700000003,"status":"incomplete","model":"gpt-5","output":[],"incomplete_details":{"reason":"content_filter"}}`,
+			wantStatus:     "incomplete",
+			wantIncomplete: "content_filter",
+		},
+		{
+			name:       "canceled",
+			body:       `{"id":"resp_canceled","object":"response","created_at":1700000004,"status":"canceled","model":"gpt-5","output":[]}`,
+			wantStatus: "canceled",
+		},
+		{
+			name:           "incomplete with function call",
+			body:           `{"id":"resp_incomplete_tool","object":"response","created_at":1700000005,"status":"incomplete","model":"gpt-5","output":[{"id":"fc_1","type":"function_call","call_id":"call_1","name":"lookup","arguments":"{}","status":"completed"}],"incomplete_details":{"reason":"content_filter"}}`,
+			wantStatus:     "incomplete",
+			wantIncomplete: "content_filter",
+			wantOutputType: "function_call",
+		},
+		{
+			name:           "canceled with function call",
+			body:           `{"id":"resp_canceled_tool","object":"response","created_at":1700000006,"status":"canceled","model":"gpt-5","output":[{"id":"fc_2","type":"function_call","call_id":"call_2","name":"lookup","arguments":"{}","status":"completed"}]}`,
+			wantStatus:     "canceled",
+			wantOutputType: "function_call",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			unified, err := outbound.TransformResponse(t.Context(), &httpclient.Response{StatusCode: http.StatusOK, Body: []byte(tt.body)})
+			require.NoError(t, err)
+			httpResponse, err := inbound.TransformResponse(t.Context(), unified)
+			require.NoError(t, err)
+
+			var roundTripped Response
+			require.NoError(t, json.Unmarshal(httpResponse.Body, &roundTripped))
+			require.NotNil(t, roundTripped.Status)
+			require.Equal(t, tt.wantStatus, *roundTripped.Status)
+			if tt.wantOutputType == "" {
+				require.Empty(t, roundTripped.Output)
+			} else {
+				require.NotEmpty(t, roundTripped.Output)
+				require.Equal(t, tt.wantOutputType, roundTripped.Output[0].Type)
+			}
+			if tt.wantErrorCode != "" {
+				require.NotNil(t, roundTripped.Error)
+				require.Equal(t, tt.wantErrorCode, roundTripped.Error.Code)
+			}
+			if tt.wantIncomplete != "" {
+				require.NotNil(t, roundTripped.IncompleteDetails)
+				require.Equal(t, tt.wantIncomplete, roundTripped.IncompleteDetails.Reason)
+			}
+		})
+	}
+}
+
+func TestOutboundTransformer_TransformResponse_ErrorOnlyBody(t *testing.T) {
+	transformer, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	result, err := transformer.TransformResponse(t.Context(), &httpclient.Response{
+		StatusCode: http.StatusOK,
+		Body:       []byte(`{"object":"response","status":"failed","output":[],"error":{"type":"invalid_request_error","code":"bad_input","message":"bad input"}}`),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.Error)
+	require.Equal(t, http.StatusInternalServerError, result.Error.StatusCode)
+	require.Equal(t, "bad_input", result.Error.Detail.Code)
+}
+
 func TestOutboundTransformer_TransformResponse_PreservesAppliedServiceTier(t *testing.T) {
 	transformer, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
 	require.NoError(t, err)

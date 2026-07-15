@@ -2,14 +2,30 @@ package anthropic
 
 import (
 	"encoding/json"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/internal/pkg/xtest"
 )
+
+func TestAggregateStreamChunks_PreservesErrorStatusCode(t *testing.T) {
+	_, _, err := AggregateStreamChunks(t.Context(), []*httpclient.StreamEvent{{
+		Type:       "error",
+		StatusCode: http.StatusTooManyRequests,
+		Data:       []byte(`{"type":"error","error":{"type":"rate_limit_error","message":"rate limited"}}`),
+	}}, PlatformDirect)
+
+	var responseErr *llm.ResponseError
+	require.ErrorAs(t, err, &responseErr)
+	require.Equal(t, http.StatusTooManyRequests, responseErr.StatusCode)
+	require.Equal(t, "rate_limit_error", responseErr.Detail.Type)
+	require.Equal(t, "rate limited", responseErr.Detail.Message)
+}
 
 func TestAggregateStreamChunks(t *testing.T) {
 	tests := []struct {
@@ -146,6 +162,18 @@ func TestAggregateStreamChunks(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAggregateStreamChunks_ReturnsNativeErrorEnvelope(t *testing.T) {
+	_, _, err := AggregateStreamChunks(t.Context(), []*httpclient.StreamEvent{{
+		Type: "error",
+		Data: []byte(`{"type":"error","request_id":"req_123","error":{"type":"overloaded_error","message":"overloaded"}}`),
+	}}, PlatformDirect)
+
+	var responseErr *llm.ResponseError
+	require.ErrorAs(t, err, &responseErr)
+	require.Equal(t, "overloaded_error", responseErr.Detail.Type)
+	require.Equal(t, "req_123", responseErr.Detail.RequestID)
 }
 
 func TestAggregateStreamChunks_EdgeCases(t *testing.T) {

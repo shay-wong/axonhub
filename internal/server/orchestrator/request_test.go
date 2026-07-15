@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/looplj/axonhub/internal/authz"
@@ -147,6 +148,178 @@ func TestPersistRequestMiddleware_OnInboundRawResponse_ServiceTierSelection(t *t
 			require.Equal(t, tt.requested, usageLog.RequestedServiceTier)
 			require.Equal(t, tt.wantApplied, usageLog.AppliedServiceTier)
 			require.Equal(t, tt.wantBilled, usageLog.ServiceTier)
+		})
+	}
+}
+
+func TestPersistRequestMiddleware_OnInboundRawResponse_PersistsTerminalStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		response   *llm.Response
+		wantStatus entrequest.Status
+	}{
+		{
+			name: "failed",
+			response: &llm.Response{
+				ID: "resp_failed",
+				Error: &llm.ResponseError{
+					StatusCode: 422,
+					Detail:     llm.ErrorDetail{Type: "invalid_request_error", Code: "bad_input", Message: "bad input"},
+				},
+			},
+			wantStatus: entrequest.StatusFailed,
+		},
+		{
+			name: "canceled",
+			response: &llm.Response{
+				ID:                      "resp_canceled",
+				ProviderTerminalOutcome: llm.ResponseTerminalOutcomeCanceled,
+				Choices:                 []llm.Choice{{FinishReason: lo.ToPtr("tool_calls")}},
+			},
+			wantStatus: entrequest.StatusCanceled,
+		},
+		{
+			name: "incomplete",
+			response: &llm.Response{
+				ID:                      "resp_incomplete",
+				ProviderTerminalOutcome: llm.ResponseTerminalOutcomeIncomplete,
+				Choices:                 []llm.Choice{{FinishReason: lo.ToPtr("tool_calls")}},
+			},
+			wantStatus: entrequest.StatusFailed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+			defer client.Close()
+
+			ctx := authz.WithTestBypass(ent.NewContext(t.Context(), client))
+			project := createTestProject(t, ctx, client)
+			ch := createTestChannel(t, ctx, client)
+			_, requestService, _, usageLogService := setupTestServices(t, client)
+			requestRow, err := client.Request.Create().
+				SetProjectID(project.ID).
+				SetChannelID(ch.ID).
+				SetModelID("gpt-5").
+				SetRequestBody([]byte(`{"model":"gpt-5"}`)).
+				SetStatus(entrequest.StatusProcessing).
+				Save(ctx)
+			require.NoError(t, err)
+
+			state := &PersistenceState{
+				Request:         requestRow,
+				RequestService:  requestService,
+				UsageLogService: usageLogService,
+			}
+			middleware := &persistRequestMiddleware{inbound: &PersistentInboundTransformer{state: state}}
+			_, err = middleware.OnOutboundLlmResponse(ctx, tt.response)
+			require.NoError(t, err)
+
+			body := []byte(`{"error":{"message":"terminal"}}`)
+			_, err = middleware.OnInboundRawResponse(ctx, &httpclient.Response{StatusCode: 500, Body: body})
+			require.NoError(t, err)
+
+			updated, err := client.Request.Get(ctx, requestRow.ID)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantStatus, updated.Status)
+			require.Equal(t, tt.response.ID, updated.ExternalID)
+			require.JSONEq(t, string(body), string(updated.ResponseBody))
+		})
+	}
+}
+
+func TestPersistRequestExecutionMiddleware_OnOutboundLlmResponse_PersistsTerminalStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		response   *llm.Response
+		wantStatus requestexecution.Status
+		wantCode   int
+	}{
+		{
+			name: "failed",
+			response: &llm.Response{
+				ID: "resp_failed",
+				Error: &llm.ResponseError{
+					StatusCode: 422,
+					Detail:     llm.ErrorDetail{Type: "invalid_request_error", Code: "bad_input", Message: "bad input"},
+				},
+			},
+			wantStatus: requestexecution.StatusFailed,
+			wantCode:   422,
+		},
+		{
+			name: "canceled",
+			response: &llm.Response{
+				ID:                      "resp_canceled",
+				ProviderTerminalOutcome: llm.ResponseTerminalOutcomeCanceled,
+				Choices:                 []llm.Choice{{FinishReason: lo.ToPtr("tool_calls")}},
+			},
+			wantStatus: requestexecution.StatusCanceled,
+			wantCode:   500,
+		},
+		{
+			name: "incomplete",
+			response: &llm.Response{
+				ID:                      "resp_incomplete",
+				ProviderTerminalOutcome: llm.ResponseTerminalOutcomeIncomplete,
+				Choices:                 []llm.Choice{{FinishReason: lo.ToPtr("tool_calls")}},
+			},
+			wantStatus: requestexecution.StatusFailed,
+			wantCode:   0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+			defer client.Close()
+
+			ctx := authz.WithTestBypass(ent.NewContext(t.Context(), client))
+			project := createTestProject(t, ctx, client)
+			ch := createTestChannel(t, ctx, client)
+			_, requestService, _, _ := setupTestServices(t, client)
+			requestRow, err := client.Request.Create().
+				SetProjectID(project.ID).
+				SetChannelID(ch.ID).
+				SetModelID("gpt-5").
+				SetRequestBody([]byte(`{"model":"gpt-5"}`)).
+				SetStatus(entrequest.StatusProcessing).
+				Save(ctx)
+			require.NoError(t, err)
+			executionRow, err := client.RequestExecution.Create().
+				SetRequestID(requestRow.ID).
+				SetProjectID(project.ID).
+				SetChannelID(ch.ID).
+				SetModelID("gpt-5").
+				SetRequestBody([]byte(`{"model":"gpt-5"}`)).
+				SetStatus(requestexecution.StatusProcessing).
+				Save(ctx)
+			require.NoError(t, err)
+
+			state := &PersistenceState{Request: requestRow, RequestExec: executionRow, RequestService: requestService}
+			middleware := &persistRequestExecutionMiddleware{
+				outbound: &PersistentOutboundTransformer{state: state},
+				rawResponse: &httpclient.Response{
+					StatusCode: 500,
+					Body:       []byte(`{"error":{"message":"terminal"}}`),
+				},
+			}
+
+			_, err = middleware.OnOutboundLlmResponse(ctx, tt.response)
+			require.NoError(t, err)
+
+			updated, err := client.RequestExecution.Get(ctx, executionRow.ID)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantStatus, updated.Status)
+			require.Equal(t, tt.response.ID, updated.ExternalID)
+			require.JSONEq(t, `{"error":{"message":"terminal"}}`, string(updated.ResponseBody))
+			if tt.wantCode == 0 {
+				require.Nil(t, updated.ResponseStatusCode)
+			} else {
+				require.NotNil(t, updated.ResponseStatusCode)
+				require.Equal(t, tt.wantCode, *updated.ResponseStatusCode)
+			}
 		})
 	}
 }

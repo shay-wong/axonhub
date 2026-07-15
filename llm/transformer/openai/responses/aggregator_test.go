@@ -2,12 +2,15 @@ package responses
 
 import (
 	"encoding/json"
+	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/internal/pkg/xtest"
 )
@@ -38,6 +41,60 @@ func TestAggregateStreamChunks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, _, err := AggregateStreamChunks(t.Context(), tt.chunks)
 			tt.assertErr(t, err)
+		})
+	}
+}
+
+func TestAggregateStreamChunks_ReturnsStandaloneError(t *testing.T) {
+	_, _, err := AggregateStreamChunks(t.Context(), []*httpclient.StreamEvent{{
+		Type: "error",
+		Data: []byte(`{"type":"error","status":400,"code":"invalid_request","message":"bad input","param":"input","request_id":"req_123"}`),
+	}})
+
+	var responseErr *llm.ResponseError
+	require.ErrorAs(t, err, &responseErr)
+	require.Equal(t, 400, responseErr.StatusCode)
+	require.Equal(t, "invalid_request", responseErr.Detail.Code)
+	require.Equal(t, "error", responseErr.Detail.Type)
+	require.Equal(t, "input", responseErr.Detail.Param)
+	require.Equal(t, "req_123", responseErr.Detail.RequestID)
+}
+
+func TestStreamEvent_StatusIsReadOnlyMetadata(t *testing.T) {
+	var event StreamEvent
+	require.NoError(t, json.Unmarshal([]byte(`{"type":"error","status":429,"code":"rate_limit"}`), &event))
+	require.Equal(t, 429, event.StatusCode)
+
+	encoded, err := json.Marshal(&event)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), `"status"`)
+}
+
+func TestAggregateStreamChunks_UsesInternalStatusCode(t *testing.T) {
+	_, _, err := AggregateStreamChunks(t.Context(), []*httpclient.StreamEvent{{
+		Type:       "error",
+		StatusCode: 429,
+		Data:       []byte(`{"type":"error","code":"rate_limit","message":"slow down"}`),
+	}})
+
+	var responseErr *llm.ResponseError
+	require.ErrorAs(t, err, &responseErr)
+	require.Equal(t, 429, responseErr.StatusCode)
+	require.Equal(t, "rate_limit", responseErr.Detail.Code)
+}
+
+func TestAggregateStreamChunks_NormalizesInvalidErrorStatus(t *testing.T) {
+	for _, statusCode := range []int{http.StatusOK, 999} {
+		t.Run(strconv.Itoa(statusCode), func(t *testing.T) {
+			_, _, err := AggregateStreamChunks(t.Context(), []*httpclient.StreamEvent{{
+				Type:       "error",
+				StatusCode: statusCode,
+				Data:       []byte(`{"type":"error","code":"bad_status","message":"failed"}`),
+			}})
+
+			var responseErr *llm.ResponseError
+			require.ErrorAs(t, err, &responseErr)
+			require.Equal(t, http.StatusInternalServerError, responseErr.StatusCode)
 		})
 	}
 }

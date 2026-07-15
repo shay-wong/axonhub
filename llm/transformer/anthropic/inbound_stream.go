@@ -367,8 +367,9 @@ func (s *anthropicInboundStream) enqueEvent(ev *StreamEvent) error {
 	}
 
 	s.eventQueue = append(s.eventQueue, &httpclient.StreamEvent{
-		Type: ev.Type,
-		Data: eventData,
+		Type:       ev.Type,
+		Data:       eventData,
+		StatusCode: ev.StatusCode,
 	})
 
 	return nil
@@ -455,6 +456,31 @@ func (s *anthropicInboundStream) Next() bool {
 	// Handle [DONE] marker
 	if chunk.Object == "[DONE]" {
 		return s.Next() // Try next chunk
+	}
+	if terminalErr := chunk.TerminalError(); terminalErr != nil {
+		detail := ErrorDetail{
+			Type:      terminalErr.Detail.Type,
+			Message:   terminalErr.Detail.Message,
+			Truncated: terminalErr.Detail.Truncated,
+		}
+		if detail.Type == "" {
+			detail.Type = "api_error"
+		}
+		if detail.Message == "" {
+			detail.Message = "upstream request failed"
+		}
+		if err := s.enqueEvent(&StreamEvent{
+			Type:       "error",
+			StatusCode: terminalErr.StatusCode,
+			Error:      &detail,
+			RequestID:  terminalErr.Detail.RequestID,
+		}); err != nil {
+			s.err = fmt.Errorf("failed to enqueue error event: %w", err)
+			return false
+		}
+		s.messageStoped = true
+
+		return s.Next()
 	}
 
 	// Initialize message ID and model from first chunk
@@ -1056,6 +1082,8 @@ func (s *anthropicInboundStream) Next() bool {
 				stopReason = "max_tokens"
 			case "tool_calls":
 				stopReason = "tool_use"
+			case "content_filter":
+				stopReason = "refusal"
 			default:
 				stopReason = "end_turn"
 			}

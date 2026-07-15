@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"github.com/samber/lo"
@@ -96,8 +97,56 @@ func newResponsesOutboundStream(stream streams.Stream[*httpclient.StreamEvent], 
 	}
 }
 
+func newStreamResponseError(statusCode int, upstreamError *Error) *llm.ResponseError {
+	if statusCode < http.StatusBadRequest || statusCode > 599 {
+		statusCode = http.StatusInternalServerError
+	}
+	detail := llm.ErrorDetail{
+		Code:      upstreamError.Code,
+		Message:   upstreamError.Message,
+		Type:      upstreamError.Type,
+		Param:     lo.FromPtr(upstreamError.Param),
+		RequestID: upstreamError.RequestID,
+	}
+	if detail.Message == "" {
+		detail.Message = "upstream request failed"
+	}
+
+	return &llm.ResponseError{StatusCode: statusCode, Detail: detail}
+}
+
 func (s *responsesOutboundStream) enqueue(resp *llm.Response) {
 	s.eventQueue = append(s.eventQueue, resp)
+}
+
+func (s *responsesOutboundStream) applyResponseSnapshot(resp *llm.Response, snapshot *Response) {
+	if snapshot != nil {
+		if snapshot.ID != "" {
+			s.state.responseID = snapshot.ID
+		}
+		if snapshot.Model != "" {
+			s.state.responseModel = snapshot.Model
+		}
+		if snapshot.CreatedAt != 0 {
+			s.state.created = snapshot.CreatedAt
+		}
+		if snapshot.PreviousResponseID != nil {
+			s.state.previousResponseID = snapshot.PreviousResponseID
+		}
+		if snapshot.ServiceTier != nil {
+			s.state.serviceTier = *snapshot.ServiceTier
+		}
+		if snapshot.Usage != nil {
+			s.state.usage = snapshot.Usage.ToUsage()
+		}
+	}
+
+	resp.ID = s.state.responseID
+	resp.Model = s.state.responseModel
+	resp.Created = s.state.created
+	resp.PreviousResponseID = s.state.previousResponseID
+	resp.ServiceTier = s.state.serviceTier
+	resp.Usage = s.state.usage
 }
 
 func (s *responsesOutboundStream) setServerItemContent(resp *llm.Response, item *Item) (bool, error) {
@@ -725,10 +774,8 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 	case StreamEventTypeResponseCompleted:
 		// Response completed - emit two events: one with finish_reason, one with usage
 		s.responseCompleted = true
-		if streamEvent.Response != nil {
-			s.state.previousResponseID = streamEvent.Response.PreviousResponseID
-			resp.PreviousResponseID = s.state.previousResponseID
-		}
+		s.applyResponseSnapshot(resp, streamEvent.Response)
+		resp.Usage = nil
 		if len(s.state.transformerMetadata) > 0 && !s.state.transformerMetadataEmitted {
 			resp.TransformerMetadata = s.state.transformerMetadata
 			s.state.transformerMetadataEmitted = true
@@ -771,6 +818,22 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 	case StreamEventTypeResponseFailed:
 		// Response failed
 		s.responseCompleted = true
+		upstreamError := streamEvent.Error
+		s.applyResponseSnapshot(resp, streamEvent.Response)
+		if streamEvent.Response != nil {
+			if streamEvent.Response.Error != nil {
+				upstreamError = streamEvent.Response.Error
+			}
+		}
+		if upstreamError == nil {
+			upstreamError = &Error{
+				Type:    "server_error",
+				Code:    "response_failed",
+				Message: "upstream response failed",
+			}
+		}
+		resp.Error = newStreamResponseError(streamEvent.StatusCode, upstreamError)
+		resp.ProviderTerminalOutcome = llm.ResponseTerminalOutcomeFailed
 		finishReason := "error"
 		resp.Choices = []llm.Choice{
 			{
@@ -782,7 +845,13 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 	case StreamEventTypeResponseIncomplete:
 		// Response incomplete (e.g., max tokens)
 		s.responseCompleted = true
+		s.applyResponseSnapshot(resp, streamEvent.Response)
+		resp.ProviderTerminalOutcome = llm.ResponseTerminalOutcomeIncomplete
 		finishReason := "length"
+		if streamEvent.Response != nil && streamEvent.Response.IncompleteDetails != nil &&
+			streamEvent.Response.IncompleteDetails.Reason == "content_filter" {
+			finishReason = "content_filter"
+		}
 		resp.Choices = []llm.Choice{
 			{
 				Index:        0,
@@ -793,6 +862,8 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 	case StreamEventTypeResponseCancelled:
 		// Response cancelled
 		s.responseCompleted = true
+		s.applyResponseSnapshot(resp, streamEvent.Response)
+		resp.ProviderTerminalOutcome = llm.ResponseTerminalOutcomeCanceled
 		finishReason := "cancelled"
 		resp.Choices = []llm.Choice{
 			{
@@ -802,13 +873,17 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		}
 
 	case StreamEventTypeError:
-		return &llm.ResponseError{
-			Detail: llm.ErrorDetail{
-				Code:    streamEvent.Code,
-				Message: streamEvent.Message,
-				Param:   lo.FromPtr(streamEvent.Param),
-			},
+		upstreamError := streamEvent.Error
+		if upstreamError == nil {
+			upstreamError = &Error{
+				Type:      string(streamEvent.Type),
+				Code:      streamEvent.Code,
+				Message:   streamEvent.Message,
+				Param:     streamEvent.Param,
+				RequestID: streamEvent.RequestID,
+			}
 		}
+		return newStreamResponseError(streamEvent.StatusCode, upstreamError)
 
 	case StreamEventTypeImageGenerationPartialImage,
 		StreamEventTypeImageGenerationGenerating,

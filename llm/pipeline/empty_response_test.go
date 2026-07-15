@@ -29,6 +29,20 @@ func TestHasResponseContent(t *testing.T) {
 		require.False(t, hasResponseContent(&llm.Response{}))
 	})
 
+	t.Run("response error", func(t *testing.T) {
+		require.True(t, hasResponseContent(&llm.Response{
+			Error: &llm.ResponseError{Detail: llm.ErrorDetail{Message: "upstream failed"}},
+		}))
+	})
+
+	for _, reason := range []string{"length", "content_filter", "cancelled"} {
+		t.Run("terminal "+reason, func(t *testing.T) {
+			require.True(t, hasResponseContent(&llm.Response{
+				Choices: []llm.Choice{{FinishReason: lo.ToPtr(reason)}},
+			}))
+		})
+	}
+
 	t.Run("message text content", func(t *testing.T) {
 		require.True(t, hasResponseContent(&llm.Response{
 			Choices: []llm.Choice{{
@@ -165,6 +179,52 @@ func TestPipeline_Process_StreamEmptyResponseDetection(t *testing.T) {
 		require.True(t, res.Stream)
 		require.Equal(t, 2, streamCalls)
 		require.Equal(t, 1, prepareCalls)
+	})
+
+	t.Run("does not retry response error as empty", func(t *testing.T) {
+		streamCalls := 0
+		executor := &mockExecutor{
+			doStream: func(ctx context.Context, req *httpclient.Request) (streams.Stream[*httpclient.StreamEvent], error) {
+				streamCalls++
+				return streams.SliceStream([]*httpclient.StreamEvent{{}}), nil
+			},
+		}
+
+		prepareCalls := 0
+		outbound := &mockOutbound{
+			transformStream: func(ctx context.Context, req *httpclient.Request, stream streams.Stream[*httpclient.StreamEvent]) (streams.Stream[*llm.Response], error) {
+				return streams.SliceStream([]*llm.Response{{
+					Error: &llm.ResponseError{Detail: llm.ErrorDetail{
+						Type:    "invalid_request_error",
+						Code:    "context_length_exceeded",
+						Message: "context window exceeded",
+					}},
+					Choices: []llm.Choice{{FinishReason: lo.ToPtr("error")}},
+				}, llm.DoneResponse}), nil
+			},
+			canRetry: func(err error) bool { return errors.Is(err, ErrEmptyResponse) },
+			prepareForRetry: func(ctx context.Context) error {
+				prepareCalls++
+				return nil
+			},
+		}
+
+		streamFlag := true
+		p := &pipeline{
+			Executor: executor,
+			Inbound: &mockInbound{transformRequest: func(ctx context.Context, req *httpclient.Request) (*llm.Request, error) {
+				return &llm.Request{Stream: &streamFlag}, nil
+			}},
+			Outbound:               outbound,
+			maxSameChannelRetries:  1,
+			emptyResponseDetection: true,
+		}
+
+		res, err := p.Process(ctx, &httpclient.Request{})
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		require.Equal(t, 1, streamCalls)
+		require.Zero(t, prepareCalls)
 	})
 
 	t.Run("retries on empty binary speech stream", func(t *testing.T) {

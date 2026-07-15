@@ -3,6 +3,7 @@ package anthropic
 import (
 	"encoding/json"
 	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -21,6 +22,87 @@ type failingResponseStream struct {
 	items []*llm.Response
 	index int
 	err   error
+}
+
+func TestInboundStream_EmitsErrorWithoutMessageLifecycle(t *testing.T) {
+	stream, err := NewInboundTransformer().TransformStream(t.Context(), streams.SliceStream([]*llm.Response{{
+		Error: &llm.ResponseError{Detail: llm.ErrorDetail{
+			Type:    "invalid_request_error",
+			Code:    "context_length_exceeded",
+			Message: "context window exceeded",
+		}},
+		Choices: []llm.Choice{{FinishReason: lo.ToPtr("error")}},
+	}, llm.DoneResponse}))
+	require.NoError(t, err)
+
+	events, err := streams.All(stream)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, "error", events[0].Type)
+	require.JSONEq(t, `{
+		"type":"error",
+		"error":{"type":"invalid_request_error","message":"context window exceeded"}
+	}`, string(events[0].Data))
+}
+
+func TestInboundTransformer_MapsCancellationToAnthropicError(t *testing.T) {
+	response := &llm.Response{Choices: []llm.Choice{{FinishReason: lo.ToPtr("cancelled")}}}
+	transformer := NewInboundTransformer()
+
+	nonStream, err := transformer.TransformResponse(t.Context(), response)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusInternalServerError, nonStream.StatusCode)
+	require.JSONEq(t, `{
+		"type":"server_error",
+		"request_id":"",
+		"error":{"type":"server_error","message":"upstream response cancelled"}
+	}`, string(nonStream.Body))
+
+	stream, err := transformer.TransformStream(t.Context(), streams.SliceStream([]*llm.Response{response, llm.DoneResponse}))
+	require.NoError(t, err)
+	events, err := streams.All(stream)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, "error", events[0].Type)
+	require.JSONEq(t, `{
+		"type":"error",
+		"error":{"type":"server_error","message":"upstream response cancelled"}
+	}`, string(events[0].Data))
+}
+
+func TestInboundStream_MapsContentFilterToRefusal(t *testing.T) {
+	stream, err := NewInboundTransformer().TransformStream(t.Context(), streams.SliceStream([]*llm.Response{
+		{
+			ID:      "msg_filtered",
+			Model:   "claude-sonnet-4-5",
+			Choices: []llm.Choice{{Index: 0, Delta: &llm.Message{Role: "assistant", Content: llm.MessageContent{Content: lo.ToPtr("blocked")}}}},
+		},
+		{
+			ID:      "msg_filtered",
+			Model:   "claude-sonnet-4-5",
+			Choices: []llm.Choice{{Index: 0, Delta: &llm.Message{}, FinishReason: lo.ToPtr("content_filter")}},
+		},
+		{
+			ID:    "msg_filtered",
+			Model: "claude-sonnet-4-5",
+			Usage: &llm.Usage{PromptTokens: 1, CompletionTokens: 1, TotalTokens: 2},
+		},
+		llm.DoneResponse,
+	}))
+	require.NoError(t, err)
+
+	events, err := streams.All(stream)
+	require.NoError(t, err)
+	var stopReason *string
+	for _, event := range events {
+		var decoded StreamEvent
+		require.NoError(t, json.Unmarshal(event.Data, &decoded))
+		if decoded.Type == "message_delta" && decoded.Delta != nil {
+			stopReason = decoded.Delta.StopReason
+		}
+	}
+	require.NotNil(t, stopReason)
+	require.Equal(t, "refusal", *stopReason)
 }
 
 func (s *failingResponseStream) Next() bool {

@@ -67,6 +67,18 @@ func hasResponseContent(resp *llm.Response) bool {
 	if resp == nil || resp == llm.DoneResponse || resp.Object == "[DONE]" {
 		return false
 	}
+	if resp.Error != nil {
+		return true
+	}
+	for _, choice := range resp.Choices {
+		if choice.FinishReason == nil {
+			continue
+		}
+		switch *choice.FinishReason {
+		case "error", "length", "content_filter", "cancelled", "canceled":
+			return true
+		}
+	}
 
 	if resp.Embedding != nil && len(resp.Embedding.Data) > 0 {
 		return true

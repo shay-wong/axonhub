@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -138,6 +139,27 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 		// Skip [DONE] events
 		if bytes.HasPrefix(chunk.Data, []byte("[DONE]")) {
 			continue
+		}
+
+		var errorEnvelope struct {
+			Detail *llm.ErrorDetail `json:"error"`
+		}
+		if err := json.Unmarshal(chunk.Data, &errorEnvelope); err == nil && errorEnvelope.Detail != nil {
+			statusCode := chunk.StatusCode
+			if statusCode == 0 {
+				statusCode = http.StatusInternalServerError
+			}
+			detail := *errorEnvelope.Detail
+			if detail.Message == "" {
+				detail.Message = "upstream request failed"
+			}
+			if detail.Type == "" {
+				detail.Type = "api_error"
+			}
+			return nil, llm.ResponseMeta{}, &llm.ResponseError{
+				StatusCode: statusCode,
+				Detail:     detail,
+			}
 		}
 
 		chunk, err := chunkTransformer(ctx, chunk)

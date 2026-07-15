@@ -43,8 +43,17 @@ func (m *apiKeyModelMappingMiddleware) OnInboundLlmRequest(ctx context.Context, 
 		m.RequestModel = llmRequest.Model
 	}
 
+	// OriginalModel is attempt-independent state used by channel selection,
+	// observability, and circuit breaking. Initialize it even when the request
+	// has no API key profile to map.
+	if m.inbound.state.OriginalModel != "" {
+		llmRequest.Model = m.inbound.state.OriginalModel
+		return llmRequest, nil
+	}
+
 	// Apply model mapping from API key profiles if active profile exists
 	if m.inbound.state.APIKey == nil {
+		m.inbound.state.OriginalModel = llmRequest.Model
 		return llmRequest, nil
 	}
 
@@ -63,14 +72,7 @@ func (m *apiKeyModelMappingMiddleware) OnInboundLlmRequest(ctx context.Context, 
 	// This should be done after the api key level model mapping.
 	// This should be done before the request is created.
 	// The outbound transformer will restore the original model if it was mapped.
-	if m.inbound.state.OriginalModel == "" {
-		m.inbound.state.OriginalModel = llmRequest.Model
-	} else {
-		// Restore original model if it was mapped
-		// This should not happen, the inbound should not be called twice.
-		// Just in case, restore the original model.
-		llmRequest.Model = m.inbound.state.OriginalModel
-	}
+	m.inbound.state.OriginalModel = llmRequest.Model
 
 	return llmRequest, nil
 }

@@ -64,6 +64,8 @@ type StreamEvent struct {
 	// Common fields
 	Type           StreamEventType `json:"type"`
 	SequenceNumber int             `json:"sequence_number"`
+	StatusCode     int             `json:"-"`
+	Error          *Error          `json:"error,omitempty"`
 
 	// For response.* events
 	Response *Response `json:"response,omitempty"`
@@ -102,9 +104,27 @@ type StreamEvent struct {
 	PartialImageIndex *int   `json:"partial_image_index,omitempty"`
 
 	// For error events
-	Code    string  `json:"code,omitempty"`
-	Message string  `json:"message,omitempty"`
-	Param   *string `json:"param,omitempty"`
+	Code      string  `json:"code,omitempty"`
+	Message   string  `json:"message,omitempty"`
+	Param     *string `json:"param,omitempty"`
+	RequestID string  `json:"request_id,omitempty"`
+}
+
+func (e *StreamEvent) UnmarshalJSON(data []byte) error {
+	type streamEventAlias StreamEvent
+	wire := struct {
+		*streamEventAlias
+		StatusCode int `json:"status,omitempty"`
+	}{
+		streamEventAlias: (*streamEventAlias)(e),
+	}
+
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	e.StatusCode = wire.StatusCode
+
+	return nil
 }
 
 // StreamEventContentPart represents a content part in streaming events.

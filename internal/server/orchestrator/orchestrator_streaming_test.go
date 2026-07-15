@@ -29,6 +29,7 @@ import (
 	anthropictransformer "github.com/looplj/axonhub/llm/transformer/anthropic"
 	geminitransformer "github.com/looplj/axonhub/llm/transformer/gemini"
 	"github.com/looplj/axonhub/llm/transformer/openai"
+	responseapi "github.com/looplj/axonhub/llm/transformer/openai/responses"
 )
 
 func mustMarshalGeminiStreamChunk(resp *geminitransformer.GenerateContentResponse) []byte {
@@ -120,6 +121,152 @@ func TestChatCompletionOrchestrator_Process_StreamingEmptyRetryPersistsFinalExec
 	require.Equal(t, "priority", usageLog.RequestedServiceTier)
 	require.Equal(t, "default", usageLog.AppliedServiceTier)
 	require.Equal(t, "default", usageLog.ServiceTier)
+}
+
+func TestChatCompletionOrchestrator_Process_FirstResponsesErrorPersistsRequestBody(t *testing.T) {
+	ctx := authz.WithTestBypass(context.Background())
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+	ctx = ent.NewContext(ctx, client)
+
+	project := createTestProject(t, ctx, client)
+	ch := createTestChannel(t, ctx, client)
+	channelService, requestService, systemService, usageLogService := setupTestServices(t, client)
+	require.NoError(t, systemService.SetRetryPolicy(ctx, &biz.RetryPolicy{
+		Enabled:                true,
+		EmptyResponseDetection: true,
+		LoadBalancerStrategy:   "adaptive",
+	}))
+	require.NoError(t, systemService.SetStoragePolicy(ctx, &biz.StoragePolicy{
+		StoreChunks:       false,
+		StoreResponseBody: true,
+	}))
+
+	providerErrorBody := []byte(`{"type":"error","status":400,"code":"invalid_request","message":"bad input","param":"input","request_id":"req_123"}`)
+	executor := &mockExecutor{streamEvents: []*httpclient.StreamEvent{{Type: "error", Data: providerErrorBody}}}
+	outbound, err := responseapi.NewOutboundTransformer(ch.BaseURL, ch.Credentials.APIKey)
+	require.NoError(t, err)
+	bizChannel := &biz.Channel{Channel: ch, Outbound: outbound}
+	orchestrator := &ChatCompletionOrchestrator{
+		channelSelector:       &staticChannelSelector{candidates: channelsToTestCandidates([]*biz.Channel{bizChannel}, "gpt-4")},
+		Inbound:               responseapi.NewInboundTransformer(),
+		RequestService:        requestService,
+		ChannelService:        channelService,
+		PromptProvider:        &stubPromptProvider{},
+		SystemService:         systemService,
+		UsageLogService:       usageLogService,
+		PipelineFactory:       pipeline.NewFactory(executor),
+		ModelMapper:           NewModelMapper(),
+		channelLimiterManager: NewChannelLimiterManager(),
+		Middlewares:           []pipeline.Middleware{stream.EnsureUsage()},
+	}
+
+	httpRequest := &httpclient.Request{
+		Method:      http.MethodPost,
+		Path:        "/v1/responses",
+		Headers:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:        []byte(`{"model":"gpt-4","input":"hello","stream":true}`),
+		APIFormat:   string(llm.APIFormatOpenAIResponse),
+		RequestType: string(llm.RequestTypeChat),
+	}
+	ctx = contexts.WithProjectID(ctx, project.ID)
+	_, err = orchestrator.Process(ctx, httpRequest)
+	require.Error(t, err)
+
+	dbRequest, err := client.Request.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, request.StatusFailed, dbRequest.Status)
+	require.NotEmpty(t, dbRequest.ResponseBody)
+	require.Contains(t, string(dbRequest.ResponseBody), "bad input")
+	require.Contains(t, string(dbRequest.ResponseBody), "invalid_request")
+	require.Empty(t, dbRequest.ResponseChunks)
+
+	dbExecution, err := client.RequestExecution.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, requestexecution.StatusFailed, dbExecution.Status)
+	require.JSONEq(t, string(providerErrorBody), string(dbExecution.ResponseBody))
+	require.NotNil(t, dbExecution.ResponseStatusCode)
+	require.Equal(t, 400, *dbExecution.ResponseStatusCode)
+}
+
+func TestChatCompletionOrchestrator_Process_ResponsesLateStreamErrorRecordsFailureOnce(t *testing.T) {
+	ctx := authz.WithTestBypass(context.Background())
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+	ctx = ent.NewContext(ctx, client)
+
+	project := createTestProject(t, ctx, client)
+	ch := createTestChannel(t, ctx, client)
+	channelService, requestService, systemService, usageLogService := setupTestServices(t, client)
+	lateErr := errors.New("responses upstream connection reset")
+	executor := &mockExecutorWithErrorStream{
+		events: []*httpclient.StreamEvent{
+			{
+				Type: "response.created",
+				Data: []byte(`{"type":"response.created","response":{"id":"resp_late_error","object":"response","created_at":1700000000,"model":"gpt-4","status":"in_progress","output":[],"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}`),
+			},
+			{
+				Type: "response.output_text.delta",
+				Data: []byte(`{"type":"response.output_text.delta","item_id":"msg_late_error","output_index":0,"content_index":0,"delta":"partial"}`),
+			},
+		},
+		streamErr: lateErr,
+	}
+
+	outbound, err := responseapi.NewOutboundTransformer(ch.BaseURL, ch.Credentials.APIKey)
+	require.NoError(t, err)
+	modelCircuitBreaker := biz.NewModelCircuitBreaker()
+	orchestrator := &ChatCompletionOrchestrator{
+		channelSelector:       &staticChannelSelector{candidates: channelsToTestCandidates([]*biz.Channel{{Channel: ch, Outbound: outbound}}, "gpt-4")},
+		Inbound:               responseapi.NewInboundTransformer(),
+		RequestService:        requestService,
+		ChannelService:        channelService,
+		PromptProvider:        &stubPromptProvider{},
+		SystemService:         systemService,
+		UsageLogService:       usageLogService,
+		PipelineFactory:       pipeline.NewFactory(executor),
+		ModelMapper:           NewModelMapper(),
+		channelLimiterManager: NewChannelLimiterManager(),
+		Middlewares:           []pipeline.Middleware{stream.EnsureUsage()},
+		modelCircuitBreaker:   modelCircuitBreaker,
+	}
+
+	httpRequest := &httpclient.Request{
+		Method:      http.MethodPost,
+		Path:        "/v1/responses",
+		Headers:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:        []byte(`{"model":"gpt-4","input":"hello","stream":true}`),
+		APIFormat:   string(llm.APIFormatOpenAIResponse),
+		RequestType: string(llm.RequestTypeChat),
+	}
+	ctx = contexts.WithProjectID(ctx, project.ID)
+	result, err := orchestrator.Process(ctx, httpRequest)
+	require.NoError(t, err)
+	require.NotNil(t, result.ChatCompletionStream)
+
+	var responseText string
+	for result.ChatCompletionStream.Next() {
+		responseText += string(result.ChatCompletionStream.Current().Data)
+	}
+	require.NoError(t, result.ChatCompletionStream.Err())
+	require.NoError(t, result.ChatCompletionStream.Close())
+	require.Contains(t, responseText, `"type":"response.failed"`)
+	require.Contains(t, responseText, lateErr.Error())
+
+	dbRequest, err := client.Request.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, request.StatusFailed, dbRequest.Status)
+	dbExecution, err := client.RequestExecution.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, requestexecution.StatusFailed, dbExecution.Status)
+
+	require.Eventually(t, func() bool {
+		metrics, metricsErr := channelService.GetChannelMetrics(ctx, ch.ID)
+		return metricsErr == nil && metrics.FailureCount == 1 && metrics.ConsecutiveFailures == 1
+	}, time.Second, 10*time.Millisecond)
+	circuitStats := modelCircuitBreaker.GetModelCircuitBreakerStats(ctx, ch.ID, "gpt-4")
+	require.NotNil(t, circuitStats)
+	require.Equal(t, 1, circuitStats.ConsecutiveFailures)
 }
 
 func TestChatCompletionOrchestrator_Process_PassThroughStreamBillsAcceptedExecution(t *testing.T) {
@@ -690,6 +837,7 @@ func TestChatCompletionOrchestrator_Process_StreamingError(t *testing.T) {
 				),
 			},
 			{Data: []byte(`{"id":"chatcmpl-err","object":"chat.completion.chunk","model":"gpt-4","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}`)},
+			{Data: []byte(`{"id":"chatcmpl-err","object":"chat.completion.chunk","model":"gpt-4","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}`)},
 		},
 		streamErr: midStreamErr,
 	}
@@ -705,6 +853,7 @@ func TestChatCompletionOrchestrator_Process_StreamingError(t *testing.T) {
 
 	channelSelector := &staticChannelSelector{candidates: channelsToTestCandidates([]*biz.Channel{bizChannel}, "gpt-4")}
 
+	modelCircuitBreaker := biz.NewModelCircuitBreaker()
 	orchestrator := &ChatCompletionOrchestrator{
 		channelSelector:       channelSelector,
 		Inbound:               openai.NewInboundTransformer(),
@@ -719,6 +868,7 @@ func TestChatCompletionOrchestrator_Process_StreamingError(t *testing.T) {
 		Middlewares: []pipeline.Middleware{
 			stream.EnsureUsage(),
 		},
+		modelCircuitBreaker: modelCircuitBreaker,
 	}
 
 	// Build streaming request
@@ -759,6 +909,14 @@ func TestChatCompletionOrchestrator_Process_StreamingError(t *testing.T) {
 
 	dbExec := executions[0]
 	assert.Equal(t, requestexecution.StatusFailed, dbExec.Status, "request execution should be marked as failed on stream error")
+
+	require.Eventually(t, func() bool {
+		metrics, metricsErr := channelService.GetChannelMetrics(ctx, ch.ID)
+		return metricsErr == nil && metrics.FailureCount == 1 && metrics.ConsecutiveFailures == 1
+	}, time.Second, 10*time.Millisecond)
+	circuitStats := modelCircuitBreaker.GetModelCircuitBreakerStats(ctx, ch.ID, "gpt-4")
+	require.NotNil(t, circuitStats)
+	require.Equal(t, 1, circuitStats.ConsecutiveFailures)
 }
 
 // TestChatCompletionOrchestrator_Process_StreamingSuccess_NotMarkedAsError verifies that

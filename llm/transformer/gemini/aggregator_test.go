@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
 )
 
@@ -16,6 +17,32 @@ func TestAggregateStreamChunks_EmptyChunks(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, data)
 	require.Empty(t, meta.ID)
+}
+
+func TestAggregateStreamChunks_ReturnsNativeErrorEnvelope(t *testing.T) {
+	_, _, err := AggregateStreamChunks(t.Context(), []*httpclient.StreamEvent{{
+		Type: "error",
+		Data: []byte(`{"error":{"code":429,"message":"quota exceeded","status":"RESOURCE_EXHAUSTED"}}`),
+	}})
+
+	var responseErr *llm.ResponseError
+	require.ErrorAs(t, err, &responseErr)
+	require.Equal(t, 429, responseErr.StatusCode)
+	require.Equal(t, "RESOURCE_EXHAUSTED", responseErr.Detail.Type)
+}
+
+func TestAggregateStreamChunks_ReturnsErrorEnvelopeWithoutMessage(t *testing.T) {
+	_, _, err := AggregateStreamChunks(t.Context(), []*httpclient.StreamEvent{{
+		Type:       "error",
+		StatusCode: 429,
+		Data:       []byte(`{"error":{"status":"RESOURCE_EXHAUSTED"}}`),
+	}})
+
+	var responseErr *llm.ResponseError
+	require.ErrorAs(t, err, &responseErr)
+	require.Equal(t, 429, responseErr.StatusCode)
+	require.Equal(t, "RESOURCE_EXHAUSTED", responseErr.Detail.Type)
+	require.Equal(t, "upstream request failed", responseErr.Detail.Message)
 }
 
 func TestAggregateStreamChunks_SimpleText(t *testing.T) {

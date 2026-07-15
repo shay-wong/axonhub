@@ -52,12 +52,21 @@ type PersistenceState struct {
 
 	// Perf is the performance record for the current request.
 	Perf *biz.PerformanceRecord
+	// ModelCircuitBreakerRecorded prevents one provider attempt from updating
+	// circuit-breaker state more than once across stream and raw-error hooks.
+	ModelCircuitBreakerRecorded bool
 
 	// StreamCompleted tracks whether the stream has response successfully completed.
 	// This is used to distinguish between a stream that was canceled mid-way
 	// versus a stream that completed successfully but the client disconnected
 	// immediately after receiving the last chunk.
 	StreamCompleted bool
+	// StreamTerminalError records an application-level terminal stream event such
+	// as response.failed, response.incomplete, response.cancelled, or error.
+	StreamTerminalError error
+	// StreamTerminalBody preserves the first provider terminal event for error
+	// paths that return before the inbound persistence wrapper is installed.
+	StreamTerminalBody []byte
 
 	// RawProviderResponse stores the raw provider response for non-stream response pass-through.
 	RawProviderResponse *httpclient.Response

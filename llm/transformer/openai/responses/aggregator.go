@@ -208,6 +208,25 @@ func AggregateStreamChunks(_ context.Context, chunks []*httpclient.StreamEvent) 
 		if err := json.Unmarshal(chunk.Data, &ev); err != nil {
 			continue
 		}
+		if ev.Type == StreamEventTypeError {
+			upstreamError := ev.Error
+			if upstreamError == nil {
+				upstreamError = &Error{
+					Type:      string(ev.Type),
+					Code:      ev.Code,
+					Message:   ev.Message,
+					Param:     ev.Param,
+					RequestID: ev.RequestID,
+				}
+			}
+
+			statusCode := chunk.StatusCode
+			if statusCode == 0 {
+				statusCode = ev.StatusCode
+			}
+
+			return nil, llm.ResponseMeta{}, newStreamResponseError(statusCode, upstreamError)
+		}
 
 		agg.processEvent(&ev)
 	}
@@ -222,6 +241,7 @@ func AggregateStreamChunks(_ context.Context, chunks []*httpclient.StreamEvent) 
 	meta := llm.ResponseMeta{
 		ID:          agg.responseID,
 		ServiceTier: agg.serviceTier,
+		Completed:   agg.status == "completed",
 	}
 
 	if agg.usage != nil {

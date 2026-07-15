@@ -117,6 +117,42 @@ type cancelOnCloseStream struct {
 	once   sync.Once
 }
 
+type terminalErrorFinalizingStream struct {
+	stream  streams.Stream[*httpclient.StreamEvent]
+	onError func(error)
+	once    sync.Once
+}
+
+func (s *terminalErrorFinalizingStream) Next() bool {
+	hasNext := s.stream.Next()
+	if !hasNext {
+		s.finalizeError()
+	}
+
+	return hasNext
+}
+
+func (s *terminalErrorFinalizingStream) Current() *httpclient.StreamEvent {
+	return s.stream.Current()
+}
+
+func (s *terminalErrorFinalizingStream) Err() error {
+	return s.stream.Err()
+}
+
+func (s *terminalErrorFinalizingStream) Close() error {
+	err := s.stream.Close()
+	s.finalizeError()
+
+	return err
+}
+
+func (s *terminalErrorFinalizingStream) finalizeError() {
+	if err := s.stream.Err(); err != nil && s.onError != nil {
+		s.once.Do(func() { s.onError(err) })
+	}
+}
+
 func (s *cancelOnCloseStream) Next() bool {
 	return s.stream.Next()
 }
@@ -443,6 +479,12 @@ func (p *pipeline) stream(
 			stream: inboundStream,
 			cancel: firstEventGuard.cancelStream,
 		}
+	}
+	inboundStream = &terminalErrorFinalizingStream{
+		stream: inboundStream,
+		onError: func(err error) {
+			p.applyRawErrorResponseMiddlewares(ctx, err)
+		},
 	}
 
 	return inboundStream, nil

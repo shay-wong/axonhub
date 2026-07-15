@@ -102,11 +102,39 @@ func (m *performanceRecording) OnOutboundLlmResponse(ctx context.Context, respon
 			m.outbound.state.Perf.CompletionTokens = *tokenCount
 		}
 	}
+	if recordTerminalOutcomePerformance(ctx, m.outbound.state, response) {
+		return response, nil
+	}
 
 	m.outbound.state.Perf.MarkSuccess()
 	m.outbound.state.ChannelService.AsyncRecordPerformance(ctx, m.outbound.state.Perf)
 
 	return response, nil
+}
+
+func recordTerminalOutcomePerformance(ctx context.Context, state *PersistenceState, response *llm.Response) bool {
+	if state == nil || state.Perf == nil || response == nil {
+		return false
+	}
+
+	switch response.TerminalOutcome() {
+	case llm.ResponseTerminalOutcomeFailed:
+		statusCode := http.StatusInternalServerError
+		if terminalErr := response.TerminalError(); terminalErr != nil && terminalErr.StatusCode != 0 {
+			statusCode = terminalErr.StatusCode
+		}
+		state.Perf.MarkFailed(statusCode)
+	case llm.ResponseTerminalOutcomeIncomplete:
+		state.Perf.MarkIncomplete()
+	case llm.ResponseTerminalOutcomeCanceled:
+		state.Perf.MarkCanceled()
+	default:
+		return false
+	}
+
+	state.ChannelService.AsyncRecordPerformance(ctx, state.Perf)
+
+	return true
 }
 
 func (m *performanceRecording) OnOutboundRawStream(ctx context.Context, stream streams.Stream[*httpclient.StreamEvent]) (streams.Stream[*httpclient.StreamEvent], error) {
@@ -122,12 +150,15 @@ func (m *performanceRecording) OnOutboundLlmStream(ctx context.Context, stream s
 }
 
 func (m *performanceRecording) OnOutboundRawError(ctx context.Context, err error) {
-	// Record performance metrics for failed requests
-	if m.outbound.state.Perf == nil {
-		return
+	recordPerformanceError(ctx, m.outbound.state, err)
+}
+
+func recordPerformanceError(ctx context.Context, state *PersistenceState, err error) bool {
+	if state == nil || state.Perf == nil || state.Perf.RequestCompleted {
+		return false
 	}
 
-	perf := m.outbound.state.Perf
+	perf := state.Perf
 	if errors.Is(err, context.Canceled) {
 		perf.MarkCanceled()
 	} else {
@@ -140,7 +171,9 @@ func (m *performanceRecording) OnOutboundRawError(ctx context.Context, err error
 		}
 	}
 
-	m.outbound.state.ChannelService.AsyncRecordPerformance(ctx, perf)
+	state.ChannelService.AsyncRecordPerformance(ctx, perf)
+
+	return true
 }
 
 // recordPerformanceStream records performance metrics for a stream of responses.
@@ -154,6 +187,8 @@ type recordPerformanceStream struct {
 	firstTokenSet     bool
 	reasoningStartSet bool
 	reasoningEndSet   bool
+	successPending    bool
+	recorded          bool
 }
 
 func (s *recordPerformanceStream) Current() *llm.Response {
@@ -186,15 +221,33 @@ func (s *recordPerformanceStream) Current() *llm.Response {
 
 	if tokenCount := event.Usage.GetCompletionTokens(); tokenCount != nil && *tokenCount > 0 {
 		s.state.Perf.CompletionTokens = *tokenCount
-		s.state.Perf.MarkSuccess()
-		s.state.ChannelService.AsyncRecordPerformance(s.ctx, s.state.Perf)
+	}
+	if recordTerminalOutcomePerformance(s.ctx, s.state, event) {
+		s.recorded = true
+		return event
+	}
+	if tokenCount := event.Usage.GetCompletionTokens(); tokenCount != nil && *tokenCount > 0 {
+		s.successPending = true
 	}
 
 	return event
 }
 
 func (s *recordPerformanceStream) Next() bool {
-	return s.stream.Next()
+	hasNext := s.stream.Next()
+	if hasNext || s.recorded || s.state.Perf == nil {
+		return hasNext
+	}
+
+	if err := s.stream.Err(); err != nil {
+		s.recorded = recordPerformanceError(s.ctx, s.state, err)
+	} else if s.successPending {
+		s.state.Perf.MarkSuccess()
+		s.state.ChannelService.AsyncRecordPerformance(s.ctx, s.state.Perf)
+		s.recorded = true
+	}
+
+	return hasNext
 }
 
 func (s *recordPerformanceStream) Close() error {

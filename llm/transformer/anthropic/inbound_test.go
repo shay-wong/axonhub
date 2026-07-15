@@ -481,6 +481,18 @@ func TestInboundTransformer_TransformRequest(t *testing.T) {
 	}
 }
 
+func TestConvertToAnthropicResponse_MapsContentFilterToRefusal(t *testing.T) {
+	response := convertToAnthropicResponse(&llm.Response{
+		Choices: []llm.Choice{{
+			Message:      &llm.Message{Role: "assistant"},
+			FinishReason: lo.ToPtr("content_filter"),
+		}},
+	})
+
+	require.NotNil(t, response.StopReason)
+	require.Equal(t, "refusal", *response.StopReason)
+}
+
 func TestInboundTransformer_TransformResponse_RemovesEmptyReadPages(t *testing.T) {
 	transformer := NewInboundTransformer()
 	finishReason := "tool_calls"

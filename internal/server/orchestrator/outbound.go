@@ -88,12 +88,7 @@ func (ts *OutboundPersistentStream) Current() *httpclient.StreamEvent {
 		// For raw binary audio chunks (TTS stream_format=audio), persist only a size
 		// summary to avoid buffering the full audio payload in memory.
 		ts.responseChunks = append(ts.responseChunks, httpclient.SummarizeBinaryChunk(event))
-		// Check if this is a terminal event, which indicates the stream completed successfully.
-		// For Chat Completions API this is the raw [DONE] event; for Responses API this is
-		// response.completed; for Anthropic Messages API this is message_stop.
-		if isTerminalStreamEvent(event) {
-			ts.state.StreamCompleted = true
-		}
+		observeStreamTerminal(ts.state, event)
 	}
 
 	return event
@@ -115,6 +110,11 @@ func (ts *OutboundPersistentStream) Close() error {
 
 	streamErr := ts.stream.Err()
 	ctxErr := ctx.Err()
+	if ts.state.StreamTerminalError != nil {
+		ts.logFinalizationDecision(ctx, "terminal_event_failed", streamErr, ctxErr, false, nil)
+		ts.persistTerminalResponse(ctx, ts.state.StreamTerminalError)
+		return ts.stream.Close()
+	}
 
 	// If we received the [DONE] event, treat the stream as successfully completed
 	// even if there's a context cancellation error. This handles the case where
@@ -262,12 +262,79 @@ func (ts *OutboundPersistentStream) persistResponseChunks(ctx context.Context) {
 	}
 }
 
+func (ts *OutboundPersistentStream) persistTerminalResponse(ctx context.Context, terminalErr error) {
+	if ts.requestExec == nil {
+		return
+	}
+
+	persistCtx, cancel := xcontext.DetachWithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	responseBody, meta, aggErr := ts.transformer.AggregateStreamChunks(persistCtx, ts.state.RawProviderRequest, ts.responseChunks)
+	if aggErr == nil {
+		ts.persistUsage(persistCtx, meta)
+		if err := ts.RequestService.UpdateRequestExecutionTerminated(
+			persistCtx,
+			ts.requestExec.ID,
+			terminalErr,
+			meta.ID,
+			responseBody,
+			latencyMetrics(ts.perf),
+		); err != nil {
+			log.Warn(persistCtx, "Failed to persist terminal request execution response", log.Cause(err))
+		}
+	} else {
+		log.Warn(persistCtx, "Failed to aggregate terminal request execution chunks", log.Cause(aggErr))
+		if responseBody := terminalEventBody(ts.responseChunks); len(responseBody) > 0 {
+			if err := ts.RequestService.UpdateRequestExecutionTerminated(
+				persistCtx,
+				ts.requestExec.ID,
+				terminalErr,
+				terminalResponseID(responseBody),
+				responseBody,
+				latencyMetrics(ts.perf),
+			); err != nil {
+				log.Warn(persistCtx, "Failed to persist raw terminal request execution response", log.Cause(err))
+			}
+		} else if err := ts.RequestService.UpdateRequestExecutionStatusFromError(persistCtx, ts.requestExec.ID, terminalErr); err != nil {
+			log.Warn(persistCtx, "Failed to update terminal request execution status", log.Cause(err))
+		}
+	}
+
+	if err := ts.RequestService.SaveRequestExecutionChunks(persistCtx, ts.requestExec.ID, ts.responseChunks); err != nil {
+		log.Warn(persistCtx, "Failed to save terminal request execution chunks", log.Cause(err))
+	}
+}
+
 func (ts *OutboundPersistentStream) persistAggregatedResponse(ctx context.Context, responseBody []byte, meta llm.ResponseMeta) {
 	if ts.requestExec == nil {
 		return
 	}
 
-	// Try to create usage log from aggregated response
+	ts.persistUsage(ctx, meta)
+
+	err := ts.RequestService.UpdateRequestExecutionCompleted(
+		ctx,
+		ts.requestExec.ID,
+		meta.ID,
+		responseBody,
+		latencyMetrics(ts.perf),
+	)
+	if err != nil {
+		log.Warn(
+			ctx,
+			"Failed to update request execution with chunks, trying basic completion",
+			log.Cause(err),
+		)
+	}
+
+	// Save all response chunks at once
+	if err := ts.RequestService.SaveRequestExecutionChunks(ctx, ts.requestExec.ID, ts.responseChunks); err != nil {
+		log.Warn(ctx, "Failed to save request execution chunks", log.Cause(err))
+	}
+}
+
+func (ts *OutboundPersistentStream) persistUsage(ctx context.Context, meta llm.ResponseMeta) {
 	if usage := meta.Usage; usage != nil && ts.state.UsageLogEligible {
 		ts.state.AppliedServiceTier = meta.ServiceTier
 		_, err := ts.UsageLogService.CreateUsageLogFromRequest(
@@ -283,40 +350,6 @@ func (ts *OutboundPersistentStream) persistAggregatedResponse(ctx context.Contex
 		if err != nil {
 			log.Warn(ctx, "Failed to create usage log from request", log.Cause(err))
 		}
-	}
-
-	// Build latency metrics from performance record
-	var metrics *biz.LatencyMetrics
-
-	if ts.perf != nil {
-		firstTokenLatencyMs, requestLatencyMs, _ := ts.perf.Calculate()
-
-		metrics = &biz.LatencyMetrics{
-			LatencyMs: &requestLatencyMs,
-		}
-		if ts.perf.Stream && ts.perf.FirstTokenTime != nil {
-			metrics.FirstTokenLatencyMs = &firstTokenLatencyMs
-		}
-	}
-
-	err := ts.RequestService.UpdateRequestExecutionCompleted(
-		ctx,
-		ts.requestExec.ID,
-		meta.ID,
-		responseBody,
-		metrics,
-	)
-	if err != nil {
-		log.Warn(
-			ctx,
-			"Failed to update request execution with chunks, trying basic completion",
-			log.Cause(err),
-		)
-	}
-
-	// Save all response chunks at once
-	if err := ts.RequestService.SaveRequestExecutionChunks(ctx, ts.requestExec.ID, ts.responseChunks); err != nil {
-		log.Warn(ctx, "Failed to save request execution chunks", log.Cause(err))
 	}
 }
 
@@ -388,6 +421,9 @@ func (p *PersistentOutboundTransformer) TransformRequest(ctx context.Context, ll
 
 	p.state.CurrentCandidate = candidate
 	p.state.StreamCompleted = false
+	p.state.StreamTerminalError = nil
+	p.state.StreamTerminalBody = nil
+	p.state.ModelCircuitBreakerRecorded = false
 
 	p.wrapped = selectOutboundForCandidate(candidate)
 

@@ -3,9 +3,12 @@ package responses
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/looplj/axonhub/llm"
@@ -135,6 +138,58 @@ func TestOutboundTransformer_StreamTransformation_ErrorEvent(t *testing.T) {
 	_, err = streams.All(transformedStream)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "Something went wrong")
+}
+
+func TestOutboundTransformer_TransformStream_PreservesUpstreamErrors(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name            string
+		event           string
+		wantStatus      int
+		wantStreamError bool
+	}{
+		{
+			name:            "nested error event",
+			event:           `{"type":"error","status":400,"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Your input exceeds the context window of this model."}}`,
+			wantStatus:      http.StatusBadRequest,
+			wantStreamError: true,
+		},
+		{
+			name:       "response failed event",
+			event:      `{"type":"response.failed","response":{"id":"resp_failed","object":"response","status":"failed","output":[],"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Your input exceeds the context window of this model."}}}`,
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream([]*httpclient.StreamEvent{{
+				Data: []byte(tt.event),
+			}}))
+			require.NoError(t, err)
+
+			var responseErr *llm.ResponseError
+			responses, err := streams.All(stream)
+			if tt.wantStreamError {
+				require.ErrorAs(t, err, &responseErr)
+			} else {
+				require.NoError(t, err)
+				for _, response := range responses {
+					if response != nil && response.Error != nil {
+						responseErr = response.Error
+						break
+					}
+				}
+			}
+			require.NotNil(t, responseErr)
+			require.Equal(t, tt.wantStatus, responseErr.StatusCode)
+			require.Equal(t, "invalid_request_error", responseErr.Detail.Type)
+			require.Equal(t, "context_length_exceeded", responseErr.Detail.Code)
+			require.Equal(t, "Your input exceeds the context window of this model.", responseErr.Detail.Message)
+		})
+	}
 }
 
 func TestOutboundTransformer_TransformStream_UsesDoneArgumentsWithoutDeltas(t *testing.T) {
@@ -299,6 +354,156 @@ func TestOutboundTransformer_TransformStream_ResponseCancelledCompletes(t *testi
 	require.NotEmpty(t, responses[1].Choices)
 	require.NotNil(t, responses[1].Choices[0].FinishReason)
 	require.Equal(t, "cancelled", *responses[1].Choices[0].FinishReason)
+}
+
+func TestOutboundTransformer_TransformStream_PreservesTerminalSnapshots(t *testing.T) {
+	for _, terminalType := range []string{"response.failed", "response.incomplete", "response.cancelled"} {
+		t.Run(terminalType, func(t *testing.T) {
+			status := map[string]string{
+				"response.failed":     "failed",
+				"response.incomplete": "incomplete",
+				"response.cancelled":  "canceled",
+			}[terminalType]
+			extra := ""
+			if terminalType == "response.failed" {
+				extra = `,"error":{"type":"server_error","code":"provider_error","message":"failed"}`
+			}
+			if terminalType == "response.incomplete" {
+				extra = `,"incomplete_details":{"reason":"max_output_tokens"}`
+			}
+			body := fmt.Sprintf(`{
+				"type":%q,
+				"response":{
+					"id":"resp_terminal",
+					"object":"response",
+					"created_at":1700000000,
+					"model":"gpt-5",
+					"status":%q,
+					"previous_response_id":"resp_previous",
+					"service_tier":"priority",
+					"output":[],
+					"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}%s
+				}
+			}`, terminalType, status, extra)
+
+			transformer, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+			require.NoError(t, err)
+			stream, err := transformer.TransformStream(t.Context(), nil, streams.SliceStream([]*httpclient.StreamEvent{{
+				Type: terminalType,
+				Data: []byte(body),
+			}}))
+			require.NoError(t, err)
+			responses, err := streams.All(stream)
+			require.NoError(t, err)
+			require.NotEmpty(t, responses)
+
+			terminal := responses[0]
+			require.Equal(t, "resp_terminal", terminal.ID)
+			require.Equal(t, "gpt-5", terminal.Model)
+			require.Equal(t, int64(1700000000), terminal.Created)
+			require.Equal(t, "resp_previous", lo.FromPtr(terminal.PreviousResponseID))
+			require.Equal(t, "priority", terminal.ServiceTier)
+			require.NotNil(t, terminal.Usage)
+			require.Equal(t, int64(12), terminal.Usage.TotalTokens)
+		})
+	}
+}
+
+func TestResponsesStream_TerminalStatusRoundTrip(t *testing.T) {
+	tests := []struct {
+		name                 string
+		eventsBeforeTerminal []*httpclient.StreamEvent
+		terminalEvent        *httpclient.StreamEvent
+		wantType             StreamEventType
+		wantStatus           string
+		wantIncomplete       string
+	}{
+		{
+			name: "incomplete",
+			eventsBeforeTerminal: []*httpclient.StreamEvent{
+				{Type: "response.output_item.added", Data: []byte(`{
+					"type":"response.output_item.added",
+					"output_index":0,
+					"item":{"id":"msg_terminal","type":"message","status":"in_progress","role":"assistant","content":[]}
+				}`)},
+				{Type: "response.content_part.added", Data: []byte(`{
+					"type":"response.content_part.added",
+					"item_id":"msg_terminal",
+					"output_index":0,
+					"content_index":0,
+					"part":{"type":"output_text","text":""}
+				}`)},
+				{Type: "response.output_text.delta", Data: []byte(`{
+					"type":"response.output_text.delta",
+					"item_id":"msg_terminal",
+					"output_index":0,
+					"content_index":0,
+					"delta":"partial"
+				}`)},
+			},
+			terminalEvent: &httpclient.StreamEvent{Type: "response.incomplete", Data: []byte(`{
+				"type":"response.incomplete",
+				"response":{
+					"id":"resp_terminal",
+					"object":"response",
+					"status":"incomplete",
+					"output":[],
+					"incomplete_details":{"reason":"max_output_tokens"}
+				}
+			}`)},
+			wantType:       StreamEventTypeResponseIncomplete,
+			wantStatus:     "incomplete",
+			wantIncomplete: "max_output_tokens",
+		},
+		{
+			name: "cancelled",
+			terminalEvent: &httpclient.StreamEvent{Type: "response.cancelled", Data: []byte(`{
+				"type":"response.cancelled",
+				"response":{
+					"id":"resp_terminal",
+					"object":"response",
+					"status":"canceled",
+					"output":[]
+				}
+			}`)},
+			wantType:   StreamEventTypeResponseCancelled,
+			wantStatus: "canceled",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outbound, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+			require.NoError(t, err)
+			providerEvents := []*httpclient.StreamEvent{
+				{Type: "response.created", Data: []byte(`{
+					"type":"response.created",
+					"response":{"id":"resp_terminal","object":"response","status":"in_progress","output":[]}
+				}`)},
+			}
+			providerEvents = append(providerEvents, tt.eventsBeforeTerminal...)
+			providerEvents = append(providerEvents, tt.terminalEvent)
+			llmStream, err := outbound.TransformStream(t.Context(), nil, streams.SliceStream(providerEvents))
+			require.NoError(t, err)
+
+			inboundStream, err := NewInboundTransformer().TransformStream(t.Context(), llmStream)
+			require.NoError(t, err)
+			events, err := streams.All(inboundStream)
+			require.NoError(t, err)
+			require.NotEmpty(t, events)
+
+			var terminal StreamEvent
+			require.NoError(t, json.Unmarshal(events[len(events)-1].Data, &terminal))
+			require.Equal(t, tt.wantType, terminal.Type)
+			require.NotNil(t, terminal.Response)
+			require.NotNil(t, terminal.Response.Status)
+			require.Equal(t, tt.wantStatus, *terminal.Response.Status)
+			if tt.wantIncomplete != "" {
+				require.NotNil(t, terminal.Response.IncompleteDetails)
+				require.Equal(t, tt.wantIncomplete, terminal.Response.IncompleteDetails.Reason)
+			}
+		})
+	}
 }
 
 func TestOutboundTransformer_TransformStream_PreservesFinalItemAnnotations(t *testing.T) {

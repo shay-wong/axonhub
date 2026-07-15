@@ -512,7 +512,8 @@ type ImageSource struct {
 type StreamEvent struct {
 	// Any of "message_start", "message_delta", "message_stop", "content_block_start",
 	// "content_block_delta", "content_block_stop".
-	Type string `json:"type"`
+	Type       string `json:"type"`
+	StatusCode int    `json:"-"`
 
 	// Message will be present if type is "message_start".
 	Message *StreamMessage `json:"message,omitempty"`
@@ -527,6 +528,10 @@ type StreamEvent struct {
 	Delta *StreamDelta `json:"delta,omitempty"`
 
 	Usage *Usage `json:"usage,omitempty"`
+
+	// Error will be present if type is "error".
+	Error     *ErrorDetail `json:"error,omitempty"`
+	RequestID string       `json:"request_id,omitempty"`
 }
 
 // StreamDelta represents delta in streaming response.

@@ -8,7 +8,20 @@ import (
 
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/llm"
 )
+
+func TestAPIKeyModelMappingMiddleware_InitializesOriginalModelWithoutAPIKey(t *testing.T) {
+	state := &PersistenceState{ModelMapper: NewModelMapper()}
+	middleware := applyModelMapping(&PersistentInboundTransformer{state: state})
+	request := &llm.Request{Model: "gpt-4"}
+
+	result, err := middleware.OnInboundLlmRequest(t.Context(), request)
+
+	assert.NoError(t, err)
+	assert.Same(t, request, result)
+	assert.Equal(t, "gpt-4", state.OriginalModel)
+}
 
 func TestModelMapper_MapModel(t *testing.T) {
 	ctx := context.Background()

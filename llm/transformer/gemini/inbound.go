@@ -92,6 +92,15 @@ func (t *InboundTransformer) TransformResponse(ctx context.Context, chatResp *ll
 	if chatResp == nil {
 		return nil, fmt.Errorf("chat completion response is nil")
 	}
+	if terminalErr := chatResp.TerminalError(); terminalErr != nil {
+		httpErr := t.TransformError(ctx, terminalErr)
+
+		return &httpclient.Response{
+			StatusCode: httpErr.StatusCode,
+			Body:       httpErr.Body,
+			Headers:    http.Header{"Content-Type": []string{"application/json"}},
+		}, nil
+	}
 
 	// Convert to Gemini response format (non-streaming)
 	geminiResp := convertLLMToGeminiResponse(chatResp, false)

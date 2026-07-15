@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -16,6 +17,41 @@ import (
 	"github.com/looplj/axonhub/llm/streams"
 	"github.com/looplj/axonhub/llm/transformer/shared"
 )
+
+func TestInboundStream_EmitsGeminiError(t *testing.T) {
+	stream, err := NewInboundTransformer().TransformStream(t.Context(), streams.SliceStream([]*llm.Response{{
+		Error: &llm.ResponseError{StatusCode: 400, Detail: llm.ErrorDetail{
+			Type:    "invalid_request_error",
+			Code:    "context_length_exceeded",
+			Message: "context window exceeded",
+		}},
+		Choices: []llm.Choice{{FinishReason: lo.ToPtr("error")}},
+	}, llm.DoneResponse}))
+	require.NoError(t, err)
+
+	events, err := streams.All(stream)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, "error", events[0].Type)
+	require.JSONEq(t, `{
+		"error":{"code":400,"message":"context window exceeded","status":"INVALID_ARGUMENT"}
+	}`, string(events[0].Data))
+}
+
+func TestInboundTransformer_MapsCancellationToGeminiError(t *testing.T) {
+	response := &llm.Response{Choices: []llm.Choice{{FinishReason: lo.ToPtr("cancelled")}}}
+	transformer := NewInboundTransformer()
+
+	nonStream, err := transformer.TransformResponse(t.Context(), response)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusInternalServerError, nonStream.StatusCode)
+	require.JSONEq(t, `{"error":{"code":500,"message":"upstream response cancelled","status":"INTERNAL"}}`, string(nonStream.Body))
+
+	streamEvent, err := transformer.TransformStreamChunk(t.Context(), response)
+	require.NoError(t, err)
+	require.Equal(t, "error", streamEvent.Type)
+	require.JSONEq(t, `{"error":{"code":500,"message":"upstream response cancelled","status":"INTERNAL"}}`, string(streamEvent.Data))
+}
 
 func TestInboundTransformer_TransformStreamChunk(t *testing.T) {
 	transformer := NewInboundTransformer()

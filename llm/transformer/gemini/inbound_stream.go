@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -109,6 +110,26 @@ func (s *geminiInboundStream) transformChunk(chunk *llm.Response) (*httpclient.S
 	// Handle [DONE] marker
 	if chunk.Object == "[DONE]" {
 		return nil, nil
+	}
+	if terminalErr := chunk.TerminalError(); terminalErr != nil {
+		code := terminalErr.StatusCode
+		if code == 0 {
+			code = http.StatusInternalServerError
+		}
+		message := terminalErr.Detail.Message
+		if message == "" {
+			message = "upstream request failed"
+		}
+
+		return &httpclient.StreamEvent{
+			Type: "error",
+			Data: xjson.MustMarshal(&GeminiError{Error: ErrorDetail{
+				Code:      code,
+				Message:   message,
+				Status:    mapHTTPStatusToGeminiStatus(code),
+				Truncated: terminalErr.Detail.Truncated,
+			}}),
+		}, nil
 	}
 
 	// Fast-path: no choices
@@ -339,6 +360,23 @@ func (t *InboundTransformer) TransformStreamChunk(
 		// Gemini doesn't use [DONE] marker, but we can return an nil to signal the end of the stream.
 		//nolint:nilnil // Checked.
 		return nil, nil
+	}
+	if terminalErr := chatResp.TerminalError(); terminalErr != nil {
+		code := terminalErr.StatusCode
+		message := terminalErr.Detail.Message
+		if message == "" {
+			message = "upstream request failed"
+		}
+
+		return &httpclient.StreamEvent{
+			Type: "error",
+			Data: xjson.MustMarshal(&GeminiError{Error: ErrorDetail{
+				Code:      code,
+				Message:   message,
+				Status:    mapHTTPStatusToGeminiStatus(code),
+				Truncated: terminalErr.Detail.Truncated,
+			}}),
+		}, nil
 	}
 
 	// Convert to Gemini response format (streaming)

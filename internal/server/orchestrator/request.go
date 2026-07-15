@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -137,6 +138,27 @@ func (m *persistRequestMiddleware) OnInboundRawResponse(ctx context.Context, htt
 		}
 	}
 
+	if terminalErr := responsePersistenceTerminalError(llmResp); terminalErr != nil {
+		status := request.StatusFailed
+		if errors.Is(terminalErr, context.Canceled) {
+			status = request.StatusCanceled
+		}
+
+		err := state.RequestService.UpdateRequestStatusExternalIDAndResponseBody(
+			persistCtx,
+			state.Request.ID,
+			status,
+			llmResp.ID,
+			httpResp.Body,
+			metrics,
+		)
+		if err != nil {
+			log.Warn(persistCtx, "Failed to persist terminal request response", log.Cause(err))
+		}
+
+		return httpResp, nil
+	}
+
 	// Video generation is async: initial response contains provider task id, but task may not be completed.
 	// Keep request in processing status and store provider task id in external_id.
 	if llmResp.RequestType == llm.RequestTypeVideo {
@@ -189,6 +211,23 @@ func (m *persistRequestMiddleware) OnInboundRawResponse(ctx context.Context, htt
 	}
 
 	return httpResp, nil
+}
+
+func responsePersistenceTerminalError(response *llm.Response) error {
+	if terminalErr := response.TerminalError(); terminalErr != nil {
+		return terminalErr
+	}
+	if response.TerminalOutcome() == llm.ResponseTerminalOutcomeIncomplete {
+		return &llm.ResponseError{
+			Detail: llm.ErrorDetail{
+				Type:    "server_error",
+				Code:    "response_incomplete",
+				Message: "upstream response incomplete",
+			},
+		}
+	}
+
+	return nil
 }
 
 // audioSafeResponseBody converts audio response bodies into JSON-safe payloads for persistence:

@@ -146,6 +146,35 @@ func TestAggregateStreamChunks(t *testing.T) {
 	}
 }
 
+func TestAggregateStreamChunks_ReturnsNativeErrorEnvelope(t *testing.T) {
+	_, _, err := AggregateStreamChunks(t.Context(), []*httpclient.StreamEvent{{
+		Type:       "error",
+		StatusCode: 429,
+		Data:       []byte(`{"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"context window exceeded","param":"input"}}`),
+	}}, DefaultTransformChunk)
+
+	var responseErr *llm.ResponseError
+	require.ErrorAs(t, err, &responseErr)
+	require.Equal(t, 429, responseErr.StatusCode)
+	require.Equal(t, "context_length_exceeded", responseErr.Detail.Code)
+	require.Equal(t, "input", responseErr.Detail.Param)
+}
+
+func TestAggregateStreamChunks_ReturnsErrorEnvelopeWithoutMessage(t *testing.T) {
+	_, _, err := AggregateStreamChunks(t.Context(), []*httpclient.StreamEvent{{
+		Type:       "error",
+		StatusCode: 400,
+		Data:       []byte(`{"error":{"type":"invalid_request_error","code":"bad_input"}}`),
+	}}, DefaultTransformChunk)
+
+	var responseErr *llm.ResponseError
+	require.ErrorAs(t, err, &responseErr)
+	require.Equal(t, 400, responseErr.StatusCode)
+	require.Equal(t, "invalid_request_error", responseErr.Detail.Type)
+	require.Equal(t, "bad_input", responseErr.Detail.Code)
+	require.Equal(t, "upstream request failed", responseErr.Detail.Message)
+}
+
 func TestAggregateStreamChunks_EmptyChunks(t *testing.T) {
 	gotBytes, _, err := AggregateStreamChunks(context.Background(), nil, DefaultTransformChunk)
 	require.NoError(t, err)

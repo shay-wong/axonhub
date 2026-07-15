@@ -45,13 +45,16 @@ type responsesInboundStream struct {
 	hasContentPartStarted   bool
 	hasFinished             bool
 	responseCompleted       bool
+	terminalEventType       StreamEventType
+	incompleteDetails       *ResponseIncompleteDetails
 	pendingAnnotations      []llm.Annotation
 
 	// Response metadata
-	responseID  string
-	model       string
-	createdAt   int64
-	serviceTier string
+	responseID         string
+	model              string
+	createdAt          int64
+	previousResponseID *string
+	serviceTier        string
 
 	// Content tracking
 	outputIndex    int
@@ -96,8 +99,9 @@ func (s *responsesInboundStream) enqueueEvent(ev *StreamEvent) error {
 	}
 
 	streamEvent := &httpclient.StreamEvent{
-		Type: string(ev.Type),
-		Data: eventData,
+		Type:       string(ev.Type),
+		Data:       eventData,
+		StatusCode: ev.StatusCode,
 	}
 
 	s.eventQueue = append(s.eventQueue, streamEvent)
@@ -126,21 +130,8 @@ func (s *responsesInboundStream) Next() bool {
 	// Try to get the next chunk from source
 	if !s.source.Next() {
 		if s.err == nil && !s.errorEventEmitted && s.source.Err() == nil && s.hasFinished && !s.responseCompleted {
-			s.responseCompleted = true
-			s.aggregator.status = "completed"
-			response := s.aggregator.buildResponse()
-			if s.usage != nil {
-				response.Usage = ConvertLLMUsageToResponsesUsage(s.usage)
-			}
-			if calls := getResponseWebSearchCallsFromMetadata(s.transformerMetadata); len(calls) > 0 {
-				response.Output = append(append([]Item(nil), calls...), response.Output...)
-			}
-
-			if err := s.enqueueEvent(&StreamEvent{
-				Type:     StreamEventTypeResponseCompleted,
-				Response: response,
-			}); err != nil {
-				s.err = fmt.Errorf("failed to enqueue response.completed event: %w", err)
+			if err := s.enqueueTerminalResponse(); err != nil {
+				s.err = fmt.Errorf("failed to enqueue terminal response event: %w", err)
 				return false
 			}
 
@@ -181,18 +172,21 @@ func (s *responsesInboundStream) Next() bool {
 		return s.Next() // Try next chunk
 	}
 
-	// Initialize response metadata from first chunk
-	if s.responseID == "" && chunk.ID != "" {
+	// Keep the latest non-empty snapshot so terminal metadata can correct values
+	// emitted by earlier chunks.
+	if chunk.ID != "" {
 		s.responseID = chunk.ID
 	}
 
-	if s.model == "" && chunk.Model != "" {
+	if chunk.Model != "" {
 		s.model = chunk.Model
 	}
 
-	// Track createdAt
-	if s.createdAt == 0 && chunk.Created != 0 {
+	if chunk.Created != 0 {
 		s.createdAt = chunk.Created
+	}
+	if chunk.PreviousResponseID != nil {
+		s.previousResponseID = chunk.PreviousResponseID
 	}
 
 	// Track usage
@@ -216,12 +210,13 @@ func (s *responsesInboundStream) Next() bool {
 		s.hasResponseCreated = true
 
 		response := &Response{
-			Object:    "response",
-			ID:        s.responseID,
-			Model:     s.model,
-			CreatedAt: s.createdAt,
-			Status:    lo.ToPtr("in_progress"),
-			Output:    []Item{},
+			Object:             "response",
+			ID:                 s.responseID,
+			Model:              s.model,
+			CreatedAt:          s.createdAt,
+			Status:             lo.ToPtr("in_progress"),
+			Output:             []Item{},
+			PreviousResponseID: s.previousResponseID,
 		}
 		if s.serviceTier != "" {
 			response.ServiceTier = lo.ToPtr(s.serviceTier)
@@ -248,6 +243,13 @@ func (s *responsesInboundStream) Next() bool {
 			s.err = fmt.Errorf("failed to enqueue response.in_progress event: %w", err)
 			return false
 		}
+	}
+	if chunk.Error != nil {
+		if err := s.emitStreamErrorEvent(chunk.Error); err != nil {
+			s.err = fmt.Errorf("failed to emit upstream error event: %w", err)
+			return false
+		}
+		return s.Next()
 	}
 
 	// Process choices
@@ -304,6 +306,19 @@ func (s *responsesInboundStream) Next() bool {
 		// Handle finish reason
 		if choice.FinishReason != nil && !s.hasFinished {
 			s.hasFinished = true
+			s.terminalEventType = StreamEventTypeResponseCompleted
+			switch *choice.FinishReason {
+			case "length":
+				s.terminalEventType = StreamEventTypeResponseIncomplete
+				s.incompleteDetails = &ResponseIncompleteDetails{Reason: "max_output_tokens"}
+			case "content_filter":
+				s.terminalEventType = StreamEventTypeResponseIncomplete
+				s.incompleteDetails = &ResponseIncompleteDetails{Reason: "content_filter"}
+			case "cancelled", "canceled":
+				s.terminalEventType = StreamEventTypeResponseCancelled
+			case "error":
+				s.terminalEventType = StreamEventTypeResponseFailed
+			}
 
 			// Close any open content parts
 			if err := s.closeCurrentContentPart(); err != nil {
@@ -321,29 +336,55 @@ func (s *responsesInboundStream) Next() bool {
 
 	// Handle final usage chunk and complete response
 	if chunk.Usage != nil && s.hasFinished && !s.responseCompleted {
-		s.responseCompleted = true
 		s.usage = chunk.Usage
-
-		// Build final response using aggregator
-		s.aggregator.status = "completed"
-		response := s.aggregator.buildResponse()
-		response.Usage = ConvertLLMUsageToResponsesUsage(s.usage)
-		if calls := getResponseWebSearchCallsFromMetadata(s.transformerMetadata); len(calls) > 0 {
-			response.Output = append(append([]Item(nil), calls...), response.Output...)
-		}
-
-		err := s.enqueueEvent(&StreamEvent{
-			Type:     StreamEventTypeResponseCompleted,
-			Response: response,
-		})
-		if err != nil {
-			s.err = fmt.Errorf("failed to enqueue response.completed event: %w", err)
+		if err := s.enqueueTerminalResponse(); err != nil {
+			s.err = fmt.Errorf("failed to enqueue terminal response event: %w", err)
 			return false
 		}
 	}
 
 	// Continue to the next event
 	return s.Next()
+}
+
+func (s *responsesInboundStream) enqueueTerminalResponse() error {
+	eventType := s.terminalEventType
+	status := "completed"
+	if eventType == "" {
+		eventType = StreamEventTypeResponseCompleted
+	}
+
+	switch eventType {
+	case StreamEventTypeResponseFailed:
+		status = "failed"
+	case StreamEventTypeResponseIncomplete:
+		status = "incomplete"
+	case StreamEventTypeResponseCancelled:
+		status = "canceled"
+	}
+
+	s.responseCompleted = true
+	s.aggregator.status = status
+	response := s.aggregator.buildResponse()
+	response.ID = s.responseID
+	response.Model = s.model
+	response.CreatedAt = s.createdAt
+	response.PreviousResponseID = s.previousResponseID
+	if s.serviceTier != "" {
+		response.ServiceTier = lo.ToPtr(s.serviceTier)
+	}
+	response.IncompleteDetails = s.incompleteDetails
+	if eventType == StreamEventTypeResponseFailed && response.Error == nil {
+		response.Error = &Error{Type: "server_error", Code: "response_failed", Message: "upstream response failed"}
+	}
+	if s.usage != nil {
+		response.Usage = ConvertLLMUsageToResponsesUsage(s.usage)
+	}
+	if calls := getResponseWebSearchCallsFromMetadata(s.transformerMetadata); len(calls) > 0 {
+		response.Output = append(append([]Item(nil), calls...), response.Output...)
+	}
+
+	return s.enqueueEvent(&StreamEvent{Type: eventType, Response: response})
 }
 
 func (s *responsesInboundStream) mergeTransformerMetadata(metadata map[string]any) {
@@ -1073,20 +1114,41 @@ func (s *responsesInboundStream) closeCurrentOutputItem() error {
 
 func (s *responsesInboundStream) emitStreamErrorEvent(err error) error {
 	code, message := classifyStreamError(err)
+	detail := llm.ErrorDetail{Type: "server_error", Code: code, Message: message}
+	var responseErr *llm.ResponseError
+	statusCode := 0
+	if errors.As(err, &responseErr) {
+		statusCode = responseErr.StatusCode
+		detail = responseErr.Detail
+		if detail.Type == "" {
+			detail.Type = "server_error"
+		}
+		if detail.Code == "" {
+			detail.Code = "stream_error"
+		}
+		if detail.Message == "" {
+			detail.Message = "upstream request failed"
+		}
+	}
 
 	if s.hasResponseCreated {
-		response := s.buildFailedResponse(code, message)
+		response := s.buildFailedResponse(detail)
 		if err := s.enqueueEvent(&StreamEvent{
-			Type:     StreamEventTypeResponseFailed,
-			Response: response,
+			Type:       StreamEventTypeResponseFailed,
+			StatusCode: statusCode,
+			Response:   response,
 		}); err != nil {
 			return err
 		}
 	} else {
+		param := lo.EmptyableToPtr(detail.Param)
 		if err := s.enqueueEvent(&StreamEvent{
-			Type:    StreamEventTypeError,
-			Code:    code,
-			Message: message,
+			Type:       StreamEventTypeError,
+			StatusCode: statusCode,
+			Code:       detail.Code,
+			Message:    detail.Message,
+			Param:      param,
+			RequestID:  detail.RequestID,
 		}); err != nil {
 			return err
 		}
@@ -1138,18 +1200,21 @@ func classifyStreamError(err error) (code, message string) {
 	return code, message
 }
 
-func (s *responsesInboundStream) buildFailedResponse(code, message string) *Response {
+func (s *responsesInboundStream) buildFailedResponse(detail llm.ErrorDetail) *Response {
 	response := &Response{
-		Object:    "response",
-		ID:        s.responseID,
-		Model:     s.model,
-		CreatedAt: s.createdAt,
-		Status:    lo.ToPtr("failed"),
-		Output:    []Item{},
+		Object:             "response",
+		ID:                 s.responseID,
+		Model:              s.model,
+		CreatedAt:          s.createdAt,
+		Status:             lo.ToPtr("failed"),
+		Output:             []Item{},
+		PreviousResponseID: s.previousResponseID,
 		Error: &Error{
-			Type:    "server_error",
-			Code:    code,
-			Message: message,
+			Type:      detail.Type,
+			Code:      detail.Code,
+			Message:   detail.Message,
+			Param:     lo.EmptyableToPtr(detail.Param),
+			RequestID: detail.RequestID,
 		},
 	}
 	if s.serviceTier != "" {
@@ -1159,6 +1224,13 @@ func (s *responsesInboundStream) buildFailedResponse(code, message string) *Resp
 	if s.aggregator != nil {
 		aggregated := s.aggregator.buildResponse()
 		response.Output = aggregated.Output
+		response.Usage = aggregated.Usage
+		if response.ServiceTier == nil {
+			response.ServiceTier = aggregated.ServiceTier
+		}
+	}
+	if s.usage != nil {
+		response.Usage = ConvertLLMUsageToResponsesUsage(s.usage)
 	}
 
 	return response

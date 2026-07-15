@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -714,6 +715,119 @@ type Response struct {
 	// TransformerMetadata stores metadata from transformers that process the response.
 	// This field is ignored when serializing to JSON and is only used internally by transformers.
 	TransformerMetadata map[string]any `json:"transformer_metadata,omitempty"`
+
+	// ProviderTerminalOutcome preserves provider lifecycle semantics that cannot
+	// be inferred from a cross-protocol finish reason alone.
+	ProviderTerminalOutcome ResponseTerminalOutcome `json:"-"`
+}
+
+type ResponseTerminalOutcome string
+
+const (
+	ResponseTerminalOutcomeNone       ResponseTerminalOutcome = ""
+	ResponseTerminalOutcomeFailed     ResponseTerminalOutcome = "failed"
+	ResponseTerminalOutcomeCanceled   ResponseTerminalOutcome = "canceled"
+	ResponseTerminalOutcomeIncomplete ResponseTerminalOutcome = "incomplete"
+)
+
+// TerminalOutcome classifies provider terminal states without deciding how a
+// client protocol should render them.
+func (r *Response) TerminalOutcome() ResponseTerminalOutcome {
+	if r == nil {
+		return ResponseTerminalOutcomeNone
+	}
+	if r.ProviderTerminalOutcome != ResponseTerminalOutcomeNone {
+		return r.ProviderTerminalOutcome
+	}
+	if r.Error != nil {
+		return ResponseTerminalOutcomeFailed
+	}
+
+	for _, choice := range r.Choices {
+		if choice.FinishReason == nil {
+			continue
+		}
+
+		switch strings.ToLower(*choice.FinishReason) {
+		case "cancelled", "canceled":
+			return ResponseTerminalOutcomeCanceled
+		case "error":
+			return ResponseTerminalOutcomeFailed
+		}
+	}
+
+	return ResponseTerminalOutcomeNone
+}
+
+// TerminalError returns the application-level error represented by this response.
+// Provider cancellations are failures at protocol boundaries that do not support
+// a distinct cancelled terminal response.
+func (r *Response) TerminalError() *ResponseError {
+	if r == nil {
+		return nil
+	}
+
+	if r.Error != nil {
+		if r.Error.StatusCode != 0 {
+			return r.Error
+		}
+
+		normalized := *r.Error
+		normalized.StatusCode = http.StatusInternalServerError
+
+		return &normalized
+	}
+	switch r.ProviderTerminalOutcome {
+	case ResponseTerminalOutcomeFailed:
+		return &ResponseError{
+			StatusCode: http.StatusInternalServerError,
+			Detail: ErrorDetail{
+				Code:    "response_failed",
+				Message: "upstream response failed",
+				Type:    "server_error",
+			},
+		}
+	case ResponseTerminalOutcomeCanceled:
+		return &ResponseError{
+			StatusCode: http.StatusInternalServerError,
+			Detail: ErrorDetail{
+				Code:    "response_cancelled",
+				Message: "upstream response cancelled",
+				Type:    "server_error",
+			},
+			cause: context.Canceled,
+		}
+	}
+
+	for _, choice := range r.Choices {
+		if choice.FinishReason == nil {
+			continue
+		}
+
+		switch strings.ToLower(*choice.FinishReason) {
+		case "cancelled", "canceled":
+			return &ResponseError{
+				StatusCode: http.StatusInternalServerError,
+				Detail: ErrorDetail{
+					Code:    "response_cancelled",
+					Message: "upstream response cancelled",
+					Type:    "server_error",
+				},
+				cause: context.Canceled,
+			}
+		case "error":
+			return &ResponseError{
+				StatusCode: http.StatusInternalServerError,
+				Detail: ErrorDetail{
+					Code:    "response_failed",
+					Message: "upstream response failed",
+					Type:    "server_error",
+				},
+			}
+		}
+	}
+
+	return nil
 }
 
 // Choice represents a choice in the response.
@@ -842,6 +956,7 @@ type PromptTokensDetails struct {
 type ResponseError struct {
 	StatusCode int         `json:"-"`
 	Detail     ErrorDetail `json:"error"`
+	cause      error
 }
 
 func (e ResponseError) Error() string {
@@ -871,6 +986,10 @@ func (e ResponseError) Error() string {
 	}
 
 	return sb.String()
+}
+
+func (e ResponseError) Unwrap() error {
+	return e.cause
 }
 
 // ErrorDetail represents error details.

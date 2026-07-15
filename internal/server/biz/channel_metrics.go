@@ -598,6 +598,14 @@ func (m *PerformanceRecord) MarkFailed(errorCode int) {
 	m.EndTime = time.Now()
 }
 
+// MarkIncomplete records a provider-declared incomplete terminal outcome
+// without fabricating an HTTP response status code.
+func (m *PerformanceRecord) MarkIncomplete() {
+	m.Success = false
+	m.RequestCompleted = true
+	m.EndTime = time.Now()
+}
+
 // MarkCanceled marks the request as canceled by context.
 func (m *PerformanceRecord) MarkCanceled() {
 	m.Success = false

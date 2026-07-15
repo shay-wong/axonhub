@@ -23,6 +23,7 @@ import (
 	"github.com/looplj/axonhub/llm/pipeline"
 	"github.com/looplj/axonhub/llm/streams"
 	"github.com/looplj/axonhub/llm/transformer"
+	responseapi "github.com/looplj/axonhub/llm/transformer/openai/responses"
 )
 
 // mockTransformer is a simple mock transformer for testing.
@@ -397,7 +398,8 @@ func TestPersistentOutboundTransformer_TransformRequest_ResetsStreamCompletedFor
 	processor := &PersistentOutboundTransformer{
 		wrapped: &mockTransformer{},
 		state: &PersistenceState{
-			StreamCompleted: true,
+			StreamCompleted:     true,
+			StreamTerminalError: fmt.Errorf("previous attempt failed"),
 			ChannelModelsCandidates: []*ChannelModelsCandidate{
 				{Channel: channel, Priority: 0, Models: []biz.ChannelModelEntry{{RequestModel: "gpt-4", ActualModel: "gpt-4"}}},
 			},
@@ -420,6 +422,7 @@ func TestPersistentOutboundTransformer_TransformRequest_ResetsStreamCompletedFor
 	_, err := processor.TransformRequest(ctx, llmRequest)
 	require.NoError(t, err)
 	require.False(t, processor.state.StreamCompleted)
+	require.NoError(t, processor.state.StreamTerminalError)
 }
 
 func TestPersistentOutboundTransformer_CanRetry(t *testing.T) {
@@ -827,6 +830,264 @@ func TestOutboundPersistentStream_Close_AggregatedResponsesCompletionHandling(t 
 		require.Empty(t, usageLog.AppliedServiceTier)
 		require.Equal(t, "priority", usageLog.ServiceTier)
 	})
+}
+
+func TestOutboundPersistentStream_Close_PersistsResponsesTerminalFailures(t *testing.T) {
+	tests := []struct {
+		name       string
+		event      *httpclient.StreamEvent
+		body       []byte
+		usage      *llm.Usage
+		wantStatus requestexecution.Status
+		wantError  string
+	}{
+		{
+			name: "failed without usage",
+			event: &httpclient.StreamEvent{Type: "response.failed", Data: []byte(`{
+				"type":"response.failed",
+				"response":{"id":"resp_failed","status":"failed","error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"context window exceeded"}}
+			}`)},
+			body:       []byte(`{"id":"resp_failed","status":"failed","error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"context window exceeded"}}`),
+			wantStatus: requestexecution.StatusFailed,
+			wantError:  "context_length_exceeded",
+		},
+		{
+			name: "failed with usage",
+			event: &httpclient.StreamEvent{Type: "response.failed", Data: []byte(`{
+				"type":"response.failed",
+				"response":{"id":"resp_failed","status":"failed","error":{"type":"server_error","code":"server_error","message":"upstream failed"},"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}
+			}`)},
+			body:       []byte(`{"id":"resp_failed","status":"failed","error":{"type":"server_error","code":"server_error","message":"upstream failed"},"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}`),
+			usage:      &llm.Usage{PromptTokens: 10, CompletionTokens: 2, TotalTokens: 12},
+			wantStatus: requestexecution.StatusFailed,
+			wantError:  "server_error",
+		},
+		{
+			name: "incomplete",
+			event: &httpclient.StreamEvent{Type: "response.incomplete", Data: []byte(`{
+				"type":"response.incomplete",
+				"response":{"id":"resp_incomplete","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}
+			}`)},
+			body:       []byte(`{"id":"resp_incomplete","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}`),
+			wantStatus: requestexecution.StatusFailed,
+			wantError:  "max_output_tokens",
+		},
+		{
+			name: "cancelled",
+			event: &httpclient.StreamEvent{Type: "response.cancelled", Data: []byte(`{
+				"type":"response.cancelled",
+				"response":{"id":"resp_cancelled","status":"canceled"}
+			}`)},
+			body:       []byte(`{"id":"resp_cancelled","status":"canceled"}`),
+			wantStatus: requestexecution.StatusCanceled,
+			wantError:  "response canceled",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+			defer client.Close()
+
+			ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+			project := createTestProject(t, ctx, client)
+			ch := createTestChannel(t, ctx, client)
+			_, requestService, systemService, usageLogService := setupTestServices(t, client)
+			require.NoError(t, systemService.SetStoragePolicy(ctx, &biz.StoragePolicy{
+				StoreChunks:       true,
+				StoreResponseBody: true,
+			}))
+
+			req, err := client.Request.Create().
+				SetProjectID(project.ID).
+				SetChannelID(ch.ID).
+				SetModelID("gpt-4.1").
+				SetStatus(request.StatusPending).
+				SetRequestBody([]byte(`{"stream":true}`)).
+				Save(ctx)
+			require.NoError(t, err)
+			exec, err := client.RequestExecution.Create().
+				SetRequestID(req.ID).
+				SetProjectID(project.ID).
+				SetChannelID(ch.ID).
+				SetModelID("gpt-4.1").
+				SetRequestBody([]byte(`{"stream":true}`)).
+				SetFormat("openai/responses").
+				SetStatus(requestexecution.StatusPending).
+				SetStream(true).
+				Save(ctx)
+			require.NoError(t, err)
+
+			state := &PersistenceState{}
+			stream := NewOutboundPersistentStream(
+				ctx,
+				&sliceEventStream{events: []*httpclient.StreamEvent{tt.event}},
+				req,
+				exec,
+				requestService,
+				usageLogService,
+				&mockTransformer{
+					apiFormat:          llm.APIFormatOpenAIResponse,
+					aggregatedResponse: tt.body,
+					aggregatedMeta:     llm.ResponseMeta{ID: gjson.GetBytes(tt.body, "id").String(), Usage: tt.usage},
+				},
+				nil,
+				state,
+			)
+			for stream.Next() {
+				_ = stream.Current()
+			}
+			require.NoError(t, stream.Close())
+
+			dbExec, err := client.RequestExecution.Get(ctx, exec.ID)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantStatus, dbExec.Status)
+			require.Contains(t, dbExec.ErrorMessage, tt.wantError)
+			require.JSONEq(t, string(tt.body), string(dbExec.ResponseBody))
+			require.NotEmpty(t, dbExec.ResponseChunks)
+			require.False(t, state.StreamCompleted)
+			require.Error(t, state.StreamTerminalError)
+		})
+	}
+}
+
+func TestOutboundPersistentStream_Close_PersistsStandaloneResponsesErrorWithoutChunks(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	project := createTestProject(t, ctx, client)
+	ch := createTestChannel(t, ctx, client)
+	_, requestService, systemService, usageLogService := setupTestServices(t, client)
+	require.NoError(t, systemService.SetStoragePolicy(ctx, &biz.StoragePolicy{
+		StoreChunks:       false,
+		StoreResponseBody: true,
+	}))
+
+	req, err := client.Request.Create().
+		SetProjectID(project.ID).
+		SetChannelID(ch.ID).
+		SetModelID("gpt-5").
+		SetStatus(request.StatusPending).
+		SetRequestBody([]byte(`{"stream":true}`)).
+		Save(ctx)
+	require.NoError(t, err)
+	exec, err := client.RequestExecution.Create().
+		SetRequestID(req.ID).
+		SetProjectID(project.ID).
+		SetChannelID(ch.ID).
+		SetModelID("gpt-5").
+		SetRequestBody([]byte(`{"stream":true}`)).
+		SetFormat("openai/responses").
+		SetStatus(requestexecution.StatusPending).
+		SetStream(true).
+		Save(ctx)
+	require.NoError(t, err)
+
+	transformer, err := responseapi.NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+	errorBody := []byte(`{
+		"type":"error",
+		"status":400,
+		"code":"invalid_request",
+		"message":"bad input",
+		"param":"input",
+		"request_id":"req_123"
+	}`)
+	stream := NewOutboundPersistentStream(
+		ctx,
+		&sliceEventStream{events: []*httpclient.StreamEvent{{Type: "error", Data: errorBody}}},
+		req,
+		exec,
+		requestService,
+		usageLogService,
+		transformer,
+		nil,
+		&PersistenceState{},
+	)
+	for stream.Next() {
+		_ = stream.Current()
+	}
+	require.NoError(t, stream.Close())
+
+	dbExec, err := client.RequestExecution.Get(ctx, exec.ID)
+	require.NoError(t, err)
+	require.Equal(t, requestexecution.StatusFailed, dbExec.Status)
+	require.NotNil(t, dbExec.ResponseStatusCode)
+	require.Equal(t, 400, *dbExec.ResponseStatusCode)
+	require.Contains(t, dbExec.ErrorMessage, "invalid_request")
+	require.JSONEq(t, string(errorBody), string(dbExec.ResponseBody))
+	require.Empty(t, dbExec.ResponseChunks)
+
+	invalidExec, err := client.RequestExecution.Create().
+		SetRequestID(req.ID).
+		SetProjectID(project.ID).
+		SetChannelID(ch.ID).
+		SetModelID("gpt-5").
+		SetRequestBody([]byte(`{"stream":true}`)).
+		SetFormat("openai/responses").
+		SetStatus(requestexecution.StatusPending).
+		SetStream(true).
+		Save(ctx)
+	require.NoError(t, err)
+	invalidStatusBody := []byte(`{"type":"error","status":200,"code":"invalid_status","message":"bad status"}`)
+	invalidStatusStream := NewOutboundPersistentStream(
+		ctx,
+		&sliceEventStream{events: []*httpclient.StreamEvent{{Type: "error", Data: invalidStatusBody}}},
+		req,
+		invalidExec,
+		requestService,
+		usageLogService,
+		transformer,
+		nil,
+		&PersistenceState{},
+	)
+	for invalidStatusStream.Next() {
+		_ = invalidStatusStream.Current()
+	}
+	require.NoError(t, invalidStatusStream.Close())
+
+	invalidDBExec, err := client.RequestExecution.Get(ctx, invalidExec.ID)
+	require.NoError(t, err)
+	require.Equal(t, requestexecution.StatusFailed, invalidDBExec.Status)
+	require.NotNil(t, invalidDBExec.ResponseStatusCode)
+	require.Equal(t, 500, *invalidDBExec.ResponseStatusCode)
+	require.JSONEq(t, string(invalidStatusBody), string(invalidDBExec.ResponseBody))
+}
+
+func TestStreamTerminalError_PreservesFlatErrorFields(t *testing.T) {
+	err := streamTerminalError(&httpclient.StreamEvent{Type: "error", Data: []byte(`{
+		"type":"error",
+		"status":400,
+		"code":"invalid_request",
+		"message":"bad input",
+		"param":"input",
+		"request_id":"req_123"
+	}`)})
+
+	var responseErr *llm.ResponseError
+	require.ErrorAs(t, err, &responseErr)
+	require.Equal(t, 400, responseErr.StatusCode)
+	require.Equal(t, "invalid_request", responseErr.Detail.Code)
+	require.Equal(t, "error", responseErr.Detail.Type)
+	require.Equal(t, "input", responseErr.Detail.Param)
+	require.Equal(t, "req_123", responseErr.Detail.RequestID)
+}
+
+func TestObserveStreamTerminal_PreservesFirstProviderError(t *testing.T) {
+	state := &PersistenceState{}
+	observeStreamTerminal(state, &httpclient.StreamEvent{Type: "response.failed", Data: []byte(`{
+		"type":"response.failed",
+		"response":{"error":{"type":"invalid_request_error","code":"provider_error","message":"provider failed"}}
+	}`)})
+	observeStreamTerminal(state, &httpclient.StreamEvent{Type: "error", Data: []byte(`{
+		"type":"error","code":"format_error","message":"client formatting failed"
+	}`)})
+
+	var responseErr *llm.ResponseError
+	require.ErrorAs(t, state.StreamTerminalError, &responseErr)
+	require.Equal(t, "provider_error", responseErr.Detail.Code)
+	require.Equal(t, "provider failed", responseErr.Detail.Message)
 }
 
 func TestPersistentOutboundTransformer_TransformRequest_WithPrepopulatedState(t *testing.T) {

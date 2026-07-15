@@ -16,6 +16,42 @@ import (
 	"github.com/looplj/axonhub/llm/transformer/shared"
 )
 
+func TestInboundStream_EmitsSingleLayerError(t *testing.T) {
+	stream, err := NewInboundTransformer().TransformStream(t.Context(), streams.SliceStream([]*llm.Response{{
+		Error: &llm.ResponseError{StatusCode: 400, Detail: llm.ErrorDetail{
+			Type:    "invalid_request_error",
+			Code:    "context_length_exceeded",
+			Message: "context window exceeded",
+		}},
+		Choices: []llm.Choice{{FinishReason: lo.ToPtr("error")}},
+	}, llm.DoneResponse}))
+	require.NoError(t, err)
+
+	events, err := streams.All(stream)
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	require.Equal(t, "error", events[0].Type)
+	require.JSONEq(t, `{
+		"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"context window exceeded"}
+	}`, string(events[0].Data))
+	require.Equal(t, "[DONE]", string(events[1].Data))
+}
+
+func TestInboundTransformer_MapsCancellationToOpenAIError(t *testing.T) {
+	response := &llm.Response{Choices: []llm.Choice{{FinishReason: lo.ToPtr("cancelled")}}}
+	transformer := NewInboundTransformer()
+
+	nonStream, err := transformer.TransformResponse(t.Context(), response)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusInternalServerError, nonStream.StatusCode)
+	require.JSONEq(t, `{"error":{"code":"response_cancelled","message":"upstream response cancelled","type":"server_error"}}`, string(nonStream.Body))
+
+	streamEvent, err := transformer.TransformStreamChunk(t.Context(), response)
+	require.NoError(t, err)
+	require.Equal(t, "error", streamEvent.Type)
+	require.JSONEq(t, `{"error":{"code":"response_cancelled","message":"upstream response cancelled","type":"server_error"}}`, string(streamEvent.Data))
+}
+
 func TestInboundTransformer_TransformRequest(t *testing.T) {
 	transformer := NewInboundTransformer()
 

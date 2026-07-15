@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 
 	"github.com/looplj/axonhub/llm"
@@ -43,6 +44,36 @@ func AggregateStreamChunks(
 		// Skip empty or [DONE] events
 		if chunk == nil || len(chunk.Data) == 0 || string(chunk.Data) == "[DONE]" {
 			continue
+		}
+
+		var errorEnvelope struct {
+			Error *ErrorDetail `json:"error"`
+		}
+		if err := json.Unmarshal(chunk.Data, &errorEnvelope); err == nil && errorEnvelope.Error != nil {
+			statusCode := errorEnvelope.Error.Code
+			if statusCode == 0 {
+				statusCode = chunk.StatusCode
+			}
+			if statusCode == 0 {
+				statusCode = http.StatusInternalServerError
+			}
+			errorType := errorEnvelope.Error.Status
+			if errorType == "" {
+				errorType = "api_error"
+			}
+			message := errorEnvelope.Error.Message
+			if message == "" {
+				message = "upstream request failed"
+			}
+
+			return nil, llm.ResponseMeta{}, &llm.ResponseError{
+				StatusCode: statusCode,
+				Detail: llm.ErrorDetail{
+					Message:   message,
+					Type:      errorType,
+					Truncated: errorEnvelope.Error.Truncated,
+				},
+			}
 		}
 
 		var geminiResp GenerateContentResponse

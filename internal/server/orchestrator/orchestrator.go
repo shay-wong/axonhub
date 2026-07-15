@@ -2,10 +2,12 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/looplj/axonhub/internal/authz"
 	"github.com/looplj/axonhub/internal/contexts"
+	entrequest "github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/metrics"
 	"github.com/looplj/axonhub/internal/pkg/xcontext"
@@ -303,7 +305,6 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		// order. The request-only tier capture below is a no-op for responses.
 		captureRawProviderResponse(outbound, processor.SystemService),
 		captureRawProviderStream(outbound, processor.SystemService),
-
 	)
 
 	pipelineOpts = append(pipelineOpts, pipeline.WithMiddlewares(middlewares...))
@@ -332,10 +333,34 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		}
 
 		// Update the main request status based on error
-		if request := outbound.GetRequest(); request != nil {
-			if updateErr := processor.RequestService.UpdateRequestStatusFromError(
+		if requestRow := outbound.GetRequest(); requestRow != nil {
+			terminalErr := state.StreamTerminalError
+			if terminalErr != nil {
+				responseBody := state.StreamTerminalBody
+				if transformed := inbound.TransformError(persistCtx, terminalErr); transformed != nil && len(transformed.Body) > 0 {
+					responseBody = transformed.Body
+				}
+				status := entrequest.StatusFailed
+				if errors.Is(terminalErr, context.Canceled) {
+					status = entrequest.StatusCanceled
+				}
+				if len(responseBody) > 0 {
+					if updateErr := processor.RequestService.UpdateRequestStatusExternalIDAndResponseBody(
+						persistCtx,
+						requestRow.ID,
+						status,
+						terminalResponseID(state.StreamTerminalBody),
+						responseBody,
+						latencyMetrics(state.Perf),
+					); updateErr != nil {
+						log.Warn(persistCtx, "Failed to persist pre-read terminal request response", log.Cause(updateErr))
+					}
+				} else if updateErr := processor.RequestService.UpdateRequestStatusFromError(persistCtx, requestRow.ID, terminalErr); updateErr != nil {
+					log.Warn(persistCtx, "Failed to update terminal request status from error", log.Cause(updateErr))
+				}
+			} else if updateErr := processor.RequestService.UpdateRequestStatusFromError(
 				persistCtx,
-				request.ID,
+				requestRow.ID,
 				err,
 			); updateErr != nil {
 				log.Warn(persistCtx, "Failed to update request status from error", log.Cause(updateErr))

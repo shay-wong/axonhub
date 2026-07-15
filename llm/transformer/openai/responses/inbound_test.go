@@ -1306,12 +1306,19 @@ func TestInboundTransformer_TransformError(t *testing.T) {
 					Message: "Rate limit exceeded",
 					Type:    "rate_limit_error",
 					Code:    "rate_limit",
+					Param:   "model",
 				},
 			},
 			validate: func(t *testing.T, result *httpclient.Error) {
 				require.Equal(t, http.StatusTooManyRequests, result.StatusCode)
-				require.Contains(t, string(result.Body), "Rate limit exceeded")
-				require.Contains(t, string(result.Body), "rate_limit_error")
+				require.JSONEq(t, `{
+					"error":{
+						"message":"Rate limit exceeded",
+						"type":"rate_limit_error",
+						"code":"rate_limit",
+						"param":"model"
+					}
+				}`, string(result.Body))
 			},
 		},
 		{

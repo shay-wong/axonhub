@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net/http"
 
 	"github.com/kaptinlin/jsonrepair"
 	"github.com/samber/lo"
@@ -37,6 +38,26 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 		// log.Debug(ctx, "chat stream event", log.Any("event", event))
 
 		switch event.Type {
+		case "error":
+			detail := llm.ErrorDetail{Message: "upstream request failed", Type: "api_error", RequestID: event.RequestID}
+			if event.Error != nil {
+				detail.Message = event.Error.Message
+				detail.Type = event.Error.Type
+				detail.Truncated = event.Error.Truncated
+			}
+			if detail.Message == "" {
+				detail.Message = "upstream request failed"
+			}
+			if detail.Type == "" {
+				detail.Type = "api_error"
+			}
+
+			statusCode := chunk.StatusCode
+			if statusCode == 0 {
+				statusCode = http.StatusInternalServerError
+			}
+
+			return nil, llm.ResponseMeta{}, &llm.ResponseError{StatusCode: statusCode, Detail: detail}
 		case "message_start":
 			messageStart = &event
 			if event.Message != nil && event.Message.Usage != nil {

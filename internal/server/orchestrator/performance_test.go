@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,7 +22,39 @@ import (
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
+	"github.com/looplj/axonhub/llm/streams"
 )
+
+type responseEventsThenError struct {
+	events []*llm.Response
+	index  int
+	err    error
+}
+
+func (s *responseEventsThenError) Next() bool {
+	if s.index >= len(s.events) {
+		return false
+	}
+	s.index++
+
+	return true
+}
+
+func (s *responseEventsThenError) Current() *llm.Response {
+	return s.events[s.index-1]
+}
+
+func (s *responseEventsThenError) Err() error {
+	if s.index >= len(s.events) {
+		return s.err
+	}
+
+	return nil
+}
+
+func (s *responseEventsThenError) Close() error { return nil }
+
+var _ streams.Stream[*llm.Response] = (*responseEventsThenError)(nil)
 
 // mockChannelService is a mock implementation of ChannelService for testing
 type mockChannelService struct{}
@@ -84,6 +117,101 @@ func TestPerformanceRecording_OnInboundLlmRequest_SetsStreamFlag(t *testing.T) {
 			assert.Equal(t, tt.expectedFlag, state.Perf.Stream)
 		})
 	}
+}
+
+func TestRecordTerminalOutcomePerformance(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+	channelService, _, _, _ := setupTestServices(t, client)
+
+	tests := []struct {
+		name       string
+		response   *llm.Response
+		wantCode   int
+		wantCancel bool
+	}{
+		{
+			name: "failed",
+			response: &llm.Response{
+				ProviderTerminalOutcome: llm.ResponseTerminalOutcomeFailed,
+				Error:                   &llm.ResponseError{StatusCode: http.StatusServiceUnavailable},
+			},
+			wantCode: http.StatusServiceUnavailable,
+		},
+		{
+			name:     "incomplete",
+			response: &llm.Response{ProviderTerminalOutcome: llm.ResponseTerminalOutcomeIncomplete},
+		},
+		{
+			name:       "canceled",
+			response:   &llm.Response{ProviderTerminalOutcome: llm.ResponseTerminalOutcomeCanceled},
+			wantCancel: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			perf := &biz.PerformanceRecord{ChannelID: 1, StartTime: time.Now()}
+			state := &PersistenceState{Perf: perf, ChannelService: channelService}
+
+			require.True(t, recordTerminalOutcomePerformance(t.Context(), state, tt.response))
+			require.True(t, perf.RequestCompleted)
+			require.False(t, perf.Success)
+			require.Equal(t, tt.wantCode, perf.ResponseStatusCode)
+			require.Equal(t, tt.wantCancel, perf.Canceled)
+		})
+	}
+}
+
+func TestUsageBeforeLateStreamErrorDoesNotRecordSuccess(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+	channelService, _, _, _ := setupTestServices(t, client)
+	channel := &biz.Channel{Channel: &ent.Channel{ID: 1, Name: "test-channel"}, Outbound: &mockTransformer{}}
+	state := &PersistenceState{
+		Perf:           &biz.PerformanceRecord{ChannelID: channel.ID, StartTime: time.Now(), Stream: true},
+		ChannelService: channelService,
+		OriginalModel:  "gpt-5",
+		CurrentCandidate: &ChannelModelsCandidate{
+			Channel: channel,
+		},
+	}
+	lateErr := errors.New("stream failed after usage")
+	source := &responseEventsThenError{
+		events: []*llm.Response{{Usage: &llm.Usage{CompletionTokens: 3, TotalTokens: 3}}},
+		err:    lateErr,
+	}
+	performanceStream := &recordPerformanceStream{ctx: t.Context(), stream: source, state: state}
+	modelCircuitBreaker := biz.NewModelCircuitBreaker()
+	circuitStream := &probeReleasingStream{
+		ctx:                 t.Context(),
+		stream:              performanceStream,
+		state:               state,
+		modelCircuitBreaker: modelCircuitBreaker,
+		channelID:           channel.ID,
+		modelID:             "gpt-5",
+	}
+
+	for circuitStream.Next() {
+		_ = circuitStream.Current()
+	}
+	require.ErrorIs(t, circuitStream.Err(), lateErr)
+	require.True(t, state.Perf.RequestCompleted)
+	require.False(t, state.Perf.Success)
+	stats := modelCircuitBreaker.GetModelCircuitBreakerStats(t.Context(), channel.ID, "gpt-5")
+	require.NotNil(t, stats)
+	require.Equal(t, 1, stats.ConsecutiveFailures)
+
+	outbound := &PersistentOutboundTransformer{state: state}
+	tracker := &modelCircuitBreakerTracker{outbound: outbound, modelCircuitBreaker: modelCircuitBreaker}
+	tracker.OnOutboundRawError(t.Context(), lateErr)
+	(&performanceRecording{outbound: outbound}).OnOutboundRawError(t.Context(), lateErr)
+
+	require.True(t, state.Perf.RequestCompleted)
+	require.False(t, state.Perf.Success)
+	stats = modelCircuitBreaker.GetModelCircuitBreakerStats(t.Context(), channel.ID, "gpt-5")
+	require.NotNil(t, stats)
+	require.Equal(t, 1, stats.ConsecutiveFailures)
 }
 
 // TestPerformanceRecording_OnOutboundRawRequest_PreservesStreamFlag verifies that

@@ -8,8 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/looplj/axonhub/internal/authz"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/enttest"
+	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/pkg/xcache"
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
@@ -23,6 +25,7 @@ type mockInboundTransformer struct {
 	aggregateResponseBody []byte
 	aggregateMeta         llm.ResponseMeta
 	aggregateErr          error
+	transformedError      *httpclient.Error
 }
 
 func (m *mockInboundTransformer) APIFormat() llm.APIFormat {
@@ -42,7 +45,7 @@ func (m *mockInboundTransformer) TransformStream(ctx context.Context, stream str
 }
 
 func (m *mockInboundTransformer) TransformError(ctx context.Context, rawErr error) *httpclient.Error {
-	return nil
+	return m.transformedError
 }
 
 func (m *mockInboundTransformer) AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent) ([]byte, llm.ResponseMeta, error) {
@@ -258,6 +261,162 @@ func TestInboundPersistentStream_Close_WithAggregationError(t *testing.T) {
 
 	assert.False(t, state.StreamCompleted, "StreamCompleted should remain false after Close() with aggregation error")
 	assert.True(t, mockStream.closed, "Stream should be closed")
+}
+
+func TestInboundPersistentStream_Close_PersistsResponseFailure(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	project := createTestProject(t, ctx, client)
+	ch := createTestChannel(t, ctx, client)
+	_, requestService, systemService, _ := setupTestServices(t, client)
+	require.NoError(t, systemService.SetStoragePolicy(ctx, &biz.StoragePolicy{
+		StoreChunks:       true,
+		StoreResponseBody: true,
+	}))
+
+	req, err := client.Request.Create().
+		SetProjectID(project.ID).
+		SetChannelID(ch.ID).
+		SetModelID("gpt-4.1").
+		SetStatus(request.StatusPending).
+		SetRequestBody([]byte(`{"stream":true}`)).
+		Save(ctx)
+	require.NoError(t, err)
+
+	failedBody := []byte(`{
+		"id":"resp_failed",
+		"status":"failed",
+		"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"context window exceeded"},
+		"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}
+	}`)
+	state := &PersistenceState{}
+	stream := NewInboundPersistentStream(
+		ctx,
+		&mockStream{events: []*httpclient.StreamEvent{{
+			Type: "response.failed",
+			Data: []byte(`{
+				"type":"response.failed",
+				"response":{
+					"id":"resp_failed",
+					"status":"failed",
+					"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"context window exceeded"},
+					"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}
+				}
+			}`),
+		}}},
+		req,
+		nil,
+		requestService,
+		&mockInboundTransformer{
+			aggregateResponseBody: failedBody,
+			aggregateMeta: llm.ResponseMeta{
+				ID:    "resp_failed",
+				Usage: &llm.Usage{PromptTokens: 10, CompletionTokens: 2, TotalTokens: 12},
+			},
+		},
+		nil,
+		state,
+	)
+	for stream.Next() {
+		_ = stream.Current()
+	}
+	require.NoError(t, stream.Close())
+
+	dbReq, err := client.Request.Get(ctx, req.ID)
+	require.NoError(t, err)
+	require.Equal(t, request.StatusFailed, dbReq.Status)
+	require.JSONEq(t, string(failedBody), string(dbReq.ResponseBody))
+	require.NotEmpty(t, dbReq.ResponseChunks)
+	require.False(t, state.StreamCompleted)
+	require.Error(t, state.StreamTerminalError)
+	require.Contains(t, state.StreamTerminalError.Error(), "context_length_exceeded")
+}
+
+func TestInboundPersistentStream_Close_PersistsTransformedTerminalErrorWithoutClientEnvelope(t *testing.T) {
+	tests := []struct {
+		name           string
+		events         []*httpclient.StreamEvent
+		aggregatedBody []byte
+		aggregatedMeta llm.ResponseMeta
+		wantExternalID string
+	}{
+		{
+			name:           "zero client chunks",
+			aggregatedBody: []byte(`{}`),
+		},
+		{
+			name: "partial success chunks",
+			events: []*httpclient.StreamEvent{{
+				Data: []byte(`{"id":"chatcmpl_partial","choices":[{"delta":{"content":"partial"}}]}`),
+			}},
+			aggregatedBody: []byte(`{"id":"chatcmpl_partial","choices":[{"message":{"content":"partial"}}]}`),
+			aggregatedMeta: llm.ResponseMeta{ID: "chatcmpl_partial"},
+			wantExternalID: "chatcmpl_partial",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+			defer client.Close()
+
+			ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+			project := createTestProject(t, ctx, client)
+			ch := createTestChannel(t, ctx, client)
+			_, requestService, systemService, _ := setupTestServices(t, client)
+			require.NoError(t, systemService.SetStoragePolicy(ctx, &biz.StoragePolicy{
+				StoreChunks:       false,
+				StoreResponseBody: true,
+			}))
+
+			req, err := client.Request.Create().
+				SetProjectID(project.ID).
+				SetChannelID(ch.ID).
+				SetModelID("gpt-5").
+				SetStatus(request.StatusPending).
+				SetRequestBody([]byte(`{"stream":true}`)).
+				Save(ctx)
+			require.NoError(t, err)
+
+			clientErrorBody := []byte(`{"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"context window exceeded"}}`)
+			terminalErr := &llm.ResponseError{
+				StatusCode: 400,
+				Detail: llm.ErrorDetail{
+					Type:    "invalid_request_error",
+					Code:    "context_length_exceeded",
+					Message: "context window exceeded",
+				},
+			}
+			state := &PersistenceState{StreamTerminalError: terminalErr}
+			stream := NewInboundPersistentStream(
+				ctx,
+				&mockStream{events: tt.events},
+				req,
+				nil,
+				requestService,
+				&mockInboundTransformer{
+					aggregateResponseBody: tt.aggregatedBody,
+					aggregateMeta:         tt.aggregatedMeta,
+					transformedError:      &httpclient.Error{StatusCode: 400, Body: clientErrorBody},
+				},
+				nil,
+				state,
+			)
+			for stream.Next() {
+				_ = stream.Current()
+			}
+			require.NoError(t, stream.Close())
+
+			dbReq, err := client.Request.Get(ctx, req.ID)
+			require.NoError(t, err)
+			require.Equal(t, request.StatusFailed, dbReq.Status)
+			require.Equal(t, tt.wantExternalID, dbReq.ExternalID)
+			require.JSONEq(t, string(clientErrorBody), string(dbReq.ResponseBody))
+			require.Empty(t, dbReq.ResponseChunks)
+		})
+	}
 }
 
 func TestIsTerminalStreamEvent_AudioDoneEvents(t *testing.T) {
