@@ -14,6 +14,9 @@ import (
 	"github.com/looplj/axonhub/internal/ent/datastorage"
 	"github.com/looplj/axonhub/internal/ent/enttest"
 	"github.com/looplj/axonhub/internal/ent/project"
+	"github.com/looplj/axonhub/internal/ent/request"
+	"github.com/looplj/axonhub/internal/ent/requestexecution"
+	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/pkg/xcache"
 	"github.com/looplj/axonhub/internal/pkg/xfile"
 )
@@ -142,6 +145,119 @@ func TestRequestService_LoadersReturnEmptyJSONAndSlices(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, execResponseChunks)
 	require.Empty(t, execResponseChunks)
+}
+
+func TestRequestService_LoadersReturnTerminalResponseBodies(t *testing.T) {
+	traceService, client := setupTestTraceService(t, nil)
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	projectEntity, err := client.Project.Create().
+		SetName("failed-response-loader-project").
+		SetStatus(project.StatusActive).
+		Save(ctx)
+	require.NoError(t, err)
+
+	errorBody := []byte(`{"error":{"code":"context_length_exceeded"}}`)
+	for _, tt := range []struct {
+		name            string
+		requestStatus   request.Status
+		executionStatus requestexecution.Status
+		wantBody        bool
+	}{
+		{name: "pending", requestStatus: request.StatusPending, executionStatus: requestexecution.StatusPending},
+		{name: "processing", requestStatus: request.StatusProcessing, executionStatus: requestexecution.StatusProcessing},
+		{name: "completed", requestStatus: request.StatusCompleted, executionStatus: requestexecution.StatusCompleted, wantBody: true},
+		{name: "failed", requestStatus: request.StatusFailed, executionStatus: requestexecution.StatusFailed, wantBody: true},
+		{name: "canceled", requestStatus: request.StatusCanceled, executionStatus: requestexecution.StatusCanceled, wantBody: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := client.Request.Create().
+				SetProjectID(projectEntity.ID).
+				SetModelID("gpt-5.6-sol").
+				SetFormat("openai/responses").
+				SetRequestBody([]byte(`{}`)).
+				SetResponseBody(errorBody).
+				SetStatus(tt.requestStatus).
+				SetStream(true).
+				Save(ctx)
+			require.NoError(t, err)
+
+			responseBody, err := traceService.requestService.LoadResponseBody(ctx, req)
+			require.NoError(t, err)
+			if tt.wantBody {
+				require.JSONEq(t, string(errorBody), string(responseBody))
+			} else {
+				require.JSONEq(t, `{}`, string(responseBody))
+			}
+
+			exec, err := client.RequestExecution.Create().
+				SetProjectID(projectEntity.ID).
+				SetRequestID(req.ID).
+				SetModelID("gpt-5.6-sol").
+				SetFormat("openai/responses").
+				SetRequestBody([]byte(`{}`)).
+				SetResponseBody(errorBody).
+				SetStatus(tt.executionStatus).
+				SetStream(true).
+				Save(ctx)
+			require.NoError(t, err)
+
+			execResponseBody, err := traceService.requestService.LoadRequestExecutionResponseBody(ctx, exec)
+			require.NoError(t, err)
+			if tt.wantBody {
+				require.JSONEq(t, string(errorBody), string(execResponseBody))
+			} else {
+				require.JSONEq(t, `{}`, string(execResponseBody))
+			}
+		})
+	}
+
+	t.Run("external storage", func(t *testing.T) {
+		dir := t.TempDir()
+		storage, err := client.DataStorage.Create().
+			SetName("failed-response-fs-storage").
+			SetDescription("Failed response loader test storage").
+			SetPrimary(false).
+			SetType(datastorage.TypeFs).
+			SetSettings(&objects.DataStorageSettings{Directory: &dir}).
+			SetStatus(datastorage.StatusActive).
+			Save(ctx)
+		require.NoError(t, err)
+
+		req, err := client.Request.Create().
+			SetProjectID(projectEntity.ID).
+			SetDataStorageID(storage.ID).
+			SetModelID("gpt-5.6-sol").
+			SetFormat("openai/responses").
+			SetRequestBody([]byte(`{}`)).
+			SetStatus("failed").
+			SetStream(true).
+			Save(ctx)
+		require.NoError(t, err)
+		require.NoError(t, traceService.requestService.DataStorageService.SaveData(ctx, storage, GenerateResponseBodyKey(projectEntity.ID, req.ID), errorBody))
+
+		responseBody, err := traceService.requestService.LoadResponseBody(ctx, req)
+		require.NoError(t, err)
+		require.JSONEq(t, string(errorBody), string(responseBody))
+
+		exec, err := client.RequestExecution.Create().
+			SetProjectID(projectEntity.ID).
+			SetRequestID(req.ID).
+			SetDataStorageID(storage.ID).
+			SetModelID("gpt-5.6-sol").
+			SetFormat("openai/responses").
+			SetRequestBody([]byte(`{}`)).
+			SetStatus("failed").
+			SetStream(true).
+			Save(ctx)
+		require.NoError(t, err)
+		require.NoError(t, traceService.requestService.DataStorageService.SaveData(ctx, storage, GenerateExecutionResponseBodyKey(projectEntity.ID, req.ID, exec.ID), errorBody))
+
+		execResponseBody, err := traceService.requestService.LoadRequestExecutionResponseBody(ctx, exec)
+		require.NoError(t, err)
+		require.JSONEq(t, string(errorBody), string(execResponseBody))
+	})
 }
 
 func TestTraceService_GetOrCreateTrace(t *testing.T) {

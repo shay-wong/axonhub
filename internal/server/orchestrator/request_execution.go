@@ -265,6 +265,10 @@ func ExtractErrorInfo(err error) *biz.ExecutionErrorInfo {
 
 // ExtractErrorMessage extracts HTTP error message from error.
 func ExtractErrorMessage(err error) string {
+	if responseErr, ok := xerrors.As[*llm.ResponseError](err); ok && responseErr.Detail.Message != "" {
+		return responseErr.Detail.Message
+	}
+
 	httpErr, ok := xerrors.As[*httpclient.Error](err)
 	if !ok {
 		return err.Error()

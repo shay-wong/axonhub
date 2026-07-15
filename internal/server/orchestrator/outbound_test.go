@@ -849,7 +849,7 @@ func TestOutboundPersistentStream_Close_PersistsResponsesTerminalFailures(t *tes
 			}`)},
 			body:       []byte(`{"id":"resp_failed","status":"failed","error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"context window exceeded"}}`),
 			wantStatus: requestexecution.StatusFailed,
-			wantError:  "context_length_exceeded",
+			wantError:  "context window exceeded",
 		},
 		{
 			name: "failed with usage",
@@ -860,7 +860,7 @@ func TestOutboundPersistentStream_Close_PersistsResponsesTerminalFailures(t *tes
 			body:       []byte(`{"id":"resp_failed","status":"failed","error":{"type":"server_error","code":"server_error","message":"upstream failed"},"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}`),
 			usage:      &llm.Usage{PromptTokens: 10, CompletionTokens: 2, TotalTokens: 12},
 			wantStatus: requestexecution.StatusFailed,
-			wantError:  "server_error",
+			wantError:  "upstream failed",
 		},
 		{
 			name: "incomplete",
@@ -870,7 +870,7 @@ func TestOutboundPersistentStream_Close_PersistsResponsesTerminalFailures(t *tes
 			}`)},
 			body:       []byte(`{"id":"resp_incomplete","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}`),
 			wantStatus: requestexecution.StatusFailed,
-			wantError:  "max_output_tokens",
+			wantError:  "response incomplete: max_output_tokens",
 		},
 		{
 			name: "cancelled",
@@ -880,7 +880,7 @@ func TestOutboundPersistentStream_Close_PersistsResponsesTerminalFailures(t *tes
 			}`)},
 			body:       []byte(`{"id":"resp_cancelled","status":"canceled"}`),
 			wantStatus: requestexecution.StatusCanceled,
-			wantError:  "response canceled",
+			wantError:  "response canceled: context canceled",
 		},
 	}
 
@@ -942,7 +942,7 @@ func TestOutboundPersistentStream_Close_PersistsResponsesTerminalFailures(t *tes
 			dbExec, err := client.RequestExecution.Get(ctx, exec.ID)
 			require.NoError(t, err)
 			require.Equal(t, tt.wantStatus, dbExec.Status)
-			require.Contains(t, dbExec.ErrorMessage, tt.wantError)
+			require.Equal(t, tt.wantError, dbExec.ErrorMessage)
 			require.JSONEq(t, string(tt.body), string(dbExec.ResponseBody))
 			require.NotEmpty(t, dbExec.ResponseChunks)
 			require.False(t, state.StreamCompleted)
@@ -1015,7 +1015,7 @@ func TestOutboundPersistentStream_Close_PersistsStandaloneResponsesErrorWithoutC
 	require.Equal(t, requestexecution.StatusFailed, dbExec.Status)
 	require.NotNil(t, dbExec.ResponseStatusCode)
 	require.Equal(t, 400, *dbExec.ResponseStatusCode)
-	require.Contains(t, dbExec.ErrorMessage, "invalid_request")
+	require.Equal(t, "bad input", dbExec.ErrorMessage)
 	require.JSONEq(t, string(errorBody), string(dbExec.ResponseBody))
 	require.Empty(t, dbExec.ResponseChunks)
 
@@ -1050,6 +1050,7 @@ func TestOutboundPersistentStream_Close_PersistsStandaloneResponsesErrorWithoutC
 	invalidDBExec, err := client.RequestExecution.Get(ctx, invalidExec.ID)
 	require.NoError(t, err)
 	require.Equal(t, requestexecution.StatusFailed, invalidDBExec.Status)
+	require.Equal(t, "bad status", invalidDBExec.ErrorMessage)
 	require.NotNil(t, invalidDBExec.ResponseStatusCode)
 	require.Equal(t, 500, *invalidDBExec.ResponseStatusCode)
 	require.JSONEq(t, string(invalidStatusBody), string(invalidDBExec.ResponseBody))

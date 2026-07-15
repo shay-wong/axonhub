@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -14,11 +15,25 @@ import (
 	"github.com/looplj/axonhub/internal/ent/enttest"
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/server/biz"
+	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/pipeline"
 	"github.com/looplj/axonhub/llm/pipeline/stream"
 	"github.com/looplj/axonhub/llm/transformer/openai"
 )
+
+func TestExtractErrorMessage_ResponseError(t *testing.T) {
+	err := fmt.Errorf("failed to stream request: %w", &llm.ResponseError{
+		StatusCode: http.StatusBadGateway,
+		Detail: llm.ErrorDetail{
+			Message: "provider unavailable",
+			Code:    "upstream_error",
+			Type:    "server_error",
+		},
+	})
+
+	require.Equal(t, "provider unavailable", ExtractErrorMessage(err))
+}
 
 // TestChatCompletionOrchestrator_Process_ErrorHandling tests error handling.
 func TestChatCompletionOrchestrator_Process_ErrorHandling(t *testing.T) {

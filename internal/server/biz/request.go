@@ -761,7 +761,7 @@ func (s *RequestService) UpdateRequestExecutionTerminated(
 		ctx,
 		executionID,
 		status,
-		rawErr.Error(),
+		executionErrorMessageFromError(rawErr),
 		externalId,
 		responseBody,
 		metrics,
@@ -885,6 +885,15 @@ func executionErrorInfoFromError(rawErr error) *ExecutionErrorInfo {
 	return &ExecutionErrorInfo{StatusCode: &statusCode}
 }
 
+func executionErrorMessageFromError(rawErr error) string {
+	var responseErr *llm.ResponseError
+	if errors.As(rawErr, &responseErr) && responseErr.Detail.Message != "" {
+		return responseErr.Detail.Message
+	}
+
+	return rawErr.Error()
+}
+
 // UpdateRequestExecutionFailed updates request execution status to failed with error message and optional error details.
 func (s *RequestService) UpdateRequestExecutionFailed(
 	ctx context.Context,
@@ -931,7 +940,7 @@ func (s *RequestService) UpdateRequestExecutionStatusFromError(ctx context.Conte
 		status = requestexecution.StatusCanceled
 	}
 
-	return s.UpdateRequestExecutionStatus(ctx, executionID, status, rawErr.Error(), executionErrorInfoFromError(rawErr))
+	return s.UpdateRequestExecutionStatus(ctx, executionID, status, executionErrorMessageFromError(rawErr), executionErrorInfoFromError(rawErr))
 }
 
 type jsonStreamEvent struct {
@@ -1319,8 +1328,8 @@ func (s *RequestService) LoadResponseBody(ctx context.Context, req *ent.Request)
 		return nil, fmt.Errorf("request is nil")
 	}
 
-	// Only load response body if request is completed
-	if req.Status != request.StatusCompleted {
+	// Hide partial bodies while a request is active; terminal failures may carry provider errors.
+	if req.Status == request.StatusPending || req.Status == request.StatusProcessing {
 		return xjson.EmptyJSONRawMessage, nil
 	}
 
@@ -1439,8 +1448,8 @@ func (s *RequestService) LoadRequestExecutionResponseBody(ctx context.Context, e
 		return nil, fmt.Errorf("request execution is nil")
 	}
 
-	// Only load response body if execution is completed
-	if exec.Status != requestexecution.StatusCompleted {
+	// Hide partial bodies while an execution is active; terminal failures may carry provider errors.
+	if exec.Status == requestexecution.StatusPending || exec.Status == requestexecution.StatusProcessing {
 		return xjson.EmptyJSONRawMessage, nil
 	}
 

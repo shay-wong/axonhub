@@ -184,6 +184,7 @@ func TestChatCompletionOrchestrator_Process_FirstResponsesErrorPersistsRequestBo
 	dbExecution, err := client.RequestExecution.Query().Only(ctx)
 	require.NoError(t, err)
 	require.Equal(t, requestexecution.StatusFailed, dbExecution.Status)
+	require.Equal(t, "bad input", dbExecution.ErrorMessage)
 	require.JSONEq(t, string(providerErrorBody), string(dbExecution.ResponseBody))
 	require.NotNil(t, dbExecution.ResponseStatusCode)
 	require.Equal(t, 400, *dbExecution.ResponseStatusCode)
