@@ -3,7 +3,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -11,7 +13,13 @@ import (
 )
 
 func reloadRunningServer(pidFile string) error {
-	data, err := os.ReadFile(pidFile)
+	file, err := os.Open(pidFile)
+	if err != nil {
+		return fmt.Errorf("read PID file %s: %w", pidFile, err)
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
 	if err != nil {
 		return fmt.Errorf("read PID file %s: %w", pidFile, err)
 	}
@@ -19,6 +27,17 @@ func reloadRunningServer(pidFile string) error {
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
 		return fmt.Errorf("invalid PID in %s: %w", pidFile, err)
+	}
+	if pid <= 0 {
+		return fmt.Errorf("invalid PID in %s: PID must be positive", pidFile)
+	}
+
+	locked, err := pidFileLocked(file)
+	if err != nil {
+		return fmt.Errorf("check PID file lock %s: %w", pidFile, err)
+	}
+	if !locked {
+		return fmt.Errorf("PID file %s is not owned by a running AxonHub process", pidFile)
 	}
 
 	process, err := os.FindProcess(pid)
@@ -31,4 +50,9 @@ func reloadRunningServer(pidFile string) error {
 	}
 
 	return nil
+}
+
+func processExists(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
 }

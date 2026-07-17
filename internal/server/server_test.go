@@ -14,7 +14,7 @@ func TestNewDisablesTrustedProxyHeadersByDefault(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	srv := New(Config{Debug: true})
-	srv.Use(middleware.WithIPAccessControl(true, []string{"192.168.1.0/24"}, ""))
+	srv.Use(middleware.WithIPAccessControl(newServerTestIPAccessControlConfig(t)))
 	srv.GET("/", func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	})
@@ -35,7 +35,7 @@ func TestNewHonorsConfiguredTrustedProxies(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	srv := New(Config{Debug: true, TrustedProxies: []string{"10.0.0.1"}})
-	srv.Use(middleware.WithIPAccessControl(true, []string{"192.168.1.0/24"}, ""))
+	srv.Use(middleware.WithIPAccessControl(newServerTestIPAccessControlConfig(t)))
 	srv.GET("/", func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	})
@@ -50,4 +50,14 @@ func TestNewHonorsConfiguredTrustedProxies(t *testing.T) {
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d (configured trusted proxy should allow forwarded client IP)", recorder.Code, http.StatusNoContent)
 	}
+}
+
+func newServerTestIPAccessControlConfig(t *testing.T) *middleware.IPAccessControlConfig {
+	t.Helper()
+
+	config, err := middleware.NewIPAccessControlConfig(true, []string{"192.168.1.0/24"}, "")
+	if err != nil {
+		t.Fatalf("NewIPAccessControlConfig() error = %v", err)
+	}
+	return config
 }

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -72,25 +71,32 @@ func startServer() {
 		}),
 		conf.Module,
 		fx.Provide(metrics.NewProvider),
+		// Install the SIGHUP handler before publishing the PID file.
+		fx.Invoke(func(lc fx.Lifecycle, loader *conf.Loader, ipAccessControl *middleware.IPAccessControlConfig) {
+			registerConfigReload(lc, loader, ipAccessControl)
+		}),
 		fx.Invoke(func(lc fx.Lifecycle, cfg server.Config) {
+			var releasePidFile func() error
+
 			lc.Append(fx.Hook{
 				OnStart: func(ctx context.Context) error {
-					if cfg.PidFile == "" {
+					if cfg.PidFile == "" || !pidFileSupported() {
 						return nil
 					}
 					pidFile := expandHome(cfg.PidFile)
-					if err := writePidFile(pidFile); err != nil {
+					release, err := acquirePidFile(pidFile)
+					if err != nil {
 						return fmt.Errorf("write PID file %s: %w", pidFile, err)
 					}
+					releasePidFile = release
 					return nil
 				},
 				OnStop: func(ctx context.Context) error {
-					if cfg.PidFile == "" {
+					if releasePidFile == nil {
 						return nil
 					}
-					pidFile := expandHome(cfg.PidFile)
-					if err := os.Remove(pidFile); err != nil && !os.IsNotExist(err) {
-						return fmt.Errorf("remove PID file %s: %w", pidFile, err)
+					if err := releasePidFile(); err != nil {
+						return fmt.Errorf("remove PID file %s: %w", expandHome(cfg.PidFile), err)
 					}
 					return nil
 				},
@@ -151,15 +157,15 @@ func startServer() {
 				},
 			})
 		}),
-		// Register this hook after the server hook so Fx stops the signal loop
-		// before closing the HTTP server and database connections.
-		fx.Invoke(func(lc fx.Lifecycle, loader *conf.Loader, ipAccessControl *middleware.IPAccessControlConfig) {
-			registerConfigReload(lc, loader, ipAccessControl)
-		}),
 	)
 }
 
 func handleReload() {
+	if !pidFileSupported() {
+		fmt.Fprintln(os.Stderr, "Reload failed: reload is not available on this platform")
+		os.Exit(1)
+	}
+
 	cfg, err := conf.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Reload failed: load config: %v\n", err)
@@ -175,10 +181,6 @@ func handleReload() {
 		os.Exit(1)
 	}
 	fmt.Println("Config reload signal sent successfully")
-}
-
-func writePidFile(path string) error {
-	return os.WriteFile(path, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600)
 }
 
 func expandHome(path string) string {

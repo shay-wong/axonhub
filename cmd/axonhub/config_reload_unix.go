@@ -25,11 +25,6 @@ func registerConfigReload(lc fx.Lifecycle, loader *conf.Loader, ipAccessControl 
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			if loader.ConfigFile() == "" {
-				log.Warn(ctx, "SIGHUP config reload disabled because no config file was loaded at startup")
-				return nil
-			}
-
 			// A one-element buffer coalesces bursts of HUP signals while a
 			// reload is in progress. The reload loop is deliberately serial.
 			runCtx, runCancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is stored in the outer closure and called via OnStop
@@ -37,7 +32,11 @@ func registerConfigReload(lc fx.Lifecycle, loader *conf.Loader, ipAccessControl 
 			signal.Notify(signals, syscall.SIGHUP)
 			go runConfigReloadLoop(runCtx, signals, loader, ipAccessControl, done)
 
-			log.Info(ctx, "SIGHUP config reload enabled", log.String("config_file", loader.ConfigFile()))
+			if loader.ConfigFile() == "" {
+				log.Warn(ctx, "SIGHUP config reload requests will be rejected because no config file was loaded at startup")
+			} else {
+				log.Info(ctx, "SIGHUP config reload enabled", log.String("config_file", loader.ConfigFile()))
+			}
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
