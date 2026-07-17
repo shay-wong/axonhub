@@ -1498,8 +1498,14 @@ func deduplicateSpansWithParent(current, parent []Span) []Span {
 // normalizeJSON re-parses and re-serializes JSON to produce a canonical form,
 // eliminating whitespace differences between compact and pretty-printed JSON.
 func normalizeJSON(s string) string {
+	decoder := json.NewDecoder(strings.NewReader(s))
+	decoder.UseNumber()
+
 	var v any
-	if err := json.Unmarshal([]byte(s), &v); err != nil {
+	if err := decoder.Decode(&v); err != nil {
+		return s
+	}
+	if strings.TrimSpace(s[decoder.InputOffset():]) != "" {
 		return s
 	}
 

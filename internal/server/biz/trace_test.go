@@ -821,6 +821,18 @@ func TestSpanToKey_CompactTypesIncludeSummary(t *testing.T) {
 	}
 }
 
+func TestNormalizeJSONIgnoresWhitespace(t *testing.T) {
+	require.Equal(t, normalizeJSON(`{"city":"Shanghai"}`), normalizeJSON(`{ "city": "Shanghai" }`))
+}
+
+func TestNormalizeJSONPreservesLargeIntegerPrecision(t *testing.T) {
+	first := normalizeJSON(`{"value":9007199254740992}`)
+	second := normalizeJSON(`{"value":9007199254740993}`)
+
+	require.NotEqual(t, first, second)
+	require.Equal(t, `{"value":9007199254740993}`, second)
+}
+
 func TestTraceService_GetRequestTrace_EmptyTrace(t *testing.T) {
 	traceService, client := setupTestTraceService(t, nil)
 	defer client.Close()
