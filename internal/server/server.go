@@ -87,6 +87,7 @@ func Run(opts ...fx.Option) {
 		gql.NewGraphqlHandlers,
 		gc.NewWorker,
 		New,
+		NewIPAccessControlRuntime,
 	}
 
 	app := fx.New(
