@@ -123,6 +123,87 @@ func (s *ThreadService) FirstText(ctx context.Context, id int) (*string, error) 
 	return s.traceService.GetFirstText(ctx, trace.ID)
 }
 
+// Archive sets the thread status to archived and cascades to all its traces.
+func (s *ThreadService) Archive(ctx context.Context, id int) error {
+	return s.RunInTransaction(ctx, func(txCtx context.Context) error {
+		tx := ent.FromContext(txCtx)
+		_, err := tx.Thread.UpdateOneID(id).
+			Where(thread.StatusEQ(thread.StatusActive)).
+			SetStatus(thread.StatusArchived).
+			Save(txCtx)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return fmt.Errorf("cannot archive thread: current status is not active or thread not found")
+			}
+			return fmt.Errorf("failed to archive thread: %w", err)
+		}
+
+		_, err = tx.Trace.Update().Where(trace.ThreadIDEQ(id), trace.StatusEQ(trace.StatusActive)).SetStatus(trace.StatusArchived).Save(txCtx)
+		if err != nil {
+			return fmt.Errorf("failed to cascade archive traces: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// Unarchive sets the thread status to active and cascades to all its traces.
+func (s *ThreadService) Unarchive(ctx context.Context, id int) error {
+	return s.RunInTransaction(ctx, func(txCtx context.Context) error {
+		tx := ent.FromContext(txCtx)
+		_, err := tx.Thread.UpdateOneID(id).
+			Where(thread.StatusEQ(thread.StatusArchived)).
+			SetStatus(thread.StatusActive).
+			Save(txCtx)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return fmt.Errorf("cannot unarchive thread: current status is not archived or thread not found")
+			}
+			return fmt.Errorf("failed to unarchive thread: %w", err)
+		}
+
+		_, err = tx.Trace.Update().Where(trace.ThreadIDEQ(id), trace.StatusEQ(trace.StatusArchived)).SetStatus(trace.StatusActive).Save(txCtx)
+		if err != nil {
+			return fmt.Errorf("failed to cascade unarchive traces: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// Retain protects the thread and its traces from GC without overwriting
+// per-trace archive or retention state.
+func (s *ThreadService) Retain(ctx context.Context, id int) error {
+	_, err := s.entFromContext(ctx).Thread.UpdateOneID(id).
+		Where(thread.StatusEQ(thread.StatusActive)).
+		SetStatus(thread.StatusRetained).
+		Save(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return fmt.Errorf("cannot retain thread: current status is not active or thread not found")
+		}
+		return fmt.Errorf("failed to retain thread: %w", err)
+	}
+
+	return nil
+}
+
+// Unretain restores the thread while preserving explicit per-trace retention.
+func (s *ThreadService) Unretain(ctx context.Context, id int) error {
+	_, err := s.entFromContext(ctx).Thread.UpdateOneID(id).
+		Where(thread.StatusEQ(thread.StatusRetained)).
+		SetStatus(thread.StatusActive).
+		Save(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return fmt.Errorf("cannot unretain thread: current status is not retained or thread not found")
+		}
+		return fmt.Errorf("failed to unretain thread: %w", err)
+	}
+
+	return nil
+}
+
 func (s *ThreadService) UsageMetadata(ctx context.Context, threadID int) (*UsageMetadata, error) {
 	client := s.entFromContext(ctx)
 	if client == nil {

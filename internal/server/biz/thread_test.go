@@ -10,6 +10,8 @@ import (
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/enttest"
 	"github.com/looplj/axonhub/internal/ent/project"
+	"github.com/looplj/axonhub/internal/ent/thread"
+	"github.com/looplj/axonhub/internal/ent/trace"
 	"github.com/looplj/axonhub/internal/pkg/xcache"
 )
 
@@ -173,4 +175,37 @@ func TestThreadService_GetOrCreateThread_NoClient(t *testing.T) {
 	require.NotNil(t, thread)
 	require.Equal(t, "thread-123", thread.ThreadID)
 	require.Equal(t, 1, thread.ProjectID)
+}
+
+func TestThreadService_RetainPreservesTraceStatuses(t *testing.T) {
+	threadService, client := setupTestThreadService(t)
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	projectEntity := client.Project.Create().SetName("retained-thread-project").SaveX(ctx)
+	threadEntity := client.Thread.Create().
+		SetProjectID(projectEntity.ID).
+		SetThreadID("retained-thread").
+		SaveX(ctx)
+	activeTrace := client.Trace.Create().
+		SetProjectID(projectEntity.ID).
+		SetThreadID(threadEntity.ID).
+		SetTraceID("active-trace").
+		SaveX(ctx)
+	retainedTrace := client.Trace.Create().
+		SetProjectID(projectEntity.ID).
+		SetThreadID(threadEntity.ID).
+		SetTraceID("explicitly-retained-trace").
+		SetStatus(trace.StatusRetained).
+		SaveX(ctx)
+
+	require.NoError(t, threadService.Retain(ctx, threadEntity.ID))
+	require.Equal(t, thread.StatusRetained, client.Thread.GetX(ctx, threadEntity.ID).Status)
+	require.Equal(t, trace.StatusActive, client.Trace.GetX(ctx, activeTrace.ID).Status)
+	require.Equal(t, trace.StatusRetained, client.Trace.GetX(ctx, retainedTrace.ID).Status)
+
+	require.NoError(t, threadService.Unretain(ctx, threadEntity.ID))
+	require.Equal(t, thread.StatusActive, client.Thread.GetX(ctx, threadEntity.ID).Status)
+	require.Equal(t, trace.StatusActive, client.Trace.GetX(ctx, activeTrace.ID).Status)
+	require.Equal(t, trace.StatusRetained, client.Trace.GetX(ctx, retainedTrace.ID).Status)
 }

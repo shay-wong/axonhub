@@ -13,6 +13,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/channelprobe"
 	"github.com/looplj/axonhub/internal/ent/datastorage"
+	"github.com/looplj/axonhub/internal/ent/predicate"
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/ent/schema/schematype"
@@ -25,6 +26,13 @@ import (
 )
 
 var defaultBatchSize = 500
+
+func retainedTracePredicate() predicate.Trace {
+	return trace.Or(
+		trace.StatusEQ(trace.StatusRetained),
+		trace.HasThreadWith(thread.StatusEQ(thread.StatusRetained)),
+	)
+}
 
 type TriggerGcCleanupInput struct {
 	RequestsCleanupDays  int `json:"requests_cleanup_days"`
@@ -250,7 +258,12 @@ func (w *Worker) cleanupOldRequestExecutions(ctx context.Context, cutoffTime tim
 				requestexecution.FieldDataStorageID,
 				requestexecution.FieldRequestID,
 			).
-			Where(requestexecution.CreatedAtLT(cutoffTime)).
+			Where(
+				requestexecution.CreatedAtLT(cutoffTime),
+				requestexecution.Not(requestexecution.HasRequestWith(
+					request.HasTraceWith(retainedTracePredicate()),
+				)),
+			).
 			Order(ent.Asc(requestexecution.FieldID)).
 			Limit(batchSize).
 			All(ctx)
@@ -298,7 +311,10 @@ func (w *Worker) cleanupOldRequestsRecords(ctx context.Context, cutoffTime time.
 				request.FieldProjectID,
 				request.FieldDataStorageID,
 			).
-			Where(request.CreatedAtLT(cutoffTime)).
+			Where(
+				request.CreatedAtLT(cutoffTime),
+				request.Not(request.HasTraceWith(retainedTracePredicate())),
+			).
 			Order(ent.Asc(request.FieldID)).
 			Limit(batchSize).
 			All(ctx)
@@ -452,7 +468,12 @@ func (w *Worker) cleanupUsageLogs(ctx context.Context, cleanupDays int, manual b
 
 	result, err := w.deleteInBatches(ctx, func() (int, error) {
 		ids, err := w.Ent.UsageLog.Query().
-			Where(usagelog.CreatedAtLT(cutoffTime)).
+			Where(
+				usagelog.CreatedAtLT(cutoffTime),
+				usagelog.Not(usagelog.HasRequestWith(
+					request.HasTraceWith(retainedTracePredicate()),
+				)),
+			).
 			Order(ent.Asc(usagelog.FieldID)).
 			Limit(batchSize).
 			IDs(ctx)
@@ -488,7 +509,10 @@ func (w *Worker) cleanupThreads(ctx context.Context, cleanupDays int, manual boo
 
 	result, err := w.deleteInBatches(ctx, func() (int, error) {
 		ids, err := w.Ent.Thread.Query().
-			Where(thread.CreatedAtLT(cutoffTime)).
+			Where(
+				thread.CreatedAtLT(cutoffTime),
+				thread.StatusNEQ(thread.StatusRetained),
+			).
 			Order(ent.Asc(thread.FieldID)).
 			Limit(batchSize).
 			IDs(ctx)
@@ -524,7 +548,10 @@ func (w *Worker) cleanupTraces(ctx context.Context, cleanupDays int, manual bool
 
 	result, err := w.deleteInBatches(ctx, func() (int, error) {
 		ids, err := w.Ent.Trace.Query().
-			Where(trace.CreatedAtLT(cutoffTime)).
+			Where(
+				trace.CreatedAtLT(cutoffTime),
+				trace.Not(retainedTracePredicate()),
+			).
 			Order(ent.Asc(trace.FieldID)).
 			Limit(batchSize).
 			IDs(ctx)
@@ -661,7 +688,10 @@ func (w *Worker) PreviewCleanup(ctx context.Context, input TriggerGcCleanupInput
 
 	if input.RequestsCleanupDays > 0 {
 		cutoff := time.Now().AddDate(0, 0, -input.RequestsCleanupDays)
-		count, err := w.Ent.Request.Query().Where(request.CreatedAtLT(cutoff)).Count(ctx)
+		count, err := w.Ent.Request.Query().Where(
+			request.CreatedAtLT(cutoff),
+			request.Not(request.HasTraceWith(retainedTracePredicate())),
+		).Count(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to count requests for preview: %w", err)
 		}
@@ -675,7 +705,12 @@ func (w *Worker) PreviewCleanup(ctx context.Context, input TriggerGcCleanupInput
 
 	if input.UsageLogsCleanupDays > 0 {
 		cutoff := time.Now().AddDate(0, 0, -input.UsageLogsCleanupDays)
-		count, err := w.Ent.UsageLog.Query().Where(usagelog.CreatedAtLT(cutoff)).Count(ctx)
+		count, err := w.Ent.UsageLog.Query().Where(
+			usagelog.CreatedAtLT(cutoff),
+			usagelog.Not(usagelog.HasRequestWith(
+				request.HasTraceWith(retainedTracePredicate()),
+			)),
+		).Count(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to count usage logs for preview: %w", err)
 		}

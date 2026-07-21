@@ -17,6 +17,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/channelprobe"
 	"github.com/looplj/axonhub/internal/ent/datastorage"
 	"github.com/looplj/axonhub/internal/ent/enttest"
+	"github.com/looplj/axonhub/internal/ent/thread"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/pkg/xcache"
 	"github.com/looplj/axonhub/internal/server/biz"
@@ -279,6 +280,37 @@ func TestWorker_cleanupWithZeroDays(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cleanupUsageLogs with negative days failed: %v", err)
 	}
+}
+
+func TestWorker_cleanupTracesPreservesActiveTraceUnderRetainedThread(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:retained-thread-gc?mode=memory&_fk=1")
+	t.Cleanup(func() { client.Close() })
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	projectEntity := client.Project.Create().SetName("retained-thread-gc-project").SaveX(ctx)
+	threadEntity := client.Thread.Create().
+		SetProjectID(projectEntity.ID).
+		SetThreadID("retained-thread-gc").
+		SetStatus(thread.StatusRetained).
+		SaveX(ctx)
+	oldCreatedAt := time.Now().AddDate(0, 0, -2)
+	protectedTrace := client.Trace.Create().
+		SetProjectID(projectEntity.ID).
+		SetThreadID(threadEntity.ID).
+		SetTraceID("protected-by-thread").
+		SetCreatedAt(oldCreatedAt).
+		SaveX(ctx)
+	deletableTrace := client.Trace.Create().
+		SetProjectID(projectEntity.ID).
+		SetTraceID("not-retained").
+		SetCreatedAt(oldCreatedAt).
+		SaveX(ctx)
+
+	worker := &Worker{Ent: client}
+	require.NoError(t, worker.cleanupTraces(ctx, 1, false))
+	require.NotNil(t, client.Trace.GetX(ctx, protectedTrace.ID))
+	_, err := client.Trace.Get(ctx, deletableTrace.ID)
+	require.True(t, ent.IsNotFound(err))
 }
 
 func TestWorker_cleanupChannelProbesDeletesInBatches(t *testing.T) {
