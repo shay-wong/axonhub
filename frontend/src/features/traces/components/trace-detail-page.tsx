@@ -7,6 +7,7 @@ import { IconArchive, IconPin, IconRotate } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { cn, extractNumberID } from '@/lib/utils';
 import { usePaginationSearch } from '@/hooks/use-pagination-search';
+import { usePermissions } from '@/hooks/usePermissions';
 import useInterval from '@/hooks/useInterval';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,7 +39,9 @@ export default function TraceDetailPage() {
   const { t, i18n } = useTranslation();
   const { traceId } = useParams({ from: '/_authenticated/project/traces/$traceId' });
   const navigate = useNavigate();
+  const { hasScope } = usePermissions();
   const locale = i18n.language === 'zh' ? zhCN : enUS;
+  const canWrite = hasScope('write_requests');
   const [selectedTrace, setSelectedTrace] = useState<Segment | null>(null);
   const [selectedSpan, setSelectedSpan] = useState<Span | null>(null);
   const [selectedSpanType, setSelectedSpanType] = useState<'request' | 'response' | null>(null);
@@ -203,7 +206,7 @@ export default function TraceDetailPage() {
                 <RefreshCw className={`h-4 w-4 ${isLoading || autoRefresh ? 'animate-spin' : ''}`} />
                 <span className='hidden sm:inline ml-2'>{t('common.refresh')}</span>
               </Button>
-              {(() => {
+              {canWrite && (() => {
                 const status = trace.status ?? 'active';
                 if (status === 'active') {
                   return (

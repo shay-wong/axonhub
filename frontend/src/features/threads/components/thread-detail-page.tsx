@@ -7,6 +7,7 @@ import { IconArchive, IconPin, IconRotate } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { extractNumberID } from '@/lib/utils';
 import { usePaginationSearch } from '@/hooks/use-pagination-search';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -44,7 +45,9 @@ export default function ThreadDetailPage() {
   };
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
+  const { hasScope } = usePermissions();
   const locale = i18n.language === 'zh' ? zhCN : enUS;
+  const canWrite = hasScope('write_requests');
   
   // 合并 Drawer 相关状态
   const [drawerState, setDrawerState] = useState<{
@@ -186,7 +189,7 @@ export default function ThreadDetailPage() {
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               <span className='hidden sm:inline ml-2'>{t('common.refresh')}</span>
             </Button>
-            {(() => {
+            {canWrite && (() => {
               const status = thread.status ?? 'active';
               if (status === 'active') {
                 return (

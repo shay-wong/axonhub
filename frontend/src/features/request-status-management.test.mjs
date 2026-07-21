@@ -7,6 +7,8 @@ const files = {
   traceData: await readFile(new URL('./traces/data/traces.ts', import.meta.url), 'utf8'),
   threadColumns: await readFile(new URL('./threads/components/threads-columns.tsx', import.meta.url), 'utf8'),
   traceColumns: await readFile(new URL('./traces/components/traces-columns.tsx', import.meta.url), 'utf8'),
+  threadDetail: await readFile(new URL('./threads/components/thread-detail-page.tsx', import.meta.url), 'utf8'),
+  traceDetail: await readFile(new URL('./traces/components/trace-detail-page.tsx', import.meta.url), 'utf8'),
 };
 
 function count(source, value) {
@@ -26,5 +28,12 @@ test('status action columns require write_requests', () => {
   for (const source of [files.threadColumns, files.traceColumns]) {
     assert.match(source, /const canWrite = hasScope\('write_requests'\);/);
     assert.match(source, /\.\.\.\(canWrite\s*\?\s*\[/);
+  }
+});
+
+test('status actions on detail pages require write_requests', () => {
+  for (const source of [files.threadDetail, files.traceDetail]) {
+    assert.match(source, /const canWrite = hasScope\('write_requests'\);/);
+    assert.match(source, /\{canWrite && \(\(\) => \{/);
   }
 });
