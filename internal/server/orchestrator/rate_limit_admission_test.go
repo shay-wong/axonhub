@@ -103,6 +103,6 @@ func TestPersistentOutboundTransformer_CanRetry_LocalRPMExhausted(t *testing.T) 
 	outbound := newTestOutbound(channel)
 	err := newLocalRPMExhaustedError(channel, 1)
 
-	assert.False(t, outbound.CanRetry(err))
+	assert.False(t, outbound.CanRetryContext(t.Context(), err))
 	assert.True(t, errors.Is(err, ErrLocalRPMExhausted))
 }

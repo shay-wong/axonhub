@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/samber/lo"
 
+	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
@@ -559,6 +561,16 @@ func (p *PersistentOutboundTransformer) HasMoreChannels() bool {
 	return p.state.CurrentCandidateIndex+1 < len(p.state.ChannelModelsCandidates)
 }
 
+func (p *PersistentOutboundTransformer) HasMoreChannelsContext(ctx context.Context) bool {
+	for i := p.state.CurrentCandidateIndex + 1; i < len(p.state.ChannelModelsCandidates); i++ {
+		if hasRequestAvailableAPIKey(ctx, p.state.ChannelModelsCandidates[i].Channel) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // resetPassThroughStreamState cancels the current attempt's fan-out goroutine (if any)
 // and clears pass-through stream state so the next attempt starts with a clean slate.
 // Must be called before every retry to prevent goroutine leaks and data races on
@@ -580,12 +592,24 @@ func (p *PersistentOutboundTransformer) NextChannel(ctx context.Context) error {
 	// so it exits promptly and releases its upstream HTTP connection.
 	p.resetPassThroughStreamState()
 
-	p.state.CurrentCandidateIndex++
+	for {
+		p.state.CurrentCandidateIndex++
+		if p.state.CurrentCandidateIndex >= len(p.state.ChannelModelsCandidates) {
+			return errors.New("no more candidates available for retry")
+		}
+
+		candidate := p.state.ChannelModelsCandidates[p.state.CurrentCandidateIndex]
+		if hasRequestAvailableAPIKey(ctx, candidate.Channel) {
+			break
+		}
+
+		log.Debug(ctx, "skipping retry candidate with no request-eligible API key",
+			log.Int("channel_id", candidate.Channel.ID),
+			log.Int("index", p.state.CurrentCandidateIndex),
+		)
+	}
 
 	p.state.CurrentModelIndex = 0
-	if p.state.CurrentCandidateIndex >= len(p.state.ChannelModelsCandidates) {
-		return errors.New("no more candidates available for retry")
-	}
 
 	// Reset request execution for the new candidate
 	p.state.RequestExec = nil
@@ -608,11 +632,28 @@ func (p *PersistentOutboundTransformer) NextChannel(ctx context.Context) error {
 	return nil
 }
 
-// CanRetry returns true if the current channel can be retried.
-// It implements the pipeline.ChannelRetryable interface, it just check the error is retryable, the
-// pipeline will ensure the maxSameChannelRetries is not exceeded.
-func (p *PersistentOutboundTransformer) CanRetry(err error) bool {
+func hasRequestAvailableAPIKey(ctx context.Context, channel *biz.Channel) bool {
+	if channel == nil || !channel.HasConfiguredAPIKeys() {
+		return true
+	}
+
+	for _, apiKey := range channel.GetEnabledAPIKeys() {
+		if !contexts.IsChannelAPIKeyExcluded(ctx, channel.ID, apiKey) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// CanRetryContext returns true if the current channel can be retried. It also
+// records failed API keys in request context before the pipeline decides
+// whether to retry this channel or switch candidates.
+func (p *PersistentOutboundTransformer) CanRetryContext(ctx context.Context, err error) bool {
 	if p.state.CurrentCandidate == nil {
+		return false
+	}
+	if p.state.RetryPolicy != nil && !p.state.RetryPolicy.Enabled {
 		return false
 	}
 
@@ -626,11 +667,19 @@ func (p *PersistentOutboundTransformer) CanRetry(err error) bool {
 		return false
 	}
 
-	// Empty response detection: allow same-channel retry so the pipeline can
-	// re-execute the request against the same (or next model in the) channel.
-	if errors.Is(err, pipeline.ErrEmptyResponse) ||
+	emptyResponse := errors.Is(err, pipeline.ErrEmptyResponse) ||
 		errors.Is(err, pipeline.ErrEmptyStreamChunks) ||
-		errors.Is(err, pipeline.ErrEmptyAggregatedBody) {
+		errors.Is(err, pipeline.ErrEmptyAggregatedBody)
+	retryableForChannel := isRetryableErrorForChannel(err, p.state.CurrentCandidate.Channel)
+	if emptyResponse || retryableForChannel || p.matchesAPIKeyAutoDisableStatus(err) {
+		if handled, canRetry := p.canRetryWithNextAPIKey(ctx); handled {
+			return canRetry
+		}
+	}
+
+	// Empty response detection: allow same-channel retry for channels without
+	// rotatable API keys.
+	if emptyResponse {
 		log.Debug(context.Background(), "empty response detected",
 			log.Int("channel_id", p.state.CurrentCandidate.Channel.ID),
 		)
@@ -638,14 +687,8 @@ func (p *PersistentOutboundTransformer) CanRetry(err error) bool {
 		return true
 	}
 
-	// 429 Too Many Requests: always skip same-channel retry.
-	// The upstream is explicitly rate-limiting this channel, so retrying the same
-	// channel would just burn a retry attempt without any chance of success.
-	// Instead, force a channel switch so the next candidate (e.g. a backup channel)
-	// is tried immediately. The load balancer (e.g. ErrorAware strategy) will
-	// deprioritize this channel for subsequent requests and it will naturally
-	// recover as the rate-limit window resets.
-	if httpclient.IsRateLimitErr(err) {
+	// A 429 without another eligible key should switch channels immediately.
+	if ExtractStatusCodeFromError(err) == http.StatusTooManyRequests {
 		log.Debug(context.Background(), "429 rate limit, skipping same-channel retry to switch to next channel",
 			log.Int("channel_id", p.state.CurrentCandidate.Channel.ID),
 		)
@@ -659,7 +702,64 @@ func (p *PersistentOutboundTransformer) CanRetry(err error) bool {
 	}
 
 	// otherwise check if the error is retryable for the current channel.
-	return isRetryableErrorForChannel(err, p.state.CurrentCandidate.Channel)
+	return retryableForChannel
+}
+
+func (p *PersistentOutboundTransformer) matchesAPIKeyAutoDisableStatus(err error) bool {
+	policy := p.state.RetryPolicy
+	if policy == nil || !policy.Enabled || !policy.APIKeyAutoDisable.Enabled {
+		return false
+	}
+
+	statusCode := ExtractStatusCodeFromError(err)
+	for _, rule := range policy.APIKeyAutoDisable.Statuses {
+		if rule.Status == statusCode {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (p *PersistentOutboundTransformer) canRetryWithNextAPIKey(ctx context.Context) (handled, canRetry bool) {
+	channel := p.state.CurrentCandidate.Channel
+	if channel == nil || !channel.HasConfiguredAPIKeys() || p.state.Perf == nil || p.state.Perf.APIKey == "" {
+		return false, false
+	}
+
+	currentKey := p.state.Perf.APIKey
+	enabledKeys := channel.GetEnabledAPIKeys()
+	currentKeyEnabled := false
+	for _, key := range enabledKeys {
+		if key == currentKey {
+			currentKeyEnabled = true
+			break
+		}
+	}
+	if !currentKeyEnabled {
+		return false, false
+	}
+
+	contexts.ExcludeChannelAPIKey(ctx, channel.ID, currentKey)
+
+	for _, key := range enabledKeys {
+		if !contexts.IsChannelAPIKeyExcluded(ctx, channel.ID, key) {
+			return true, true
+		}
+	}
+
+	return true, false
+}
+
+func (p *PersistentOutboundTransformer) MaxSameChannelRetries() int {
+	if p.state == nil || p.state.CurrentCandidate == nil || p.state.CurrentCandidate.Channel == nil {
+		return 0
+	}
+	if p.state.RetryPolicy == nil || !p.state.RetryPolicy.Enabled {
+		return 0
+	}
+
+	return max(0, len(p.state.CurrentCandidate.Channel.GetEnabledAPIKeys())-1)
 }
 
 // PrepareForRetry implements the pipeline.ChannelRetryable interface.
@@ -675,6 +775,10 @@ func (p *PersistentOutboundTransformer) PrepareForRetry(ctx context.Context) err
 	// Cancel any in-flight pass-through stream goroutine from the previous attempt
 	// so it exits promptly and releases its upstream HTTP connection.
 	p.resetPassThroughStreamState()
+
+	if p.state.Perf != nil && contexts.IsChannelAPIKeyExcluded(ctx, candidate.Channel.ID, p.state.Perf.APIKey) {
+		return nil
+	}
 
 	// If there's another model in the list, advance to it.
 	if p.state.CurrentModelIndex+1 < len(candidate.Models) {

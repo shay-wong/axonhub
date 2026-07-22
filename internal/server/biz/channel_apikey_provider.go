@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/samber/lo"
 
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/log"
@@ -99,7 +100,7 @@ func recordSelectedAPIKey(ctx context.Context, key string) {
 }
 
 func (p *TraceStickyKeyProvider) Get(ctx context.Context) string {
-	enabled := p.channel.GetEnabledAPIKeys()
+	enabled := apiKeyConfigKeys(availableAPIKeyConfigs(ctx, p.channel))
 	if len(enabled) == 0 {
 		panicNoEnabledAPIKey(p.channel)
 	}
@@ -134,7 +135,7 @@ func (p *TraceStickyKeyProvider) Get(ctx context.Context) string {
 }
 
 func (p *WeightedTraceStickyKeyProvider) Get(ctx context.Context) string {
-	enabled := p.channel.GetEnabledAPIKeyConfigs()
+	enabled := availableAPIKeyConfigs(ctx, p.channel)
 	if len(enabled) == 0 {
 		panicNoEnabledAPIKey(p.channel)
 	}
@@ -162,7 +163,7 @@ func (p *WeightedTraceStickyKeyProvider) Get(ctx context.Context) string {
 }
 
 func (p *FailoverAPIKeyProvider) Get(ctx context.Context) string {
-	enabled := p.channel.GetEnabledAPIKeyConfigs()
+	enabled := availableAPIKeyConfigs(ctx, p.channel)
 	if len(enabled) == 0 {
 		panicNoEnabledAPIKey(p.channel)
 	}
@@ -203,6 +204,12 @@ func (p *FailoverAPIKeyProvider) Get(ctx context.Context) string {
 	recordSelectedAPIKey(ctx, selectedKey)
 
 	return selectedKey
+}
+
+func availableAPIKeyConfigs(ctx context.Context, channel *Channel) []objects.ChannelAPIKeyConfig {
+	return lo.Filter(channel.GetEnabledAPIKeyConfigs(), func(config objects.ChannelAPIKeyConfig, _ int) bool {
+		return !contexts.IsChannelAPIKeyExcluded(ctx, channel.ID, config.Key)
+	})
 }
 
 // rendezvousSelect picks a key using Highest Random Weight (Rendezvous) hashing.

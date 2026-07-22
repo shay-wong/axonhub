@@ -63,9 +63,14 @@ func (t *testRetryableOutbound) NextChannel(ctx context.Context) error {
 // testChannelRetryableOutbound implements both transformer.Outbound and ChannelRetryable interfaces.
 type testChannelRetryableOutbound struct {
 	maxRetries        int
+	retryLimit        int
 	currentRetries    int
 	canRetryCalls     int
 	prepareRetryCalls int
+}
+
+func (t *testChannelRetryableOutbound) MaxSameChannelRetries() int {
+	return t.retryLimit
 }
 
 func (t *testChannelRetryableOutbound) APIFormat() llm.APIFormat {
@@ -240,6 +245,13 @@ func TestWithRetry(t *testing.T) {
 	require.Equal(t, 5, p.maxChannelRetries)
 	require.Equal(t, 3, p.maxSameChannelRetries)
 	require.Equal(t, 100*time.Millisecond, p.retryDelay)
+}
+
+func TestPipeline_MaxSameChannelRetriesUsesOutboundLimit(t *testing.T) {
+	outbound := &testChannelRetryableOutbound{retryLimit: 4}
+	p := &pipeline{Outbound: outbound, maxSameChannelRetries: 2}
+
+	require.Equal(t, 4, p.getMaxSameChannelRetries())
 }
 
 func TestWithDecorators(t *testing.T) {

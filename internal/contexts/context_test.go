@@ -92,6 +92,22 @@ func TestEnsureContainer_AllowsInPlaceMutation(t *testing.T) {
 	}
 }
 
+func TestChannelAPIKeyExclusionIsScopedByChannel(t *testing.T) {
+	ctx := EnsureContainer(t.Context())
+
+	ExcludeChannelAPIKey(ctx, 40, "failed-key")
+
+	if !IsChannelAPIKeyExcluded(ctx, 40, "failed-key") {
+		t.Fatal("failed key should be excluded for its channel")
+	}
+	if IsChannelAPIKeyExcluded(ctx, 41, "failed-key") {
+		t.Fatal("key exclusion must not leak to another channel")
+	}
+	if IsChannelAPIKeyExcluded(ctx, 40, "other-key") {
+		t.Fatal("other keys should remain eligible")
+	}
+}
+
 func TestWithUser(t *testing.T) {
 	ctx := t.Context()
 	user := &ent.User{

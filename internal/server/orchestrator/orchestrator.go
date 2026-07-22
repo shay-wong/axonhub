@@ -214,6 +214,7 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		PromptProvider:        processor.PromptProvider,
 		PromptProtecter:       processor.PromptProtecter,
 		RetryPolicyProvider:   processor.SystemService,
+		RetryPolicy:           retryPolicy,
 		CandidateSelector:     processor.channelSelector,
 		LoadBalancer:          loadBalancer,
 		ModelMapper:           processor.ModelMapper,

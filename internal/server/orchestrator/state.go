@@ -20,6 +20,7 @@ type PersistenceState struct {
 	PromptProvider      PromptProvider
 	PromptProtecter     PromptProtecter
 	RetryPolicyProvider RetryPolicyProvider
+	RetryPolicy         *biz.RetryPolicy
 	CandidateSelector   CandidateSelector
 	LoadBalancer        *LoadBalancer
 

@@ -24,6 +24,15 @@ type Retryable interface {
 	NextChannel(ctx context.Context) error
 }
 
+type channelSwitcher interface {
+	NextChannel(ctx context.Context) error
+}
+
+type contextRetryable interface {
+	channelSwitcher
+	HasMoreChannelsContext(ctx context.Context) bool
+}
+
 // ChannelRetryable interface for transformers that support same-channel retry.
 type ChannelRetryable interface {
 	// CanRetry returns true if the transformer can retry for current channel given the error that occurred.
@@ -33,6 +42,18 @@ type ChannelRetryable interface {
 	// PrepareForRetry prepares the transformer for retry.
 	// It will be called if CanRetry returns true.
 	PrepareForRetry(ctx context.Context) error
+}
+
+// contextChannelRetryable is called for every failed attempt, including when
+// the same-channel retry budget is exhausted, so implementations can update
+// request-scoped retry state before channel switching.
+type contextChannelRetryable interface {
+	CanRetryContext(ctx context.Context, err error) bool
+	PrepareForRetry(ctx context.Context) error
+}
+
+type sameChannelRetryLimiter interface {
+	MaxSameChannelRetries() int
 }
 
 // ChannelCustomizedExecutor interface for channel need custom the process of request.
@@ -298,7 +319,21 @@ func (p *pipeline) Process(ctx context.Context, request *httpclient.Request) (*R
 
 		// 1. Try same-channel retry first if supported
 		if !timeoutRetry {
-			if channelRetryable, ok := p.Outbound.(ChannelRetryable); ok {
+			if channelRetryable, ok := p.Outbound.(contextChannelRetryable); ok {
+				if channelRetryable.CanRetryContext(ctx, lastErr) && sameChannelRetries < p.getMaxSameChannelRetries() {
+					if err := channelRetryable.PrepareForRetry(ctx); err == nil {
+						sameChannelRetries++
+						canRetry = true
+
+						slog.DebugContext(ctx, "retrying same channel",
+							slog.Int("same_channel_attempt", sameChannelRetries),
+							slog.Int("max_same_channel_retries", p.getMaxSameChannelRetries()),
+						)
+					} else {
+						slog.WarnContext(ctx, "failed to prepare same channel retry, will try channel switch", slog.Any("error", err))
+					}
+				}
+			} else if channelRetryable, ok := p.Outbound.(ChannelRetryable); ok {
 				if sameChannelRetries < p.getMaxSameChannelRetries() && channelRetryable.CanRetry(lastErr) {
 					if err := channelRetryable.PrepareForRetry(ctx); err == nil {
 						sameChannelRetries++
@@ -317,9 +352,11 @@ func (p *pipeline) Process(ctx context.Context, request *httpclient.Request) (*R
 
 		// 2. If same-channel retry not possible/exhausted, try channel switching
 		if !canRetry {
-			if retryable, ok := p.Outbound.(Retryable); ok {
-				if channelSwitches < p.maxChannelRetries && retryable.HasMoreChannels() {
-					if err := retryable.NextChannel(ctx); err == nil {
+			if channelSwitches < p.maxChannelRetries && p.hasMoreChannels(ctx) {
+				if retryable, ok := p.Outbound.(channelSwitcher); ok {
+					if err := retryable.NextChannel(ctx); err != nil {
+						slog.WarnContext(ctx, "failed to switch to next channel", slog.Any("error", err))
+					} else {
 						channelSwitches++
 						sameChannelRetries = 0 // Reset same-channel attempts for new channel
 						canRetry = true
@@ -328,8 +365,6 @@ func (p *pipeline) Process(ctx context.Context, request *httpclient.Request) (*R
 							slog.Int("channel_switch_attempt", channelSwitches),
 							slog.Int("max_channel_retries", p.maxChannelRetries),
 						)
-					} else {
-						slog.WarnContext(ctx, "failed to switch to next channel", slog.Any("error", err))
 					}
 				}
 			}
@@ -439,7 +474,23 @@ func (p *pipeline) processRequest(ctx context.Context, request *llm.Request) (*R
 
 // getMaxSameChannelRetries returns the maximum number of same-channel retries.
 func (p *pipeline) getMaxSameChannelRetries() int {
-	return p.maxSameChannelRetries
+	limit := p.maxSameChannelRetries
+	if outbound, ok := p.Outbound.(sameChannelRetryLimiter); ok {
+		limit = max(limit, outbound.MaxSameChannelRetries())
+	}
+
+	return limit
+}
+
+func (p *pipeline) hasMoreChannels(ctx context.Context) bool {
+	if retryable, ok := p.Outbound.(contextRetryable); ok {
+		return retryable.HasMoreChannelsContext(ctx)
+	}
+	if retryable, ok := p.Outbound.(Retryable); ok {
+		return retryable.HasMoreChannels()
+	}
+
+	return false
 }
 
 func isResponseTimeoutError(err error) bool {

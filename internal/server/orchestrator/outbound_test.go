@@ -12,6 +12,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/looplj/axonhub/internal/authz"
+	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/enttest"
 	"github.com/looplj/axonhub/internal/ent/request"
@@ -445,7 +446,7 @@ func TestPersistentOutboundTransformer_CanRetry(t *testing.T) {
 			},
 		}
 
-		require.False(t, outbound.CanRetry(retryableErr))
+		require.False(t, outbound.CanRetryContext(t.Context(), retryableErr))
 	})
 
 	t.Run("nil error", func(t *testing.T) {
@@ -459,7 +460,7 @@ func TestPersistentOutboundTransformer_CanRetry(t *testing.T) {
 			},
 		}
 
-		require.False(t, outbound.CanRetry(nil))
+		require.False(t, outbound.CanRetryContext(t.Context(), nil))
 	})
 
 	t.Run("non-retryable error", func(t *testing.T) {
@@ -473,7 +474,7 @@ func TestPersistentOutboundTransformer_CanRetry(t *testing.T) {
 			},
 		}
 
-		require.False(t, outbound.CanRetry(nonRetryableErr))
+		require.False(t, outbound.CanRetryContext(t.Context(), nonRetryableErr))
 	})
 
 	t.Run("skip-by-circuit-breaker should not trigger same-channel retry", func(t *testing.T) {
@@ -491,7 +492,7 @@ func TestPersistentOutboundTransformer_CanRetry(t *testing.T) {
 			},
 		}
 
-		require.False(t, outbound.CanRetry(errSkipCandidateByCircuitBreaker))
+		require.False(t, outbound.CanRetryContext(t.Context(), errSkipCandidateByCircuitBreaker))
 	})
 
 	t.Run("auto-aggregate empty errors are retryable", func(t *testing.T) {
@@ -511,9 +512,148 @@ func TestPersistentOutboundTransformer_CanRetry(t *testing.T) {
 				},
 			}
 
-			require.True(t, outbound.CanRetry(retryErr))
+			require.True(t, outbound.CanRetryContext(t.Context(), retryErr))
 		}
 	})
+}
+
+func TestPersistentOutboundTransformer_RotatesAPIKeysBeforeSwitchingChannel(t *testing.T) {
+	// A retryable key failure must consume every eligible key before channel failover.
+	channel := &biz.Channel{
+		Channel: &ent.Channel{
+			ID:   40,
+			Name: "multi-key-channel",
+			Credentials: objects.ChannelCredentials{
+				APIKeys: []string{"key-1", "key-2", "key-3"},
+			},
+		},
+		Outbound: &mockTransformer{},
+	}
+	nextChannel := &biz.Channel{
+		Channel:  &ent.Channel{ID: 41, Name: "backup-channel"},
+		Outbound: &mockTransformer{},
+	}
+	current := &ChannelModelsCandidate{
+		Channel: channel,
+		Models: []biz.ChannelModelEntry{
+			{RequestModel: "gpt-5", ActualModel: "gpt-5"},
+			{RequestModel: "gpt-5", ActualModel: "gpt-5-backup"},
+		},
+	}
+	duplicate := &ChannelModelsCandidate{
+		Channel:  channel,
+		Priority: 1,
+		Models:   []biz.ChannelModelEntry{{RequestModel: "gpt-5", ActualModel: "gpt-5-priority-backup"}},
+	}
+	backup := &ChannelModelsCandidate{
+		Channel: nextChannel,
+		Models:  []biz.ChannelModelEntry{{RequestModel: "gpt-5", ActualModel: "gpt-5"}},
+	}
+	outbound := &PersistentOutboundTransformer{
+		wrapped: &mockTransformer{},
+		state: &PersistenceState{
+			RetryPolicy: &biz.RetryPolicy{
+				Enabled: true,
+				APIKeyAutoDisable: biz.AutoDisablePolicy{
+					Enabled: true,
+					Statuses: []biz.AutoDisableStatusRule{{
+						Status: http.StatusTooManyRequests,
+						Times:  3,
+						Action: biz.DisableActionTemporary,
+					}},
+				},
+			},
+			CurrentCandidate:        current,
+			ChannelModelsCandidates: []*ChannelModelsCandidate{current, duplicate, backup},
+			Perf:                    &biz.PerformanceRecord{APIKey: "key-1"},
+		},
+	}
+	ctx := contexts.EnsureContainer(t.Context())
+	wrapped429 := pipeline.WrapUpstreamError(&llm.ResponseError{StatusCode: http.StatusTooManyRequests})
+
+	require.Equal(t, 2, outbound.MaxSameChannelRetries())
+	require.True(t, outbound.CanRetryContext(ctx, wrapped429))
+	require.NoError(t, outbound.PrepareForRetry(ctx))
+	require.True(t, contexts.IsChannelAPIKeyExcluded(ctx, channel.ID, "key-1"))
+	require.Zero(t, outbound.state.CurrentModelIndex, "key rotation must take priority over model rotation")
+
+	outbound.state.Perf = &biz.PerformanceRecord{APIKey: "key-2"}
+	require.True(t, outbound.CanRetryContext(ctx, wrapped429))
+	require.NoError(t, outbound.PrepareForRetry(ctx))
+	require.True(t, contexts.IsChannelAPIKeyExcluded(ctx, channel.ID, "key-2"))
+
+	outbound.state.Perf = &biz.PerformanceRecord{APIKey: "key-3"}
+	require.False(t, outbound.CanRetryContext(ctx, wrapped429))
+	require.True(t, contexts.IsChannelAPIKeyExcluded(ctx, channel.ID, "key-3"))
+	require.True(t, outbound.HasMoreChannels(), "channel switch should be available after all keys fail")
+	require.True(t, outbound.HasMoreChannelsContext(ctx), "an eligible backup channel should remain")
+	require.NoError(t, outbound.NextChannel(ctx))
+	require.Equal(t, 2, outbound.state.CurrentCandidateIndex, "an exhausted duplicate of the same channel must be skipped")
+	require.Same(t, nextChannel, outbound.state.CurrentCandidate.Channel)
+	require.False(t, outbound.HasMoreChannelsContext(ctx))
+}
+
+func TestPersistentOutboundTransformer_RotatesAPIKeyForConfiguredNonRetryableStatus(t *testing.T) {
+	// Auto-disable status rules also define key failover for otherwise non-retryable errors.
+	channel := &biz.Channel{
+		Channel: &ent.Channel{
+			ID:          40,
+			Credentials: objects.ChannelCredentials{APIKeys: []string{"key-1", "key-2"}},
+		},
+		Outbound: &mockTransformer{},
+	}
+	current := &ChannelModelsCandidate{
+		Channel: channel,
+		Models:  []biz.ChannelModelEntry{{RequestModel: "gpt-5", ActualModel: "gpt-5"}},
+	}
+	outbound := &PersistentOutboundTransformer{
+		wrapped: &mockTransformer{},
+		state: &PersistenceState{
+			RetryPolicy: &biz.RetryPolicy{
+				Enabled: true,
+				APIKeyAutoDisable: biz.AutoDisablePolicy{
+					Enabled: true,
+					Statuses: []biz.AutoDisableStatusRule{{
+						Status: http.StatusUnauthorized,
+						Times:  1,
+						Action: biz.DisableActionPermanent,
+					}},
+				},
+			},
+			CurrentCandidate: current,
+			Perf:             &biz.PerformanceRecord{APIKey: "key-1"},
+		},
+	}
+
+	ctx := contexts.EnsureContainer(t.Context())
+	require.True(t, outbound.CanRetryContext(ctx, &llm.ResponseError{StatusCode: http.StatusUnauthorized}))
+	require.True(t, contexts.IsChannelAPIKeyExcluded(ctx, channel.ID, "key-1"))
+}
+
+func TestPersistentOutboundTransformer_APIKeyRotationRespectsDisabledRetryPolicy(t *testing.T) {
+	// Disabling retry must keep the dynamically derived key retry budget at zero.
+	channel := &biz.Channel{
+		Channel: &ent.Channel{
+			ID:          40,
+			Credentials: objects.ChannelCredentials{APIKeys: []string{"key-1", "key-2"}},
+		},
+		Outbound: &mockTransformer{},
+	}
+	current := &ChannelModelsCandidate{
+		Channel: channel,
+		Models:  []biz.ChannelModelEntry{{RequestModel: "gpt-5", ActualModel: "gpt-5"}},
+	}
+	outbound := &PersistentOutboundTransformer{
+		wrapped: &mockTransformer{},
+		state: &PersistenceState{
+			RetryPolicy:      &biz.RetryPolicy{Enabled: false},
+			CurrentCandidate: current,
+			Perf:             &biz.PerformanceRecord{APIKey: "key-1"},
+		},
+	}
+
+	require.Zero(t, outbound.MaxSameChannelRetries())
+	require.False(t, outbound.CanRetryContext(t.Context(), &llm.ResponseError{StatusCode: http.StatusTooManyRequests}))
 }
 
 func TestShouldForceStreamingForCandidate(t *testing.T) {
@@ -1240,7 +1380,7 @@ func TestPersistentOutboundTransformer_CanRetry_429_WithRetryAfter(t *testing.T)
 			Headers:    http.Header{"Retry-After": []string{"30"}},
 		}
 
-		require.False(t, outbound.CanRetry(httpErr))
+		require.False(t, outbound.CanRetryContext(t.Context(), httpErr))
 	})
 
 	t.Run("429 with multiple headers including Retry-After should not retry", func(t *testing.T) {
@@ -1264,7 +1404,7 @@ func TestPersistentOutboundTransformer_CanRetry_429_WithRetryAfter(t *testing.T)
 			},
 		}
 
-		require.False(t, outbound.CanRetry(httpErr))
+		require.False(t, outbound.CanRetryContext(t.Context(), httpErr))
 	})
 }
 
@@ -1295,7 +1435,7 @@ func TestPersistentOutboundTransformer_CanRetry_429_WithoutRetryAfter(t *testing
 			Headers:    nil,
 		}
 
-		require.False(t, outbound.CanRetry(httpErr))
+		require.False(t, outbound.CanRetryContext(t.Context(), httpErr))
 	})
 
 	t.Run("429 without Retry-After (empty headers) should skip same-channel retry", func(t *testing.T) {
@@ -1316,7 +1456,7 @@ func TestPersistentOutboundTransformer_CanRetry_429_WithoutRetryAfter(t *testing
 			Headers:    http.Header{},
 		}
 
-		require.False(t, outbound.CanRetry(httpErr))
+		require.False(t, outbound.CanRetryContext(t.Context(), httpErr))
 	})
 
 	t.Run("429 without Retry-After (headers but no Retry-After key) should skip same-channel retry", func(t *testing.T) {
@@ -1339,7 +1479,23 @@ func TestPersistentOutboundTransformer_CanRetry_429_WithoutRetryAfter(t *testing
 			},
 		}
 
-		require.False(t, outbound.CanRetry(httpErr))
+		require.False(t, outbound.CanRetryContext(t.Context(), httpErr))
+	})
+
+	t.Run("wrapped streaming 429 without another key should switch channel", func(t *testing.T) {
+		outbound := &PersistentOutboundTransformer{
+			wrapped: &mockTransformer{},
+			state: &PersistenceState{
+				CurrentCandidate: &ChannelModelsCandidate{
+					Channel: channel,
+					Models:  []biz.ChannelModelEntry{{RequestModel: "gpt-4", ActualModel: "gpt-4"}},
+				},
+				CurrentModelIndex: 0,
+			},
+		}
+
+		streamErr := pipeline.WrapUpstreamError(&llm.ResponseError{StatusCode: http.StatusTooManyRequests})
+		require.False(t, outbound.CanRetryContext(t.Context(), streamErr))
 	})
 }
 
@@ -1366,9 +1522,9 @@ func TestPersistentOutboundTransformer_CanRetry_ChannelRetryableStatusCodes(t *t
 		},
 	}
 
-	require.True(t, outbound.CanRetry(&httpclient.Error{StatusCode: http.StatusBadRequest}))
-	require.True(t, outbound.CanRetry(&httpclient.Error{StatusCode: http.StatusForbidden}))
-	require.False(t, outbound.CanRetry(&httpclient.Error{StatusCode: http.StatusUnauthorized}))
+	require.True(t, outbound.CanRetryContext(t.Context(), &httpclient.Error{StatusCode: http.StatusBadRequest}))
+	require.True(t, outbound.CanRetryContext(t.Context(), &httpclient.Error{StatusCode: http.StatusForbidden}))
+	require.False(t, outbound.CanRetryContext(t.Context(), &httpclient.Error{StatusCode: http.StatusUnauthorized}))
 }
 
 func TestPersistentOutboundTransformer_CanRetry_429_WithMultipleModels(t *testing.T) {
@@ -1402,6 +1558,6 @@ func TestPersistentOutboundTransformer_CanRetry_429_WithMultipleModels(t *testin
 		}
 
 		// Should skip retry even though there are more models
-		require.False(t, outbound.CanRetry(httpErr))
+		require.False(t, outbound.CanRetryContext(t.Context(), httpErr))
 	})
 }

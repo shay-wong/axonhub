@@ -316,6 +316,28 @@ func TestTraceStickyKeyProvider_CachedSelectionSkipsDisabledKey(t *testing.T) {
 	require.NotEqual(t, selectedKey, keyAfterDisable, "cached sticky key must not be reused after it is disabled")
 }
 
+func TestTraceStickyKeyProvider_SkipsRequestExcludedKey(t *testing.T) {
+	keys := []string{"key-1", "key-2", "key-3"}
+	ch := &Channel{
+		Channel: &ent.Channel{
+			ID: 40,
+			Credentials: objects.ChannelCredentials{
+				APIKeys: keys,
+			},
+		},
+		cachedAPIKeyConfigs: apiKeyConfigs(keys),
+	}
+	ctx := contexts.EnsureContainer(contexts.WithTrace(t.Context(), &ent.Trace{TraceID: "retry-trace"}))
+	provider := NewTraceStickyKeyProvider(ch)
+
+	failedKey := provider.Get(ctx)
+	contexts.ExcludeChannelAPIKey(ctx, ch.ID, failedKey)
+
+	retryKey := provider.Get(ctx)
+	require.NotEqual(t, failedKey, retryKey)
+	require.Contains(t, keys, retryKey)
+}
+
 func TestTraceStickyKeyProvider_AddKey_Stable(t *testing.T) {
 	originalKeys := []string{"key-1", "key-2", "key-3"}
 	ch := &Channel{
@@ -453,6 +475,28 @@ func TestWeightedTraceStickyKeyProvider_DistributionFollowsWeights(t *testing.T)
 	require.InDelta(t, 0.25, float64(counts["tertiary"])/2000.0, 0.06)
 }
 
+func TestWeightedTraceStickyKeyProvider_SkipsRequestExcludedKeyWithoutTrace(t *testing.T) {
+	configs := []objects.ChannelAPIKeyConfig{
+		{Key: "key-1", Weight: 100},
+		{Key: "key-2", Weight: 100},
+		{Key: "key-3", Weight: 100},
+	}
+	ch := &Channel{
+		Channel: &ent.Channel{
+			ID:          40,
+			Credentials: objects.ChannelCredentials{APIKeyConfigs: configs},
+		},
+		cachedAPIKeyConfigs: configs,
+	}
+	ctx := contexts.EnsureContainer(t.Context())
+	contexts.ExcludeChannelAPIKey(ctx, ch.ID, "key-1")
+	provider := NewWeightedTraceStickyKeyProvider(ch)
+
+	for range 100 {
+		require.NotEqual(t, "key-1", provider.Get(ctx))
+	}
+}
+
 func TestFailoverAPIKeyProvider_UsesOnlyHighestWeightGroup(t *testing.T) {
 	configs := []objects.ChannelAPIKeyConfig{
 		{Key: "primary-a", Weight: 100},
@@ -503,6 +547,27 @@ func TestFailoverAPIKeyProvider_FallsBackWhenHighestWeightGroupDisabled(t *testi
 		ctx := contexts.WithTrace(context.Background(), trace)
 		require.Equal(t, "backup", provider.Get(ctx))
 	}
+}
+
+func TestFailoverAPIKeyProvider_FallsBackWhenHighestWeightGroupExcludedForRequest(t *testing.T) {
+	configs := []objects.ChannelAPIKeyConfig{
+		{Key: "primary-a", Weight: 100},
+		{Key: "primary-b", Weight: 100},
+		{Key: "backup", Weight: 50},
+	}
+	ch := &Channel{
+		Channel: &ent.Channel{
+			ID:          40,
+			Credentials: objects.ChannelCredentials{APIKeyConfigs: configs},
+		},
+		cachedAPIKeyConfigs: configs,
+	}
+	ctx := contexts.EnsureContainer(t.Context())
+	contexts.ExcludeChannelAPIKey(ctx, ch.ID, "primary-a")
+	contexts.ExcludeChannelAPIKey(ctx, ch.ID, "primary-b")
+
+	provider := NewFailoverAPIKeyProvider(ch)
+	require.Equal(t, "backup", provider.Get(ctx))
 }
 
 func TestRendezvousSelect_Deterministic(t *testing.T) {

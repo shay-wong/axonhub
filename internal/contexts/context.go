@@ -138,6 +138,36 @@ func GetChannelAPIKey(ctx context.Context) (string, bool) {
 	return "", false
 }
 
+// ExcludeChannelAPIKey prevents a failed upstream key from being selected again
+// for the same channel during the current request.
+func ExcludeChannelAPIKey(ctx context.Context, channelID int, apiKey string) {
+	if channelID == 0 || apiKey == "" {
+		return
+	}
+
+	container := getContainer(ctx)
+	container.mu.Lock()
+	defer container.mu.Unlock()
+
+	if container.ExcludedChannelAPIKeys == nil {
+		container.ExcludedChannelAPIKeys = make(map[int]map[string]struct{})
+	}
+	if container.ExcludedChannelAPIKeys[channelID] == nil {
+		container.ExcludedChannelAPIKeys[channelID] = make(map[string]struct{})
+	}
+
+	container.ExcludedChannelAPIKeys[channelID][apiKey] = struct{}{}
+}
+
+func IsChannelAPIKeyExcluded(ctx context.Context, channelID int, apiKey string) bool {
+	container := getContainer(ctx)
+	container.mu.RLock()
+	defer container.mu.RUnlock()
+
+	_, excluded := container.ExcludedChannelAPIKeys[channelID][apiKey]
+	return excluded
+}
+
 // WithProjectID stores the project ID in the context.
 func WithProjectID(ctx context.Context, projectID int) context.Context {
 	container := getContainer(ctx)

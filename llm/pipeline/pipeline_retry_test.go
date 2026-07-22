@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -58,6 +59,7 @@ type mockOutbound struct {
 	transformer.Outbound
 
 	apiFormat             llm.APIFormat
+	maxSameChannelRetries func() int
 	hasMoreChannels       func() bool
 	nextChannel           func(context.Context) error
 	canRetry              func(error) bool
@@ -69,7 +71,28 @@ type mockOutbound struct {
 	aggregateStreamChunks func(context.Context, []*httpclient.StreamEvent) ([]byte, llm.ResponseMeta, error)
 }
 
+type mockContextRetryableOutbound struct {
+	*mockOutbound
+	canRetryContext func(context.Context, error) bool
+}
+
+func (m *mockContextRetryableOutbound) CanRetryContext(ctx context.Context, err error) bool {
+	return m.canRetryContext(ctx, err)
+}
+
+func (m *mockContextRetryableOutbound) HasMoreChannelsContext(ctx context.Context) bool {
+	return m.hasMoreChannels()
+}
+
 func (m *mockOutbound) APIFormat() llm.APIFormat { return m.apiFormat }
+func (m *mockOutbound) MaxSameChannelRetries() int {
+	if m.maxSameChannelRetries != nil {
+		return m.maxSameChannelRetries()
+	}
+
+	return 0
+}
+
 func (m *mockOutbound) TransformRequest(ctx context.Context, req *llm.Request) (*httpclient.Request, error) {
 	if m.transformRequest != nil {
 		return m.transformRequest(ctx, req)
@@ -390,6 +413,63 @@ func TestPipeline_Process_RetryLogic(t *testing.T) {
 		require.Nil(t, res)
 		require.Equal(t, 4, execCalls)
 	})
+}
+
+func TestPipeline_Process_ExhaustsSameChannelKeysBeforeSwitchingChannel(t *testing.T) {
+	ctx := context.Background()
+	inbound := &mockInbound{}
+	currentChannel := 0
+	currentKey := 0
+	attempts := make([]string, 0, 4)
+
+	executor := &mockExecutor{
+		do: func(ctx context.Context, req *httpclient.Request) (*httpclient.Response, error) {
+			if currentChannel == 0 {
+				attempts = append(attempts, fmt.Sprintf("channel-1/key-%d", currentKey+1))
+
+				return nil, errors.New("key failed")
+			}
+
+			attempts = append(attempts, "channel-2")
+
+			return &httpclient.Response{}, nil
+		},
+	}
+
+	prepareCalls := 0
+	switchCalls := 0
+	classifiedFailures := 0
+	outbound := &mockContextRetryableOutbound{mockOutbound: &mockOutbound{
+		// Three keys require two same-channel retries before the channel is exhausted.
+		maxSameChannelRetries: func() int { return 2 },
+		prepareForRetry: func(ctx context.Context) error {
+			prepareCalls++
+			currentKey++
+
+			return nil
+		},
+		hasMoreChannels: func() bool { return currentChannel == 0 },
+		nextChannel: func(ctx context.Context) error {
+			switchCalls++
+			currentChannel++
+
+			return nil
+		},
+	}, canRetryContext: func(ctx context.Context, err error) bool {
+		classifiedFailures++
+
+		return currentChannel == 0 && currentKey < 2
+	}}
+
+	p := NewFactory(executor).Pipeline(inbound, outbound, WithRetry(1, 0, 0))
+
+	result, err := p.Process(ctx, &httpclient.Request{})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, []string{"channel-1/key-1", "channel-1/key-2", "channel-1/key-3", "channel-2"}, attempts)
+	require.Equal(t, 2, prepareCalls)
+	require.Equal(t, 1, switchCalls)
+	require.Equal(t, 3, classifiedFailures, "the final failed key must be classified before channel switching")
 }
 
 func TestPipeline_Process_RetryPreservesOriginalStreamIntent(t *testing.T) {
