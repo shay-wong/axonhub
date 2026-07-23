@@ -28,6 +28,7 @@ import {
   bulkUpdateChannelOrderingResultSchema,
   channelSummaryConnectionSchema,
   ChannelSettings,
+  ProxyConfig,
   ChannelPolicies,
   ChannelModelPrice,
   SaveChannelModelPriceInput,
@@ -118,6 +119,7 @@ const CREATE_CHANNEL_MUTATION = `
           url
           username
           password
+          disableConnectionReuse
         }
         transformOptions {
           forceArrayInstructions
@@ -210,6 +212,7 @@ const DUPLICATE_CHANNEL_MUTATION = `
           url
           username
           password
+          disableConnectionReuse
         }
         transformOptions {
           forceArrayInstructions
@@ -302,6 +305,7 @@ const BULK_CREATE_CHANNELS_MUTATION = `
           url
           username
           password
+          disableConnectionReuse
         }
         transformOptions {
           forceArrayInstructions
@@ -394,6 +398,7 @@ const UPDATE_CHANNEL_MUTATION = `
           url
           username
           password
+          disableConnectionReuse
         }
         transformOptions {
           forceArrayInstructions
@@ -681,6 +686,7 @@ const GET_CHANNEL_DISABLED_API_KEYS_QUERY = `
           disabledUntil
           disableAction
           errorCode
+          reason
         }
       }
     }
@@ -755,6 +761,52 @@ const GET_CHANNEL_MODEL_PRICES_QUERY = `
               }
             }
           }
+          schedule {
+            timezone
+            overrides {
+              name
+              priority
+              when {
+                dailyTime {
+                  start
+                  end
+                }
+                weekdays
+                dateRange {
+                  start
+                  end
+                }
+              }
+              items {
+                itemCode
+                pricing {
+                  mode
+                  flatFee
+                  usagePerUnit
+                  usageTiered {
+                    tiers {
+                      upTo
+                      pricePerUnit
+                    }
+                  }
+                }
+                promptWriteCacheVariants {
+                  variantCode
+                  pricing {
+                    mode
+                    flatFee
+                    usagePerUnit
+                    usageTiered {
+                      tiers {
+                        upTo
+                        pricePerUnit
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -821,6 +873,52 @@ const SAVE_CHANNEL_MODEL_PRICES_MUTATION = `
                   tiers {
                     upTo
                     pricePerUnit
+                  }
+                }
+              }
+            }
+          }
+        }
+        schedule {
+          timezone
+          overrides {
+            name
+            priority
+            when {
+              dailyTime {
+                start
+                end
+              }
+              weekdays
+              dateRange {
+                start
+                end
+              }
+            }
+            items {
+              itemCode
+              pricing {
+                mode
+                flatFee
+                usagePerUnit
+                usageTiered {
+                  tiers {
+                    upTo
+                    pricePerUnit
+                  }
+                }
+              }
+              promptWriteCacheVariants {
+                variantCode
+                pricing {
+                  mode
+                  flatFee
+                  usagePerUnit
+                  usageTiered {
+                    tiers {
+                      upTo
+                      pricePerUnit
+                    }
                   }
                 }
               }
@@ -1027,6 +1125,7 @@ const QUERY_CHANNELS_QUERY = `
               url
               username
               password
+              disableConnectionReuse
             }
             transformOptions {
               forceArrayInstructions
@@ -1614,7 +1713,7 @@ export function useTestChannel(options?: { silent?: boolean }) {
     }: {
       channelID: string;
       modelID?: string;
-      proxy?: { type: string; url?: string; username?: string; password?: string };
+      proxy?: ProxyConfig;
     }) => {
       try {
         const data = await graphqlRequest<{
@@ -1993,6 +2092,7 @@ export function useChannelDisabledAPIKeys(channelId: string, options?: { enabled
               disabledUntil?: string | null;
               disableAction?: string | null;
               errorCode: number;
+              reason?: string | null;
             }>;
           };
         }>(GET_CHANNEL_DISABLED_API_KEYS_QUERY, { id: channelId });

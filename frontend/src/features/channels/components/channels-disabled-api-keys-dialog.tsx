@@ -328,7 +328,7 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
                 <div className='divide-y'>
                   {disabledKeys.map((dk) => (
                     <div key={dk.key} className='flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/50'>
-                      <div className='flex min-w-0 items-center gap-3'>
+                      <div className='flex min-w-0 flex-1 items-center gap-3'>
                         <Checkbox
                           checked={selectedKeys.has(dk.key)}
                           onCheckedChange={(checked) => {
@@ -371,7 +371,7 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
                               </TooltipContent>
                             </Tooltip>
                           </div>
-                          <div className='text-muted-foreground flex items-center gap-2 text-xs'>
+                          <div className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs'>
                             {dk.disableStatus.kind === 'temporary' ? (
                               <>
                                 <span>
@@ -398,10 +398,18 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
                               </>
                             )}
                           </div>
+                          {dk.reason && (
+                            <div className='text-muted-foreground flex min-w-0 items-start gap-1 text-xs'>
+                              <span className='shrink-0 font-medium'>
+                                {t('channels.dialogs.disabledAPIKeys.reason')}:
+                              </span>
+                              <span className='min-w-0 whitespace-pre-wrap break-words'>{dk.reason}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      <div className='flex gap-1'>
+                      <div className='flex shrink-0 gap-1'>
                         {/* Enable single key */}
                         <Popover
                           open={confirmPopoverKey === dk.key}

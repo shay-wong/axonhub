@@ -16,6 +16,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AutoCompleteSelect } from '@/components/auto-complete-select';
 import { ModelPriceEditor } from '@/components/model-price-editor';
+import { PriceScheduleEditor } from '@/components/price-schedule-editor';
 import { useProvidersData } from '@/features/models/data/providers';
 import { type ProviderModel, type ProvidersData } from '@/features/models/data/providers.schema';
 import { useGeneralSettings } from '@/features/system/data/system';
@@ -82,6 +83,36 @@ const createPriceFormSchema = (t: (key: string) => string) =>
               )
               .optional()
               .nullable(),
+            schedule: z
+              .object({
+                timezone: z.string(),
+                overrides: z.array(
+                  z.object({
+                    name: z.string(),
+                    priority: z.number().int(),
+                    when: z.object({
+                      dailyTime: z
+                        .object({
+                          start: z.string(),
+                          end: z.string(),
+                        })
+                        .optional()
+                        .nullable(),
+                      weekdays: z.array(z.number().int().min(1).max(7)).optional().nullable(),
+                      dateRange: z
+                        .object({
+                          start: z.string(),
+                          end: z.string(),
+                        })
+                        .optional()
+                        .nullable(),
+                    }),
+                    items: z.array(priceItemFormSchema),
+                  })
+                ),
+              })
+              .optional()
+              .nullable(),
           }),
         })
       ),
@@ -101,6 +132,33 @@ const createPriceFormSchema = (t: (key: string) => string) =>
           message: messageByCode[issue.code],
           path: issue.path,
         });
+      });
+
+      data.prices.forEach((price, priceIndex) => {
+        const schedule = price.price.schedule;
+        if (schedule) {
+          if (schedule.overrides.length === 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: t('price.schedule.validation.overridesRequired'),
+              path: ['prices', priceIndex, 'price', 'schedule', 'overrides'],
+            });
+          }
+
+          schedule.overrides.forEach((override, overrideIndex) => {
+            const when = override.when;
+            const hasDailyTime = !!when.dailyTime;
+            const hasWeekdays = !!when.weekdays && when.weekdays.length > 0;
+            const hasDateRange = !!when.dateRange?.start && !!when.dateRange?.end;
+            if (!hasDailyTime && !hasWeekdays && !hasDateRange) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: t('price.schedule.when.atLeastOne'),
+                path: ['prices', priceIndex, 'price', 'schedule', 'overrides', overrideIndex, 'when'],
+              });
+            }
+          });
+        }
       });
     });
 
@@ -307,6 +365,7 @@ const PriceCard = memo(function PriceCard({
   t,
   priceIndex,
   currencyCode,
+  defaultTimezone,
   onAddItem,
   onModelSelected,
   onDuplicatePrice,
@@ -325,6 +384,7 @@ const PriceCard = memo(function PriceCard({
   t: TFunction;
   priceIndex: number;
   currencyCode?: string;
+  defaultTimezone?: string;
   onAddItem: (priceIndex: number) => void;
   onModelSelected: (priceIndex: number, modelId: string) => void;
   onDuplicatePrice: (priceIndex: number) => void;
@@ -401,6 +461,7 @@ const PriceCard = memo(function PriceCard({
             onAddVariant={onAddVariant}
             onRemoveVariant={onRemoveVariant}
           />
+          <PriceScheduleEditor control={control} priceIndex={priceIndex} currencyCode={currencyCode} defaultTimezone={defaultTimezone} />
         </div>
 
         {/* Desktop: grid layout */}
@@ -471,6 +532,7 @@ const PriceCard = memo(function PriceCard({
               onAddVariant={onAddVariant}
               onRemoveVariant={onRemoveVariant}
             />
+            <PriceScheduleEditor control={control} priceIndex={priceIndex} currencyCode={currencyCode} defaultTimezone={defaultTimezone} />
           </div>
 
           <div />
@@ -586,6 +648,27 @@ export function ChannelsModelPriceDialog() {
     setOpen(null);
     reset();
   }, [setOpen, reset]);
+
+  const onSubmitError = useCallback((errors: Record<string, any>) => {
+    const messages: string[] = [];
+    const collectErrors = (obj: any, path: string = '') => {
+      if (!obj) return;
+      if (obj.message && typeof obj.message === 'string') {
+        messages.push(obj.message);
+      }
+      for (const key of Object.keys(obj)) {
+        if (key === 'message' || key === 'type' || key === 'ref') continue;
+        const val = obj[key];
+        if (val && typeof val === 'object') {
+          collectErrors(val, path ? `${path}.${key}` : key);
+        }
+      }
+    };
+    collectErrors(errors);
+    if (messages.length > 0) {
+      toast.error(messages[0]);
+    }
+  }, []);
 
   const onSubmit = useCallback(
     async (data: PriceFormData) => {
@@ -849,7 +932,7 @@ export function ChannelsModelPriceDialog() {
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className='flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'>
+          <form onSubmit={form.handleSubmit(onSubmit, onSubmitError)} className='flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'>
             <Card className='mb-4 max-h-[15vh] shrink-0 overflow-y-auto md:max-h-none md:overflow-visible'>
               <CardContent className='pt-0 md:pt-4'>
                 <div className='text-muted-foreground mb-3 text-xs'>{t('price.apply.usdHint')}</div>
@@ -959,6 +1042,7 @@ export function ChannelsModelPriceDialog() {
                     t={t}
                     priceIndex={index}
                     currencyCode={settings?.currencyCode}
+                    defaultTimezone={settings?.timezone || 'UTC'}
                     onAddItem={addItem}
                     onModelSelected={onModelSelected}
                     onDuplicatePrice={duplicatePrice}

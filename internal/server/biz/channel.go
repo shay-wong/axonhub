@@ -366,6 +366,9 @@ func (svc *ChannelService) cleanupSwappedChannels(channels []*Channel) {
 			ch.stopTokenProvider()
 		}
 		stopChannelOutbounds(ch)
+		if ch != nil && ch.HTTPClient != nil && ch.HTTPClient != svc.httpClient {
+			ch.HTTPClient.CloseIdleConnections()
+		}
 	}
 }
 

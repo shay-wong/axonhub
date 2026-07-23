@@ -24,12 +24,27 @@ export type PriceFormItem = {
   }> | null;
 };
 
+export type PriceFormSchedule = {
+  timezone: string;
+  overrides: Array<{
+    name: string;
+    priority: number;
+    when: {
+      dailyTime?: { start: string; end: string } | null;
+      weekdays?: number[] | null;
+      dateRange?: { start: string; end: string } | null;
+    };
+    items: PriceFormItem[];
+  }>;
+};
+
 export type PriceFormPrice = {
   items: PriceFormItem[];
   serviceTierPrices?: Array<{
     serviceTier: string;
     items: PriceFormItem[];
   }> | null;
+  schedule?: PriceFormSchedule | null;
 };
 
 export type PriceFormData = {
@@ -112,11 +127,11 @@ function mapItemToInput(item: PriceFormItem): ModelPriceItem {
 }
 
 function cloneFormItems(items: PriceFormItem[]): PriceFormItem[] {
-	return structuredClone(items);
+  return structuredClone(items);
 }
 
 function canonicalizeServiceTier(serviceTier: string): string {
-	return serviceTier.trim().toLowerCase();
+  return serviceTier.trim().toLowerCase();
 }
 
 export function mapServerPricesToFormData(currentPrices: readonly ChannelModelPrice[]): PriceFormData {
@@ -130,6 +145,21 @@ export function mapServerPricesToFormData(currentPrices: readonly ChannelModelPr
             serviceTier: serviceTierPrice.serviceTier,
             items: serviceTierPrice.items.map(mapItemToForm),
           })) || [],
+        schedule: price.price.schedule
+          ? {
+              timezone: price.price.schedule.timezone,
+              overrides: price.price.schedule.overrides.map((override) => ({
+                name: override.name,
+                priority: override.priority,
+                when: {
+                  dailyTime: override.when.dailyTime || null,
+                  weekdays: override.when.weekdays || null,
+                  dateRange: override.when.dateRange || null,
+                },
+                items: override.items.map(mapItemToForm),
+              })),
+            }
+          : null,
       },
     })),
   };
@@ -140,11 +170,29 @@ export function mapPriceFormDataToSaveInput(data: PriceFormData): SaveChannelMod
     modelId: price.modelId,
     price: {
       items: price.price.items.map(mapItemToInput),
-		serviceTierPrices:
-			price.price.serviceTierPrices?.map((serviceTierPrice) => ({
-				serviceTier: canonicalizeServiceTier(serviceTierPrice.serviceTier),
+      serviceTierPrices:
+        price.price.serviceTierPrices?.map((serviceTierPrice) => ({
+          serviceTier: canonicalizeServiceTier(serviceTierPrice.serviceTier),
           items: serviceTierPrice.items.map(mapItemToInput),
         })) || [],
+      schedule: price.price.schedule
+        ? {
+            timezone: price.price.schedule.timezone,
+            overrides: price.price.schedule.overrides.map((override) => ({
+              name: override.name,
+              priority: override.priority,
+              when: {
+                dailyTime: override.when.dailyTime || null,
+                weekdays: override.when.weekdays?.length ? override.when.weekdays : null,
+                dateRange:
+                  override.when.dateRange?.start && override.when.dateRange?.end
+                    ? { start: override.when.dateRange.start, end: override.when.dateRange.end }
+                    : null,
+              },
+              items: override.items.map(mapItemToInput),
+            })),
+          }
+        : null,
     },
   }));
 }
@@ -256,9 +304,9 @@ export function collectPriceFormValidationIssues(data: PriceFormData): PriceForm
     const pricePath = ['prices', priceIndex, 'price'] as Array<string | number>;
     collectItemIssues(price.price.items, [...pricePath, 'items'], issues);
 
-	const tierIndexesByName = new Map<string, number[]>();
-	(price.price.serviceTierPrices || []).forEach((serviceTierPrice, serviceTierIndex) => {
-		const serviceTier = canonicalizeServiceTier(serviceTierPrice.serviceTier);
+    const tierIndexesByName = new Map<string, number[]>();
+    (price.price.serviceTierPrices || []).forEach((serviceTierPrice, serviceTierIndex) => {
+      const serviceTier = canonicalizeServiceTier(serviceTierPrice.serviceTier);
       if (!serviceTier) {
         issues.push({
           code: 'serviceTierRequired',
@@ -281,6 +329,10 @@ export function collectPriceFormValidationIssues(data: PriceFormData): PriceForm
           path: [...pricePath, 'serviceTierPrices', serviceTierIndex, 'serviceTier'],
         });
       });
+    });
+
+    (price.price.schedule?.overrides || []).forEach((override, overrideIndex) => {
+      collectItemIssues(override.items, [...pricePath, 'schedule', 'overrides', overrideIndex, 'items'], issues);
     });
   });
 

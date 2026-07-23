@@ -26,6 +26,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { AutoCompleteSelect } from '@/components/auto-complete-select';
 import { SelectDropdown } from '@/components/select-dropdown';
 import { useProxyPresets, useSaveProxyPreset } from '@/features/system/data/system';
+import { usePermissions } from '@/hooks/usePermissions';
 import { antigravityOAuthExchange, antigravityOAuthStart } from '../data/antigravity';
 import { formatAPIKeyIdentity, maskAPIKeySuffix } from '../data/api-key-display';
 import {
@@ -419,6 +420,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const { data: allTags = [], isLoading: isLoadingTags } = useAllChannelTags();
   const { data: proxyPresets = [] } = useProxyPresets();
   const saveProxyPreset = useSaveProxyPreset();
+  const { hasSystemScope } = usePermissions();
   const [supportedModels, setSupportedModels] = useState<string[]>(() => initialRow?.supportedModels || []);
   const [manualModels, setManualModels] = useState<string[]>(() => initialRow?.manualModels || []);
   const [newModel, setNewModel] = useState('');
@@ -1407,7 +1409,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         }
 
         // Auto-save proxy preset (preserve existing name if available)
-        if (proxyType === ProxyType.URL && proxyUrl) {
+        if (hasSystemScope('write_settings') && proxyType === ProxyType.URL && proxyUrl) {
           const existingPreset = proxyPresets.find((p) => p.url === proxyUrl);
           saveProxyPreset.mutate({
             name: existingPreset?.name,

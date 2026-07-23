@@ -52,7 +52,7 @@ test('preserves service-tier prices through query, form, and mutation mapping', 
         ],
         serviceTierPrices: [
           {
-	            serviceTier: ' PRIORITY ',
+            serviceTier: ' PRIORITY ',
             items: [
               usageItem('prompt_tokens', 2.5),
               {
@@ -134,9 +134,87 @@ test('preserves service-tier prices through query, form, and mutation mapping', 
             ],
           },
         ],
+        schedule: null,
       },
     },
   ]);
+});
+
+test('preserves scheduled prompt cache variants through form and mutation mapping', () => {
+  // Scheduled items use the same billing shape as base items and must not lose variant prices on save.
+  const serverPrices = [
+    {
+      id: 'price_1',
+      modelID: 'gpt-5.3-codex',
+      price: {
+        items: [usageItem('prompt_tokens', 1)],
+        serviceTierPrices: [],
+        schedule: {
+          timezone: 'UTC',
+          overrides: [
+            {
+              name: 'Night cache price',
+              priority: 1,
+              when: { weekdays: [1, 2, 3, 4, 5] },
+              items: [
+                {
+                  ...usageItem('prompt_write_cached_tokens', 4),
+                  promptWriteCacheVariants: [
+                    {
+                      variantCode: 'one_hour',
+                      pricing: { mode: 'flat_fee', flatFee: 1.5 },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    },
+  ];
+
+  const formData = mapServerPricesToFormData(serverPrices);
+  assert.equal(formData.prices[0].price.schedule.overrides[0].items[0].pricing.usagePerUnit, '4');
+  assert.equal(formData.prices[0].price.schedule.overrides[0].items[0].promptWriteCacheVariants[0].pricing.flatFee, '1.5');
+
+  const savedSchedule = mapPriceFormDataToSaveInput(formData)[0].price.schedule;
+  assert.deepEqual(savedSchedule, {
+    timezone: 'UTC',
+    overrides: [
+      {
+        name: 'Night cache price',
+        priority: 1,
+        when: {
+          dailyTime: null,
+          weekdays: [1, 2, 3, 4, 5],
+          dateRange: null,
+        },
+        items: [
+          {
+            itemCode: 'prompt_write_cached_tokens',
+            pricing: {
+              mode: 'usage_per_unit',
+              flatFee: null,
+              usagePerUnit: '4',
+              usageTiered: null,
+            },
+            promptWriteCacheVariants: [
+              {
+                variantCode: 'one_hour',
+                pricing: {
+                  mode: 'flat_fee',
+                  flatFee: '1.5',
+                  usagePerUnit: null,
+                  usageTiered: null,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
 });
 
 test('catalog application replaces stale service-tier prices without replacing manual base prices', () => {
@@ -184,7 +262,7 @@ test('validates service-tier names and nested price items with the same rules as
               items: [usageItem('prompt_tokens', '2'), usageItem('prompt_tokens', '3')],
             },
             {
-	              serviceTier: ' Priority ',
+              serviceTier: ' Priority ',
               items: [
                 {
                   itemCode: 'prompt_write_cached_tokens',
@@ -216,6 +294,47 @@ test('validates service-tier names and nested price items with the same rules as
   assert.ok(issueCodes.includes('priceRequired'));
   assert.equal(issueCodes.filter((code) => code === 'duplicateItemCode').length, 2);
   assert.equal(issueCodes.filter((code) => code === 'duplicateVariantCode').length, 2);
+});
+
+test('validates scheduled items with the same duplicate rules as base prices', () => {
+  // Schedule overrides become the active billing list, so duplicate items and variants must be rejected before save.
+  const formData = {
+    prices: [
+      {
+        modelId: 'gpt-5.3-codex',
+        price: {
+          items: [usageItem('prompt_tokens', '1')],
+          serviceTierPrices: [],
+          schedule: {
+            timezone: 'UTC',
+            overrides: [
+              {
+                name: 'Duplicate schedule prices',
+                priority: 1,
+                when: { weekdays: [1] },
+                items: [
+                  usageItem('prompt_tokens', '2'),
+                  {
+                    itemCode: 'prompt_tokens',
+                    pricing: { mode: 'usage_per_unit', usagePerUnit: '3' },
+                    promptWriteCacheVariants: [
+                      { variantCode: 'five_min', pricing: { mode: 'flat_fee', flatFee: '1' } },
+                      { variantCode: 'five_min', pricing: { mode: 'flat_fee', flatFee: '2' } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ],
+  };
+
+  const issues = collectPriceFormValidationIssues(formData);
+  assert.equal(issues.filter((issue) => issue.code === 'duplicateItemCode').length, 2);
+  assert.equal(issues.filter((issue) => issue.code === 'duplicateVariantCode').length, 2);
+  assert.ok(issues.every((issue) => issue.path.includes('schedule')));
 });
 
 test('accepts positive strictly increasing tier bounds for usage tiered and usage volume prices', () => {

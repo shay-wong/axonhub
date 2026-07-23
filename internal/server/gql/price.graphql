@@ -22,6 +22,7 @@ enum PromptWriteCacheVariantCode {
 type ModelPrice {
   items: [ModelPriceItem!]!
   serviceTierPrices: [ServiceTierPrice!]!
+  schedule: PriceSchedule
 }
 
 type ModelPriceItem {
@@ -33,6 +34,35 @@ type ModelPriceItem {
 type ServiceTierPrice {
   serviceTier: String!
   items: [ModelPriceItem!]!
+}
+
+# Time-based price schedule
+type PriceSchedule {
+  timezone: String!
+  overrides: [PriceOverride!]!
+}
+
+type PriceOverride {
+  name: String!
+  priority: Int!
+  when: OverrideWhen!
+  items: [ModelPriceItem!]!
+}
+
+type OverrideWhen {
+  dailyTime: DailyTimeRange
+  weekdays: [Int!]
+  dateRange: DateRange
+}
+
+type DailyTimeRange {
+  start: String!
+  end: String!
+}
+
+type DateRange {
+  start: String!
+  end: String!
 }
 
 type Pricing {
@@ -60,6 +90,7 @@ type PromptWriteCacheVariant {
 input ModelPriceInput {
   items: [ModelPriceItemInput!]!
   serviceTierPrices: [ServiceTierPriceInput!]
+  schedule: PriceScheduleInput
 }
 
 input ModelPriceItemInput {
@@ -71,6 +102,35 @@ input ModelPriceItemInput {
 input ServiceTierPriceInput {
   serviceTier: String!
   items: [ModelPriceItemInput!]!
+}
+
+# Input types for time-based price schedule
+input PriceScheduleInput {
+  timezone: String!
+  overrides: [PriceOverrideInput!]!
+}
+
+input PriceOverrideInput {
+  name: String!
+  priority: Int!
+  when: OverrideWhenInput!
+  items: [ModelPriceItemInput!]!
+}
+
+input OverrideWhenInput {
+  dailyTime: DailyTimeRangeInput
+  weekdays: [Int!]
+  dateRange: DateRangeInput
+}
+
+input DailyTimeRangeInput {
+  start: String!
+  end: String!
+}
+
+input DateRangeInput {
+  start: String!
+  end: String!
 }
 
 input PricingInput {
