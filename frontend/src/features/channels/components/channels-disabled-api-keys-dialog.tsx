@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { IconRefresh, IconRefreshOff, IconKey, IconAlertTriangle, IconTrash } from '@tabler/icons-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -15,6 +16,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import useInterval from '@/hooks/useInterval';
 import { useChannels } from '../context/channels-context';
 import { createAPIKeyNameMap, formatAPIKeyIdentity, maskAPIKeySuffix } from '../data/api-key-display';
 import {
@@ -24,6 +26,10 @@ import {
   useEnableSelectedChannelAPIKeys,
   useDeleteDisabledChannelAPIKeys,
 } from '../data/channels';
+import {
+  formatDisabledAPIKeyCountdown,
+  getActiveDisabledAPIKeyStatus,
+} from '../data/disabled-api-key-status';
 
 interface ChannelsDisabledAPIKeysDialogProps {
   open: boolean;
@@ -31,6 +37,7 @@ interface ChannelsDisabledAPIKeysDialogProps {
 }
 export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDisabledAPIKeysDialogProps) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const { currentRow, setOpen } = useChannels();
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [confirmPopoverKey, setConfirmPopoverKey] = useState<string | null>(null);
@@ -38,10 +45,48 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
   const [confirmEnableAll, setConfirmEnableAll] = useState(false);
   const [confirmEnableSelected, setConfirmEnableSelected] = useState(false);
   const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false);
+  const [nowMs, setNowMs] = useState(Date.now);
 
-  const { data: disabledKeys = [], isLoading } = useChannelDisabledAPIKeys(currentRow?.id || '', {
+  const { data: storedDisabledKeys = [], isLoading } = useChannelDisabledAPIKeys(currentRow?.id || '', {
     enabled: open && !!currentRow?.id,
   });
+
+  const disabledKeys = useMemo(
+    () =>
+      storedDisabledKeys.flatMap((key) => {
+        const disableStatus = getActiveDisabledAPIKeyStatus(key.disabledUntil, nowMs);
+        return disableStatus ? [{ ...key, disableStatus }] : [];
+      }),
+    [nowMs, storedDisabledKeys]
+  );
+  const hasTemporaryDisabledKeys = disabledKeys.some((key) => key.disableStatus.kind === 'temporary');
+  const visibleKeySignature = disabledKeys.map((key) => key.key).join('\0');
+
+  useEffect(() => {
+    if (open) setNowMs(Date.now());
+  }, [open]);
+
+  useInterval(() => {
+    const currentTime = Date.now();
+    const didExpire = disabledKeys.some(
+      (key) => key.disableStatus.kind === 'temporary' && key.disableStatus.disabledUntilMs <= currentTime
+    );
+    setNowMs(currentTime);
+    if (didExpire) void queryClient.invalidateQueries({ queryKey: ['channels'] });
+  }, open && hasTemporaryDisabledKeys ? 1000 : null);
+
+  useEffect(() => {
+    const activeKeys = new Set(visibleKeySignature ? visibleKeySignature.split('\0') : []);
+    setSelectedKeys((previousKeys) => {
+      const nextKeys = new Set([...previousKeys].filter((key) => activeKeys.has(key)));
+      return nextKeys.size === previousKeys.size ? previousKeys : nextKeys;
+    });
+    setConfirmPopoverKey((key) => (key && !activeKeys.has(key) ? null : key));
+    setConfirmDeletePopoverKey((key) => (key && !activeKeys.has(key) ? null : key));
+    setConfirmEnableAll(false);
+    setConfirmEnableSelected(false);
+    setConfirmDeleteSelected(false);
+  }, [visibleKeySignature]);
 
   const enableAPIKey = useEnableChannelAPIKey();
   const enableAllAPIKeys = useEnableAllChannelAPIKeys();
@@ -317,16 +362,39 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent>
-                                {t('channels.dialogs.disabledAPIKeys.errorCodeTooltip', { code: dk.errorCode })}
+                                {t(
+                                  dk.disableStatus.kind === 'temporary'
+                                    ? 'channels.dialogs.disabledAPIKeys.temporaryErrorCodeTooltip'
+                                    : 'channels.dialogs.disabledAPIKeys.permanentErrorCodeTooltip',
+                                  { code: dk.errorCode }
+                                )}
                               </TooltipContent>
                             </Tooltip>
                           </div>
                           <div className='text-muted-foreground flex items-center gap-2 text-xs'>
-                            <span>{format(new Date(dk.disabledAt), 'yyyy-MM-dd HH:mm:ss')}</span>
-                            {dk.reason && (
+                            {dk.disableStatus.kind === 'temporary' ? (
                               <>
+                                <span>
+                                  {t('channels.dialogs.disabledAPIKeys.remaining', {
+                                    time: formatDisabledAPIKeyCountdown(dk.disableStatus.remainingSeconds),
+                                  })}
+                                </span>
                                 <span>•</span>
-                                <span className='max-w-[200px] truncate'>{dk.reason}</span>
+                                <span>
+                                  {t('channels.dialogs.disabledAPIKeys.recoversAt', {
+                                    time: format(new Date(dk.disableStatus.disabledUntilMs), 'yyyy-MM-dd HH:mm:ss'),
+                                  })}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span>{t('channels.dialogs.disabledAPIKeys.permanent')}</span>
+                                <span>•</span>
+                                <span>
+                                  {t('channels.dialogs.disabledAPIKeys.disabledAt', {
+                                    time: format(new Date(dk.disabledAt), 'yyyy-MM-dd HH:mm:ss'),
+                                  })}
+                                </span>
                               </>
                             )}
                           </div>

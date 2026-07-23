@@ -681,7 +681,6 @@ const GET_CHANNEL_DISABLED_API_KEYS_QUERY = `
           disabledUntil
           disableAction
           errorCode
-          reason
         }
       }
     }
@@ -1994,7 +1993,6 @@ export function useChannelDisabledAPIKeys(channelId: string, options?: { enabled
               disabledUntil?: string | null;
               disableAction?: string | null;
               errorCode: number;
-              reason?: string | null;
             }>;
           };
         }>(GET_CHANNEL_DISABLED_API_KEYS_QUERY, { id: channelId });
