@@ -2,7 +2,12 @@ package biz
 
 import "github.com/samber/lo"
 
-const defaultAutoDisableFallbackDurationMinutes = 5
+const (
+	defaultAutoDisableFallbackDurationMinutes = 5
+	defaultChannelTestSystemPrompt            = "You are a helpful assistant."
+	defaultChannelTestUserPrompt              = "Hello world, I'm AxonHub.\nPlease tell me who you are?"
+	maxChannelTestPromptRunes                 = 4096
+)
 
 var defaultStoragePolicy = StoragePolicy{
 	StoreChunks:       false,
@@ -59,6 +64,8 @@ var defaultChannelSetting = SystemChannelSettings{
 	AutoSync: ChannelModelAutoSyncSetting{
 		Frequency: AutoSyncFrequencyOneHour,
 	},
+	TestSystemPrompt: defaultChannelTestSystemPrompt,
+	TestUserPrompt:   defaultChannelTestUserPrompt,
 }
 
 var defaultGeneralSettings = SystemGeneralSettings{

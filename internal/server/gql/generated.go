@@ -1046,7 +1046,7 @@ type ComplexityRoot struct {
 		UpdateRole                           func(childComplexity int, id objects.GUID, input ent.UpdateRoleInput) int
 		UpdateSecuritySettings               func(childComplexity int, input UpdateSecuritySettingsInput) int
 		UpdateStoragePolicy                  func(childComplexity int, input biz.StoragePolicy) int
-		UpdateSystemChannelSettings          func(childComplexity int, input biz.SystemChannelSettings) int
+		UpdateSystemChannelSettings          func(childComplexity int, input biz.UpdateSystemChannelSettings) int
 		UpdateSystemGeneralSettings          func(childComplexity int, input biz.SystemGeneralSettings) int
 		UpdateSystemModelSettings            func(childComplexity int, input biz.SystemModelSettings) int
 		UpdateUser                           func(childComplexity int, id objects.GUID, input ent.UpdateUserInput) int
@@ -1699,8 +1699,10 @@ type ComplexityRoot struct {
 	}
 
 	SystemChannelSettings struct {
-		AutoSync func(childComplexity int) int
-		Probe    func(childComplexity int) int
+		AutoSync         func(childComplexity int) int
+		Probe            func(childComplexity int) int
+		TestSystemPrompt func(childComplexity int) int
+		TestUserPrompt   func(childComplexity int) int
 	}
 
 	SystemConnection struct {
@@ -2238,7 +2240,7 @@ type MutationResolver interface {
 	CompleteOnboarding(ctx context.Context, input CompleteOnboardingInput) (bool, error)
 	CompleteSystemModelSettingOnboarding(ctx context.Context, input CompleteSystemModelSettingOnboardingInput) (bool, error)
 	CompleteAutoDisableChannelOnboarding(ctx context.Context, input CompleteAutoDisableChannelOnboardingInput) (bool, error)
-	UpdateSystemChannelSettings(ctx context.Context, input biz.SystemChannelSettings) (bool, error)
+	UpdateSystemChannelSettings(ctx context.Context, input biz.UpdateSystemChannelSettings) (bool, error)
 	UpdateSystemGeneralSettings(ctx context.Context, input biz.SystemGeneralSettings) (bool, error)
 	UpdateVideoStorageSettings(ctx context.Context, input biz.VideoStorageSettings) (bool, error)
 	UpdateQuotaEnforcementSettings(ctx context.Context, input UpdateQuotaEnforcementSettingsInput) (bool, error)
@@ -6833,7 +6835,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateSystemChannelSettings(childComplexity, args["input"].(biz.SystemChannelSettings)), true
+		return e.complexity.Mutation.UpdateSystemChannelSettings(childComplexity, args["input"].(biz.UpdateSystemChannelSettings)), true
 	case "Mutation.updateSystemGeneralSettings":
 		if e.complexity.Mutation.UpdateSystemGeneralSettings == nil {
 			break
@@ -9801,6 +9803,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.SystemChannelSettings.Probe(childComplexity), true
+	case "SystemChannelSettings.testSystemPrompt":
+		if e.complexity.SystemChannelSettings.TestSystemPrompt == nil {
+			break
+		}
+
+		return e.complexity.SystemChannelSettings.TestSystemPrompt(childComplexity), true
+	case "SystemChannelSettings.testUserPrompt":
+		if e.complexity.SystemChannelSettings.TestUserPrompt == nil {
+			break
+		}
+
+		return e.complexity.SystemChannelSettings.TestUserPrompt(childComplexity), true
 
 	case "SystemConnection.edges":
 		if e.complexity.SystemConnection.Edges == nil {
@@ -13337,7 +13351,7 @@ func (ec *executionContext) field_Mutation_updateStoragePolicy_args(ctx context.
 func (ec *executionContext) field_Mutation_updateSystemChannelSettings_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateSystemChannelSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐSystemChannelSettings)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateSystemChannelSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐUpdateSystemChannelSettings)
 	if err != nil {
 		return nil, err
 	}
@@ -35862,7 +35876,7 @@ func (ec *executionContext) _Mutation_updateSystemChannelSettings(ctx context.Co
 		ec.fieldContext_Mutation_updateSystemChannelSettings,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateSystemChannelSettings(ctx, fc.Args["input"].(biz.SystemChannelSettings))
+			return ec.resolvers.Mutation().UpdateSystemChannelSettings(ctx, fc.Args["input"].(biz.UpdateSystemChannelSettings))
 		},
 		nil,
 		ec.marshalNBoolean2bool,
@@ -45524,6 +45538,10 @@ func (ec *executionContext) fieldContext_Query_systemChannelSettings(_ context.C
 				return ec.fieldContext_SystemChannelSettings_probe(ctx, field)
 			case "autoSync":
 				return ec.fieldContext_SystemChannelSettings_autoSync(ctx, field)
+			case "testSystemPrompt":
+				return ec.fieldContext_SystemChannelSettings_testSystemPrompt(ctx, field)
+			case "testUserPrompt":
+				return ec.fieldContext_SystemChannelSettings_testUserPrompt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SystemChannelSettings", field.Name)
 		},
@@ -53016,6 +53034,64 @@ func (ec *executionContext) fieldContext_SystemChannelSettings_autoSync(_ contex
 				return ec.fieldContext_ChannelModelAutoSyncSetting_frequency(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ChannelModelAutoSyncSetting", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SystemChannelSettings_testSystemPrompt(ctx context.Context, field graphql.CollectedField, obj *biz.SystemChannelSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SystemChannelSettings_testSystemPrompt,
+		func(ctx context.Context) (any, error) {
+			return obj.TestSystemPrompt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SystemChannelSettings_testSystemPrompt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SystemChannelSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SystemChannelSettings_testUserPrompt(ctx context.Context, field graphql.CollectedField, obj *biz.SystemChannelSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SystemChannelSettings_testUserPrompt,
+		func(ctx context.Context) (any, error) {
+			return obj.TestUserPrompt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SystemChannelSettings_testUserPrompt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SystemChannelSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -85334,14 +85410,14 @@ func (ec *executionContext) unmarshalInputUpdateStoragePolicyInput(ctx context.C
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUpdateSystemChannelSettingsInput(ctx context.Context, obj any) (biz.SystemChannelSettings, error) {
-	var it biz.SystemChannelSettings
+func (ec *executionContext) unmarshalInputUpdateSystemChannelSettingsInput(ctx context.Context, obj any) (biz.UpdateSystemChannelSettings, error) {
+	var it biz.UpdateSystemChannelSettings
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"probe", "autoSync"}
+	fieldsInOrder := [...]string{"probe", "autoSync", "testSystemPrompt", "testUserPrompt"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -85350,18 +85426,32 @@ func (ec *executionContext) unmarshalInputUpdateSystemChannelSettingsInput(ctx c
 		switch k {
 		case "probe":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("probe"))
-			data, err := ec.unmarshalOUpdateChannelProbeSettingInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelProbeSetting(ctx, v)
+			data, err := ec.unmarshalOUpdateChannelProbeSettingInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelProbeSetting(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Probe = data
 		case "autoSync":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("autoSync"))
-			data, err := ec.unmarshalOUpdateChannelModelAutoSyncSettingInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelModelAutoSyncSetting(ctx, v)
+			data, err := ec.unmarshalOUpdateChannelModelAutoSyncSettingInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelModelAutoSyncSetting(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.AutoSync = data
+		case "testSystemPrompt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("testSystemPrompt"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TestSystemPrompt = data
+		case "testUserPrompt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("testUserPrompt"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TestUserPrompt = data
 		}
 	}
 
@@ -105569,6 +105659,16 @@ func (ec *executionContext) _SystemChannelSettings(ctx context.Context, sel ast.
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "testSystemPrompt":
+			out.Values[i] = ec._SystemChannelSettings_testSystemPrompt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "testUserPrompt":
+			out.Values[i] = ec._SystemChannelSettings_testUserPrompt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -115785,7 +115885,7 @@ func (ec *executionContext) unmarshalNUpdateStoragePolicyInput2githubᚗcomᚋlo
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNUpdateSystemChannelSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐSystemChannelSettings(ctx context.Context, v any) (biz.SystemChannelSettings, error) {
+func (ec *executionContext) unmarshalNUpdateSystemChannelSettingsInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐUpdateSystemChannelSettings(ctx context.Context, v any) (biz.UpdateSystemChannelSettings, error) {
 	res, err := ec.unmarshalInputUpdateSystemChannelSettingsInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
@@ -122649,14 +122749,20 @@ func (ec *executionContext) unmarshalOTransformOptionsInput2githubᚗcomᚋloopl
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOUpdateChannelModelAutoSyncSettingInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelModelAutoSyncSetting(ctx context.Context, v any) (biz.ChannelModelAutoSyncSetting, error) {
+func (ec *executionContext) unmarshalOUpdateChannelModelAutoSyncSettingInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelModelAutoSyncSetting(ctx context.Context, v any) (*biz.ChannelModelAutoSyncSetting, error) {
+	if v == nil {
+		return nil, nil
+	}
 	res, err := ec.unmarshalInputUpdateChannelModelAutoSyncSettingInput(ctx, v)
-	return res, graphql.ErrorOnPath(ctx, err)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOUpdateChannelProbeSettingInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelProbeSetting(ctx context.Context, v any) (biz.ChannelProbeSetting, error) {
+func (ec *executionContext) unmarshalOUpdateChannelProbeSettingInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐChannelProbeSetting(ctx context.Context, v any) (*biz.ChannelProbeSetting, error) {
+	if v == nil {
+		return nil, nil
+	}
 	res, err := ec.unmarshalInputUpdateChannelProbeSettingInput(ctx, v)
-	return res, graphql.ErrorOnPath(ctx, err)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalOUpstreamErrorPolicyInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐUpstreamErrorPolicy(ctx context.Context, v any) (biz.UpstreamErrorPolicy, error) {
