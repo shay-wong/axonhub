@@ -86,11 +86,12 @@ function DataStoragesContent() {
   };
 
   const columns = useMemo(() => createColumns(t, defaultDataStorageID ?? undefined), [t, defaultDataStorageID]);
+  const tableData = useMemo(() => data?.edges?.map((edge) => edge.node) ?? [], [data?.edges]);
 
   return (
     <div className='flex flex-1 flex-col overflow-hidden'>
       <DataStoragesTable
-        data={data?.edges?.map((edge) => edge.node) || []}
+        data={tableData}
         columns={columns}
         pageInfo={data?.pageInfo}
         pageSize={pageSize}
