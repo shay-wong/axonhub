@@ -25,7 +25,7 @@ type ImageGeneration struct {
 }
 
 type Tool struct {
-	// Any of "function", "image_generation", "custom", "web_search", "tool_search".
+	// Any of "function", "image_generation", "custom", "web_search", "tool_search", "namespace".
 	Type        string `json:"type,omitempty"`
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
@@ -39,7 +39,7 @@ type Tool struct {
 
 	// This field is for ToolSearch.
 	Execution string `json:"execution,omitempty"`
-	// This field is for ToolSearch output.
+	// Tools holds ToolSearch output or namespace sub-tools.
 	Tools []Tool `json:"tools,omitempty"`
 
 	// This field is for custom tool format definition.

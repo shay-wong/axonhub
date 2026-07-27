@@ -33,6 +33,7 @@ var defaultRetryPolicy = RetryPolicy{
 	MaxSingleChannelRetries: 2,
 	RetryDelayMs:            1000,
 	LoadBalancerStrategy:    "adaptive",
+	TraceStickyMode:         TraceStickyPreferPreviousChannel,
 	Enabled:                 true,
 	UpstreamErrorPolicy: UpstreamErrorPolicy{
 		Mode: UpstreamErrorModePassthrough,

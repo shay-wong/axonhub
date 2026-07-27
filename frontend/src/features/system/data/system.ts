@@ -107,6 +107,7 @@ const RETRY_POLICY_QUERY = `
       streamFirstEventTimeoutSeconds
       nonStreamResponseTimeoutSeconds
       loadBalancerStrategy
+      traceStickyMode
       enabled
       emptyResponseDetection
       upstreamErrorPolicy {
@@ -383,6 +384,7 @@ export interface RetryPolicy {
   streamFirstEventTimeoutSeconds: number;
   nonStreamResponseTimeoutSeconds: number;
   loadBalancerStrategy: string;
+  traceStickyMode: TraceStickyMode;
   enabled: boolean;
   autoDisableChannel: AutoDisableChannel;
   channelAutoDisable: AutoDisableChannel;
@@ -416,6 +418,7 @@ export interface RetryPolicyInput {
   streamFirstEventTimeoutSeconds?: number;
   nonStreamResponseTimeoutSeconds?: number;
   loadBalancerStrategy?: string;
+  traceStickyMode?: TraceStickyMode;
   enabled?: boolean;
   autoDisableChannel?: AutoDisableChannelInput;
   channelAutoDisable?: AutoDisableChannelInput;
@@ -428,6 +431,8 @@ export interface RetryPolicyQueryResult {
   retryPolicy: RetryPolicy;
   defaultAutoDisableStatusRules: AutoDisableChannelStatus[];
 }
+
+export type TraceStickyMode = 'DISABLED' | 'PREFER_PREVIOUS_CHANNEL';
 
 export interface UpdateDefaultDataStorageInput {
   dataStorageID: string;

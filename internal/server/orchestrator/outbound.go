@@ -121,7 +121,7 @@ func (ts *OutboundPersistentStream) Close() error {
 	// If we received the [DONE] event, treat the stream as successfully completed
 	// even if there's a context cancellation error. This handles the case where
 	// the client disconnects immediately after receiving the last chunk.
-	if ts.state.StreamCompleted {
+	if ts.state.StreamCompleted && (streamErr == nil || errors.Is(streamErr, context.Canceled) || errors.Is(streamErr, context.DeadlineExceeded)) {
 		ts.logFinalizationDecision(ctx, "terminal_event_completed", streamErr, ctxErr, true, nil)
 		// Stream completed successfully - perform final persistence
 		log.Debug(ctx, "Stream completed successfully (received [DONE]), performing final persistence")
@@ -654,6 +654,13 @@ func (p *PersistentOutboundTransformer) CanRetryContext(ctx context.Context, err
 		return false
 	}
 	if p.state.RetryPolicy != nil && !p.state.RetryPolicy.Enabled {
+		return false
+	}
+
+	// Trace/thread sticky candidates are intentionally one-shot. A failed
+	// sticky attempt must proceed to the normal fallback candidates instead of
+	// retrying the same channel or another mapped model on that channel.
+	if p.state.CurrentCandidate.TraceSticky {
 		return false
 	}
 

@@ -300,6 +300,13 @@ const (
 	// LoadBalancerStrategyRoundRobin is a simple load balancer strategy that rotates channels based on historical request counts.
 	LoadBalancerStrategyRoundRobin = "round-robin"
 
+	// TraceStickyDisabled disables trace and thread sticky channel selection.
+	TraceStickyDisabled TraceStickyMode = "disabled"
+
+	// TraceStickyPreferPreviousChannel selects the most recently selected channel
+	// from the current trace, then the current thread, before normal load balancing.
+	TraceStickyPreferPreviousChannel TraceStickyMode = "prefer_previous_channel"
+
 	// UpstreamErrorModePassthrough keeps provider errors unchanged.
 	UpstreamErrorModePassthrough = "passthrough"
 
@@ -338,6 +345,9 @@ type RetryPolicy struct {
 	// LoadBalancerStrategy defines which channel load balancer strategy to use.
 	// Supported values: "adaptive", "failover", "circuit-breaker", "round-robin".
 	LoadBalancerStrategy string `json:"load_balancer_strategy"`
+	// TraceStickyMode controls whether the most recently selected channel from
+	// the current trace or thread is selected before normal load balancing.
+	TraceStickyMode TraceStickyMode `json:"trace_sticky_mode"`
 
 	// AutoDisableChannel is the legacy auto-disable setting kept for read/write compatibility.
 	AutoDisableChannel AutoDisablePolicy `json:"auto_disable_channel"`
@@ -355,6 +365,59 @@ type RetryPolicy struct {
 
 	// UpstreamErrorPolicy controls how provider errors are exposed to API users.
 	UpstreamErrorPolicy UpstreamErrorPolicy `json:"upstream_error_policy"`
+}
+
+type TraceStickyMode string
+
+func (m TraceStickyMode) MarshalGQL(w io.Writer) {
+	var s string
+
+	switch m {
+	case TraceStickyDisabled:
+		s = "DISABLED"
+	case TraceStickyPreferPreviousChannel:
+		s = "PREFER_PREVIOUS_CHANNEL"
+	default:
+		s = "PREFER_PREVIOUS_CHANNEL"
+	}
+
+	_, _ = io.WriteString(w, `"`+s+`"`)
+}
+
+func (m *TraceStickyMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("TraceStickyMode must be a string")
+	}
+
+	switch str {
+	case "DISABLED":
+		*m = TraceStickyDisabled
+	case "PREFER_PREVIOUS_CHANNEL":
+		*m = TraceStickyPreferPreviousChannel
+	default:
+		return fmt.Errorf("invalid TraceStickyMode: %s", str)
+	}
+
+	return nil
+}
+
+func (m *TraceStickyMode) UnmarshalJSON(data []byte) error {
+	var raw string
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("invalid TraceStickyMode: %w", err)
+	}
+
+	switch raw {
+	case "DISABLED", string(TraceStickyDisabled):
+		*m = TraceStickyDisabled
+	case "PREFER_PREVIOUS_CHANNEL", string(TraceStickyPreferPreviousChannel):
+		*m = TraceStickyPreferPreviousChannel
+	default:
+		return fmt.Errorf("invalid TraceStickyMode: %q", raw)
+	}
+
+	return nil
 }
 
 type UpstreamErrorPolicy struct {
@@ -1090,6 +1153,12 @@ func normalizeRetryPolicy(policy *RetryPolicy) {
 	// The weighted load balancer strategy is deprecated. Use the failover strategy instead.
 	if policy.LoadBalancerStrategy == "weighted" {
 		policy.LoadBalancerStrategy = LoadBalancerStrategyFailover
+	}
+
+	switch policy.TraceStickyMode {
+	case TraceStickyDisabled, TraceStickyPreferPreviousChannel:
+	default:
+		policy.TraceStickyMode = defaultRetryPolicy.TraceStickyMode
 	}
 
 	if policy.StreamFirstEventTimeoutSeconds < 0 {

@@ -1,21 +1,23 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
-
-	"github.com/samber/lo"
 
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/ent/channelmodelprice"
 	"github.com/looplj/axonhub/internal/ent/datastorage"
+	"github.com/looplj/axonhub/internal/ent/model"
 	"github.com/looplj/axonhub/internal/ent/project"
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
@@ -26,7 +28,10 @@ import (
 	"github.com/looplj/axonhub/llm"
 )
 
-const usageBackupBatchSize = 500
+const (
+	backupBatchSize      = 500
+	usageBackupBatchSize = backupBatchSize
+)
 
 type usageBackupChannelIdentity struct {
 	name      string
@@ -58,166 +63,484 @@ func (svc *BackupService) BackupWithoutAuth(ctx context.Context, opts BackupOpti
 }
 
 func (svc *BackupService) doBackup(ctx context.Context, opts BackupOptions) ([]byte, error) {
-	var (
-		projectDataList           []*BackupProject
-		channelDataList           []*BackupChannel
-		channelModelPriceDataList []*BackupChannelModelPrice
-	)
+	var buf bytes.Buffer
+	if err := svc.doBackupToWriter(ctx, opts, &buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
 
-	if opts.IncludeProjects {
-		projects, err := svc.db.Project.Query().All(ctx)
-		if err != nil {
-			return nil, err
-		}
+// doBackupToWriter streams a compact JSON backup to w without accumulating
+// the full dataset in memory. Each entity type is processed sequentially in
+// batch-sized pages using an ID-cursor.
+func (svc *BackupService) doBackupToWriter(ctx context.Context, opts BackupOptions, w io.Writer) error {
+	o := &objWriter{w: w}
 
-		projectDataList = lo.Map(projects, func(proj *ent.Project, _ int) *BackupProject {
-			return &BackupProject{Project: *proj}
-		})
+	if _, err := w.Write([]byte("{")); err != nil {
+		return err
 	}
 
-	if opts.IncludeChannels {
-		channels, err := svc.db.Channel.Query().All(ctx)
-		if err != nil {
-			return nil, err
-		}
+	if b, err := json.Marshal(BackupVersion); err != nil {
+		return err
+	} else if err := o.rawField("version", b); err != nil {
+		return err
+	}
 
-		channelDataList = lo.Map(channels, func(ch *ent.Channel, _ int) *BackupChannel {
-			return &BackupChannel{
+	if b, err := json.Marshal(time.Now()); err != nil {
+		return err
+	} else if err := o.rawField("timestamp", b); err != nil {
+		return err
+	}
+
+	if err := svc.streamProjects(ctx, o, opts); err != nil {
+		return err
+	}
+	if err := svc.streamChannels(ctx, o, opts); err != nil {
+		return err
+	}
+	if err := svc.streamModels(ctx, o, opts); err != nil {
+		return err
+	}
+	if err := svc.streamChannelModelPrices(ctx, o, opts); err != nil {
+		return err
+	}
+	if err := svc.streamAPIKeys(ctx, o, opts); err != nil {
+		return err
+	}
+	if err := svc.streamUsageRequests(ctx, o, opts); err != nil {
+		return err
+	}
+	if err := svc.streamRequestExecutions(ctx, o, opts); err != nil {
+		return err
+	}
+	if err := svc.streamUsageLogs(ctx, o, opts); err != nil {
+		return err
+	}
+
+	_, err := w.Write([]byte("}"))
+	return err
+}
+
+func (svc *BackupService) streamProjects(ctx context.Context, o *objWriter, opts BackupOptions) error {
+	return streamArrayField(o, "projects", opts.IncludeProjects, true,
+		func(lastID int) ([]*ent.Project, int, error) {
+			rows, err := svc.db.Project.Query().
+				Where(project.IDGT(lastID)).
+				Order(ent.Asc(project.FieldID)).
+				Limit(backupBatchSize).
+				All(ctx)
+			if err != nil {
+				return nil, 0, err
+			}
+			nextID := 0
+			if len(rows) > 0 {
+				nextID = rows[len(rows)-1].ID
+			}
+			return rows, nextID, nil
+		},
+		func(p *ent.Project) ([]byte, bool, error) {
+			b, err := json.Marshal(&BackupProject{Project: *p})
+			return b, true, err
+		},
+	)
+}
+
+func (svc *BackupService) streamChannels(ctx context.Context, o *objWriter, opts BackupOptions) error {
+	return streamArrayField(o, "channels", opts.IncludeChannels, false,
+		func(lastID int) ([]*ent.Channel, int, error) {
+			rows, err := svc.db.Channel.Query().
+				Where(channel.IDGT(lastID)).
+				Order(ent.Asc(channel.FieldID)).
+				Limit(backupBatchSize).
+				All(ctx)
+			if err != nil {
+				return nil, 0, err
+			}
+			nextID := 0
+			if len(rows) > 0 {
+				nextID = rows[len(rows)-1].ID
+			}
+			return rows, nextID, nil
+		},
+		func(ch *ent.Channel) ([]byte, bool, error) {
+			b, err := json.Marshal(&BackupChannel{
 				Channel:     *ch,
 				Credentials: ch.Credentials,
+			})
+			return b, true, err
+		},
+	)
+}
+
+func (svc *BackupService) streamModels(ctx context.Context, o *objWriter, opts BackupOptions) error {
+	return streamArrayField(o, "models", opts.IncludeModels, false,
+		func(lastID int) ([]*ent.Model, int, error) {
+			rows, err := svc.db.Model.Query().
+				Where(model.IDGT(lastID)).
+				Order(ent.Asc(model.FieldID)).
+				Limit(backupBatchSize).
+				All(ctx)
+			if err != nil {
+				return nil, 0, err
 			}
-		})
-	}
+			nextID := 0
+			if len(rows) > 0 {
+				nextID = rows[len(rows)-1].ID
+			}
+			return rows, nextID, nil
+		},
+		func(m *ent.Model) ([]byte, bool, error) {
+			b, err := json.Marshal(&BackupModel{Model: *m})
+			return b, true, err
+		},
+	)
+}
 
-	if opts.IncludeModelPrices {
-		prices, err := svc.db.ChannelModelPrice.Query().
-			WithChannel().
-			All(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		channelModelPriceDataList = lo.FilterMap(prices, func(p *ent.ChannelModelPrice, _ int) (*BackupChannelModelPrice, bool) {
+func (svc *BackupService) streamChannelModelPrices(ctx context.Context, o *objWriter, opts BackupOptions) error {
+	return streamArrayField(o, "channel_model_prices", opts.IncludeModelPrices, true,
+		func(lastID int) ([]*ent.ChannelModelPrice, int, error) {
+			rows, err := svc.db.ChannelModelPrice.Query().
+				WithChannel().
+				Where(channelmodelprice.IDGT(lastID)).
+				Order(ent.Asc(channelmodelprice.FieldID)).
+				Limit(backupBatchSize).
+				All(ctx)
+			if err != nil {
+				return nil, 0, err
+			}
+			nextID := 0
+			if len(rows) > 0 {
+				nextID = rows[len(rows)-1].ID
+			}
+			return rows, nextID, nil
+		},
+		func(p *ent.ChannelModelPrice) ([]byte, bool, error) {
 			if p.Edges.Channel == nil {
-				return nil, false
+				return nil, false, nil
 			}
-
-			return &BackupChannelModelPrice{
+			b, err := json.Marshal(&BackupChannelModelPrice{
 				ChannelName: p.Edges.Channel.Name,
 				ModelID:     p.ModelID,
 				Price:       p.Price,
 				ReferenceID: p.ReferenceID,
-			}, true
-		})
-	}
+			})
+			return b, true, err
+		},
+	)
+}
 
-	var modelDataList []*BackupModel
-
-	if opts.IncludeModels {
-		models, err := svc.db.Model.Query().All(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		modelDataList = lo.Map(models, func(m *ent.Model, _ int) *BackupModel {
-			return &BackupModel{
-				Model: *m,
+func (svc *BackupService) streamAPIKeys(ctx context.Context, o *objWriter, opts BackupOptions) error {
+	return streamArrayField(o, "api_keys", opts.IncludeAPIKeys, true,
+		func(lastID int) ([]*ent.APIKey, int, error) {
+			rows, err := svc.db.APIKey.Query().
+				WithProject().
+				Where(apikey.IDGT(lastID)).
+				Order(ent.Asc(apikey.FieldID)).
+				Limit(backupBatchSize).
+				All(ctx)
+			if err != nil {
+				return nil, 0, err
 			}
-		})
-	}
-
-	var apiKeyDataList []*BackupAPIKey
-
-	if opts.IncludeAPIKeys {
-		apiKeys, err := svc.db.APIKey.Query().WithProject().All(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		apiKeyDataList = lo.Map(apiKeys, func(ak *ent.APIKey, _ int) *BackupAPIKey {
+			nextID := 0
+			if len(rows) > 0 {
+				nextID = rows[len(rows)-1].ID
+			}
+			return rows, nextID, nil
+		},
+		func(ak *ent.APIKey) ([]byte, bool, error) {
 			projectName := ""
 			if ak.Edges.Project != nil {
 				projectName = ak.Edges.Project.Name
 			}
-
-			return &BackupAPIKey{
+			b, err := json.Marshal(&BackupAPIKey{
 				APIKey:      *ak,
 				ProjectName: projectName,
-			}
-		})
-	}
-
-	var (
-		usageRequestDataList     []*BackupUsageRequest
-		requestExecutionDataList []*BackupRequestExecution
-		usageLogDataList         []*BackupUsageLog
-		usageChannels            map[int]usageBackupChannelIdentity
-		usageDataStorages        map[int]*ent.DataStorage
+			})
+			return b, true, err
+		},
 	)
+}
 
-	if opts.IncludeRequestLogs || opts.IncludeUsageStats {
-		var err error
-		usageChannels, err = svc.backupUsageChannels(ctx)
+func (svc *BackupService) streamUsageRequests(ctx context.Context, o *objWriter, opts BackupOptions) error {
+	if !opts.IncludeRequestLogs {
+		return nil
+	}
+
+	channels, err := svc.backupUsageChannels(ctx)
+	if err != nil {
+		return err
+	}
+	dataStorages, err := svc.backupDataStorages(ctx, true)
+	if err != nil {
+		return err
+	}
+
+	return streamArrayField(o, "usage_requests", true, true,
+		func(lastID int) ([]*ent.Request, int, error) {
+			query := svc.db.Request.Query().
+				Where(request.IDGT(lastID)).
+				Order(ent.Asc(request.FieldID)).
+				Limit(backupBatchSize).
+				WithProject()
+			if opts.IncludeAPIKeys {
+				query.WithAPIKey()
+			}
+			rows, err := query.All(ctx)
+			if err != nil {
+				return nil, 0, err
+			}
+			nextID := 0
+			if len(rows) > 0 {
+				nextID = rows[len(rows)-1].ID
+			}
+			return rows, nextID, nil
+		},
+		func(req *ent.Request) ([]byte, bool, error) {
+			if err := svc.hydrateBackupUsageRequest(ctx, req, dataStorages[req.DataStorageID]); err != nil {
+				return nil, false, err
+			}
+			b, err := json.Marshal(backupUsageRequest(req, opts.IncludeAPIKeys, channels))
+			return b, true, err
+		},
+	)
+}
+
+func (svc *BackupService) streamRequestExecutions(ctx context.Context, o *objWriter, opts BackupOptions) error {
+	include := opts.IncludeRequestLogs || opts.IncludeUsageStats
+	if !include {
+		return nil
+	}
+
+	channels, err := svc.backupUsageChannels(ctx)
+	if err != nil {
+		return err
+	}
+	projectNames, err := svc.backupProjectNames(ctx)
+	if err != nil {
+		return err
+	}
+	dataStorages, err := svc.backupDataStorages(ctx, opts.IncludeRequestLogs)
+	if err != nil {
+		return err
+	}
+
+	return streamArrayField(o, "request_executions", true, true,
+		func(lastID int) ([]*ent.RequestExecution, int, error) {
+			query := svc.db.RequestExecution.Query().
+				Where(requestexecution.IDGT(lastID)).
+				Order(ent.Asc(requestexecution.FieldID)).
+				Limit(backupBatchSize)
+			if !opts.IncludeRequestLogs {
+				query.Where(requestexecution.HasUsageLog()).Select(
+					requestexecution.FieldID,
+					requestexecution.FieldCreatedAt,
+					requestexecution.FieldUpdatedAt,
+					requestexecution.FieldProjectID,
+					requestexecution.FieldRequestID,
+					requestexecution.FieldChannelID,
+					requestexecution.FieldDataStorageID,
+					requestexecution.FieldSource,
+					requestexecution.FieldModelID,
+					requestexecution.FieldFormat,
+					requestexecution.FieldRequestedServiceTier,
+					requestexecution.FieldSpeedMode,
+					requestexecution.FieldChannelAPIKeyName,
+					requestexecution.FieldChannelAPIKeySuffix,
+					requestexecution.FieldChannelAPIKeyHeaders,
+					requestexecution.FieldResponseStatusCode,
+					requestexecution.FieldStatus,
+					requestexecution.FieldStream,
+					requestexecution.FieldMetricsLatencyMs,
+					requestexecution.FieldMetricsFirstTokenLatencyMs,
+					requestexecution.FieldMetricsReasoningDurationMs,
+					requestexecution.FieldPassThroughApplied,
+				)
+			}
+
+			rows, err := query.All(ctx)
+			if err != nil {
+				return nil, 0, err
+			}
+			nextID := 0
+			if len(rows) > 0 {
+				nextID = rows[len(rows)-1].ID
+			}
+			return rows, nextID, nil
+		},
+		func(execution *ent.RequestExecution) ([]byte, bool, error) {
+			if opts.IncludeRequestLogs {
+				if err := svc.hydrateBackupRequestExecution(ctx, execution, dataStorages[execution.DataStorageID]); err != nil {
+					return nil, false, err
+				}
+			}
+			b, err := json.Marshal(backupRequestExecution(
+				execution,
+				projectNames,
+				channels,
+				dataStorages,
+				opts.IncludeRequestLogs,
+			))
+			return b, true, err
+		},
+	)
+}
+
+func (svc *BackupService) streamUsageLogs(ctx context.Context, o *objWriter, opts BackupOptions) error {
+	if !opts.IncludeUsageStats {
+		return nil
+	}
+
+	channels, err := svc.backupUsageChannels(ctx)
+	if err != nil {
+		return err
+	}
+	apiKeyKeys := map[int]string{}
+	if opts.IncludeAPIKeys {
+		apiKeys, err := svc.db.APIKey.Query().
+			Select(apikey.FieldID, apikey.FieldKey).
+			All(ctx)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		usageDataStorages, err = svc.backupDataStorages(ctx, opts.IncludeRequestLogs)
-		if err != nil {
-			return nil, err
+		for _, ak := range apiKeys {
+			apiKeyKeys[ak.ID] = ak.Key
 		}
 	}
 
-	if opts.IncludeRequestLogs {
-		var err error
-		usageRequestDataList, err = svc.backupUsageRequests(ctx, opts.IncludeAPIKeys, usageChannels, usageDataStorages)
-		if err != nil {
-			return nil, err
+	return streamArrayField(o, "usage_logs", true, true,
+		func(lastID int) ([]*ent.UsageLog, int, error) {
+			query := svc.db.UsageLog.Query().
+				Where(usagelog.IDGT(lastID)).
+				Order(ent.Asc(usagelog.FieldID)).
+				Limit(backupBatchSize).
+				WithProject().
+				WithRequest(func(query *ent.RequestQuery) {
+					query.Select(
+						request.FieldID,
+						request.FieldCreatedAt,
+						request.FieldSource,
+						request.FieldModelID,
+						request.FieldReasoningEffort,
+						request.FieldFormat,
+						request.FieldStream,
+					)
+				}).
+				WithRequestExecution(func(query *ent.RequestExecutionQuery) {
+					fields := []string{
+						requestexecution.FieldID,
+						requestexecution.FieldCreatedAt,
+						requestexecution.FieldFormat,
+					}
+					if opts.IncludeRequestLogs {
+						fields = append(fields, requestexecution.FieldRequestURL)
+					}
+					query.Select(fields...)
+				})
+
+			rows, err := query.All(ctx)
+			if err != nil {
+				return nil, 0, err
+			}
+			nextID := 0
+			if len(rows) > 0 {
+				nextID = rows[len(rows)-1].ID
+			}
+			return rows, nextID, nil
+		},
+		func(ul *ent.UsageLog) ([]byte, bool, error) {
+			b, err := json.Marshal(backupUsageLog(ul, apiKeyKeys, channels, opts.IncludeRequestLogs))
+			return b, true, err
+		},
+	)
+}
+
+// objWriter writes a JSON object incrementally, tracking leading commas.
+type objWriter struct {
+	w         io.Writer
+	needComma bool
+}
+
+func (o *objWriter) rawField(name string, raw []byte) error {
+	if o.needComma {
+		if _, err := o.w.Write([]byte(",")); err != nil {
+			return err
 		}
 	}
-
-	if opts.IncludeUsageStats {
-		var err error
-		usageLogDataList, err = svc.backupUsageLogs(ctx, opts.IncludeAPIKeys, opts.IncludeRequestLogs, usageChannels)
-		if err != nil {
-			return nil, err
-		}
+	o.needComma = true
+	if _, err := fmt.Fprintf(o.w, "%q:", name); err != nil {
+		return err
 	}
+	_, err := o.w.Write(raw)
+	return err
+}
 
-	if opts.IncludeRequestLogs || opts.IncludeUsageStats {
-		executionIDs := make([]int, 0, len(usageLogDataList))
-		if !opts.IncludeRequestLogs {
-			for _, usageLog := range usageLogDataList {
-				if usageLog != nil && usageLog.RequestExecutionID != 0 {
-					executionIDs = append(executionIDs, usageLog.RequestExecutionID)
+// streamArrayField streams a JSON array field incrementally, processing rows
+// in pages via fetchBatch and transforming each via elem.
+func streamArrayField[T any](
+	o *objWriter, name string, on bool, omitempty bool,
+	fetchBatch func(lastID int) (rows []T, nextID int, err error),
+	elem func(T) (jsonBytes []byte, emit bool, err error),
+) error {
+	if !on {
+		if omitempty {
+			return nil
+		}
+		return o.rawField(name, []byte("null"))
+	}
+	lastID := 0
+	opened := false
+	for {
+		rows, nextID, err := fetchBatch(lastID)
+		if err != nil {
+			if opened {
+				_, _ = o.w.Write([]byte("]"))
+			}
+			return err
+		}
+		if len(rows) == 0 {
+			break
+		}
+		for _, r := range rows {
+			b, emit, err := elem(r)
+			if err != nil {
+				if opened {
+					_, _ = o.w.Write([]byte("]"))
+				}
+				return err
+			}
+			if !emit {
+				continue
+			}
+			if !opened {
+				if err := o.rawField(name, []byte("[")); err != nil {
+					return err
+				}
+				opened = true
+				if _, err := o.w.Write(b); err != nil {
+					return err
+				}
+			} else {
+				if _, err := o.w.Write([]byte(",")); err != nil {
+					return err
+				}
+				if _, err := o.w.Write(b); err != nil {
+					return err
 				}
 			}
 		}
-
-		var err error
-		requestExecutionDataList, err = svc.backupRequestExecutions(ctx, usageChannels, usageDataStorages, opts.IncludeRequestLogs, executionIDs)
-		if err != nil {
-			return nil, err
+		lastID = nextID
+		if len(rows) < backupBatchSize {
+			break
 		}
 	}
-
-	backupData := &BackupData{
-		Version:            BackupVersion,
-		Timestamp:          time.Now(),
-		Projects:           projectDataList,
-		Channels:           channelDataList,
-		Models:             modelDataList,
-		ChannelModelPrices: channelModelPriceDataList,
-		APIKeys:            apiKeyDataList,
-		UsageRequests:      usageRequestDataList,
-		RequestExecutions:  requestExecutionDataList,
-		UsageLogs:          usageLogDataList,
+	if opened {
+		_, err := o.w.Write([]byte("]"))
+		return err
 	}
-
-	if opts.IncludeUsageStats || opts.IncludeRequestLogs {
-		return json.Marshal(backupData)
+	if omitempty {
+		return nil
 	}
-
-	return json.MarshalIndent(backupData, "", "  ")
+	return o.rawField(name, []byte("[]"))
 }
 
 func (svc *BackupService) backupUsageChannels(ctx context.Context) (map[int]usageBackupChannelIdentity, error) {
@@ -237,169 +560,6 @@ func (svc *BackupService) backupUsageChannels(ctx context.Context) (map[int]usag
 	}
 
 	return identities, nil
-}
-
-func (svc *BackupService) backupUsageRequests(
-	ctx context.Context,
-	includeAPIKeyValues bool,
-	channels map[int]usageBackupChannelIdentity,
-	dataStorages map[int]*ent.DataStorage,
-) ([]*BackupUsageRequest, error) {
-	var usageRequestDataList []*BackupUsageRequest
-	lastID := 0
-
-	for {
-		query := svc.db.Request.Query().
-			Where(request.IDGT(lastID)).
-			Order(ent.Asc(request.FieldID)).
-			Limit(usageBackupBatchSize).
-			WithProject()
-		if includeAPIKeyValues {
-			query.WithAPIKey()
-		}
-
-		usageRequests, err := query.All(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(usageRequests) == 0 {
-			break
-		}
-
-		for _, req := range usageRequests {
-			if err := svc.hydrateBackupUsageRequest(ctx, req, dataStorages[req.DataStorageID]); err != nil {
-				return nil, err
-			}
-			usageRequestDataList = append(usageRequestDataList, backupUsageRequest(req, includeAPIKeyValues, channels))
-			lastID = req.ID
-		}
-
-		if len(usageRequests) < usageBackupBatchSize {
-			break
-		}
-	}
-
-	return usageRequestDataList, nil
-}
-
-func backupUsageRequest(req *ent.Request, includeAPIKeyValues bool, channels map[int]usageBackupChannelIdentity) *BackupUsageRequest {
-	data := &BackupUsageRequest{Request: *req}
-	// Binary artifacts remain in their external storage and cannot be restored under
-	// a new request ID. Keep request-log backups self-contained and non-misleading.
-	data.ContentSaved = false
-	data.ContentStorageID = nil
-	data.ContentStorageKey = nil
-	data.ContentSavedAt = nil
-	if req.Edges.Project != nil {
-		data.ProjectName = req.Edges.Project.Name
-	}
-	channelIdentity := channels[req.ChannelID]
-	data.ChannelName = channelIdentity.name
-	data.ChannelDeletedAt = channelIdentity.deletedAt
-	if includeAPIKeyValues && req.Edges.APIKey != nil {
-		data.APIKeyKey = req.Edges.APIKey.Key
-	}
-	data.Request.Edges = ent.RequestEdges{}
-
-	return data
-}
-
-func (svc *BackupService) backupRequestExecutions(
-	ctx context.Context,
-	channels map[int]usageBackupChannelIdentity,
-	dataStorages map[int]*ent.DataStorage,
-	includeAll bool,
-	executionIDs []int,
-) ([]*BackupRequestExecution, error) {
-	if !includeAll && len(executionIDs) == 0 {
-		return nil, nil
-	}
-
-	projectNames, err := svc.backupProjectNames(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]*BackupRequestExecution, 0)
-	appendExecutions := func(executions []*ent.RequestExecution) error {
-		for _, execution := range executions {
-			if includeAll {
-				if err := svc.hydrateBackupRequestExecution(ctx, execution, dataStorages[execution.DataStorageID]); err != nil {
-					return err
-				}
-			}
-			result = append(result, backupRequestExecution(execution, projectNames, channels, dataStorages, includeAll))
-		}
-		return nil
-	}
-
-	if includeAll {
-		lastID := 0
-		for {
-			executions, err := svc.db.RequestExecution.Query().
-				Where(requestexecution.IDGT(lastID)).
-				Order(ent.Asc(requestexecution.FieldID)).
-				Limit(usageBackupBatchSize).
-				All(ctx)
-			if err != nil {
-				return nil, err
-			}
-			if len(executions) == 0 {
-				break
-			}
-
-			if err := appendExecutions(executions); err != nil {
-				return nil, err
-			}
-			lastID = executions[len(executions)-1].ID
-			if len(executions) < usageBackupBatchSize {
-				break
-			}
-		}
-
-		return result, nil
-	}
-
-	executionIDs = lo.Uniq(executionIDs)
-	for start := 0; start < len(executionIDs); start += usageBackupBatchSize {
-		end := min(start+usageBackupBatchSize, len(executionIDs))
-		executions, err := svc.db.RequestExecution.Query().
-			Where(requestexecution.IDIn(executionIDs[start:end]...)).
-			Order(ent.Asc(requestexecution.FieldID)).
-			Select(
-				requestexecution.FieldID,
-				requestexecution.FieldCreatedAt,
-				requestexecution.FieldUpdatedAt,
-				requestexecution.FieldProjectID,
-				requestexecution.FieldRequestID,
-				requestexecution.FieldChannelID,
-				requestexecution.FieldDataStorageID,
-				requestexecution.FieldSource,
-				requestexecution.FieldModelID,
-				requestexecution.FieldFormat,
-				requestexecution.FieldRequestedServiceTier,
-				requestexecution.FieldSpeedMode,
-				requestexecution.FieldChannelAPIKeyName,
-				requestexecution.FieldChannelAPIKeySuffix,
-				requestexecution.FieldChannelAPIKeyHeaders,
-				requestexecution.FieldResponseStatusCode,
-				requestexecution.FieldStatus,
-				requestexecution.FieldStream,
-				requestexecution.FieldMetricsLatencyMs,
-				requestexecution.FieldMetricsFirstTokenLatencyMs,
-				requestexecution.FieldMetricsReasoningDurationMs,
-				requestexecution.FieldPassThroughApplied,
-			).
-			All(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if err := appendExecutions(executions); err != nil {
-			return nil, err
-		}
-	}
-
-	return result, nil
 }
 
 func (svc *BackupService) backupProjectNames(ctx context.Context) (map[int]string, error) {
@@ -434,6 +594,28 @@ func (svc *BackupService) backupDataStorages(ctx context.Context, includeContent
 	}
 
 	return storages, nil
+}
+
+func backupUsageRequest(req *ent.Request, includeAPIKeyValues bool, channels map[int]usageBackupChannelIdentity) *BackupUsageRequest {
+	data := &BackupUsageRequest{Request: *req}
+	// Binary artifacts cannot be restored under a new request ID, so do not
+	// preserve pointers to content that remains in the original storage.
+	data.ContentSaved = false
+	data.ContentStorageID = nil
+	data.ContentStorageKey = nil
+	data.ContentSavedAt = nil
+	if req.Edges.Project != nil {
+		data.ProjectName = req.Edges.Project.Name
+	}
+	channelIdentity := channels[req.ChannelID]
+	data.ChannelName = channelIdentity.name
+	data.ChannelDeletedAt = channelIdentity.deletedAt
+	if includeAPIKeyValues && req.Edges.APIKey != nil {
+		data.APIKeyKey = req.Edges.APIKey.Key
+	}
+	data.Request.Edges = ent.RequestEdges{}
+
+	return data
 }
 
 func backupRequestExecution(
@@ -593,80 +775,6 @@ func (svc *BackupService) loadBackupData(ctx context.Context, dataStorage *ent.D
 	}
 
 	return data, true, nil
-}
-
-func (svc *BackupService) backupUsageLogs(
-	ctx context.Context,
-	includeAPIKeyValues bool,
-	includeRequestDetails bool,
-	channels map[int]usageBackupChannelIdentity,
-) ([]*BackupUsageLog, error) {
-	var usageLogDataList []*BackupUsageLog
-	apiKeyKeys := map[int]string{}
-	lastID := 0
-
-	if includeAPIKeyValues {
-		apiKeys, err := svc.db.APIKey.Query().
-			Select(apikey.FieldID, apikey.FieldKey).
-			All(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, ak := range apiKeys {
-			apiKeyKeys[ak.ID] = ak.Key
-		}
-	}
-
-	for {
-		query := svc.db.UsageLog.Query().
-			Where(usagelog.IDGT(lastID)).
-			Order(ent.Asc(usagelog.FieldID)).
-			Limit(usageBackupBatchSize).
-			WithProject().
-			WithRequest(func(query *ent.RequestQuery) {
-				query.Select(
-					request.FieldID,
-					request.FieldCreatedAt,
-					request.FieldSource,
-					request.FieldModelID,
-					request.FieldReasoningEffort,
-					request.FieldFormat,
-					request.FieldStream,
-				)
-			}).
-			WithRequestExecution(func(query *ent.RequestExecutionQuery) {
-				fields := []string{
-					requestexecution.FieldID,
-					requestexecution.FieldCreatedAt,
-					requestexecution.FieldFormat,
-				}
-				if includeRequestDetails {
-					fields = append(fields, requestexecution.FieldRequestURL)
-				}
-				query.Select(fields...)
-			})
-
-		usageLogs, err := query.All(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(usageLogs) == 0 {
-			break
-		}
-
-		for _, ul := range usageLogs {
-			usageLogDataList = append(usageLogDataList, backupUsageLog(ul, apiKeyKeys, channels, includeRequestDetails))
-			lastID = ul.ID
-		}
-
-		if len(usageLogs) < usageBackupBatchSize {
-			break
-		}
-	}
-
-	return usageLogDataList, nil
 }
 
 func backupUsageLog(

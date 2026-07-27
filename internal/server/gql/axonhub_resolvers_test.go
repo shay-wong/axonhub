@@ -460,7 +460,7 @@ func TestMutationResolver_TestChannel_SourceTestSkipsHealthStateTracking(t *test
 		SystemService:   systemService,
 		Cache:           xcache.NewFromConfig[ent.DataStorage](cacheConfig),
 	}
-	requestService := biz.NewRequestService(client, systemService, usageLogService, dataStorageService, biz.NewLiveStreamRegistry())
+	requestService := biz.NewRequestService(client, cacheConfig, systemService, usageLogService, dataStorageService, biz.NewLiveStreamRegistry())
 	promptProtectionRuleService := biz.NewPromptProtectionRuleService(biz.PromptProtectionRuleServiceParams{
 		CacheConfig: cacheConfig,
 		Ent:         client,
