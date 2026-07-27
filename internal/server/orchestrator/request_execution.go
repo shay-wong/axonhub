@@ -29,19 +29,24 @@ var (
 	longBase64Regex   = regexp.MustCompile(`[a-zA-Z0-9+/_-]{128,}={0,2}`)
 )
 
+const maxResponsesDiagnosticOutputTypes = 20
+
 type responsesExecutionDiagnostic struct {
-	Status           string                    `json:"status"`
-	IncompleteReason string                    `json:"incomplete_reason,omitempty"`
-	OutputTypes      []string                  `json:"output_types,omitempty"`
-	RefusalSummary   string                    `json:"refusal_summary,omitempty"`
-	MessageSummary   string                    `json:"message_summary,omitempty"`
-	Error            *responsesDiagnosticError `json:"error,omitempty"`
+	Status               string                    `json:"status"`
+	IncompleteReason     string                    `json:"incomplete_reason,omitempty"`
+	OutputTypes          []string                  `json:"output_types,omitempty"`
+	RefusalSummary       string                    `json:"refusal_summary,omitempty"`
+	MessageSummary       string                    `json:"message_summary,omitempty"`
+	Error                *responsesDiagnosticError `json:"error,omitempty"`
+	OutputTypesTruncated bool                      `json:"output_types_truncated,omitempty"`
 }
 
 type responsesDiagnosticError struct {
-	Type    string `json:"type,omitempty"`
-	Code    string `json:"code,omitempty"`
-	Message string `json:"message,omitempty"`
+	Type      string `json:"type,omitempty"`
+	Code      string `json:"code,omitempty"`
+	Message   string `json:"message,omitempty"`
+	Param     string `json:"param,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
 }
 
 // sanitizeResponseBody redacts obvious secrets and truncates the body for safe logging.
@@ -88,10 +93,6 @@ func responsesDiagnostic(response *httpclient.Response) (*responsesExecutionDiag
 	if response == nil || len(response.Body) == 0 {
 		return nil, "", false
 	}
-	if response.Request != nil && response.Request.APIFormat != "" && response.Request.APIFormat != llm.APIFormatOpenAIResponse.String() {
-		return nil, "", false
-	}
-
 	var wire struct {
 		Object            string  `json:"object"`
 		ID                string  `json:"id"`
@@ -114,7 +115,8 @@ func responsesDiagnostic(response *httpclient.Response) (*responsesExecutionDiag
 	if err := json.Unmarshal(response.Body, &wire); err != nil {
 		return nil, "", false
 	}
-	if (response.Request == nil || response.Request.APIFormat == "") && wire.Object != "response" {
+	responsesRequest := response.Request != nil && response.Request.APIFormat == llm.APIFormatOpenAIResponse.String()
+	if !responsesRequest && wire.Object != "response" {
 		return nil, "", false
 	}
 	if wire.Object != "response" && wire.ID == "" && wire.Status == nil && len(wire.Output) == 0 && wire.Error == nil {
@@ -130,14 +132,20 @@ func responsesDiagnostic(response *httpclient.Response) (*responsesExecutionDiag
 	}
 	if wire.Error != nil {
 		diagnostic.Error = &responsesDiagnosticError{
-			Type:    sanitizeDiagnosticText(wire.Error.Type, 128),
-			Code:    sanitizeDiagnosticText(wire.Error.Code, 128),
-			Message: sanitizeDiagnosticText(wire.Error.Message, 512),
+			Type:      sanitizeDiagnosticText(wire.Error.Type, 128),
+			Code:      sanitizeDiagnosticText(wire.Error.Code, 128),
+			Message:   sanitizeDiagnosticText(wire.Error.Message, 512),
+			Param:     sanitizeDiagnosticText(wire.Error.Param, 128),
+			RequestID: sanitizeDiagnosticText(wire.Error.RequestID, 128),
 		}
 	}
 
 	for _, item := range wire.Output {
-		diagnostic.OutputTypes = append(diagnostic.OutputTypes, sanitizeDiagnosticText(item.Type, 64))
+		if len(diagnostic.OutputTypes) < maxResponsesDiagnosticOutputTypes {
+			diagnostic.OutputTypes = append(diagnostic.OutputTypes, sanitizeDiagnosticText(item.Type, 64))
+		} else {
+			diagnostic.OutputTypesTruncated = true
+		}
 		if diagnostic.RefusalSummary == "" && item.Refusal != nil {
 			diagnostic.RefusalSummary = sanitizeDiagnosticText(*item.Refusal, 512)
 		}
@@ -157,6 +165,19 @@ func responsesDiagnostic(response *httpclient.Response) (*responsesExecutionDiag
 	return diagnostic, wire.ID, true
 }
 
+func responsesDiagnosticForError(response *httpclient.Response, err error, request *httpclient.Request) (*responsesExecutionDiagnostic, string, bool) {
+	if diagnostic, externalID, ok := responsesDiagnostic(response); ok {
+		return diagnostic, externalID, true
+	}
+
+	httpErr, ok := xerrors.As[*httpclient.Error](err)
+	if !ok || len(httpErr.Body) == 0 {
+		return nil, "", false
+	}
+
+	return responsesDiagnostic(&httpclient.Response{Body: httpErr.Body, Request: request})
+}
+
 func sanitizedResponsesDiagnosticError(err error) error {
 	if errors.Is(err, context.Canceled) {
 		return context.Canceled
@@ -169,6 +190,12 @@ func sanitizedResponsesDiagnosticError(err error) error {
 		sanitized.Detail.Message = message
 
 		return &sanitized
+	}
+	if httpErr, ok := xerrors.As[*httpclient.Error](err); ok {
+		return &llm.ResponseError{
+			StatusCode: httpErr.StatusCode,
+			Detail:     llm.ErrorDetail{Message: message},
+		}
 	}
 
 	return errors.New(message)
@@ -369,7 +396,7 @@ func (m *persistRequestExecutionMiddleware) OnOutboundRawError(ctx context.Conte
 	defer cancel()
 
 	var updateErr error
-	if diagnostic, externalID, ok := responsesDiagnostic(m.rawResponse); ok {
+	if diagnostic, externalID, ok := responsesDiagnosticForError(m.rawResponse, err, state.RawProviderRequest); ok {
 		updateErr = state.RequestService.UpdateRequestExecutionTerminated(
 			persistCtx,
 			state.RequestExec.ID,

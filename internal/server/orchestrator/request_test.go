@@ -359,9 +359,11 @@ func TestPersistRequestExecutionMiddleware_OnOutboundRawError_PersistsResponsesD
 		"status":             "incomplete",
 		"incomplete_details": map[string]any{"reason": "content_filter"},
 		"error": map[string]any{
-			"type":    "image_error",
-			"code":    "generation_failed",
-			"message": "Provider exposed sk-error-secret",
+			"type":       "image_error",
+			"code":       "generation_failed",
+			"message":    "Provider exposed sk-error-secret",
+			"param":      "prompt",
+			"request_id": "req_diagnostic",
 		},
 		"output": []any{
 			map[string]any{
@@ -401,16 +403,45 @@ func TestPersistRequestExecutionMiddleware_OnOutboundRawError_PersistsResponsesD
 	require.Equal(t, requestexecution.StatusFailed, updated.Status)
 	require.Equal(t, "resp_diagnostic", updated.ExternalID)
 	require.Equal(t, "image conversion failed api_key=[REDACTED]", updated.ErrorMessage)
-	require.JSONEq(t, `{
+	wantDiagnostic := `{
 		"status":"incomplete",
 		"incomplete_reason":"content_filter",
 		"output_types":["message","image_generation_call"],
 		"refusal_summary":"Policy refusal for [EMAIL REDACTED] credential {\"api_key\":\"[REDACTED]\"} [IMAGE DATA REDACTED]",
 		"message_summary":"Provider message api-key: [REDACTED]",
-		"error":{"type":"image_error","code":"generation_failed","message":"Provider exposed [API KEY REDACTED]"}
-	}`, string(updated.ResponseBody))
+		"error":{"type":"image_error","code":"generation_failed","message":"Provider exposed [API KEY REDACTED]","param":"prompt","request_id":"req_diagnostic"}
+	}`
+	require.JSONEq(t, wantDiagnostic, string(updated.ResponseBody))
 	require.NotContains(t, string(updated.ResponseBody), strings.Repeat("B", 128))
 	require.NotContains(t, string(updated.ResponseBody), "sk-")
+
+	// Non-2xx provider responses carry their body on httpclient.Error, not rawResponse.
+	httpExecution, err := client.RequestExecution.Create().
+		SetRequestID(requestRow.ID).
+		SetProjectID(project.ID).
+		SetChannelID(ch.ID).
+		SetModelID("gpt-5.4-mini").
+		SetRequestBody([]byte(`{"model":"gpt-5.4-mini"}`)).
+		SetStatus(requestexecution.StatusProcessing).
+		Save(ctx)
+	require.NoError(t, err)
+	state.RequestExec = httpExecution
+	state.RawProviderRequest = &httpclient.Request{APIFormat: llm.APIFormatOpenAIResponse.String()}
+	middleware.rawResponse = nil
+	middleware.OnOutboundRawError(ctx, &httpclient.Error{
+		StatusCode: 429,
+		Status:     "429 Too Many Requests",
+		Body:       providerBody,
+	})
+
+	updatedHTTP, err := client.RequestExecution.Get(ctx, httpExecution.ID)
+	require.NoError(t, err)
+	require.Equal(t, requestexecution.StatusFailed, updatedHTTP.Status)
+	require.Equal(t, "resp_diagnostic", updatedHTTP.ExternalID)
+	require.Equal(t, "Provider exposed [API KEY REDACTED]", updatedHTTP.ErrorMessage)
+	require.NotNil(t, updatedHTTP.ResponseStatusCode)
+	require.Equal(t, 429, *updatedHTTP.ResponseStatusCode)
+	require.JSONEq(t, wantDiagnostic, string(updatedHTTP.ResponseBody))
 }
 
 // A retried attempt must never persist the previous attempt's provider response.
@@ -432,6 +463,39 @@ func TestResponsesDiagnostic_RequiresResponsesMarkerWithoutRequestFormat(t *test
 	require.False(t, ok)
 	require.Nil(t, diagnostic)
 	require.Empty(t, externalID)
+}
+
+// Codex image requests keep their original API format even though the aggregated body is a Responses object.
+func TestResponsesDiagnostic_AcceptsResponsesBodyForImageBridge(t *testing.T) {
+	diagnostic, externalID, ok := responsesDiagnostic(&httpclient.Response{
+		Body: []byte(`{"object":"response","id":"resp_image","status":"incomplete","output":[{"type":"message"}]}`),
+		Request: &httpclient.Request{
+			APIFormat: llm.APIFormatOpenAIImageEdit.String(),
+		},
+	})
+
+	require.True(t, ok)
+	require.Equal(t, "resp_image", externalID)
+	require.Equal(t, "incomplete", diagnostic.Status)
+	require.Equal(t, []string{"message"}, diagnostic.OutputTypes)
+}
+
+// Provider output cardinality must not make the persisted diagnostic unbounded.
+func TestResponsesDiagnostic_BoundsOutputTypes(t *testing.T) {
+	output := make([]map[string]string, maxResponsesDiagnosticOutputTypes+5)
+	for i := range output {
+		output[i] = map[string]string{"type": "message"}
+	}
+	body, err := json.Marshal(map[string]any{
+		"object": "response",
+		"output": output,
+	})
+	require.NoError(t, err)
+
+	diagnostic, _, ok := responsesDiagnostic(&httpclient.Response{Body: body})
+	require.True(t, ok)
+	require.Len(t, diagnostic.OutputTypes, maxResponsesDiagnosticOutputTypes)
+	require.True(t, diagnostic.OutputTypesTruncated)
 }
 
 func TestPersistRequestMiddleware_Name(t *testing.T) {
