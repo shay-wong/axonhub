@@ -2,6 +2,7 @@ package responses
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/internal/pkg/xurl"
@@ -13,7 +14,18 @@ func BuildImageResponse(upstream *Response, metadata map[string]any) (*llm.Respo
 	}
 
 	if upstream.Error != nil {
-		return nil, fmt.Errorf("codex image response error: %s", upstream.Error.Message)
+		details := make([]string, 0, 2)
+		if errorType := strings.TrimSpace(upstream.Error.Type); errorType != "" {
+			details = append(details, "type="+errorType)
+		}
+		if code := strings.TrimSpace(upstream.Error.Code); code != "" {
+			details = append(details, "code="+code)
+		}
+		if len(details) == 0 {
+			return nil, fmt.Errorf("codex image response failed")
+		}
+
+		return nil, fmt.Errorf("codex image response failed (%s)", strings.Join(details, ", "))
 	}
 
 	format, _ := metadata["codex_image_output_format"].(string)
@@ -37,8 +49,20 @@ func BuildImageResponse(upstream *Response, metadata map[string]any) (*llm.Respo
 		imageResp.Background = background
 	}
 
+	outputTypes := make([]string, 0, len(upstream.Output))
+	hasImageGenerationCall := false
 	for _, item := range upstream.Output {
-		if item.Type != "image_generation_call" || item.Result == nil || *item.Result == "" {
+		outputType := strings.TrimSpace(item.Type)
+		if outputType == "" {
+			outputType = "unknown"
+		}
+		outputTypes = append(outputTypes, outputType)
+
+		if item.Type != "image_generation_call" {
+			continue
+		}
+		hasImageGenerationCall = true
+		if item.Result == nil || *item.Result == "" {
 			continue
 		}
 
@@ -49,7 +73,7 @@ func BuildImageResponse(upstream *Response, metadata map[string]any) (*llm.Respo
 	}
 
 	if len(imageResp.Data) == 0 {
-		return nil, fmt.Errorf("codex image response did not contain image_generation_call result")
+		return nil, imageResponseNoResultError(upstream, outputTypes, hasImageGenerationCall)
 	}
 
 	result := &llm.Response{
@@ -70,4 +94,28 @@ func BuildImageResponse(upstream *Response, metadata map[string]any) (*llm.Respo
 	}
 
 	return result, nil
+}
+
+func imageResponseNoResultError(upstream *Response, outputTypes []string, hasImageGenerationCall bool) error {
+	status := "unknown"
+	if upstream.Status != nil && strings.TrimSpace(*upstream.Status) != "" {
+		status = strings.TrimSpace(*upstream.Status)
+	}
+
+	details := "status=" + status
+	if len(outputTypes) > 0 {
+		details += ", output_types=" + strings.Join(outputTypes, ",")
+	}
+
+	if upstream.IncompleteDetails != nil && strings.TrimSpace(upstream.IncompleteDetails.Reason) != "" {
+		return fmt.Errorf("codex image response incomplete: %s (%s)", strings.TrimSpace(upstream.IncompleteDetails.Reason), details)
+	}
+	if hasImageGenerationCall {
+		return fmt.Errorf("codex image response contained image_generation_call without result (%s)", details)
+	}
+	if len(outputTypes) == 0 {
+		return fmt.Errorf("codex image response did not produce any output (%s)", details)
+	}
+
+	return fmt.Errorf("codex image response did not produce an image (%s)", details)
 }

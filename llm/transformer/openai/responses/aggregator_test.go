@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -971,4 +972,86 @@ func TestAggregateStreamChunks_ImageGenerationCall(t *testing.T) {
 	require.Equal(t, "call_abc", resp.Output[0].CallID)
 	require.NotNil(t, resp.Output[0].Result)
 	require.Equal(t, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", *resp.Output[0].Result)
+}
+
+// The terminal snapshot is authoritative when providers omit the image result from item events.
+func TestAggregateStreamChunks_UsesTerminalOutput(t *testing.T) {
+	chunks := []*httpclient.StreamEvent{
+		{Data: []byte(`{"type":"response.created","response":{"id":"resp_terminal_image","model":"gpt-5.4-mini","status":"in_progress","output":[]}}`)},
+		{Data: []byte(`{"type":"response.completed","response":{"id":"resp_terminal_image","model":"gpt-5.4-mini","status":"completed","output":[{"id":"img_1","type":"image_generation_call","status":"completed","result":"terminal-image-result"}]}}`)},
+	}
+
+	body, _, err := AggregateStreamChunks(t.Context(), chunks)
+	require.NoError(t, err)
+
+	var resp Response
+	require.NoError(t, json.Unmarshal(body, &resp))
+	require.Len(t, resp.Output, 1)
+	require.Equal(t, "image_generation_call", resp.Output[0].Type)
+	require.Equal(t, "terminal-image-result", lo.FromPtr(resp.Output[0].Result))
+}
+
+// A partial terminal snapshot must not erase fields already completed by item events.
+func TestAggregateStreamChunks_MergesTerminalOutputWithStreamedFields(t *testing.T) {
+	chunks := []*httpclient.StreamEvent{
+		{Data: []byte(`{"type":"response.created","response":{"id":"resp_merged_output","model":"gpt-5.4-mini","status":"in_progress","output":[]}}`)},
+		{Data: []byte(`{"type":"response.output_item.added","output_index":0,"item":{"id":"img_1","type":"image_generation_call","status":"in_progress"}}`)},
+		{Data: []byte(`{"type":"response.output_item.done","output_index":0,"item":{"id":"img_1","type":"image_generation_call","status":"completed","result":"streamed-image-result"}}`)},
+		{Data: []byte(`{"type":"response.completed","response":{"id":"resp_merged_output","model":"gpt-5.4-mini","status":"completed","output":[{"id":"img_1","type":"image_generation_call","status":"completed"}]}}`)},
+	}
+
+	body, _, err := AggregateStreamChunks(t.Context(), chunks)
+	require.NoError(t, err)
+
+	var resp Response
+	require.NoError(t, json.Unmarshal(body, &resp))
+	require.Len(t, resp.Output, 1)
+	require.Equal(t, "streamed-image-result", lo.FromPtr(resp.Output[0].Result))
+}
+
+// Terminal message content may be a subset; later streamed parts still belong in the final output.
+func TestAggregateStreamChunks_MergesPartialTerminalContent(t *testing.T) {
+	chunks := []*httpclient.StreamEvent{
+		{Data: []byte(`{"type":"response.created","response":{"id":"resp_partial_content","model":"gpt-5.4-mini","status":"in_progress","output":[]}}`)},
+		{Data: []byte(`{"type":"response.output_item.added","output_index":0,"item":{"id":"msg_1","type":"message","role":"assistant","status":"in_progress"}}`)},
+		{Data: []byte(`{"type":"response.content_part.added","item_id":"msg_1","output_index":0,"content_index":0,"part":{"type":"output_text","text":"streamed first"}}`)},
+		{Data: []byte(`{"type":"response.content_part.added","item_id":"msg_1","output_index":0,"content_index":1,"part":{"type":"refusal","refusal":"streamed second"}}`)},
+		{Data: []byte(`{"type":"response.completed","response":{"id":"resp_partial_content","model":"gpt-5.4-mini","status":"completed","output":[{"id":"msg_1","type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"terminal first"}]}]}}`)},
+	}
+
+	body, _, err := AggregateStreamChunks(t.Context(), chunks)
+	require.NoError(t, err)
+
+	var resp Response
+	require.NoError(t, json.Unmarshal(body, &resp))
+	require.Len(t, resp.Output, 1)
+	require.Len(t, resp.Output[0].Content.Items, 2)
+	require.Equal(t, "terminal first", lo.FromPtr(resp.Output[0].Content.Items[0].Text))
+	require.Equal(t, "streamed second", lo.FromPtr(resp.Output[0].Content.Items[1].Refusal))
+}
+
+// Refusal content must survive SSE aggregation and the Responses-to-LLM conversion.
+func TestAggregateStreamChunks_PreservesRefusal(t *testing.T) {
+	chunks := []*httpclient.StreamEvent{
+		{Data: []byte(`{"type":"response.created","response":{"id":"resp_refusal","model":"gpt-5.4-mini","status":"in_progress","output":[]}}`)},
+		{Data: []byte(`{"type":"response.output_item.added","output_index":0,"item":{"id":"msg_refusal","type":"message","role":"assistant","status":"in_progress"}}`)},
+		{Data: []byte(`{"type":"response.content_part.added","item_id":"msg_refusal","output_index":0,"content_index":0,"part":{"type":"refusal","refusal":""}}`)},
+		{Data: []byte(`{"type":"response.refusal.delta","item_id":"msg_refusal","output_index":0,"content_index":0,"delta":"I cannot "}`)},
+		{Data: []byte(`{"type":"response.refusal.done","item_id":"msg_refusal","output_index":0,"content_index":0,"refusal":"I cannot help with that."}`)},
+		{Data: []byte(`{"type":"response.completed","response":{"id":"resp_refusal","model":"gpt-5.4-mini","status":"completed","output":[]}}`)},
+	}
+
+	body, _, err := AggregateStreamChunks(t.Context(), chunks)
+	require.NoError(t, err)
+
+	var resp Response
+	require.NoError(t, json.Unmarshal(body, &resp))
+	require.Len(t, resp.Output, 1)
+	require.Len(t, resp.Output[0].Content.Items, 1)
+	require.Equal(t, "refusal", resp.Output[0].Content.Items[0].Type)
+	require.Nil(t, resp.Output[0].Content.Items[0].Text)
+	require.Equal(t, "I cannot help with that.", lo.FromPtr(resp.Output[0].Content.Items[0].Refusal))
+
+	msg := convertOutputToMessage(resp.Output, nil)
+	require.Equal(t, "I cannot help with that.", msg.Refusal)
 }

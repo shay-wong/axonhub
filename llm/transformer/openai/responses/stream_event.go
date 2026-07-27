@@ -32,6 +32,8 @@ const (
 
 	StreamEventTypeOutputTextDelta StreamEventType = "response.output_text.delta"
 	StreamEventTypeOutputTextDone  StreamEventType = "response.output_text.done"
+	StreamEventTypeRefusalDelta    StreamEventType = "response.refusal.delta"
+	StreamEventTypeRefusalDone     StreamEventType = "response.refusal.done"
 
 	// Function call events.
 
@@ -86,6 +88,8 @@ type StreamEvent struct {
 
 	// For output_text.done events
 	Text string `json:"text,omitempty"`
+	// For refusal.done events
+	Refusal string `json:"refusal,omitempty"`
 
 	// For function_call_arguments.done events
 	Name      string `json:"name,omitempty"`

@@ -3,6 +3,8 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/samber/lo"
@@ -322,6 +324,114 @@ func TestPersistRequestExecutionMiddleware_OnOutboundLlmResponse_PersistsTermina
 			}
 		})
 	}
+}
+
+// Conversion failures retain only the provider outcome needed to diagnose the failed execution.
+func TestPersistRequestExecutionMiddleware_OnOutboundRawError_PersistsResponsesDiagnostic(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(t.Context(), client))
+	project := createTestProject(t, ctx, client)
+	ch := createTestChannel(t, ctx, client)
+	_, requestService, _, _ := setupTestServices(t, client)
+	requestRow, err := client.Request.Create().
+		SetProjectID(project.ID).
+		SetChannelID(ch.ID).
+		SetModelID("gpt-5.4-mini").
+		SetRequestBody([]byte(`{"model":"gpt-5.4-mini"}`)).
+		SetStatus(entrequest.StatusProcessing).
+		Save(ctx)
+	require.NoError(t, err)
+	executionRow, err := client.RequestExecution.Create().
+		SetRequestID(requestRow.ID).
+		SetProjectID(project.ID).
+		SetChannelID(ch.ID).
+		SetModelID("gpt-5.4-mini").
+		SetRequestBody([]byte(`{"model":"gpt-5.4-mini"}`)).
+		SetStatus(requestexecution.StatusProcessing).
+		Save(ctx)
+	require.NoError(t, err)
+
+	providerBody, err := json.Marshal(map[string]any{
+		"object":             "response",
+		"id":                 "resp_diagnostic",
+		"status":             "incomplete",
+		"incomplete_details": map[string]any{"reason": "content_filter"},
+		"error": map[string]any{
+			"type":    "image_error",
+			"code":    "generation_failed",
+			"message": "Provider exposed sk-error-secret",
+		},
+		"output": []any{
+			map[string]any{
+				"type": "message",
+				"content": []any{
+					map[string]any{
+						"type":    "refusal",
+						"refusal": `Policy refusal for user@example.com credential {"api_key":"sk-refusal-secret"} data:image/png;base64,` + strings.Repeat("A", 256),
+					},
+					map[string]any{
+						"type": "output_text",
+						"text": "Provider message api-key: sk-message-secret",
+					},
+				},
+			},
+			map[string]any{
+				"type":   "image_generation_call",
+				"result": strings.Repeat("B", 1024),
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	state := &PersistenceState{Request: requestRow, RequestExec: executionRow, RequestService: requestService}
+	middleware := &persistRequestExecutionMiddleware{
+		outbound: &PersistentOutboundTransformer{state: state},
+		rawResponse: &httpclient.Response{
+			StatusCode: 200,
+			Body:       providerBody,
+			Request:    &httpclient.Request{APIFormat: llm.APIFormatOpenAIResponse.String()},
+		},
+	}
+	middleware.OnOutboundRawError(ctx, errors.New("image conversion failed api_key=sk-persist-secret"))
+
+	updated, err := client.RequestExecution.Get(ctx, executionRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, requestexecution.StatusFailed, updated.Status)
+	require.Equal(t, "resp_diagnostic", updated.ExternalID)
+	require.Equal(t, "image conversion failed api_key=[REDACTED]", updated.ErrorMessage)
+	require.JSONEq(t, `{
+		"status":"incomplete",
+		"incomplete_reason":"content_filter",
+		"output_types":["message","image_generation_call"],
+		"refusal_summary":"Policy refusal for [EMAIL REDACTED] credential {\"api_key\":\"[REDACTED]\"} [IMAGE DATA REDACTED]",
+		"message_summary":"Provider message api-key: [REDACTED]",
+		"error":{"type":"image_error","code":"generation_failed","message":"Provider exposed [API KEY REDACTED]"}
+	}`, string(updated.ResponseBody))
+	require.NotContains(t, string(updated.ResponseBody), strings.Repeat("B", 128))
+	require.NotContains(t, string(updated.ResponseBody), "sk-")
+}
+
+// A retried attempt must never persist the previous attempt's provider response.
+func TestPersistRequestExecutionMiddleware_OnOutboundRawRequest_ClearsRawResponse(t *testing.T) {
+	middleware := &persistRequestExecutionMiddleware{
+		outbound:    &PersistentOutboundTransformer{state: &PersistenceState{RequestExec: &ent.RequestExecution{ID: 1}}},
+		rawResponse: &httpclient.Response{Body: []byte(`{"status":"completed"}`)},
+	}
+
+	_, err := middleware.OnOutboundRawRequest(t.Context(), &httpclient.Request{})
+	require.NoError(t, err)
+	require.Nil(t, middleware.rawResponse)
+}
+
+func TestResponsesDiagnostic_RequiresResponsesMarkerWithoutRequestFormat(t *testing.T) {
+	diagnostic, externalID, ok := responsesDiagnostic(&httpclient.Response{
+		Body: []byte(`{"id":"not_a_response","status":"completed","output":[]}`),
+	})
+	require.False(t, ok)
+	require.Nil(t, diagnostic)
+	require.Empty(t, externalID)
 }
 
 func TestPersistRequestMiddleware_Name(t *testing.T) {

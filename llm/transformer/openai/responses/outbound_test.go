@@ -82,6 +82,39 @@ func TestOutboundTransformer_TransformResponse_CanceledFinishReason(t *testing.T
 	require.Equal(t, "cancelled", *result.Choices[0].FinishReason)
 }
 
+// Refusal content must survive both response conversion boundaries.
+func TestResponsesNonStreamRefusalRoundTrip(t *testing.T) {
+	outbound, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	unified, err := outbound.TransformResponse(t.Context(), &httpclient.Response{
+		StatusCode: http.StatusOK,
+		Body: []byte(`{
+			"id":"resp_refusal",
+			"object":"response",
+			"model":"gpt-5.4-mini",
+			"status":"incomplete",
+			"incomplete_details":{"reason":"content_filter"},
+			"output":[{"id":"msg_1","type":"message","role":"assistant","status":"incomplete","content":[{"type":"refusal","refusal":"I cannot help."}]}]
+		}`),
+	})
+	require.NoError(t, err)
+	require.Len(t, unified.Choices, 1)
+	require.Equal(t, "I cannot help.", unified.Choices[0].Message.Refusal)
+
+	httpResponse, err := NewInboundTransformer().TransformResponse(t.Context(), unified)
+	require.NoError(t, err)
+
+	var roundTrip Response
+	require.NoError(t, json.Unmarshal(httpResponse.Body, &roundTrip))
+	require.Equal(t, "incomplete", lo.FromPtr(roundTrip.Status))
+	require.Equal(t, "content_filter", roundTrip.IncompleteDetails.Reason)
+	require.Len(t, roundTrip.Output, 1)
+	require.Len(t, roundTrip.Output[0].Content.Items, 1)
+	require.Equal(t, "refusal", roundTrip.Output[0].Content.Items[0].Type)
+	require.Equal(t, "I cannot help.", lo.FromPtr(roundTrip.Output[0].Content.Items[0].Refusal))
+}
+
 func TestResponsesNonStreamTerminalRoundTrip(t *testing.T) {
 	outbound, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
 	require.NoError(t, err)

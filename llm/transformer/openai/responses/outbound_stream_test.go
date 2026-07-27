@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -16,6 +17,99 @@ import (
 	"github.com/looplj/axonhub/llm/internal/pkg/xtest"
 	"github.com/looplj/axonhub/llm/streams"
 )
+
+// Refusals may arrive as deltas or only in the terminal response snapshot.
+func TestOutboundTransformer_StreamPreservesRefusal(t *testing.T) {
+	tests := []struct {
+		name   string
+		events []*httpclient.StreamEvent
+	}{
+		{
+			name: "refusal deltas",
+			events: []*httpclient.StreamEvent{
+				{Data: []byte(`{"type":"response.created","response":{"id":"resp_refusal_delta","model":"gpt-5.4-mini","status":"in_progress","output":[]}}`)},
+				{Data: []byte(`{"type":"response.refusal.delta","delta":"I cannot "}`)},
+				{Data: []byte(`{"type":"response.refusal.done","refusal":"I cannot help."}`)},
+				{Data: []byte(`{"type":"response.completed","response":{"id":"resp_refusal_delta","model":"gpt-5.4-mini","status":"completed","output":[]}}`)},
+			},
+		},
+		{
+			name: "terminal snapshot only",
+			events: []*httpclient.StreamEvent{
+				{Data: []byte(`{"type":"response.created","response":{"id":"resp_refusal_terminal","model":"gpt-5.4-mini","status":"in_progress","output":[]}}`)},
+				{Data: []byte(`{"type":"response.completed","response":{"id":"resp_refusal_terminal","model":"gpt-5.4-mini","status":"completed","output":[{"id":"msg_1","type":"message","role":"assistant","status":"completed","content":[{"type":"refusal","refusal":"I cannot help."}]}]}}`)},
+			},
+		},
+		{
+			name: "incomplete terminal snapshot",
+			events: []*httpclient.StreamEvent{
+				{Data: []byte(`{"type":"response.created","response":{"id":"resp_refusal_incomplete","model":"gpt-5.4-mini","status":"in_progress","output":[]}}`)},
+				{Data: []byte(`{"type":"response.incomplete","response":{"id":"resp_refusal_incomplete","model":"gpt-5.4-mini","status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[{"id":"msg_1","type":"message","role":"assistant","status":"incomplete","content":[{"type":"refusal","refusal":"I cannot help."}]}]}}`)},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stream, err := new(OutboundTransformer).TransformStream(t.Context(), nil, streams.SliceStream(tt.events))
+			require.NoError(t, err)
+
+			var refusal strings.Builder
+			for stream.Next() {
+				resp := stream.Current()
+				for _, choice := range resp.Choices {
+					if choice.Delta != nil {
+						refusal.WriteString(choice.Delta.Refusal)
+					}
+				}
+			}
+			require.NoError(t, stream.Err())
+			require.Equal(t, "I cannot help.", refusal.String())
+		})
+	}
+}
+
+// A terminal-only provider refusal must reach the client as refusal SSE events and final output.
+func TestResponsesStream_RoundTripsTerminalRefusal(t *testing.T) {
+	providerEvents := []*httpclient.StreamEvent{
+		{Data: []byte(`{"type":"response.created","response":{"id":"resp_refusal_roundtrip","model":"gpt-5.4-mini","status":"in_progress","output":[]}}`)},
+		{Data: []byte(`{"type":"response.incomplete","response":{"id":"resp_refusal_roundtrip","model":"gpt-5.4-mini","status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[{"id":"msg_1","type":"message","role":"assistant","status":"incomplete","content":[{"type":"refusal","refusal":"I cannot help."}]}]}}`)},
+	}
+
+	unified, err := new(OutboundTransformer).TransformStream(t.Context(), nil, streams.SliceStream(providerEvents))
+	require.NoError(t, err)
+	clientStream, err := NewInboundTransformer().TransformStream(t.Context(), unified)
+	require.NoError(t, err)
+	events, err := streams.All(clientStream)
+	require.NoError(t, err)
+
+	var (
+		refusalDelta strings.Builder
+		sawDone      bool
+		terminal     *Response
+	)
+	for _, event := range events {
+		var parsed StreamEvent
+		require.NoError(t, json.Unmarshal(event.Data, &parsed))
+		switch parsed.Type {
+		case StreamEventTypeRefusalDelta:
+			refusalDelta.WriteString(parsed.Delta)
+		case StreamEventTypeRefusalDone:
+			sawDone = true
+			require.Equal(t, "I cannot help.", parsed.Refusal)
+		case StreamEventTypeResponseIncomplete:
+			terminal = parsed.Response
+		}
+	}
+
+	require.Equal(t, "I cannot help.", refusalDelta.String())
+	require.True(t, sawDone)
+	require.NotNil(t, terminal)
+	require.Equal(t, "content_filter", terminal.IncompleteDetails.Reason)
+	require.Len(t, terminal.Output, 1)
+	require.Len(t, terminal.Output[0].Content.Items, 1)
+	require.Equal(t, "I cannot help.", lo.FromPtr(terminal.Output[0].Content.Items[0].Refusal))
+}
 
 func TestOutboundTransformer_StreamTransformation_WithTestData(t *testing.T) {
 	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")

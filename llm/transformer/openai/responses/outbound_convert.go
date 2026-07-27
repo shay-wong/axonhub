@@ -331,6 +331,12 @@ func convertAssistantMessage(msg llm.Message) []Item {
 			}
 		}
 	}
+	if msg.Refusal != "" {
+		contentItems = append(contentItems, Item{
+			Type:    "refusal",
+			Refusal: lo.ToPtr(msg.Refusal),
+		})
+	}
 
 	// In the common assistant flow, the visible message content precedes any
 	// subsequent tool calls. Flush message segments before appending tool-call
@@ -844,6 +850,7 @@ func convertOutputToMessageWithError(output []Item, transformerMetadata map[stri
 	var (
 		contentParts         []llm.MessageContentPart
 		textContent          strings.Builder
+		refusalContent       strings.Builder
 		reasoningContent     strings.Builder
 		reasoningSignature   *string
 		messageID            string
@@ -876,12 +883,17 @@ func convertOutputToMessageWithError(output []Item, transformerMetadata map[stri
 				continue
 			}
 			for _, contentItem := range outputItem.Content.Items {
-				if contentItem.Type == "output_text" {
+				switch contentItem.Type {
+				case "output_text":
 					annotations = appendOutputText(&textContent, &visibleTextRuneCount, annotations, contentItem)
+				case "refusal":
+					refusalContent.WriteString(lo.FromPtr(contentItem.Refusal))
 				}
 			}
 		case "output_text":
 			annotations = appendOutputText(&textContent, &visibleTextRuneCount, annotations, outputItem)
+		case "refusal":
+			refusalContent.WriteString(lo.FromPtr(outputItem.Refusal))
 		case "function_call":
 			toolCalls = append(toolCalls, llm.ToolCall{
 				ID:   outputItem.CallID,
@@ -1011,6 +1023,7 @@ func convertOutputToMessageWithError(output []Item, transformerMetadata map[stri
 		ToolCalls:         toolCalls,
 		Annotations:       annotations,
 		InlineToolResults: inlineToolResults,
+		Refusal:           refusalContent.String(),
 	}
 
 	if reasoningContent.Len() > 0 {

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/samber/lo"
+
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/internal/pkg/xjson"
 	"github.com/looplj/axonhub/llm/transformer"
@@ -552,6 +554,8 @@ type Item struct {
 
 	// Text for output_text/input_text type.
 	Text *string `json:"text,omitempty"`
+	// Refusal text for refusal content parts.
+	Refusal *string `json:"refusal,omitempty"`
 
 	// Image generation fields
 
@@ -747,7 +751,7 @@ func (item Item) isOutputMessageContent() bool {
 	}
 
 	for _, ci := range item.Content.Items {
-		if ci.Type == "output_text" {
+		if ci.Type == "output_text" || ci.Type == "refusal" {
 			return true
 		}
 	}
@@ -772,6 +776,7 @@ func (item Item) GetContentItems() []ContentItem {
 		result = append(result, ContentItem{
 			Type:        ci.Type,
 			Text:        text,
+			Refusal:     lo.FromPtr(ci.Refusal),
 			Annotations: append([]Annotation(nil), ci.Annotations...),
 		})
 	}
@@ -788,11 +793,15 @@ func (item *Item) SetContentItems(items []ContentItem) {
 
 	contentItems := make([]Item, 0, len(items))
 	for _, ci := range items {
-		contentItems = append(contentItems, Item{
+		contentItem := Item{
 			Type:        ci.Type,
-			Text:        &ci.Text,
+			Refusal:     lo.EmptyableToPtr(ci.Refusal),
 			Annotations: append([]Annotation(nil), ci.Annotations...),
-		})
+		}
+		if ci.Type != "refusal" || ci.Text != "" {
+			contentItem.Text = &ci.Text
+		}
+		contentItems = append(contentItems, contentItem)
 	}
 
 	item.Content = &Input{Items: contentItems}
@@ -909,6 +918,7 @@ type Response struct {
 type ContentItem struct {
 	Type        string       `json:"type"`
 	Text        string       `json:"text,omitempty"`
+	Refusal     string       `json:"refusal,omitempty"`
 	Annotations []Annotation `json:"annotations,omitempty"`
 }
 

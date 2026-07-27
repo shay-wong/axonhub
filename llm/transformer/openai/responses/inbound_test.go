@@ -1557,6 +1557,49 @@ func TestConvertToMessageContent(t *testing.T) {
 	}
 }
 
+// Refusal output replayed as Responses input must remain an assistant refusal.
+func TestInboundTransformer_TransformRequest_PreservesRefusalInput(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		wantText string
+	}{
+		{
+			name:    "refusal only",
+			content: `[{"type":"refusal","refusal":"I cannot help."}]`,
+		},
+		{
+			name:     "text and refusal",
+			content:  `[{"type":"output_text","text":"Partial answer"},{"type":"refusal","refusal":"I cannot continue."}]`,
+			wantText: "Partial answer",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request, err := NewInboundTransformer().TransformRequest(t.Context(), &httpclient.Request{
+				Body: []byte(`{"model":"gpt-5.4-mini","input":[{"type":"message","role":"assistant","content":` + tt.content + `}]}`),
+			})
+			require.NoError(t, err)
+			require.Len(t, request.Messages, 1)
+			require.Equal(t, "assistant", request.Messages[0].Role)
+			if tt.wantText == "" {
+				require.Nil(t, request.Messages[0].Content.Content)
+				require.Empty(t, request.Messages[0].Content.MultipleContent)
+			} else {
+				require.Len(t, request.Messages[0].Content.MultipleContent, 1)
+				require.Equal(t, tt.wantText, lo.FromPtr(request.Messages[0].Content.MultipleContent[0].Text))
+			}
+
+			wantRefusal := "I cannot help."
+			if tt.wantText != "" {
+				wantRefusal = "I cannot continue."
+			}
+			require.Equal(t, wantRefusal, request.Messages[0].Refusal)
+		})
+	}
+}
+
 func TestConvertToResponsesAPIResponse_PreservesToolSearchContentParts(t *testing.T) {
 	callItem := Item{
 		ID:        "search_call_1",

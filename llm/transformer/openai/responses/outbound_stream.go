@@ -60,6 +60,7 @@ type outboundStreamState struct {
 
 	// Content accumulation
 	textContent      strings.Builder
+	refusalContent   strings.Builder
 	reasoningContent strings.Builder
 
 	// Tool call tracking
@@ -147,6 +148,44 @@ func (s *responsesOutboundStream) applyResponseSnapshot(resp *llm.Response, snap
 	resp.PreviousResponseID = s.state.previousResponseID
 	resp.ServiceTier = s.state.serviceTier
 	resp.Usage = s.state.usage
+}
+
+func (s *responsesOutboundStream) applyRefusal(resp *llm.Response, refusal string, final bool) bool {
+	if refusal == "" {
+		return false
+	}
+
+	delta := refusal
+	if final {
+		existing := s.state.refusalContent.String()
+		if !strings.HasPrefix(refusal, existing) {
+			return false
+		}
+		delta = strings.TrimPrefix(refusal, existing)
+	}
+	if delta == "" {
+		return false
+	}
+
+	s.state.refusalContent.WriteString(delta)
+	resp.Choices = []llm.Choice{{
+		Index: 0,
+		Delta: &llm.Message{Refusal: delta},
+	}}
+
+	return true
+}
+
+func (s *responsesOutboundStream) enqueueTerminalRefusal(resp *llm.Response, snapshot *Response) {
+	if snapshot == nil || len(snapshot.Output) == 0 {
+		return
+	}
+
+	msg := convertOutputToMessage(snapshot.Output, s.state.transformerMetadata)
+	refusalResp := *resp
+	if s.applyRefusal(&refusalResp, msg.Refusal, true) {
+		s.enqueue(&refusalResp)
+	}
 }
 
 func (s *responsesOutboundStream) setServerItemContent(resp *llm.Response, item *Item) (bool, error) {
@@ -640,7 +679,12 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		return nil // Intentionally skip this event
 
 	case StreamEventTypeContentPartAdded:
-		// Content part added - skip, no meaningful content to emit
+		if streamEvent.Part != nil && streamEvent.Part.Type == "refusal" && streamEvent.Part.Refusal != nil &&
+			s.applyRefusal(resp, *streamEvent.Part.Refusal, true) {
+			break
+		}
+
+		// Other content parts carry no new content.
 		return nil // Intentionally skip this event
 
 	case StreamEventTypeOutputTextDelta:
@@ -674,6 +718,16 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 	case StreamEventTypeOutputTextDone:
 		// Text content completed - skip, content was already streamed via deltas
 		return nil // Intentionally skip this event
+
+	case StreamEventTypeRefusalDelta:
+		if !s.applyRefusal(resp, streamEvent.Delta, false) {
+			return nil
+		}
+
+	case StreamEventTypeRefusalDone:
+		if !s.applyRefusal(resp, streamEvent.Refusal, true) {
+			return nil
+		}
 
 	case StreamEventTypeReasoningSummaryTextDone:
 		// Reasoning content completed - skip, content was already streamed via deltas
@@ -756,9 +810,14 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		if err != nil {
 			return err
 		}
-		if len(msg.Annotations) == 0 {
+		refusalDelta := ""
+		if strings.HasPrefix(msg.Refusal, s.state.refusalContent.String()) {
+			refusalDelta = strings.TrimPrefix(msg.Refusal, s.state.refusalContent.String())
+		}
+		if len(msg.Annotations) == 0 && refusalDelta == "" {
 			return nil // Intentionally skip this event
 		}
+		s.state.refusalContent.WriteString(refusalDelta)
 		if len(s.state.transformerMetadata) > 0 {
 			resp.TransformerMetadata = s.state.transformerMetadata
 			s.state.transformerMetadataEmitted = true
@@ -769,12 +828,20 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 				Index: 0,
 				Delta: &llm.Message{
 					Annotations: msg.Annotations,
+					Refusal:     refusalDelta,
 				},
 			},
 		}
 
-	case StreamEventTypeContentPartDone,
-		StreamEventTypeReasoningSummaryPartAdded, StreamEventTypeReasoningSummaryPartDone:
+	case StreamEventTypeContentPartDone:
+		if streamEvent.Part != nil && streamEvent.Part.Type == "refusal" && streamEvent.Part.Refusal != nil &&
+			s.applyRefusal(resp, *streamEvent.Part.Refusal, true) {
+			break
+		}
+
+		return nil
+
+	case StreamEventTypeReasoningSummaryPartAdded, StreamEventTypeReasoningSummaryPartDone:
 		// These events don't need special handling - skip
 		return nil // Intentionally skip this event
 
@@ -783,6 +850,7 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		s.responseCompleted = true
 		s.applyResponseSnapshot(resp, streamEvent.Response)
 		resp.Usage = nil
+		s.enqueueTerminalRefusal(resp, streamEvent.Response)
 		if len(s.state.transformerMetadata) > 0 && !s.state.transformerMetadataEmitted {
 			resp.TransformerMetadata = s.state.transformerMetadata
 			s.state.transformerMetadataEmitted = true
@@ -827,6 +895,7 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		s.responseCompleted = true
 		upstreamError := streamEvent.Error
 		s.applyResponseSnapshot(resp, streamEvent.Response)
+		s.enqueueTerminalRefusal(resp, streamEvent.Response)
 		if streamEvent.Response != nil {
 			if streamEvent.Response.Error != nil {
 				upstreamError = streamEvent.Response.Error
@@ -853,6 +922,7 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		// Response incomplete (e.g., max tokens)
 		s.responseCompleted = true
 		s.applyResponseSnapshot(resp, streamEvent.Response)
+		s.enqueueTerminalRefusal(resp, streamEvent.Response)
 		resp.ProviderTerminalOutcome = llm.ResponseTerminalOutcomeIncomplete
 		finishReason := "length"
 		if streamEvent.Response != nil && streamEvent.Response.IncompleteDetails != nil &&
@@ -870,6 +940,7 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		// Response cancelled
 		s.responseCompleted = true
 		s.applyResponseSnapshot(resp, streamEvent.Response)
+		s.enqueueTerminalRefusal(resp, streamEvent.Response)
 		resp.ProviderTerminalOutcome = llm.ResponseTerminalOutcomeCanceled
 		finishReason := "cancelled"
 		resp.Choices = []llm.Choice{

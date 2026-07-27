@@ -2,7 +2,10 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/tidwall/gjson"
@@ -18,10 +21,28 @@ import (
 
 // Precompiled regex patterns for sanitizeResponseBody to avoid recompiling on each call.
 var (
-	tokenRegex  = regexp.MustCompile(`(?i)(bearer[\s:=]+)[a-zA-Z0-9_\-\.]+`)
-	apiKeyRegex = regexp.MustCompile(`(api[keyK]ey|API[keyK]ey)["']?\s*[:=]\s*["']?([a-zA-Z0-9_\-\.]{8,})["']?`)
-	emailRegex  = regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
+	tokenRegex        = regexp.MustCompile(`(?i)(bearer[\s:=]+)[a-zA-Z0-9_\-\.]+`)
+	apiKeyRegex       = regexp.MustCompile(`(?i)(api[_-]?key["']?\s*[:=]\s*["']?)([a-zA-Z0-9_\-.]{8,})(["']?)`)
+	secretKeyRegex    = regexp.MustCompile(`(?i)\bsk-[a-z0-9_-]{8,}\b`)
+	emailRegex        = regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
+	imageDataURLRegex = regexp.MustCompile(`(?i)data:image/[a-z0-9.+-]+;base64,[a-zA-Z0-9+/_=-]+`)
+	longBase64Regex   = regexp.MustCompile(`[a-zA-Z0-9+/_-]{128,}={0,2}`)
 )
+
+type responsesExecutionDiagnostic struct {
+	Status           string                    `json:"status"`
+	IncompleteReason string                    `json:"incomplete_reason,omitempty"`
+	OutputTypes      []string                  `json:"output_types,omitempty"`
+	RefusalSummary   string                    `json:"refusal_summary,omitempty"`
+	MessageSummary   string                    `json:"message_summary,omitempty"`
+	Error            *responsesDiagnosticError `json:"error,omitempty"`
+}
+
+type responsesDiagnosticError struct {
+	Type    string `json:"type,omitempty"`
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
+}
 
 // sanitizeResponseBody redacts obvious secrets and truncates the body for safe logging.
 func sanitizeResponseBody(body []byte, maxLen int) []byte {
@@ -35,7 +56,8 @@ func sanitizeResponseBody(body []byte, maxLen int) []byte {
 	str = tokenRegex.ReplaceAllString(str, "${1}[REDACTED]")
 
 	// Redact API keys (common patterns)
-	str = apiKeyRegex.ReplaceAllString(str, "$1=[REDACTED]")
+	str = apiKeyRegex.ReplaceAllString(str, "${1}[REDACTED]${3}")
+	str = secretKeyRegex.ReplaceAllString(str, "[API KEY REDACTED]")
 
 	// Redact email addresses
 	str = emailRegex.ReplaceAllString(str, "[EMAIL REDACTED]")
@@ -46,6 +68,110 @@ func sanitizeResponseBody(body []byte, maxLen int) []byte {
 	}
 
 	return []byte(str)
+}
+
+func sanitizeDiagnosticText(text string, maxLen int) string {
+	text = imageDataURLRegex.ReplaceAllString(text, "[IMAGE DATA REDACTED]")
+	text = longBase64Regex.ReplaceAllString(text, "[ENCODED DATA REDACTED]")
+	text = string(sanitizeResponseBody([]byte(text), max(len(text)*2, maxLen)))
+	text = strings.TrimSpace(strings.ToValidUTF8(text, ""))
+
+	runes := []rune(text)
+	if len(runes) > maxLen {
+		text = string(runes[:maxLen]) + "..."
+	}
+
+	return text
+}
+
+func responsesDiagnostic(response *httpclient.Response) (*responsesExecutionDiagnostic, string, bool) {
+	if response == nil || len(response.Body) == 0 {
+		return nil, "", false
+	}
+	if response.Request != nil && response.Request.APIFormat != "" && response.Request.APIFormat != llm.APIFormatOpenAIResponse.String() {
+		return nil, "", false
+	}
+
+	var wire struct {
+		Object            string  `json:"object"`
+		ID                string  `json:"id"`
+		Status            *string `json:"status"`
+		IncompleteDetails *struct {
+			Reason string `json:"reason"`
+		} `json:"incomplete_details"`
+		Output []struct {
+			Type    string  `json:"type"`
+			Text    *string `json:"text"`
+			Refusal *string `json:"refusal"`
+			Content []struct {
+				Type    string  `json:"type"`
+				Text    *string `json:"text"`
+				Refusal *string `json:"refusal"`
+			} `json:"content"`
+		} `json:"output"`
+		Error *responsesDiagnosticError `json:"error"`
+	}
+	if err := json.Unmarshal(response.Body, &wire); err != nil {
+		return nil, "", false
+	}
+	if (response.Request == nil || response.Request.APIFormat == "") && wire.Object != "response" {
+		return nil, "", false
+	}
+	if wire.Object != "response" && wire.ID == "" && wire.Status == nil && len(wire.Output) == 0 && wire.Error == nil {
+		return nil, "", false
+	}
+
+	diagnostic := &responsesExecutionDiagnostic{Status: "unknown"}
+	if wire.Status != nil && strings.TrimSpace(*wire.Status) != "" {
+		diagnostic.Status = sanitizeDiagnosticText(*wire.Status, 64)
+	}
+	if wire.IncompleteDetails != nil {
+		diagnostic.IncompleteReason = sanitizeDiagnosticText(wire.IncompleteDetails.Reason, 128)
+	}
+	if wire.Error != nil {
+		diagnostic.Error = &responsesDiagnosticError{
+			Type:    sanitizeDiagnosticText(wire.Error.Type, 128),
+			Code:    sanitizeDiagnosticText(wire.Error.Code, 128),
+			Message: sanitizeDiagnosticText(wire.Error.Message, 512),
+		}
+	}
+
+	for _, item := range wire.Output {
+		diagnostic.OutputTypes = append(diagnostic.OutputTypes, sanitizeDiagnosticText(item.Type, 64))
+		if diagnostic.RefusalSummary == "" && item.Refusal != nil {
+			diagnostic.RefusalSummary = sanitizeDiagnosticText(*item.Refusal, 512)
+		}
+		if diagnostic.MessageSummary == "" && item.Text != nil {
+			diagnostic.MessageSummary = sanitizeDiagnosticText(*item.Text, 512)
+		}
+		for _, content := range item.Content {
+			if diagnostic.RefusalSummary == "" && content.Type == "refusal" && content.Refusal != nil {
+				diagnostic.RefusalSummary = sanitizeDiagnosticText(*content.Refusal, 512)
+			}
+			if diagnostic.MessageSummary == "" && content.Type == "output_text" && content.Text != nil {
+				diagnostic.MessageSummary = sanitizeDiagnosticText(*content.Text, 512)
+			}
+		}
+	}
+
+	return diagnostic, wire.ID, true
+}
+
+func sanitizedResponsesDiagnosticError(err error) error {
+	if errors.Is(err, context.Canceled) {
+		return context.Canceled
+	}
+
+	message := sanitizeDiagnosticText(ExtractErrorMessage(err), 512)
+	if responseErr, ok := xerrors.As[*llm.ResponseError](err); ok {
+		sanitized := *responseErr
+		sanitized.Detail = responseErr.Detail
+		sanitized.Detail.Message = message
+
+		return &sanitized
+	}
+
+	return errors.New(message)
 }
 
 // persistRequestExecutionMiddleware ensures a request execution exists and handles error updates.
@@ -68,6 +194,8 @@ func (m *persistRequestExecutionMiddleware) Name() string {
 }
 
 func (m *persistRequestExecutionMiddleware) OnOutboundRawRequest(ctx context.Context, request *httpclient.Request) (*httpclient.Request, error) {
+	m.rawResponse = nil
+
 	state := m.outbound.state
 	if state == nil || state.RequestExec != nil {
 		return request, nil
@@ -240,12 +368,24 @@ func (m *persistRequestExecutionMiddleware) OnOutboundRawError(ctx context.Conte
 	persistCtx, cancel := xcontext.DetachWithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	updateErr := state.RequestService.UpdateRequestExecutionFailed(
-		persistCtx,
-		state.RequestExec.ID,
-		ExtractErrorMessage(err),
-		ExtractErrorInfo(err),
-	)
+	var updateErr error
+	if diagnostic, externalID, ok := responsesDiagnostic(m.rawResponse); ok {
+		updateErr = state.RequestService.UpdateRequestExecutionTerminated(
+			persistCtx,
+			state.RequestExec.ID,
+			sanitizedResponsesDiagnosticError(err),
+			externalID,
+			diagnostic,
+			latencyMetrics(state.Perf),
+		)
+	} else {
+		updateErr = state.RequestService.UpdateRequestExecutionFailed(
+			persistCtx,
+			state.RequestExec.ID,
+			ExtractErrorMessage(err),
+			ExtractErrorInfo(err),
+		)
+	}
 	if updateErr != nil {
 		log.Warn(persistCtx, "Failed to update request execution status to failed", log.Cause(updateErr))
 	}

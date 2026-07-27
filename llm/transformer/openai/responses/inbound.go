@@ -499,7 +499,9 @@ func convertReasoningWithFollowing(items []Item, startIdx int) (*llm.Message, in
 			if nextItem.Role == "assistant" {
 				msg.ID = nextItem.ID
 				if nextItem.Content != nil && len(nextItem.Content.Items) > 0 && nextItem.isOutputMessageContent() {
-					msg.Content = convertContentItemsToMessageContent(nextItem.GetContentItems())
+					contentItems := nextItem.GetContentItems()
+					msg.Content = convertContentItemsToMessageContent(contentItems)
+					msg.Refusal = refusalFromContentItems(contentItems)
 				} else if nextItem.Content != nil {
 					msg.Content = convertToMessageContent(*nextItem.Content)
 				} else if nextItem.Text != nil {
@@ -536,7 +538,9 @@ func convertItemToMessage(item *Item) (*llm.Message, error) {
 
 		// Handle content - check Content.Items first (output message format from JSON)
 		if item.Content != nil && len(item.Content.Items) > 0 && item.isOutputMessageContent() {
-			msg.Content = convertContentItemsToMessageContent(item.GetContentItems())
+			contentItems := item.GetContentItems()
+			msg.Content = convertContentItemsToMessageContent(contentItems)
+			msg.Refusal = refusalFromContentItems(contentItems)
 		} else if item.Content != nil {
 			msg.Content = convertToMessageContent(*item.Content)
 		} else if item.Text != nil {
@@ -707,6 +711,17 @@ func convertContentItemsToMessageContent(items []ContentItem) llm.MessageContent
 	return llm.MessageContent{
 		MultipleContent: parts,
 	}
+}
+
+func refusalFromContentItems(items []ContentItem) string {
+	var refusal strings.Builder
+	for _, item := range items {
+		if item.Type == "refusal" {
+			refusal.WriteString(item.Refusal)
+		}
+	}
+
+	return refusal.String()
 }
 
 // convertToMessageContentParts converts content items to []llm.MessageContentPart.
@@ -1069,6 +1084,9 @@ func convertToResponsesAPIResponse(chatResp *llm.Response) *Response {
 				Text:        &text,
 				Annotations: []Annotation{},
 			}}, message.Annotations)
+			if message.Refusal != "" {
+				contentItems = append(contentItems, Item{Type: "refusal", Refusal: lo.ToPtr(message.Refusal)})
+			}
 			resp.Output = append(resp.Output, Item{
 				ID:   messageItemID,
 				Type: "message",
@@ -1123,6 +1141,9 @@ func convertToResponsesAPIResponse(chatResp *llm.Response) *Response {
 					}
 				}
 			}
+			if message.Refusal != "" {
+				contentItems = append(contentItems, Item{Type: "refusal", Refusal: lo.ToPtr(message.Refusal)})
+			}
 
 			if len(contentItems) > 0 {
 				contentItems, _ = attachAnnotationsToFirstTextItem(contentItems, message.Annotations)
@@ -1134,6 +1155,14 @@ func convertToResponsesAPIResponse(chatResp *llm.Response) *Response {
 					Status:  lo.ToPtr("completed"),
 				})
 			}
+		} else if message.Refusal != "" {
+			resp.Output = append(resp.Output, Item{
+				ID:      messageItemID,
+				Type:    "message",
+				Role:    "assistant",
+				Content: &Input{Items: []Item{{Type: "refusal", Refusal: lo.ToPtr(message.Refusal)}}},
+				Status:  lo.ToPtr("completed"),
+			})
 		}
 
 		// Set status based on finish reason

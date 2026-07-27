@@ -131,12 +131,13 @@ func TestBuildImageResponse_NilResponse(t *testing.T) {
 func TestBuildImageResponse_ResponseError(t *testing.T) {
 	upstream := &Response{
 		ID:    "resp_err",
-		Error: &Error{Message: "generation failed"},
+		Error: &Error{Type: "image_error", Code: "generation_failed", Message: "api_key=sk-provider-secret"},
 	}
 
 	_, err := BuildImageResponse(upstream, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "generation failed")
+	require.Equal(t, "codex image response failed (type=image_error, code=generation_failed)", err.Error())
+	require.NotContains(t, err.Error(), "sk-provider-secret")
 }
 
 func TestBuildImageResponse_NoImageResult(t *testing.T) {
@@ -147,7 +148,55 @@ func TestBuildImageResponse_NoImageResult(t *testing.T) {
 
 	_, err := BuildImageResponse(upstream, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "did not contain image_generation_call result")
+	require.Equal(t, "codex image response did not produce any output (status=unknown)", err.Error())
+}
+
+// Image failures must preserve the upstream outcome instead of collapsing to one generic error.
+func TestBuildImageResponse_NoImageResultPreservesUpstreamOutcome(t *testing.T) {
+	tests := []struct {
+		name       string
+		upstream   *Response
+		wantError  string
+		wantDetail string
+	}{
+		{
+			name: "incomplete response",
+			upstream: &Response{
+				Status:            lo.ToPtr("incomplete"),
+				IncompleteDetails: &ResponseIncompleteDetails{Reason: "content_filter"},
+				Output:            []Item{{Type: "message"}},
+			},
+			wantError:  "codex image response incomplete: content_filter",
+			wantDetail: "status=incomplete, output_types=message",
+		},
+		{
+			name: "empty image result",
+			upstream: &Response{
+				Status: lo.ToPtr("completed"),
+				Output: []Item{{Type: "image_generation_call", Result: lo.ToPtr("")}},
+			},
+			wantError:  "codex image response contained image_generation_call without result",
+			wantDetail: "status=completed, output_types=image_generation_call",
+		},
+		{
+			name: "non-image output",
+			upstream: &Response{
+				Status: lo.ToPtr("completed"),
+				Output: []Item{{Type: "reasoning"}, {Type: "message"}},
+			},
+			wantError:  "codex image response did not produce an image",
+			wantDetail: "status=completed, output_types=reasoning,message",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := BuildImageResponse(tt.upstream, nil)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.wantError)
+			require.Contains(t, err.Error(), tt.wantDetail)
+		})
+	}
 }
 
 func TestBuildImageResponse_ModelFromMetadata(t *testing.T) {

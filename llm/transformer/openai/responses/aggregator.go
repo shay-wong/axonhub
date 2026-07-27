@@ -34,6 +34,7 @@ type streamAggregator struct {
 	// Terminal response details
 	responseError     *Error
 	incompleteDetails *ResponseIncompleteDetails
+	terminalOutput    []Item
 }
 
 // aggregatedItem holds the accumulated state for an output item.
@@ -73,6 +74,7 @@ type aggregatedSummaryPart struct {
 type aggregatedContentPart struct {
 	Type        string
 	Text        *strings.Builder
+	Refusal     *strings.Builder
 	Annotations []Annotation
 }
 
@@ -85,7 +87,8 @@ func newAggregatedItem() *aggregatedItem {
 
 func newAggregatedContentPart() *aggregatedContentPart {
 	return &aggregatedContentPart{
-		Text: &strings.Builder{},
+		Text:    &strings.Builder{},
+		Refusal: &strings.Builder{},
 	}
 }
 
@@ -320,10 +323,29 @@ func (a *streamAggregator) processEvent(ev *StreamEvent) {
 				if ev.Part.Text != "" {
 					contentPart.Text.WriteString(ev.Part.Text)
 				}
+				if ev.Part.Refusal != nil {
+					contentPart.Refusal.WriteString(*ev.Part.Refusal)
+				}
 				contentPart.Annotations = append([]Annotation(nil), ev.Part.Annotations...)
 			}
 
 			item.Content = append(item.Content, contentPart)
+		}
+
+	case StreamEventTypeContentPartDone:
+		item := a.getItemForEvent(ev.OutputIndex, ev.ItemID)
+		if item != nil && ev.ContentIndex != nil && ev.Part != nil {
+			part := ensureContentPart(item, *ev.ContentIndex)
+			if ev.Part.Type != "" {
+				part.Type = ev.Part.Type
+			}
+			applyDoneText(part.Text, ev.Part.Text)
+			if ev.Part.Refusal != nil {
+				applyDoneText(part.Refusal, *ev.Part.Refusal)
+			}
+			if ev.Part.Annotations != nil {
+				part.Annotations = append([]Annotation(nil), ev.Part.Annotations...)
+			}
 		}
 
 	case StreamEventTypeOutputTextDelta:
@@ -340,6 +362,22 @@ func (a *streamAggregator) processEvent(ev *StreamEvent) {
 			if ev.ContentIndex != nil && *ev.ContentIndex < len(item.Content) && ev.Text != "" {
 				applyDoneText(item.Content[*ev.ContentIndex].Text, ev.Text)
 			}
+		}
+
+	case StreamEventTypeRefusalDelta:
+		item := a.getItemForEvent(ev.OutputIndex, ev.ItemID)
+		if item != nil && ev.ContentIndex != nil {
+			part := ensureContentPart(item, *ev.ContentIndex)
+			part.Type = "refusal"
+			part.Refusal.WriteString(ev.Delta)
+		}
+
+	case StreamEventTypeRefusalDone:
+		item := a.getItemForEvent(ev.OutputIndex, ev.ItemID)
+		if item != nil && ev.ContentIndex != nil {
+			part := ensureContentPart(item, *ev.ContentIndex)
+			part.Type = "refusal"
+			applyDoneText(part.Refusal, ev.Refusal)
 		}
 
 	case StreamEventTypeFunctionCallArgumentsDelta:
@@ -521,6 +559,9 @@ func (a *streamAggregator) processEvent(ev *StreamEvent) {
 						if contentItem.Text != nil {
 							applyDoneText(part.Text, *contentItem.Text)
 						}
+						if contentItem.Refusal != nil {
+							applyDoneText(part.Refusal, *contentItem.Refusal)
+						}
 						if contentItem.Annotations != nil {
 							part.Annotations = append([]Annotation(nil), contentItem.Annotations...)
 						}
@@ -555,15 +596,9 @@ func (a *streamAggregator) processEvent(ev *StreamEvent) {
 		}
 
 	case StreamEventTypeResponseCompleted:
-		a.status = "completed"
-		if ev.Response != nil {
-			a.previousResponseID = ev.Response.PreviousResponseID
-			if ev.Response.ServiceTier != nil {
-				a.serviceTier = *ev.Response.ServiceTier
-			}
-			if ev.Response.Usage != nil {
-				a.usage = ev.Response.Usage
-			}
+		a.applyResponseSnapshot(ev.Response)
+		if ev.Response == nil || ev.Response.Status == nil {
+			a.status = "completed"
 		}
 
 	case StreamEventTypeResponseFailed:
@@ -618,6 +653,95 @@ func (a *streamAggregator) applyResponseSnapshot(response *Response) {
 	if response.IncompleteDetails != nil {
 		a.incompleteDetails = response.IncompleteDetails
 	}
+	if len(response.Output) > 0 {
+		a.terminalOutput = append([]Item(nil), response.Output...)
+	}
+}
+
+func mergeTerminalItem(existing, terminal Item) Item {
+	if terminal.ID == "" {
+		terminal.ID = existing.ID
+	}
+	if terminal.Type == "" {
+		terminal.Type = existing.Type
+	}
+	if len(terminal.Annotations) == 0 {
+		terminal.Annotations = append([]Annotation(nil), existing.Annotations...)
+	}
+	if terminal.Role == "" {
+		terminal.Role = existing.Role
+	}
+	if terminal.Status == nil {
+		terminal.Status = existing.Status
+	}
+	if terminal.Text == nil {
+		terminal.Text = existing.Text
+	}
+	if terminal.Refusal == nil {
+		terminal.Refusal = existing.Refusal
+	}
+	if terminal.Result == nil {
+		terminal.Result = existing.Result
+	}
+	if terminal.CallID == "" {
+		terminal.CallID = existing.CallID
+	}
+	if terminal.Name == "" {
+		terminal.Name = existing.Name
+	}
+	if terminal.Namespace == "" {
+		terminal.Namespace = existing.Namespace
+	}
+	if terminal.Arguments == "" {
+		terminal.Arguments = existing.Arguments
+	}
+	if terminal.Execution == "" {
+		terminal.Execution = existing.Execution
+	}
+	if len(terminal.Tools) == 0 {
+		terminal.Tools = append([]Tool(nil), existing.Tools...)
+	}
+	if terminal.Input == nil {
+		terminal.Input = existing.Input
+	}
+	if len(terminal.Summary) == 0 {
+		terminal.Summary = append([]ReasoningSummary(nil), existing.Summary...)
+	}
+	if terminal.EncryptedContent == nil {
+		terminal.EncryptedContent = existing.EncryptedContent
+	}
+	if terminal.Content == nil {
+		terminal.Content = cloneInput(existing.Content)
+		return terminal
+	}
+	if existing.Content == nil {
+		terminal.Content = cloneInput(terminal.Content)
+		return terminal
+	}
+
+	content := cloneInput(terminal.Content)
+	if content.Text == nil {
+		content.Text = existing.Content.Text
+	}
+	for i := range content.Items {
+		if i < len(existing.Content.Items) {
+			content.Items[i] = mergeTerminalItem(existing.Content.Items[i], content.Items[i])
+		}
+	}
+	if len(content.Items) < len(existing.Content.Items) {
+		content.Items = append(content.Items, existing.Content.Items[len(content.Items):]...)
+	}
+	terminal.Content = content
+
+	return terminal
+}
+
+func cloneInput(input *Input) *Input {
+	if input == nil {
+		return nil
+	}
+
+	return &Input{Text: input.Text, Items: append([]Item(nil), input.Items...)}
 }
 
 // buildResponse builds the final Response object from aggregated state.
@@ -647,11 +771,15 @@ func (a *streamAggregator) buildResponse() *Response {
 				contentItems := make([]Item, 0, len(item.Content))
 				for _, cp := range item.Content {
 					text := cp.Text.String()
-					contentItems = append(contentItems, Item{
+					contentItem := Item{
 						Type:        cp.Type,
-						Text:        &text,
+						Refusal:     lo.EmptyableToPtr(cp.Refusal.String()),
 						Annotations: append([]Annotation(nil), cp.Annotations...),
-					})
+					}
+					if cp.Type != "refusal" || text != "" {
+						contentItem.Text = &text
+					}
+					contentItems = append(contentItems, contentItem)
 				}
 
 				output = append(output, Item{
@@ -773,6 +901,21 @@ func (a *streamAggregator) buildResponse() *Response {
 					Status: lo.ToPtr(item.Status),
 					Role:   item.Role,
 				})
+			}
+		}
+	}
+	if len(a.terminalOutput) > 0 {
+		outputIndex := make(map[string]int, len(output))
+		for i := range output {
+			if key := serverItemKey(&output[i]); key != "" {
+				outputIndex[key] = i
+			}
+		}
+		for _, item := range a.terminalOutput {
+			if i, ok := outputIndex[serverItemKey(&item)]; ok {
+				output[i] = mergeTerminalItem(output[i], item)
+			} else {
+				output = append(output, item)
 			}
 		}
 	}
