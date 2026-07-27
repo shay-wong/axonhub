@@ -52,6 +52,66 @@ func TestResponsesStreamRoundTrip_UsesTerminalMetadataSnapshot(t *testing.T) {
 	require.Equal(t, int64(5), terminal.Response.Usage.TotalTokens)
 }
 
+// Switching between text and refusal must keep each Responses content part independent.
+func TestInboundTransformer_TransformStream_PreservesMixedTextAndRefusalParts(t *testing.T) {
+	stream, err := NewInboundTransformer().TransformStream(t.Context(), streams.SliceStream([]*llm.Response{
+		{
+			ID: "resp_mixed_content", Model: "gpt-5", Created: 1700000000,
+			Choices: []llm.Choice{{Index: 0, Delta: &llm.Message{Role: "assistant"}}},
+		},
+		{
+			ID: "resp_mixed_content", Model: "gpt-5", Created: 1700000000,
+			Choices: []llm.Choice{{Index: 0, Delta: &llm.Message{Content: llm.MessageContent{Content: lo.ToPtr("A")}}}},
+		},
+		{
+			ID: "resp_mixed_content", Model: "gpt-5", Created: 1700000000,
+			Choices: []llm.Choice{{Index: 0, Delta: &llm.Message{Refusal: "R"}}},
+		},
+		{
+			ID: "resp_mixed_content", Model: "gpt-5", Created: 1700000000,
+			Choices: []llm.Choice{{Index: 0, Delta: &llm.Message{Content: llm.MessageContent{Content: lo.ToPtr("B")}}}},
+		},
+		{
+			ID: "resp_mixed_content", Model: "gpt-5", Created: 1700000000,
+			Choices: []llm.Choice{{Index: 0, Delta: &llm.Message{}, FinishReason: lo.ToPtr("stop")}},
+		},
+	}))
+	require.NoError(t, err)
+
+	events, err := streams.All(stream)
+	require.NoError(t, err)
+
+	var (
+		doneItem *Item
+		terminal *Response
+	)
+	for _, event := range events {
+		var parsed StreamEvent
+		require.NoError(t, json.Unmarshal(event.Data, &parsed))
+		if parsed.Type == StreamEventTypeOutputItemDone && parsed.Item != nil && parsed.Item.Type == "message" {
+			doneItem = parsed.Item
+		}
+		if parsed.Type == StreamEventTypeResponseCompleted {
+			terminal = parsed.Response
+		}
+	}
+
+	requireMixedParts := func(parts []Item) {
+		require.Len(t, parts, 3)
+		require.Equal(t, "output_text", parts[0].Type)
+		require.Equal(t, "A", lo.FromPtr(parts[0].Text))
+		require.Equal(t, "refusal", parts[1].Type)
+		require.Equal(t, "R", lo.FromPtr(parts[1].Refusal))
+		require.Equal(t, "output_text", parts[2].Type)
+		require.Equal(t, "B", lo.FromPtr(parts[2].Text))
+	}
+	require.NotNil(t, doneItem)
+	requireMixedParts(doneItem.Content.Items)
+	require.NotNil(t, terminal)
+	require.Len(t, terminal.Output, 1)
+	requireMixedParts(terminal.Output[0].Content.Items)
+}
+
 // Compare each event.
 var ignoreFields = cmp.FilterPath(func(p cmp.Path) bool {
 	// Ignore dynamic fields that are generated at runtime
