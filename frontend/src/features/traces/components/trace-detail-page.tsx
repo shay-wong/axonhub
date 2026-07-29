@@ -130,7 +130,7 @@ export default function TraceDetailPage() {
 
   if (isLoading) {
     return (
-      <div className='flex h-screen flex-col'>
+      <div className='flex h-full flex-col'>
         <Header className='border-b'></Header>
         <Main className='flex-1'>
           <div className='flex h-full items-center justify-center'>
@@ -146,7 +146,7 @@ export default function TraceDetailPage() {
 
   if (!trace) {
     return (
-      <div className='flex h-screen flex-col'>
+      <div className='flex h-full flex-col'>
         <Header className='border-b'></Header>
         <Main className='flex-1'>
           <div className='flex h-full items-center justify-center'>
@@ -167,7 +167,7 @@ export default function TraceDetailPage() {
   }
 
   return (
-    <div className='flex h-screen flex-col'>
+    <div className='flex h-full flex-col'>
       {/* Normal Header - hidden in fullscreen */}
       {!isFullscreen && (
         <>

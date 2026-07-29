@@ -1288,7 +1288,12 @@ func (s *OIDCService) ExchangeCode(ctx context.Context, code string) (*ent.User,
 		return nil, fmt.Errorf("invalid user ID format in cache: %w", err)
 	}
 
-	user, err := s.entFromContext(ctx).User.Get(ctx, userID)
+	user, err := s.entFromContext(ctx).User.Query().
+		Where(user.IDEQ(userID)).
+		WithRoles().
+		WithProjectUsers().
+		WithOidcIdentities().
+		Only(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}

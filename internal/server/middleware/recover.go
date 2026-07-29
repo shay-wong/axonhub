@@ -31,7 +31,7 @@ func RecoveryWithWriter() gin.HandlerFunc {
 				log.Error(
 					c.Request.Context(),
 					fmt.Sprintf("[PANIC] %s", err),
-					log.String("path", c.Request.URL.Path),
+					log.String("path", requestLogPath(c)),
 					log.String("method", c.Request.Method),
 					log.String("client_ip", c.ClientIP()),
 					log.String("user_agent", c.Request.UserAgent()),

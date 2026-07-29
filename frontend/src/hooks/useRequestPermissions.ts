@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { getProjectEffectiveScopes } from '@/config/route-permission';
 import { useAuthStore } from '@/stores/authStore';
 import { useSelectedProjectId } from '@/stores/projectStore';
 import { useMe } from '@/features/auth/data/auth';
@@ -27,7 +28,7 @@ export function useRequestPermissions(): RequestPermissions {
       return [];
     }
     const project = user.projects.find((p) => p.projectID === selectedProjectId);
-    return project?.scopes || [];
+    return getProjectEffectiveScopes(project);
   }, [selectedProjectId, user?.projects]);
 
   const permissions = useMemo(() => {

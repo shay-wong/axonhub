@@ -1,37 +1,48 @@
 import { useEffect } from 'react';
 import { useRouter } from '@tanstack/react-router';
 import { IconShieldX, IconArrowLeft } from '@tabler/icons-react';
+import { hasScopeRequirements, type ScopeLevel, type ScopeRequirement } from '@/config/route-permission';
 import { useTranslation } from 'react-i18next';
 import { useRoutePermissions } from '@/hooks/useRoutePermissions';
-import { type ScopeLevel } from '@/config/route-permission';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 
 interface RouteGuardProps {
   children: React.ReactNode;
   requiredScopes?: string[];
+  scopeRequirements?: readonly ScopeRequirement[];
   scopeLevel?: ScopeLevel;
   fallbackPath?: string;
   showForbidden?: boolean;
   requireProjectOwner?: boolean; // 是否需要项目所有者权限
 }
 
-export function RouteGuard({ children, requiredScopes = [], scopeLevel, fallbackPath = '/', showForbidden = true, requireProjectOwner = false }: RouteGuardProps) {
+export function RouteGuard({
+  children,
+  requiredScopes = [],
+  scopeRequirements,
+  scopeLevel,
+  fallbackPath = '/',
+  showForbidden = true,
+  requireProjectOwner = false,
+}: RouteGuardProps) {
   const router = useRouter();
   const { userScopes, systemScopes, projectScopes, isOwner, isProjectOwner } = useRoutePermissions();
 
   let hasAccess = true;
   if (requireProjectOwner && !isProjectOwner) {
     hasAccess = false;
+  } else if (scopeRequirements) {
+    hasAccess = isOwner || hasScopeRequirements(systemScopes, projectScopes, scopeRequirements);
   } else {
     // 根据 scopeLevel 决定检查哪些权限
-    const scopesToCheck = scopeLevel === 'system'
-      ? systemScopes
-      : scopeLevel === 'project'
-        ? projectScopes
-        : userScopes;
+    const scopesToCheck = scopeLevel === 'system' ? systemScopes : scopeLevel === 'project' ? projectScopes : userScopes;
 
-    hasAccess = isOwner || requiredScopes.length === 0 || requiredScopes.some((scope) => scopesToCheck.includes(scope));
+    hasAccess =
+      isOwner ||
+      scopesToCheck.includes('*') ||
+      requiredScopes.length === 0 ||
+      requiredScopes.some((scope) => scopesToCheck.includes(scope));
   }
 
   useEffect(() => {

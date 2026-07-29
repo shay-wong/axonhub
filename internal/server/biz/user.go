@@ -319,19 +319,30 @@ func ConvertUserToUserInfo(ctx context.Context, u *ent.User) *objects.UserInfo {
 	for _, up := range u.Edges.ProjectUsers {
 		// Convert project roles to objects.RoleInfo
 		roles := projectRoles[up.ProjectID]
+		effectiveScopes := make(map[string]bool, len(up.Scopes))
+		for _, scope := range up.Scopes {
+			effectiveScopes[scope] = true
+		}
 
 		projectRoleInfos := make([]objects.RoleInfo, 0, len(roles))
 		for _, r := range roles {
 			projectRoleInfos = append(projectRoleInfos, objects.RoleInfo{
 				Name: r.Name,
 			})
+			for _, scope := range r.Scopes {
+				effectiveScopes[scope] = true
+			}
+		}
+		if up.IsOwner {
+			effectiveScopes = map[string]bool{"*": true}
 		}
 
 		userProjects = append(userProjects, objects.UserProjectInfo{
-			ProjectID: objects.GUID{Type: ent.TypeProject, ID: up.ProjectID},
-			IsOwner:   up.IsOwner,
-			Scopes:    up.Scopes,
-			Roles:     projectRoleInfos,
+			ProjectID:       objects.GUID{Type: ent.TypeProject, ID: up.ProjectID},
+			IsOwner:         up.IsOwner,
+			Scopes:          up.Scopes,
+			EffectiveScopes: lo.Keys(effectiveScopes),
+			Roles:           projectRoleInfos,
 		})
 	}
 

@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,6 +31,54 @@ func setupTestOIDCService(t *testing.T) (*OIDCService, *ent.Client) {
 	}
 
 	return svc, client
+}
+
+func TestExchangeCode_LoadsUserInfoRelations(t *testing.T) {
+	svc, client := setupTestOIDCService(t)
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	u, err := client.User.Create().
+		SetEmail("exchange@example.com").
+		SetPassword("password").
+		Save(ctx)
+	require.NoError(t, err)
+	projectRow, err := client.Project.Create().SetName("exchange-project").Save(ctx)
+	require.NoError(t, err)
+	_, err = client.UserProject.Create().
+		SetUserID(u.ID).
+		SetProjectID(projectRow.ID).
+		SetScopes([]string{"write_requests"}).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.Role.Create().
+		SetName("exchange-role").
+		SetLevel(role.LevelSystem).
+		SetScopes([]string{"read_channels"}).
+		AddUserIDs(u.ID).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.OIDCIdentity.Create().
+		SetUserID(u.ID).
+		SetIssuer("https://issuer.example.com").
+		SetSubject("exchange-subject").
+		SetEmail(u.Email).
+		Save(ctx)
+	require.NoError(t, err)
+
+	const code = "exchange-code"
+	require.NoError(t, svc.cache.Set(ctx, "oidc_exchange:"+code, []byte(strconv.Itoa(u.ID))))
+
+	exchanged, err := svc.ExchangeCode(ctx, code)
+	require.NoError(t, err)
+	require.Len(t, exchanged.Edges.Roles, 1)
+	require.Len(t, exchanged.Edges.ProjectUsers, 1)
+	require.Len(t, exchanged.Edges.OidcIdentities, 1)
+
+	info := ConvertUserToUserInfo(ctx, exchanged)
+	require.Contains(t, info.Scopes, "read_channels")
+	require.Equal(t, []string{"write_requests"}, info.Projects[0].Scopes)
+	require.Equal(t, "exchange-subject", info.OIDCIdentities[0].Subject)
 }
 
 func TestResolveUser_AccountFirstAndMultipleOIDC(t *testing.T) {

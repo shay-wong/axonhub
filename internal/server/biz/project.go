@@ -9,9 +9,11 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
+	"github.com/looplj/axonhub/internal/authz"
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/apikey"
+	"github.com/looplj/axonhub/internal/ent/invitation"
 	"github.com/looplj/axonhub/internal/ent/project"
 	"github.com/looplj/axonhub/internal/ent/role"
 	"github.com/looplj/axonhub/internal/ent/userproject"
@@ -325,11 +327,12 @@ func (s *ProjectService) invalidateProjectCache(ctx context.Context, id int) {
 // DeleteProject soft deletes a project and handles all related data.
 // This method performs the following operations:
 // 1. Validates permissions
-// 2. Deletes UserProject relationships
-// 3. Deletes project-level roles
-// 4. Deletes project API keys
-// 5. Soft deletes the project
-// 6. Invalidates project cache.
+// 2. Invalidates project invitations
+// 3. Deletes UserProject relationships
+// 4. Deletes project-level roles
+// 5. Deletes project API keys
+// 6. Soft deletes the project
+// 7. Invalidates project cache.
 func (s *ProjectService) DeleteProject(ctx context.Context, id int) error {
 	// Validate permissions before deleting
 	if err := s.permissionValidator.CanDeleteProject(ctx, id); err != nil {
@@ -344,8 +347,23 @@ func (s *ProjectService) DeleteProject(ctx context.Context, id int) error {
 		if err != nil {
 			return fmt.Errorf("failed to get project: %w", err)
 		}
+		if _, err := client.Project.UpdateOne(proj).SetStatus(project.StatusArchived).Save(ctx); err != nil {
+			return fmt.Errorf("failed to mark project for deletion: %w", err)
+		}
 
-		// 1. Delete UserProject relationships
+		// 1. Invalidate project invitations before removing the project.
+		err = authz.RunWithSystemBypassVoid(ctx, "project-delete-invitations", func(ctx context.Context) error {
+			_, err := client.Invitation.Delete().
+				Where(invitation.ProjectIDEQ(id)).
+				Exec(ctx)
+
+			return err
+		})
+		if err != nil {
+			return fmt.Errorf("failed to delete project invitations: %w", err)
+		}
+
+		// 2. Delete UserProject relationships
 		_, err = client.UserProject.Delete().
 			Where(userproject.ProjectIDEQ(id)).
 			Exec(ctx)
@@ -353,7 +371,7 @@ func (s *ProjectService) DeleteProject(ctx context.Context, id int) error {
 			return fmt.Errorf("failed to delete project users: %w", err)
 		}
 
-		// 2. Delete project-level roles
+		// 3. Delete project-level roles
 		_, err = client.Role.Delete().
 			Where(role.ProjectIDEQ(proj.ID)).
 			Exec(ctx)
@@ -361,7 +379,7 @@ func (s *ProjectService) DeleteProject(ctx context.Context, id int) error {
 			return fmt.Errorf("failed to delete project roles: %w", err)
 		}
 
-		// 3. Delete project API keys
+		// 4. Delete project API keys
 		_, err = client.APIKey.Delete().
 			Where(apikey.ProjectIDEQ(proj.ID)).
 			Exec(ctx)
@@ -369,13 +387,13 @@ func (s *ProjectService) DeleteProject(ctx context.Context, id int) error {
 			return fmt.Errorf("failed to delete project API keys: %w", err)
 		}
 
-		// 4. Soft delete the project
+		// 5. Soft delete the project
 		err = client.Project.DeleteOneID(id).Exec(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to delete project: %w", err)
 		}
 
-		// 5. Invalidate project cache
+		// 6. Invalidate project cache
 		s.invalidateProjectCache(ctx, id)
 
 		return nil

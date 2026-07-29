@@ -212,12 +212,30 @@ func TestAuthService_AuthenticateUser(t *testing.T) {
 		SetStatus(user.StatusActivated).
 		Save(ctx)
 	require.NoError(t, err)
+	testProject, err := client.Project.Create().SetName("auth-test").Save(ctx)
+	require.NoError(t, err)
+	_, err = client.UserProject.Create().
+		SetUserID(testUser.ID).
+		SetProjectID(testProject.ID).
+		SetScopes([]string{"write_requests"}).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.OIDCIdentity.Create().
+		SetUserID(testUser.ID).
+		SetIssuer("https://issuer.example.com").
+		SetSubject("auth-test-subject").
+		SetEmail(testUser.Email).
+		Save(ctx)
+	require.NoError(t, err)
 
 	// Test successful authentication
 	authenticatedUser, err := authService.AuthenticateUser(ctx, "test@example.com", password)
 	require.NoError(t, err)
 	require.Equal(t, testUser.ID, authenticatedUser.ID)
 	require.Equal(t, testUser.Email, authenticatedUser.Email)
+	require.Len(t, authenticatedUser.Edges.ProjectUsers, 1)
+	require.Equal(t, testProject.ID, authenticatedUser.Edges.ProjectUsers[0].ProjectID)
+	require.Len(t, authenticatedUser.Edges.OidcIdentities, 1)
 
 	// Test wrong password
 	_, err = authService.AuthenticateUser(ctx, "test@example.com", "wrong-password")

@@ -26,15 +26,24 @@ const MaxErrorBodySize = 1 << 20 // 1 MB
 
 func readLimitedErrorBody(body io.Reader) ([]byte, bool, error) {
 	data, err := io.ReadAll(io.LimitReader(body, MaxErrorBodySize+1))
-	if err != nil {
-		return nil, false, err
-	}
-
 	if len(data) <= MaxErrorBodySize {
-		return data, false, nil
+		return data, false, err
 	}
 
-	return data[:MaxErrorBodySize], true, nil
+	return data[:MaxErrorBodySize], true, err
+}
+
+type transportReadCloser struct {
+	io.ReadCloser
+}
+
+func (r *transportReadCloser) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	if err == nil || errors.Is(err, io.EOF) {
+		return n, err
+	}
+
+	return n, &TransportError{Err: err}
 }
 
 // HttpClient implements the HttpClient interface.
@@ -237,7 +246,7 @@ func (hc *HttpClient) Do(ctx context.Context, request *Request) (*Response, erro
 
 	rawResp, err := hc.client.Do(rawReq)
 	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
+		return nil, fmt.Errorf("HTTP request failed: %w", &TransportError{Err: err})
 	}
 
 	defer func() {
@@ -252,10 +261,7 @@ func (hc *HttpClient) Do(ctx context.Context, request *Request) (*Response, erro
 	// errors). Successful responses are read in full because they are
 	// typically small JSON payloads.
 	if rawResp.StatusCode >= 400 {
-		body, truncated, err := readLimitedErrorBody(rawResp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read error response body: %w", err)
-		}
+		body, truncated, readErr := readLimitedErrorBody(rawResp.Body)
 
 		if slog.Default().Enabled(ctx, slog.LevelDebug) {
 			slog.DebugContext(ctx, "HTTP request failed",
@@ -273,10 +279,11 @@ func (hc *HttpClient) Do(ctx context.Context, request *Request) (*Response, erro
 			Body:       body,
 			Truncated:  truncated,
 			Headers:    rawResp.Header,
+			Err:        readErr,
 		}
 	}
 
-	body, err := io.ReadAll(rawResp.Body)
+	body, err := io.ReadAll(&transportReadCloser{ReadCloser: rawResp.Body})
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
@@ -326,7 +333,7 @@ func (hc *HttpClient) DoStream(ctx context.Context, request *Request) (streams.S
 	// Execute request
 	rawResp, err := hc.client.Do(rawReq)
 	if err != nil {
-		return nil, fmt.Errorf("HTTP stream request failed: %w", err)
+		return nil, fmt.Errorf("HTTP stream request failed: %w", &TransportError{Err: err})
 	}
 
 	// Check for HTTP errors before creating stream
@@ -339,10 +346,7 @@ func (hc *HttpClient) DoStream(ctx context.Context, request *Request) (streams.S
 		}()
 
 		// Read error body for streaming requests
-		body, truncated, err := readLimitedErrorBody(rawResp.Body)
-		if err != nil {
-			return nil, err
-		}
+		body, truncated, readErr := readLimitedErrorBody(rawResp.Body)
 
 		if slog.Default().Enabled(ctx, slog.LevelDebug) {
 			slog.DebugContext(ctx, "HTTP stream request failed",
@@ -360,6 +364,7 @@ func (hc *HttpClient) DoStream(ctx context.Context, request *Request) (streams.S
 			Body:       body,
 			Truncated:  truncated,
 			Headers:    rawResp.Header,
+			Err:        readErr,
 		}
 	}
 
@@ -383,7 +388,7 @@ func (hc *HttpClient) DoStream(ctx context.Context, request *Request) (streams.S
 		decoderFactory = NewDefaultSSEDecoder
 	}
 
-	stream := decoderFactory(ctx, rawResp.Body)
+	stream := decoderFactory(ctx, &transportReadCloser{ReadCloser: rawResp.Body})
 
 	return stream, nil
 }

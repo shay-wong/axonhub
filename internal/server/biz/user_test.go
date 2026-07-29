@@ -237,6 +237,13 @@ func TestConvertUserToUserInfo_WithProjectRoles(t *testing.T) {
 	require.Equal(t, ent.TypeProject, projectInfo.ProjectID.Type)
 	require.Equal(t, false, projectInfo.IsOwner)
 	require.ElementsMatch(t, []string{"project_scope_1", "project_scope_2"}, projectInfo.Scopes)
+	require.ElementsMatch(t, []string{
+		"project_scope_1",
+		"project_scope_2",
+		"manage_project_channels",
+		"manage_project_users",
+		"read_project_channels",
+	}, projectInfo.EffectiveScopes)
 
 	// Verify project roles
 	require.Len(t, projectInfo.Roles, 2)
@@ -357,6 +364,13 @@ func TestConvertUserToUserInfo_MultipleProjects(t *testing.T) {
 		SetDescription("Second project").
 		Save(ctx)
 	require.NoError(t, err)
+	project1Role, err := client.Role.Create().
+		SetName("Project 1 Role").
+		SetLevel(role.LevelProject).
+		SetProjectID(project1.ID).
+		SetScopes([]string{"p1_role_scope"}).
+		Save(ctx)
+	require.NoError(t, err)
 
 	// Create user
 	testUser, err := client.User.Create().
@@ -367,6 +381,7 @@ func TestConvertUserToUserInfo_MultipleProjects(t *testing.T) {
 		SetPreferLanguage("en").
 		SetIsOwner(false).
 		SetStatus(user.StatusActivated).
+		AddRoles(project1Role).
 		Save(ctx)
 	require.NoError(t, err)
 
@@ -405,6 +420,12 @@ func TestConvertUserToUserInfo_MultipleProjects(t *testing.T) {
 	// Check that both projects are present
 	projectIDs := []int{userInfo.Projects[0].ProjectID.ID, userInfo.Projects[1].ProjectID.ID}
 	require.ElementsMatch(t, []int{project1.ID, project2.ID}, projectIDs)
+	effectiveScopesByProjectID := make(map[int][]string, len(userInfo.Projects))
+	for _, projectInfo := range userInfo.Projects {
+		effectiveScopesByProjectID[projectInfo.ProjectID.ID] = projectInfo.EffectiveScopes
+	}
+	require.ElementsMatch(t, []string{"*"}, effectiveScopesByProjectID[project1.ID])
+	require.ElementsMatch(t, []string{"p2_scope"}, effectiveScopesByProjectID[project2.ID])
 }
 
 func TestAddUserToProject_Success(t *testing.T) {

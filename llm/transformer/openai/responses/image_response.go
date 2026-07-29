@@ -14,12 +14,15 @@ func BuildImageResponse(upstream *Response, metadata map[string]any) (*llm.Respo
 	}
 
 	if upstream.Error != nil {
-		details := make([]string, 0, 2)
+		details := make([]string, 0, 3)
 		if errorType := strings.TrimSpace(upstream.Error.Type); errorType != "" {
 			details = append(details, "type="+errorType)
 		}
 		if code := strings.TrimSpace(upstream.Error.Code); code != "" {
 			details = append(details, "code="+code)
+		}
+		if message := strings.TrimSpace(upstream.Error.Message); message != "" {
+			details = append(details, "message="+message)
 		}
 		if len(details) == 0 {
 			return nil, fmt.Errorf("codex image response failed")
@@ -50,6 +53,8 @@ func BuildImageResponse(upstream *Response, metadata map[string]any) (*llm.Respo
 	}
 
 	outputTypes := make([]string, 0, len(upstream.Output))
+	contentTypes := make([]string, 0)
+	contentDetails := make([]string, 0)
 	hasImageGenerationCall := false
 	for _, item := range upstream.Output {
 		outputType := strings.TrimSpace(item.Type)
@@ -57,6 +62,26 @@ func BuildImageResponse(upstream *Response, metadata map[string]any) (*llm.Respo
 			outputType = "unknown"
 		}
 		outputTypes = append(outputTypes, outputType)
+		if item.Type == "message" {
+			for _, content := range item.GetContentItems() {
+				contentType := strings.TrimSpace(content.Type)
+				if contentType == "" {
+					contentType = "unknown"
+				}
+				contentTypes = append(contentTypes, contentType)
+
+				switch contentType {
+				case "refusal":
+					if refusal := strings.TrimSpace(content.Refusal); refusal != "" {
+						contentDetails = append(contentDetails, "refusal="+refusal)
+					}
+				case "output_text":
+					if message := strings.TrimSpace(content.Text); message != "" {
+						contentDetails = append(contentDetails, "message="+message)
+					}
+				}
+			}
+		}
 
 		if item.Type != "image_generation_call" {
 			continue
@@ -73,7 +98,7 @@ func BuildImageResponse(upstream *Response, metadata map[string]any) (*llm.Respo
 	}
 
 	if len(imageResp.Data) == 0 {
-		return nil, imageResponseNoResultError(upstream, outputTypes, hasImageGenerationCall)
+		return nil, imageResponseNoResultError(upstream, outputTypes, contentTypes, contentDetails, hasImageGenerationCall)
 	}
 
 	result := &llm.Response{
@@ -96,7 +121,13 @@ func BuildImageResponse(upstream *Response, metadata map[string]any) (*llm.Respo
 	return result, nil
 }
 
-func imageResponseNoResultError(upstream *Response, outputTypes []string, hasImageGenerationCall bool) error {
+func imageResponseNoResultError(
+	upstream *Response,
+	outputTypes []string,
+	contentTypes []string,
+	contentDetails []string,
+	hasImageGenerationCall bool,
+) error {
 	status := "unknown"
 	if upstream.Status != nil && strings.TrimSpace(*upstream.Status) != "" {
 		status = strings.TrimSpace(*upstream.Status)
@@ -105,6 +136,12 @@ func imageResponseNoResultError(upstream *Response, outputTypes []string, hasIma
 	details := "status=" + status
 	if len(outputTypes) > 0 {
 		details += ", output_types=" + strings.Join(outputTypes, ",")
+	}
+	if len(contentTypes) > 0 {
+		details += ", content_types=" + strings.Join(contentTypes, ",")
+	}
+	if len(contentDetails) > 0 {
+		details += ", " + strings.Join(contentDetails, ", ")
 	}
 
 	if upstream.IncompleteDetails != nil && strings.TrimSpace(upstream.IncompleteDetails.Reason) != "" {

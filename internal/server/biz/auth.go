@@ -130,6 +130,8 @@ func (s *AuthService) AuthenticateUser(
 			Where(user.EmailEQ(email)).
 			Where(user.StatusEQ(user.StatusActivated)).
 			WithRoles().
+			WithProjectUsers().
+			WithOidcIdentities().
 			Only(bypassCtx)
 	})
 	if err != nil {

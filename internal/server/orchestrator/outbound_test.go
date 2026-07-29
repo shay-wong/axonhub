@@ -477,6 +477,64 @@ func TestPersistentOutboundTransformer_CanRetry(t *testing.T) {
 		require.False(t, outbound.CanRetryContext(t.Context(), nonRetryableErr))
 	})
 
+	credentialAgnosticErrors := []struct {
+		name string
+		err  error
+	}{
+		{name: "transport failure", err: &httpclient.TransportError{Err: fmt.Errorf("http2: stream reset")}},
+		{name: "stream first event timeout", err: pipeline.ErrStreamFirstEventTimeout},
+		{name: "non-stream response timeout", err: pipeline.ErrNonStreamResponseTimeout},
+	}
+	for _, tt := range credentialAgnosticErrors {
+		t.Run(tt.name+" switches channel without rotating key", func(t *testing.T) {
+			multiKeyChannel := &biz.Channel{
+				Channel: &ent.Channel{
+					ID:          2,
+					Credentials: objects.ChannelCredentials{APIKeys: []string{"key-1", "key-2"}},
+				},
+				Outbound: &mockTransformer{},
+			}
+			backupChannel := &biz.Channel{
+				Channel:  &ent.Channel{ID: 3},
+				Outbound: &mockTransformer{},
+			}
+			current := &ChannelModelsCandidate{
+				Channel: multiKeyChannel,
+				Models: []biz.ChannelModelEntry{
+					{RequestModel: "gpt-4", ActualModel: "gpt-4"},
+					{RequestModel: "gpt-4", ActualModel: "gpt-4-backup"},
+				},
+			}
+			duplicate := &ChannelModelsCandidate{
+				Channel:  multiKeyChannel,
+				Priority: 1,
+				Models:   []biz.ChannelModelEntry{{RequestModel: "gpt-4", ActualModel: "gpt-4-priority-backup"}},
+			}
+			backup := &ChannelModelsCandidate{
+				Channel: backupChannel,
+				Models:  []biz.ChannelModelEntry{{RequestModel: "gpt-4", ActualModel: "gpt-4"}},
+			}
+			outbound := &PersistentOutboundTransformer{
+				wrapped: &mockTransformer{},
+				state: &PersistenceState{
+					RetryPolicy:             &biz.RetryPolicy{Enabled: true},
+					CurrentCandidate:        current,
+					ChannelModelsCandidates: []*ChannelModelsCandidate{current, duplicate, backup},
+					Perf:                    &biz.PerformanceRecord{APIKey: "key-1"},
+				},
+			}
+			ctx := contexts.EnsureContainer(t.Context())
+
+			require.False(t, outbound.CanRetryContext(ctx, tt.err))
+			require.False(t, contexts.IsChannelAPIKeyExcluded(ctx, multiKeyChannel.ID, "key-1"))
+			require.Zero(t, outbound.state.CurrentModelIndex)
+			require.True(t, outbound.HasMoreChannelsContext(ctx))
+			require.NoError(t, outbound.NextChannel(ctx))
+			require.Equal(t, 2, outbound.state.CurrentCandidateIndex)
+			require.Same(t, backupChannel, outbound.state.CurrentCandidate.Channel)
+		})
+	}
+
 	t.Run("skip-by-circuit-breaker should not trigger same-channel retry", func(t *testing.T) {
 		outbound := &PersistentOutboundTransformer{
 			wrapped: &mockTransformer{},

@@ -20,6 +20,52 @@ import (
 	"github.com/tmaxmax/go-sse"
 )
 
+type transportFailureRoundTripper struct {
+	err error
+}
+
+func (r transportFailureRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, r.err
+}
+
+type responseBodyErrorRoundTripper struct {
+	statusCode int
+	body       []byte
+	err        error
+}
+
+func (r responseBodyErrorRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	statusCode := r.statusCode
+	if statusCode == 0 {
+		statusCode = http.StatusOK
+	}
+
+	return &http.Response{
+		StatusCode: statusCode,
+		Status:     fmt.Sprintf("%d %s", statusCode, http.StatusText(statusCode)),
+		Header:     http.Header{"X-Request-Id": []string{"request-1"}},
+		Body:       &errorReadCloser{data: r.body, err: r.err},
+	}, nil
+}
+
+type errorReadCloser struct {
+	data []byte
+	err  error
+	read bool
+}
+
+func (r *errorReadCloser) Read(p []byte) (int, error) {
+	if r.read {
+		return 0, io.EOF
+	}
+
+	r.read = true
+
+	return copy(p, r.data), r.err
+}
+
+func (r *errorReadCloser) Close() error { return nil }
+
 func TestHttpClientImpl_Do(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -202,6 +248,103 @@ func TestHttpClientImpl_Do_DoesNotLimitSuccessResponseBody(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, result.Body, len(largeBody))
+}
+
+func TestHttpClientImpl_MarksTransportErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		do   func(*HttpClient) error
+	}{
+		{
+			name: "non-streaming",
+			do: func(client *HttpClient) error {
+				_, err := client.Do(t.Context(), &Request{Method: http.MethodGet, URL: "http://upstream.invalid"})
+				return err
+			},
+		},
+		{
+			name: "streaming",
+			do: func(client *HttpClient) error {
+				_, err := client.DoStream(t.Context(), &Request{Method: http.MethodGet, URL: "http://upstream.invalid"})
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cause := errors.New("dial failed")
+			client := NewHttpClientWithClient(&http.Client{
+				Transport: transportFailureRoundTripper{err: cause},
+			})
+
+			err := tt.do(client)
+			require.Error(t, err)
+			require.True(t, IsTransportError(err))
+			require.ErrorIs(t, err, cause)
+		})
+	}
+}
+
+func TestHttpClientImpl_MarksResponseBodyErrors(t *testing.T) {
+	cause := errors.New("connection reset while reading response")
+	client := NewHttpClientWithClient(&http.Client{
+		Transport: responseBodyErrorRoundTripper{err: cause},
+	})
+
+	_, err := client.Do(t.Context(), &Request{Method: http.MethodGet, URL: "http://upstream.invalid"})
+	require.Error(t, err)
+	require.True(t, IsTransportError(err))
+	require.ErrorIs(t, err, cause)
+}
+
+func TestHttpClientImpl_ErrorResponseBodyErrorsPreserveStatusAndCause(t *testing.T) {
+	tests := []struct {
+		name string
+		do   func(*HttpClient) error
+	}{
+		{
+			name: "non-streaming",
+			do: func(client *HttpClient) error {
+				_, err := client.Do(t.Context(), &Request{Method: http.MethodGet, URL: "http://upstream.invalid"})
+
+				return err
+			},
+		},
+		{
+			name: "streaming",
+			do: func(client *HttpClient) error {
+				_, err := client.DoStream(t.Context(), &Request{Method: http.MethodGet, URL: "http://upstream.invalid"})
+
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cause := errors.New("connection reset while reading error response")
+			client := NewHttpClientWithClient(&http.Client{
+				Transport: responseBodyErrorRoundTripper{
+					statusCode: http.StatusTooManyRequests,
+					body:       []byte(`{"error":"partial"}`),
+					err:        cause,
+				},
+			})
+
+			err := tt.do(client)
+			require.Error(t, err)
+			require.ErrorIs(t, err, cause)
+			require.False(t, IsTransportError(err))
+
+			var httpErr *Error
+			require.ErrorAs(t, err, &httpErr)
+			require.Equal(t, http.StatusTooManyRequests, httpErr.StatusCode)
+			require.Equal(t, "request-1", httpErr.Headers.Get("X-Request-ID"))
+			require.Equal(t, []byte(`{"error":"partial"}`), httpErr.Body)
+			require.False(t, httpErr.Truncated)
+		})
+	}
 }
 
 func TestHttpClientImpl_DoStream(t *testing.T) {

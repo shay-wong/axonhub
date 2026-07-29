@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from 'react';
+import { getProjectEffectiveScopes } from '@/config/route-permission';
 import { useAuthStore } from '@/stores/authStore';
 import { useSelectedProjectId } from '@/stores/projectStore';
 import { useMe } from '@/features/auth/data/auth';
@@ -23,7 +24,7 @@ export function usePermissions() {
       return [];
     }
     const project = user.projects.find((p) => p.projectID === selectedProjectId);
-    return project?.scopes || [];
+    return getProjectEffectiveScopes(project);
   }, [selectedProjectId, user?.projects]);
 
   const isProjectOwner = useMemo(() => {
@@ -70,7 +71,7 @@ export function usePermissions() {
       }
 
       // Check for specific scope at project level only
-      if (projectScopes.includes(requiredScope)) {
+      if (projectScopes.includes('*') || projectScopes.includes(requiredScope)) {
         return true;
       }
 

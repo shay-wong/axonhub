@@ -1,5 +1,12 @@
 import { useMemo } from 'react';
-import { routeConfigs, type RouteConfig, type RouteGroup, type ScopeLevel } from '@/config/route-permission';
+import {
+  getProjectEffectiveScopes,
+  hasScopeRequirements,
+  routeConfigs,
+  type RouteConfig,
+  type RouteGroup,
+  type ScopeLevel,
+} from '@/config/route-permission';
 import { useAuthStore } from '@/stores/authStore';
 import { useSelectedProjectId } from '@/stores/projectStore';
 import { type NavGroup, type NavItem } from '@/components/layout/types';
@@ -21,7 +28,7 @@ export function useRoutePermissions() {
       return [];
     }
     const project = user.projects.find((p) => p.projectID === selectedProjectId);
-    return project?.scopes || [];
+    return getProjectEffectiveScopes(project);
   }, [selectedProjectId, user?.projects]);
 
   const isProjectOwner = useMemo(() => {
@@ -42,12 +49,16 @@ export function useRoutePermissions() {
       return false;
     }
 
-    if (!routeConfig.requiredScopes || routeConfig.requiredScopes.length === 0) {
+    // Owner 拥有所有权限
+    if (isOwner) {
       return true;
     }
 
-    // Owner 拥有所有权限
-    if (isOwner) {
+    if (routeConfig.scopeRequirements) {
+      return hasScopeRequirements(systemScopes, projectScopes, routeConfig.scopeRequirements);
+    }
+
+    if (!routeConfig.requiredScopes || routeConfig.requiredScopes.length === 0) {
       return true;
     }
 

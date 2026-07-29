@@ -1,4 +1,5 @@
-import { AuthUser } from '@/stores/authStore';
+import { getProjectEffectiveScopes } from '@/config/route-permission';
+import type { AuthUser } from '@/stores/authStore';
 
 /**
  * 获取用户的所有权限范围（包括直接权限和角色权限）
@@ -15,7 +16,7 @@ export function getUserScopes(user: AuthUser | null, projectId?: string | null):
   if (projectId) {
     const project = user.projects.find((p) => p.projectID === projectId);
     if (project) {
-      project.scopes.forEach((scope) => scopes.add(scope));
+      getProjectEffectiveScopes(project).forEach((scope) => scopes.add(scope));
     }
   }
 
@@ -30,7 +31,7 @@ export function hasScope(user: AuthUser | null, scope: string, projectId?: strin
   if (user.isOwner) return true; // Owner 拥有所有权限
 
   const userScopes = getUserScopes(user, projectId);
-  return userScopes.includes(scope);
+  return userScopes.includes('*') || userScopes.includes(scope);
 }
 
 /**

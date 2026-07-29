@@ -41,7 +41,7 @@ func AccessLog() gin.HandlerFunc {
 		fields := []log.Field{
 			log.Int("status", status),
 			log.String("method", c.Request.Method),
-			log.String("path", c.Request.URL.Path),
+			log.String("path", requestLogPath(c)),
 			log.Duration("latency", latency),
 			log.String("client_ip", c.ClientIP()),
 		}
@@ -58,4 +58,11 @@ func AccessLog() gin.HandlerFunc {
 
 		log.Error(ctx, "[ACCESS]", fields...)
 	}
+}
+
+func requestLogPath(c *gin.Context) string {
+	if path := c.FullPath(); path != "" {
+		return path
+	}
+	return c.Request.URL.Path
 }

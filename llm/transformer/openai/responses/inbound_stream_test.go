@@ -334,6 +334,160 @@ func TestInboundTransformer_TransformStream_KeepsResponsesReasoningItemsSeparate
 	require.Equal(t, "gAAAA_done_2", lo.FromPtr(lastEvent.Response.Output[1].EncryptedContent))
 }
 
+func TestInboundTransformer_TransformStream_ReplacesItemScopedProvisionalSignature(t *testing.T) {
+	trans := NewInboundTransformer()
+	stream, err := trans.TransformStream(t.Context(), streams.SliceStream([]*llm.Response{
+		{
+			Object: "chat.completion.chunk",
+			TransformerMetadata: map[string]any{
+				responsesReasoningItemTransformerMetadataKey: responsesReasoningItemMetadata{ID: "rs_1"},
+			},
+			Choices: []llm.Choice{{Delta: &llm.Message{
+				ID:                 "rs_1",
+				ReasoningSignature: lo.ToPtr("gAAAA_PROVISIONAL_BLOB"),
+			}}},
+		},
+		{
+			Object: "chat.completion.chunk",
+			TransformerMetadata: map[string]any{
+				responsesReasoningItemTransformerMetadataKey: responsesReasoningItemMetadata{ID: "rs_1", Done: true},
+			},
+			Choices: []llm.Choice{{Delta: &llm.Message{
+				ID:                 "rs_1",
+				ReasoningSignature: lo.ToPtr("gAAAA_FINAL_BLOB"),
+			}}},
+		},
+		{Object: "chat.completion.chunk", Choices: []llm.Choice{{Delta: &llm.Message{}, FinishReason: lo.ToPtr("stop")}}},
+		{Object: "chat.completion.chunk", Usage: &llm.Usage{}},
+	}))
+	require.NoError(t, err)
+
+	var doneItems []Item
+	for stream.Next() {
+		var event StreamEvent
+		require.NoError(t, json.Unmarshal(stream.Current().Data, &event))
+		if event.Type == StreamEventTypeOutputItemDone && event.Item != nil && event.Item.Type == "reasoning" {
+			doneItems = append(doneItems, *event.Item)
+		}
+	}
+	require.NoError(t, stream.Err())
+	require.Len(t, doneItems, 1)
+	require.Equal(t, "rs_1", doneItems[0].ID)
+	require.Equal(t, "gAAAA_FINAL_BLOB", lo.FromPtr(doneItems[0].EncryptedContent))
+	require.NotEqual(t, "gAAAA_PROVISIONAL_BLOBgAAAA_FINAL_BLOB", lo.FromPtr(doneItems[0].EncryptedContent))
+}
+
+func TestInboundTransformer_TransformStream_PreservesReasoningOrderWhenItemsCompleteInReverse(t *testing.T) {
+	trans := NewInboundTransformer()
+	stream, err := trans.TransformStream(t.Context(), streams.SliceStream([]*llm.Response{
+		{
+			Object: "chat.completion.chunk",
+			TransformerMetadata: map[string]any{
+				responsesReasoningItemTransformerMetadataKey: map[string]any{"id": "rs_first"},
+			},
+			Choices: []llm.Choice{{Delta: &llm.Message{ReasoningContent: lo.ToPtr("first")}}},
+		},
+		{
+			Object: "chat.completion.chunk",
+			TransformerMetadata: map[string]any{
+				responsesReasoningItemTransformerMetadataKey: map[string]any{"id": "rs_second"},
+			},
+			Choices: []llm.Choice{{Delta: &llm.Message{ReasoningContent: lo.ToPtr("second")}}},
+		},
+		{
+			Object: "chat.completion.chunk",
+			TransformerMetadata: map[string]any{
+				responsesReasoningItemTransformerMetadataKey: map[string]any{"id": "rs_second", "done": true},
+			},
+			Choices: []llm.Choice{{Delta: &llm.Message{ID: "rs_second", ReasoningSignature: lo.ToPtr("gAAAA_SECOND_BLOB")}}},
+		},
+		{
+			Object: "chat.completion.chunk",
+			TransformerMetadata: map[string]any{
+				responsesReasoningItemTransformerMetadataKey: map[string]any{"id": "rs_first", "done": true},
+			},
+			Choices: []llm.Choice{{Delta: &llm.Message{ID: "rs_first", ReasoningSignature: lo.ToPtr("gAAAA_FIRST_BLOB")}}},
+		},
+		{Object: "chat.completion.chunk", Choices: []llm.Choice{{Delta: &llm.Message{}, FinishReason: lo.ToPtr("stop")}}},
+		{Object: "chat.completion.chunk", Usage: &llm.Usage{}},
+	}))
+	require.NoError(t, err)
+
+	var doneItems []Item
+	for stream.Next() {
+		var event StreamEvent
+		require.NoError(t, json.Unmarshal(stream.Current().Data, &event))
+		if event.Type == StreamEventTypeOutputItemDone && event.Item != nil && event.Item.Type == "reasoning" {
+			doneItems = append(doneItems, *event.Item)
+		}
+	}
+	require.NoError(t, stream.Err())
+	require.Len(t, doneItems, 2)
+	require.Equal(t, "rs_first", doneItems[0].ID)
+	require.Equal(t, "first", doneItems[0].Summary[0].Text)
+	require.Equal(t, "gAAAA_FIRST_BLOB", lo.FromPtr(doneItems[0].EncryptedContent))
+	require.Equal(t, "rs_second", doneItems[1].ID)
+	require.Equal(t, "second", doneItems[1].Summary[0].Text)
+	require.Equal(t, "gAAAA_SECOND_BLOB", lo.FromPtr(doneItems[1].EncryptedContent))
+}
+
+func TestInboundTransformer_TransformStream_FlushesReasoningBeforeOutputBoundaries(t *testing.T) {
+	toolSearch, err := json.Marshal(Item{ID: "tsc_boundary", Type: "tool_search_call"})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		part     llm.MessageContentPart
+		wantType string
+	}{
+		{
+			name:     "server content",
+			part:     llm.MessageContentPart{Type: "tool_search_call", ServerBlock: toolSearch},
+			wantType: "tool_search_call",
+		},
+		{
+			name: "compaction",
+			part: llm.MessageContentPart{
+				Type:    "compaction_summary",
+				Compact: &llm.CompactContent{ID: "cmp_boundary", EncryptedContent: "encrypted-summary"},
+			},
+			wantType: "compaction_summary",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stream, err := NewInboundTransformer().TransformStream(t.Context(), streams.SliceStream([]*llm.Response{
+				{
+					Object: "chat.completion.chunk",
+					TransformerMetadata: map[string]any{
+						responsesReasoningItemTransformerMetadataKey: map[string]any{"id": "rs_boundary"},
+					},
+					Choices: []llm.Choice{{Delta: &llm.Message{ReasoningContent: lo.ToPtr("reasoning first")}}},
+				},
+				{
+					Object:  "chat.completion.chunk",
+					Choices: []llm.Choice{{Delta: &llm.Message{Content: llm.MessageContent{MultipleContent: []llm.MessageContentPart{tt.part}}}}},
+				},
+				{Object: "chat.completion.chunk", Choices: []llm.Choice{{Delta: &llm.Message{}, FinishReason: lo.ToPtr("stop")}}},
+				{Object: "chat.completion.chunk", Usage: &llm.Usage{}},
+			}))
+			require.NoError(t, err)
+
+			var completed StreamEvent
+			for stream.Next() {
+				require.NoError(t, json.Unmarshal(stream.Current().Data, &completed))
+			}
+			require.NoError(t, stream.Err())
+			require.Equal(t, StreamEventTypeResponseCompleted, completed.Type)
+			require.NotNil(t, completed.Response)
+			require.Len(t, completed.Response.Output, 2)
+			require.Equal(t, "reasoning", completed.Response.Output[0].Type)
+			require.Equal(t, tt.wantType, completed.Response.Output[1].Type)
+		})
+	}
+}
+
 func TestInboundTransformer_TransformStream_PreservesWebSearchCallsFromChunkMetadata(t *testing.T) {
 	trans := NewInboundTransformer()
 

@@ -2,6 +2,8 @@ package orchestrator
 
 import (
 	"errors"
+	"io"
+	"net"
 	"regexp"
 	"slices"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
+	"github.com/looplj/axonhub/llm/pipeline"
 )
 
 func isRetryableError(err error) bool {
@@ -18,12 +21,16 @@ func isRetryableError(err error) bool {
 		return false
 	}
 
-	return httpclient.IsHTTPStatusCodeRetryable(ExtractStatusCodeFromError(err))
+	return isRetryableTransportError(err) ||
+		httpclient.IsHTTPStatusCodeRetryable(ExtractStatusCodeFromError(err))
 }
 
 func isRetryableErrorForChannel(err error, ch *biz.Channel) bool {
 	if err == nil {
 		return false
+	}
+	if isRetryableTransportError(err) {
+		return true
 	}
 
 	statusCode := ExtractStatusCodeFromError(err)
@@ -37,6 +44,38 @@ func isRetryableErrorForChannel(err error, ch *biz.Channel) bool {
 
 	return slices.Contains(ch.Settings.RetryableStatusCodes, statusCode) ||
 		matchesRetryableErrorPattern(err, ch.Settings.RetryableErrorPatterns)
+}
+
+// isRetryableTransportError identifies failures where the upstream connection
+// ended before a usable response was received. The streaming pipeline only
+// invokes retry selection before response content is committed, so retrying
+// these transport failures cannot duplicate already-delivered output.
+func isRetryableTransportError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if ExtractStatusCodeFromError(err) != 0 {
+		return false
+	}
+
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+
+	var netErr net.Error
+
+	return errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary())
+}
+
+func isTransportFailure(err error) bool {
+	if ExtractStatusCodeFromError(err) != 0 {
+		return false
+	}
+
+	return errors.Is(err, pipeline.ErrStreamFirstEventTimeout) ||
+		errors.Is(err, pipeline.ErrNonStreamResponseTimeout) ||
+		httpclient.IsTransportError(err) ||
+		isRetryableTransportError(err)
 }
 
 func matchesRetryableErrorPattern(err error, patterns []objects.RetryableErrorPattern) bool {

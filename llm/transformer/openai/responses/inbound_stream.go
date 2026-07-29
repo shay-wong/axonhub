@@ -22,10 +22,14 @@ func (t *InboundTransformer) TransformStream(
 	stream streams.Stream[*llm.Response],
 ) (streams.Stream[*httpclient.StreamEvent], error) {
 	return &responsesInboundStream{
-		source:              stream,
-		ctx:                 ctx,
-		toolCalls:           make(map[int]*llm.ToolCall),
-		transformerMetadata: make(map[string]any),
+		source:                     stream,
+		ctx:                        ctx,
+		toolCalls:                  make(map[int]*llm.ToolCall),
+		transformerMetadata:        make(map[string]any),
+		pendingReasoning:           make(map[string][]string),
+		pendingReasoningSignatures: make(map[string]string),
+		completedReasoningItems:    make(map[string]bool),
+		queuedReasoningItems:       make(map[string]bool),
 	}, nil
 }
 
@@ -69,6 +73,11 @@ type responsesInboundStream struct {
 	accumulatedReasoningSignature strings.Builder
 	currentReasoningSourceID      string
 	messageContentItems           []Item
+	pendingReasoning              map[string][]string
+	pendingReasoningSignatures    map[string]string
+	pendingReasoningOrder         []string
+	completedReasoningItems       map[string]bool
+	queuedReasoningItems          map[string]bool
 
 	// Tool call tracking
 	toolCalls           map[int]*llm.ToolCall
@@ -260,7 +269,7 @@ func (s *responsesInboundStream) Next() bool {
 
 		// Handle reasoning content (thinking) delta
 		if choice.Delta != nil && choice.Delta.ReasoningContent != nil && *choice.Delta.ReasoningContent != "" {
-			if err := s.handleReasoningContent(choice.Delta.ReasoningContent); err != nil {
+			if err := s.handleReasoningContent(choice.Delta.ReasoningContent, chunk.TransformerMetadata); err != nil {
 				s.err = err
 				return false
 			}
@@ -338,6 +347,11 @@ func (s *responsesInboundStream) Next() bool {
 				s.terminalEventType = StreamEventTypeResponseCancelled
 			case "error":
 				s.terminalEventType = StreamEventTypeResponseFailed
+			}
+
+			if err := s.flushPendingReasoning(); err != nil {
+				s.err = err
+				return false
 			}
 
 			// Close any open content parts
@@ -446,8 +460,23 @@ func getResponsesReasoningItemMetadata(metadata map[string]any) (responsesReason
 	return item, item.ID != ""
 }
 
-func (s *responsesInboundStream) handleReasoningContent(content *string) error {
-	if err := s.ensureReasoningItemStarted(""); err != nil {
+func (s *responsesInboundStream) handleReasoningContent(content *string, metadata map[string]any) error {
+	sourceID := ""
+	if item, ok := getResponsesReasoningItemMetadata(metadata); ok {
+		sourceID = item.ID
+	}
+	if sourceID != "" {
+		s.queueReasoningItem(sourceID)
+		s.pendingReasoning[sourceID] = append(s.pendingReasoning[sourceID], *content)
+		return nil
+	}
+
+	return s.emitReasoningContent(content, sourceID)
+}
+
+func (s *responsesInboundStream) emitReasoningContent(content *string, sourceID string) error {
+
+	if err := s.ensureReasoningItemStarted(sourceID); err != nil {
 		return err
 	}
 
@@ -505,6 +534,9 @@ func (s *responsesInboundStream) handleServerContentParts(parts []llm.MessageCon
 	if len(items) == 0 {
 		return nil
 	}
+	if err := s.flushPendingReasoning(); err != nil {
+		return err
+	}
 
 	if err := s.closeCurrentContentPart(); err != nil {
 		return err
@@ -545,8 +577,27 @@ func (s *responsesInboundStream) handleServerContentParts(parts []llm.MessageCon
 
 func (s *responsesInboundStream) handleReasoningSignature(delta *llm.Message, metadata map[string]any) error {
 	sourceID := delta.ID
-	if item, ok := getResponsesReasoningItemMetadata(metadata); ok {
-		sourceID = item.ID
+	itemMetadata, itemScoped := getResponsesReasoningItemMetadata(metadata)
+	if itemScoped {
+		sourceID = itemMetadata.ID
+		s.queueReasoningItem(sourceID)
+		s.pendingReasoningSignatures[sourceID] = *delta.ReasoningSignature
+		if itemMetadata.Done {
+			s.completedReasoningItems[sourceID] = true
+			return s.flushCompletedReasoningItems()
+		}
+		return nil
+	}
+	if sourceID != "" {
+		if contents, ok := s.pendingReasoning[sourceID]; ok {
+			for _, content := range contents {
+				if err := s.emitReasoningContent(lo.ToPtr(content), sourceID); err != nil {
+					return err
+				}
+			}
+			delete(s.pendingReasoning, sourceID)
+			s.removePendingReasoningID(sourceID)
+		}
 	}
 
 	if err := s.ensureReasoningItemStarted(sourceID); err != nil {
@@ -555,10 +606,6 @@ func (s *responsesInboundStream) handleReasoningSignature(delta *llm.Message, me
 
 	s.accumulatedReasoningSignature.WriteString(*delta.ReasoningSignature)
 
-	if item, ok := getResponsesReasoningItemMetadata(metadata); ok && item.Done {
-		return s.closeReasoningItem()
-	}
-
 	// OpenAI Responses encrypted_content is emitted as an opaque item-level blob,
 	// not as a text-style delta. Close the item immediately so consecutive
 	// reasoning blobs from separate upstream items are not concatenated.
@@ -566,6 +613,71 @@ func (s *responsesInboundStream) handleReasoningSignature(delta *llm.Message, me
 		return s.closeReasoningItem()
 	}
 
+	return nil
+}
+
+func (s *responsesInboundStream) queueReasoningItem(sourceID string) {
+	if s.queuedReasoningItems[sourceID] {
+		return
+	}
+	s.queuedReasoningItems[sourceID] = true
+	s.pendingReasoningOrder = append(s.pendingReasoningOrder, sourceID)
+}
+
+func (s *responsesInboundStream) removePendingReasoningID(sourceID string) {
+	for i, id := range s.pendingReasoningOrder {
+		if id == sourceID {
+			s.pendingReasoningOrder = append(s.pendingReasoningOrder[:i], s.pendingReasoningOrder[i+1:]...)
+			return
+		}
+	}
+}
+
+func (s *responsesInboundStream) flushPendingReasoning() error {
+	for len(s.pendingReasoningOrder) > 0 {
+		sourceID := s.pendingReasoningOrder[0]
+		if err := s.emitPendingReasoningItem(sourceID); err != nil {
+			return err
+		}
+		s.pendingReasoningOrder = s.pendingReasoningOrder[1:]
+	}
+	return nil
+}
+
+func (s *responsesInboundStream) flushCompletedReasoningItems() error {
+	for len(s.pendingReasoningOrder) > 0 {
+		sourceID := s.pendingReasoningOrder[0]
+		if !s.completedReasoningItems[sourceID] {
+			return nil
+		}
+		if err := s.emitPendingReasoningItem(sourceID); err != nil {
+			return err
+		}
+		s.pendingReasoningOrder = s.pendingReasoningOrder[1:]
+	}
+	return nil
+}
+
+func (s *responsesInboundStream) emitPendingReasoningItem(sourceID string) error {
+	for _, content := range s.pendingReasoning[sourceID] {
+		if err := s.emitReasoningContent(lo.ToPtr(content), sourceID); err != nil {
+			return err
+		}
+	}
+	if signature, ok := s.pendingReasoningSignatures[sourceID]; ok {
+		if err := s.ensureReasoningItemStarted(sourceID); err != nil {
+			return err
+		}
+		s.accumulatedReasoningSignature.Reset()
+		s.accumulatedReasoningSignature.WriteString(signature)
+	}
+	if err := s.closeReasoningItem(); err != nil {
+		return err
+	}
+	delete(s.pendingReasoning, sourceID)
+	delete(s.pendingReasoningSignatures, sourceID)
+	delete(s.completedReasoningItems, sourceID)
+	delete(s.queuedReasoningItems, sourceID)
 	return nil
 }
 
@@ -614,6 +726,10 @@ func (s *responsesInboundStream) ensureReasoningItemStarted(sourceID string) err
 }
 
 func (s *responsesInboundStream) ensureMessageItem() error {
+	if err := s.flushPendingReasoning(); err != nil {
+		return err
+	}
+
 	// Close reasoning item if it was started
 	if s.hasReasoningItemStarted {
 		if err := s.closeReasoningItem(); err != nil {
@@ -743,6 +859,9 @@ func (s *responsesInboundStream) handleCompactionContent(parts []llm.MessageCont
 		if (part.Type != "compaction" && part.Type != "compaction_summary") || part.Compact == nil {
 			continue
 		}
+		if err := s.flushPendingReasoning(); err != nil {
+			return err
+		}
 
 		if err := s.closeCurrentOutputItem(); err != nil {
 			return err
@@ -770,6 +889,10 @@ func (s *responsesInboundStream) handleCompactionContent(parts []llm.MessageCont
 }
 
 func (s *responsesInboundStream) handleToolCalls(toolCalls []llm.ToolCall) error {
+	if err := s.flushPendingReasoning(); err != nil {
+		return err
+	}
+
 	// Close message item if it was started
 	if s.hasMessageItemStarted {
 		if err := s.closeMessageItem(); err != nil {

@@ -609,6 +609,48 @@ func TestChannelService_RecordPerformance_APIKeyPolicyHitShortCircuitsChannelAut
 	require.Equal(t, "key1", updatedCh.DisabledAPIKeys[0].Key)
 }
 
+func TestChannelService_RecordPerformance_TransportFailureSkipsAPIKeyAutoDisable(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := ent.NewContext(authz.WithTestBypass(context.Background()), client)
+	svc := newTestChannelService(client)
+	require.NoError(t, svc.SystemService.SetRetryPolicy(ctx, &RetryPolicy{
+		ChannelAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 500, Times: 1, Action: DisableActionPermanent},
+			},
+		},
+		APIKeyAutoDisable: AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []AutoDisableStatusRule{
+				{Status: 500, Times: 1, Action: DisableActionPermanent},
+			},
+		},
+	}))
+	ch := createTestChannelWithAPIKeys(t, client, ctx, "transport-failure-channel", []string{"key1", "key2"})
+
+	svc.RecordPerformance(ctx, &PerformanceRecord{
+		ChannelID:          ch.ID,
+		APIKey:             "key1",
+		ResponseStatusCode: 500,
+		TransportFailure:   true,
+		RequestCompleted:   true,
+		EndTime:            time.Now(),
+	})
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusDisabled, updatedCh.Status)
+	require.Empty(t, updatedCh.DisabledAPIKeys)
+
+	svc.apiKeyErrorCountsLock.Lock()
+	_, hasAPIKeyCounts := svc.apiKeyErrorCounts[ch.ID]["key1"]
+	svc.apiKeyErrorCountsLock.Unlock()
+	require.False(t, hasAPIKeyCounts)
+}
+
 func TestChannelService_RecordPerformance_APIKeyPolicyMatchDoesNotTripChannelTemporaryDisable(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
 	defer client.Close()

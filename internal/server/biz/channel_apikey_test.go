@@ -812,6 +812,39 @@ func TestChannelService_DisableAPIKey_KeepsConfiguredKey(t *testing.T) {
 	require.Empty(t, updatedCh.DisabledAPIKeys)
 }
 
+func TestChannelService_DisableAPIKey_UpgradesTemporaryDisable(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+
+	ctx := ent.NewContext(authz.WithTestBypass(context.Background()), client)
+	ch, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Temporary Disable Upgrade").
+		SetBaseURL("https://api.openai.com/v1").
+		SetCredentials(objects.ChannelCredentials{APIKeys: []string{"key1", "key2"}}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	duration := 5 * time.Minute
+	require.NoError(t, svc.ApplyAPIKeyDisableAction(ctx, ch.ID, "key1", DisableActionTemporary, &duration, 429, "rate limited"))
+	require.NoError(t, svc.DisableAPIKey(ctx, ch.ID, "key1", 401, "invalid key"))
+
+	updatedCh, err := client.Channel.Get(ctx, ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusEnabled, updatedCh.Status)
+	require.Len(t, updatedCh.DisabledAPIKeys, 1)
+	require.Equal(t, objects.DisabledAPIKey{
+		Key:           "key1",
+		DisabledAt:    updatedCh.DisabledAPIKeys[0].DisabledAt,
+		DisableAction: DisableActionPermanent,
+		ErrorCode:     401,
+		Reason:        "invalid key",
+	}, updatedCh.DisabledAPIKeys[0])
+}
+
 func TestChannelService_DisableAPIKey_KeepsStructuredAPIKeyConfig(t *testing.T) {
 	svc, client := setupTestChannelService(t)
 	defer client.Close()

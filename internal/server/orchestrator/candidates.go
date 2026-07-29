@@ -815,34 +815,74 @@ func (s *LoadBalancedSelector) sortCandidates(
 	// Sort priorities: lower value = higher priority
 	slices.Sort(priorities)
 
-	// For each priority group, apply load balancing to sort candidates within the group
-	// Stop early if we have collected enough candidates
-	var result []*ChannelModelsCandidate
+	// For each priority group, apply load balancing to distinct channels. Retry
+	// limits count channels rather than association candidates.
+	result := make([]*ChannelModelsCandidate, 0, requiredCount)
+	resultIndexByChannelID := make(map[int]int, requiredCount)
 
 	for _, p := range priorities {
 		group := priorityGroups[p]
+		uniqueGroup := make([]*ChannelModelsCandidate, 0, len(group))
+		uniqueIndexByChannelID := make(map[int]int, len(group))
+		for _, candidate := range group {
+			if candidate == nil || candidate.Channel == nil {
+				continue
+			}
+
+			if idx, ok := uniqueIndexByChannelID[candidate.Channel.ID]; ok {
+				appendCandidateModels(uniqueGroup[idx], candidate)
+				continue
+			}
+
+			candidateClone := *candidate
+			candidateClone.Models = slices.Clone(candidate.Models)
+			uniqueIndexByChannelID[candidate.Channel.ID] = len(uniqueGroup)
+			uniqueGroup = append(uniqueGroup, &candidateClone)
+		}
 
 		// Apply load balancing to sort candidates within this priority group.
 		useStream := req.Stream != nil && *req.Stream
 		ctx = contextWithQuotaLimitType(ctx, string(provider_quota.RequestModality(req.Image != nil)))
 		var sortedCandidates []*ChannelModelsCandidate
 		if trackSelection {
-			sortedCandidates = s.loadBalancer.Sort(ctx, group, req.Model, useStream)
+			sortedCandidates = s.loadBalancer.Sort(ctx, uniqueGroup, req.Model, useStream)
 		} else {
-			sortedCandidates = s.loadBalancer.SortWithoutTracking(ctx, group, req.Model, useStream)
+			sortedCandidates = s.loadBalancer.SortWithoutTracking(ctx, uniqueGroup, req.Model, useStream)
 		}
 
-		// Add candidates, but stop if we have enough
-		remaining := requiredCount - len(result)
-		if remaining <= 0 {
-			break
+		for _, candidate := range sortedCandidates {
+			if candidate == nil || candidate.Channel == nil {
+				continue
+			}
+
+			if _, ok := resultIndexByChannelID[candidate.Channel.ID]; ok {
+				continue
+			}
+			if len(result) >= requiredCount {
+				continue
+			}
+
+			candidateClone := *candidate
+			candidateClone.Models = slices.Clone(candidate.Models)
+			resultIndexByChannelID[candidate.Channel.ID] = len(result)
+			result = append(result, &candidateClone)
 		}
 
-		if len(sortedCandidates) <= remaining {
-			result = append(result, sortedCandidates...)
-		} else {
-			result = append(result, sortedCandidates[:remaining]...)
+		if len(result) >= requiredCount {
 			break
+		}
+	}
+
+	// Once the channel budget is filled, retain lower-priority model fallbacks
+	// for those selected channels without mixing endpoint API formats.
+	for _, p := range priorities {
+		for _, candidate := range priorityGroups[p] {
+			if candidate == nil || candidate.Channel == nil {
+				continue
+			}
+			if idx, ok := resultIndexByChannelID[candidate.Channel.ID]; ok {
+				appendCandidateModels(result[idx], candidate)
+			}
 		}
 	}
 
@@ -855,6 +895,21 @@ func (s *LoadBalancedSelector) sortCandidates(
 	}
 
 	return result
+}
+
+func appendCandidateModels(target, source *ChannelModelsCandidate) {
+	if target == nil || source == nil || target.APIFormat != source.APIFormat {
+		return
+	}
+
+	for _, entry := range source.Models {
+		if slices.ContainsFunc(target.Models, func(existing biz.ChannelModelEntry) bool {
+			return existing.ActualModel == entry.ActualModel
+		}) {
+			continue
+		}
+		target.Models = append(target.Models, entry)
+	}
 }
 
 // TagsFilterSelector is a decorator that filters candidates by allowed channel tags.

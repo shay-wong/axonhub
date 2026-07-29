@@ -84,8 +84,37 @@ type Error struct {
 	Body       []byte      `json:"body"`
 	Truncated  bool        `json:"truncated,omitempty"`
 	Headers    http.Header `json:"-"` // HTTP response headers (not serialized)
+	Err        error       `json:"-"`
 }
 
 func (e *Error) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("%s - %s with status %s: %v", e.Method, e.URL, e.Status, e.Err)
+	}
+
 	return fmt.Sprintf("%s - %s with status %s", e.Method, e.URL, e.Status)
+}
+
+func (e *Error) Unwrap() error {
+	return e.Err
+}
+
+// TransportError marks a request or response-body I/O failure that does not
+// carry an upstream HTTP status.
+type TransportError struct {
+	Err error
+}
+
+func (e *TransportError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *TransportError) Unwrap() error {
+	return e.Err
+}
+
+func IsTransportError(err error) bool {
+	var transportErr *TransportError
+
+	return errors.As(err, &transportErr)
 }

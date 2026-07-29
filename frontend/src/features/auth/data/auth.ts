@@ -6,8 +6,10 @@ import { ME_QUERY } from '@/gql/users';
 import { toast } from 'sonner';
 import { useAuthStore, setTokenToStorage, removeTokenFromStorage } from '@/stores/authStore';
 import { AuthUser } from '@/stores/authStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { authApi } from '@/lib/api-client';
 import i18n from '@/lib/i18n';
+import { getAuthenticatedLanding } from './auth-redirect';
 
 export interface SignInInput {
   email: string;
@@ -50,6 +52,7 @@ export function useMe(enabled = true) {
 
 export function useSignIn() {
   const { setUser, setAccessToken } = useAuthStore((state) => state.auth);
+  const { selectedProjectId, setSelectedProjectId } = useProjectStore();
   const router = useRouter();
 
   return useMutation({
@@ -73,10 +76,9 @@ export function useSignIn() {
 
       toast.success(i18n.t('common.success.signedIn'));
 
-      // Redirect based on user role
-      // Owner users go to dashboard, non-owner users go to requests page
-      const redirectPath = data.user.isOwner ? '/' : '/project/playground';
-      router.navigate({ to: redirectPath });
+      const landing = getAuthenticatedLanding(data.user, selectedProjectId);
+      setSelectedProjectId(landing.projectID);
+      router.navigate({ to: landing.path });
     },
     onError: (error: any) => {
       const errorMessage = error.message || 'Failed to sign in';
@@ -102,7 +104,6 @@ export function useSignOut() {
     router.navigate({ to: '/sign-in' });
   };
 }
-
 
 export function useOIDCProviders() {
   return useQuery({
@@ -137,6 +138,7 @@ export function useOIDCAuthorize() {
 
 export function useOIDCExchange() {
   const { setUser, setAccessToken } = useAuthStore((state) => state.auth);
+  const { selectedProjectId, setSelectedProjectId } = useProjectStore();
   const router = useRouter();
 
   return useMutation({
@@ -145,7 +147,7 @@ export function useOIDCExchange() {
     },
     onSuccess: (response) => {
       const data = response.data;
-      
+
       // Store token in localStorage
       setTokenToStorage(data.token);
 
@@ -162,9 +164,9 @@ export function useOIDCExchange() {
 
       toast.success(i18n.t('common.success.signedIn'));
 
-      // Redirect based on user role
-      const redirectPath = data.user.isOwner ? '/' : '/project/playground';
-      router.navigate({ to: redirectPath });
+      const landing = getAuthenticatedLanding(data.user, selectedProjectId);
+      setSelectedProjectId(landing.projectID);
+      router.navigate({ to: landing.path });
     },
     onError: (error: unknown) => {
       const errorMessage = error instanceof Error ? error.message : 'SSO login failed';

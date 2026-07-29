@@ -62,15 +62,16 @@ func (svc *ChannelService) ApplyAPIKeyDisableAction(
 	}
 
 	now := time.Now()
-	disabled := lo.ContainsBy(ch.DisabledAPIKeys, func(dk objects.DisabledAPIKey) bool {
+	_, disabledIndex, disabled := lo.FindIndexOf(ch.DisabledAPIKeys, func(dk objects.DisabledAPIKey) bool {
 		if dk.Key != key {
 			return false
 		}
 		return dk.DisabledUntil == nil || dk.DisabledUntil.After(now)
 	})
 
-	if disabled {
-		// 已禁用，忽略
+	if disabled && (action != DisableActionPermanent || ch.DisabledAPIKeys[disabledIndex].DisabledUntil == nil) {
+		// Keep an existing permanent disable, or any active disable when the new
+		// action is not stronger.
 		return nil
 	}
 
@@ -89,7 +90,12 @@ func (svc *ChannelService) ApplyAPIKeyDisableAction(
 		Reason:        reason,
 	}
 
-	newDisabledKeys := append(ch.DisabledAPIKeys, disabledKey)
+	newDisabledKeys := slices.Clone(ch.DisabledAPIKeys)
+	if disabled {
+		newDisabledKeys[disabledIndex] = disabledKey
+	} else {
+		newDisabledKeys = append(newDisabledKeys, disabledKey)
+	}
 
 	// 计算 enabled keys
 	enabledKeys := ch.Credentials.GetEnabledAPIKeysAt(newDisabledKeys, now)

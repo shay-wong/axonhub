@@ -162,6 +162,7 @@ func recordPerformanceError(ctx context.Context, state *PersistenceState, err er
 	if errors.Is(err, context.Canceled) {
 		perf.MarkCanceled()
 	} else {
+		perf.TransportFailure = isTransportFailure(err)
 		errorCode := ExtractErrorCode(err)
 		perf.MarkFailed(errorCode)
 		if errorCode == http.StatusTooManyRequests {

@@ -61,6 +61,90 @@ func TestLoadBalancedSelector_Select_MultipleChannels_LoadBalancing(t *testing.T
 	require.Contains(t, channelIDs, channels[2].ID, "Low weight channel should be included")
 }
 
+func TestLoadBalancedSelector_Select_CountsDistinctChannelsAcrossPriorities(t *testing.T) {
+	channelA := stickyTestCandidate(1, 0)
+	channelA.Models = []biz.ChannelModelEntry{{ActualModel: "model-a-primary"}}
+	channelAFallback := stickyTestCandidate(1, 1)
+	channelAFallback.Models = []biz.ChannelModelEntry{{ActualModel: "model-a-fallback"}}
+	channelB := stickyTestCandidate(2, 0)
+	channelB.Models = []biz.ChannelModelEntry{{ActualModel: "model-b"}}
+
+	policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
+		Enabled:           true,
+		MaxChannelRetries: 1,
+	}}
+	selector := WithLoadBalancedSelector(
+		&staticChannelSelector{candidates: []*ChannelModelsCandidate{channelA, channelAFallback, channelB}},
+		NewLoadBalancer(policy, nil),
+		policy,
+	)
+
+	result, err := selector.Select(t.Context(), &llm.Request{Model: "requested-model"})
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	require.Equal(t, []int{1, 2}, []int{result[0].Channel.ID, result[1].Channel.ID})
+	require.Equal(t,
+		[]string{"model-a-primary", "model-a-fallback"},
+		[]string{result[0].Models[0].ActualModel, result[0].Models[1].ActualModel},
+	)
+}
+
+func TestLoadBalancedSelector_Select_CountsDistinctChannelsWithinPriority(t *testing.T) {
+	channelA := stickyTestCandidate(1, 0)
+	channelA.Models = []biz.ChannelModelEntry{{ActualModel: "model-a-primary"}}
+	channelADuplicate := stickyTestCandidate(1, 0)
+	channelADuplicate.Models = []biz.ChannelModelEntry{{ActualModel: "model-a-secondary"}}
+	channelB := stickyTestCandidate(2, 0)
+	channelB.Models = []biz.ChannelModelEntry{{ActualModel: "model-b"}}
+
+	policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
+		Enabled:           true,
+		MaxChannelRetries: 1,
+	}}
+	selector := WithLoadBalancedSelector(
+		&staticChannelSelector{candidates: []*ChannelModelsCandidate{channelA, channelADuplicate, channelB}},
+		NewLoadBalancer(policy, nil),
+		policy,
+	)
+
+	result, err := selector.Select(t.Context(), &llm.Request{Model: "requested-model"})
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	require.Equal(t, []int{1, 2}, []int{result[0].Channel.ID, result[1].Channel.ID})
+	require.Equal(t,
+		[]string{"model-a-primary", "model-a-secondary"},
+		[]string{result[0].Models[0].ActualModel, result[0].Models[1].ActualModel},
+	)
+}
+
+func TestLoadBalancedSelector_Select_DoesNotMergeModelsAcrossAPIFormats(t *testing.T) {
+	channelA := stickyTestCandidate(1, 0)
+	channelA.APIFormat = string(llm.APIFormatOpenAIChatCompletion)
+	channelA.Models = []biz.ChannelModelEntry{{ActualModel: "model-a-chat"}}
+	channelAResponses := stickyTestCandidate(1, 1)
+	channelAResponses.APIFormat = string(llm.APIFormatOpenAIResponse)
+	channelAResponses.Models = []biz.ChannelModelEntry{{ActualModel: "model-a-responses"}}
+	channelB := stickyTestCandidate(2, 0)
+	channelB.Models = []biz.ChannelModelEntry{{ActualModel: "model-b"}}
+
+	policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
+		Enabled:           true,
+		MaxChannelRetries: 1,
+	}}
+	selector := WithLoadBalancedSelector(
+		&staticChannelSelector{candidates: []*ChannelModelsCandidate{channelA, channelAResponses, channelB}},
+		NewLoadBalancer(policy, nil),
+		policy,
+	)
+
+	result, err := selector.Select(t.Context(), &llm.Request{Model: "requested-model"})
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	require.Equal(t, []int{1, 2}, []int{result[0].Channel.ID, result[1].Channel.ID})
+	require.Equal(t, string(llm.APIFormatOpenAIChatCompletion), result[0].APIFormat)
+	require.Equal(t, []string{"model-a-chat"}, []string{result[0].Models[0].ActualModel})
+}
+
 // TestDefaultChannelSelector_Select_WithTraceContext tests trace sticky routing.
 func TestDefaultChannelSelector_Select_WithTraceContext(t *testing.T) {
 	ctx, client := setupTest(t)
@@ -144,12 +228,12 @@ func TestDefaultChannelSelector_Select_WithChannelFailures(t *testing.T) {
 	// Record failures for the high weight channel to test error awareness
 	for range 3 {
 		perf := &biz.PerformanceRecord{
-			ChannelID:        channels[0].ID,
-			StartTime:        time.Now().Add(-time.Minute),
-			EndTime:          time.Now(),
-			Success:          false,
-			RequestCompleted: true,
-			ResponseStatusCode:  500,
+			ChannelID:          channels[0].ID,
+			StartTime:          time.Now().Add(-time.Minute),
+			EndTime:            time.Now(),
+			Success:            false,
+			RequestCompleted:   true,
+			ResponseStatusCode: 500,
 		}
 		channelService.RecordPerformance(ctx, perf)
 	}

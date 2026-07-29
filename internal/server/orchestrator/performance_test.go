@@ -3,8 +3,11 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"syscall"
 	"testing"
 	"time"
 
@@ -22,6 +25,7 @@ import (
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
+	"github.com/looplj/axonhub/llm/pipeline"
 	"github.com/looplj/axonhub/llm/streams"
 )
 
@@ -55,6 +59,45 @@ func (s *responseEventsThenError) Err() error {
 func (s *responseEventsThenError) Close() error { return nil }
 
 var _ streams.Stream[*llm.Response] = (*responseEventsThenError)(nil)
+
+type transportErrorRoundTripper struct {
+	err error
+}
+
+func (r transportErrorRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, r.err
+}
+
+type streamErrorRoundTripper struct{}
+
+func (streamErrorRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body: &streamBodyThenError{
+			data: []byte("data: {\"type\":\"test\"}\n\n"),
+			err:  errors.New("http2: stream reset"),
+		},
+	}, nil
+}
+
+type streamBodyThenError struct {
+	data []byte
+	err  error
+	read bool
+}
+
+func (r *streamBodyThenError) Read(p []byte) (int, error) {
+	if r.read {
+		return 0, r.err
+	}
+
+	r.read = true
+
+	return copy(p, r.data), nil
+}
+
+func (r *streamBodyThenError) Close() error { return nil }
 
 // mockChannelService is a mock implementation of ChannelService for testing
 type mockChannelService struct{}
@@ -161,6 +204,128 @@ func TestRecordTerminalOutcomePerformance(t *testing.T) {
 			require.Equal(t, tt.wantCancel, perf.Canceled)
 		})
 	}
+}
+
+func TestRecordPerformanceErrorClassifiesTransportFailure(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+	channelService, _, _, _ := setupTestServices(t, client)
+
+	tests := []struct {
+		name          string
+		err           error
+		wantTransport bool
+		wantCode      int
+	}{
+		{name: "upstream EOF", err: io.EOF, wantTransport: true, wantCode: http.StatusInternalServerError},
+		{name: "stream first event timeout", err: pipeline.ErrStreamFirstEventTimeout, wantTransport: true, wantCode: http.StatusInternalServerError},
+		{name: "non-stream response timeout", err: pipeline.ErrNonStreamResponseTimeout, wantTransport: true, wantCode: http.StatusInternalServerError},
+		{name: "upstream HTTP 500", err: &httpclient.Error{StatusCode: http.StatusInternalServerError}, wantCode: http.StatusInternalServerError},
+		{
+			name: "upstream HTTP status with response body error",
+			err: &httpclient.Error{
+				StatusCode: http.StatusTooManyRequests,
+				Err:        io.ErrUnexpectedEOF,
+			},
+			wantCode: http.StatusTooManyRequests,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			perf := &biz.PerformanceRecord{ChannelID: 1, StartTime: time.Now()}
+			state := &PersistenceState{Perf: perf, ChannelService: channelService}
+
+			require.True(t, recordPerformanceError(t.Context(), state, tt.err))
+			require.Equal(t, tt.wantTransport, perf.TransportFailure)
+			require.Equal(t, tt.wantCode, perf.ResponseStatusCode)
+		})
+	}
+}
+
+func TestCredentialAgnosticFailuresDoNotDisableAPIKey(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := ent.NewContext(authz.WithTestBypass(t.Context()), client)
+	channelService := biz.NewChannelServiceForTest(client)
+	defer channelService.Stop()
+	require.NoError(t, channelService.SystemService.SetRetryPolicy(ctx, &biz.RetryPolicy{
+		APIKeyAutoDisable: biz.AutoDisablePolicy{
+			Enabled: true,
+			Statuses: []biz.AutoDisableStatusRule{
+				{Status: http.StatusInternalServerError, Times: 1, Action: biz.DisableActionPermanent},
+			},
+		},
+	}))
+
+	channelRow, err := client.Channel.Create().
+		SetType(channel.TypeOpenai).
+		SetName("Transport Failure Channel").
+		SetBaseURL("https://upstream.invalid").
+		SetCredentials(objects.ChannelCredentials{APIKeys: []string{"key1", "key2"}}).
+		SetSupportedModels([]string{"gpt-4"}).
+		SetDefaultTestModel("gpt-4").
+		SetStatus(channel.StatusEnabled).
+		Save(ctx)
+	require.NoError(t, err)
+
+	causes := []error{
+		&net.DNSError{Err: "no such host", Name: "upstream.invalid", IsNotFound: true},
+		&net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED},
+	}
+	requestErrors := make([]error, 0, len(causes)+1)
+	for _, cause := range causes {
+		httpClient := httpclient.NewHttpClientWithClient(&http.Client{
+			Transport: transportErrorRoundTripper{err: cause},
+		})
+		_, requestErr := httpClient.Do(ctx, &httpclient.Request{
+			Method: http.MethodGet,
+			URL:    channelRow.BaseURL,
+		})
+		require.Error(t, requestErr)
+		requestErrors = append(requestErrors, requestErr)
+	}
+
+	httpClient := httpclient.NewHttpClientWithClient(&http.Client{Transport: streamErrorRoundTripper{}})
+	stream, err := httpClient.DoStream(ctx, &httpclient.Request{
+		Method: http.MethodGet,
+		URL:    channelRow.BaseURL,
+	})
+	require.NoError(t, err)
+	require.True(t, stream.Next())
+	require.NotNil(t, stream.Current())
+	require.False(t, stream.Next())
+	require.Error(t, stream.Err())
+	require.True(t, httpclient.IsTransportError(stream.Err()))
+	requestErrors = append(requestErrors, stream.Err())
+	requestErrors = append(requestErrors,
+		pipeline.ErrStreamFirstEventTimeout,
+		pipeline.ErrNonStreamResponseTimeout,
+	)
+
+	for _, requestErr := range requestErrors {
+		state := &PersistenceState{
+			Perf: &biz.PerformanceRecord{
+				ChannelID: channelRow.ID,
+				APIKey:    "key1",
+				StartTime: time.Now(),
+			},
+			ChannelService: channelService,
+		}
+		require.True(t, recordPerformanceError(ctx, state, requestErr))
+		require.True(t, state.Perf.TransportFailure)
+	}
+
+	require.Eventually(t, func() bool {
+		metrics, metricsErr := channelService.GetChannelMetrics(ctx, channelRow.ID)
+		return metricsErr == nil && metrics.FailureCount == int64(len(requestErrors))
+	}, time.Second, 10*time.Millisecond)
+
+	updatedChannel, err := client.Channel.Get(ctx, channelRow.ID)
+	require.NoError(t, err)
+	require.Equal(t, channel.StatusEnabled, updatedChannel.Status)
+	require.Empty(t, updatedChannel.DisabledAPIKeys)
 }
 
 func TestUsageBeforeLateStreamErrorDoesNotRecordSuccess(t *testing.T) {

@@ -1,9 +1,24 @@
 // 路由权限配置
 export type ScopeLevel = 'system' | 'project' | 'any';
 
+export interface ScopeRequirement {
+  scope: string;
+  level: ScopeLevel;
+}
+
+export function getProjectEffectiveScopes(project?: { isOwner?: boolean; scopes?: string[]; effectiveScopes?: string[] }): string[] {
+  return project?.effectiveScopes ?? (project?.isOwner ? ['*'] : (project?.scopes ?? []));
+}
+
+export const PLAYGROUND_SCOPE_REQUIREMENTS = [
+  { scope: 'read_channels', level: 'system' },
+  { scope: 'write_requests', level: 'any' },
+] as const satisfies readonly ScopeRequirement[];
+
 export interface RouteConfig {
   path: string;
   requiredScopes?: string[];
+  scopeRequirements?: readonly ScopeRequirement[];
   scopeLevel?: ScopeLevel; // 权限级别：system 只检查系统级权限，project 只检查项目级权限，any 检查两者
   mode?: 'hidden' | 'disabled'; // 当没有权限时的处理方式
   children?: RouteConfig[];
@@ -129,7 +144,8 @@ export const routeConfigs: RouteGroup[] = [
       },
       {
         path: '/project/playground',
-        // Playground is accessible to all users
+        scopeRequirements: PLAYGROUND_SCOPE_REQUIREMENTS,
+        mode: 'hidden',
       },
     ],
   },
@@ -155,6 +171,16 @@ export const routeConfigs: RouteGroup[] = [
     ],
   },
 ];
+
+export function hasScopeRequirements(systemScopes: string[], projectScopes: string[], requirements: readonly ScopeRequirement[]): boolean {
+  const hasScope = (scopes: string[], scope: string) => scopes.includes('*') || scopes.includes(scope);
+
+  return requirements.every(({ scope, level }) => {
+    if (level === 'system') return hasScope(systemScopes, scope);
+    if (level === 'project') return hasScope(projectScopes, scope);
+    return hasScope(systemScopes, scope) || hasScope(projectScopes, scope);
+  });
+}
 
 // 获取路由配置的辅助函数
 export function getRouteConfig(path: string): RouteConfig | undefined {

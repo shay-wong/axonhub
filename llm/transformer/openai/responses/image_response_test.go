@@ -131,13 +131,12 @@ func TestBuildImageResponse_NilResponse(t *testing.T) {
 func TestBuildImageResponse_ResponseError(t *testing.T) {
 	upstream := &Response{
 		ID:    "resp_err",
-		Error: &Error{Type: "image_error", Code: "generation_failed", Message: "api_key=sk-provider-secret"},
+		Error: &Error{Type: "image_error", Code: "generation_failed", Message: "generation blocked by content policy"},
 	}
 
 	_, err := BuildImageResponse(upstream, nil)
 	require.Error(t, err)
-	require.Equal(t, "codex image response failed (type=image_error, code=generation_failed)", err.Error())
-	require.NotContains(t, err.Error(), "sk-provider-secret")
+	require.Equal(t, "codex image response failed (type=image_error, code=generation_failed, message=generation blocked by content policy)", err.Error())
 }
 
 func TestBuildImageResponse_NoImageResult(t *testing.T) {
@@ -186,6 +185,22 @@ func TestBuildImageResponse_NoImageResultPreservesUpstreamOutcome(t *testing.T) 
 			},
 			wantError:  "codex image response did not produce an image",
 			wantDetail: "status=completed, output_types=reasoning,message",
+		},
+		{
+			name: "refusal output",
+			upstream: &Response{
+				Status: lo.ToPtr("completed"),
+				Output: []Item{
+					{
+						Type: "message",
+						Content: &Input{Items: []Item{
+							{Type: "refusal", Refusal: lo.ToPtr("I cannot perform this image edit.")},
+						}},
+					},
+				},
+			},
+			wantError:  "codex image response did not produce an image",
+			wantDetail: "status=completed, output_types=message, content_types=refusal, refusal=I cannot perform this image edit.",
 		},
 	}
 

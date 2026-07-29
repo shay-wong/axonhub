@@ -332,7 +332,7 @@ func (svc *ChannelService) RecordPerformance(ctx context.Context, perf *Performa
 		// API key auto-disable owns keyed failures for matching statuses. This
 		// keeps one bad upstream key from also tripping channel-level rules.
 		apiKeyPolicyMatched := false
-		if perf.APIKey != "" {
+		if perf.APIKey != "" && !perf.TransportFailure {
 			apiKeyPolicyMatched = apiKeyAutoDisableMatchesStatus(policy, perf.ResponseStatusCode)
 			if svc.checkAndHandleAPIKeyError(ctx, perf, policy) {
 				return
@@ -510,6 +510,10 @@ type PerformanceRecord struct {
 	Success            bool
 	Canceled           bool
 	RequestCompleted   bool
+	// TransportFailure means the attempt failed without an upstream HTTP status,
+	// including transport and response-timeout failures. It must not affect
+	// API-key disable counters.
+	TransportFailure bool
 	// SkipHealthStateTracking prevents diagnostic requests from mutating
 	// in-memory routing health state such as auto-disable counters and
 	// adaptive load-balancer metrics.

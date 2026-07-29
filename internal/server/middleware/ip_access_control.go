@@ -139,7 +139,7 @@ func denyRequest(c *gin.Context, redirectURL string) {
 		c.Request.Context(),
 		"IP access control denied request",
 		log.String("client_ip", c.ClientIP()),
-		log.String("path", c.Request.URL.Path),
+		log.String("path", requestLogPath(c)),
 		log.String("method", c.Request.Method),
 	)
 

@@ -558,17 +558,36 @@ func (p *PersistentOutboundTransformer) GetRequestedModel() string {
 // HasMoreChannels returns true if there are more candidates available for retry.
 // It implements the pipeline.Retryable interface.
 func (p *PersistentOutboundTransformer) HasMoreChannels() bool {
-	return p.state.CurrentCandidateIndex+1 < len(p.state.ChannelModelsCandidates)
-}
-
-func (p *PersistentOutboundTransformer) HasMoreChannelsContext(ctx context.Context) bool {
+	currentChannel := p.GetCurrentChannel()
 	for i := p.state.CurrentCandidateIndex + 1; i < len(p.state.ChannelModelsCandidates); i++ {
-		if hasRequestAvailableAPIKey(ctx, p.state.ChannelModelsCandidates[i].Channel) {
+		candidate := p.state.ChannelModelsCandidates[i]
+		if candidate != nil && candidate.Channel != nil &&
+			(currentChannel == nil || candidate.Channel.ID != currentChannel.ID) {
 			return true
 		}
 	}
 
 	return false
+}
+
+func (p *PersistentOutboundTransformer) HasMoreChannelsContext(ctx context.Context) bool {
+	return p.nextChannelCandidateIndex(ctx) >= 0
+}
+
+func (p *PersistentOutboundTransformer) nextChannelCandidateIndex(ctx context.Context) int {
+	currentChannel := p.GetCurrentChannel()
+	for i := p.state.CurrentCandidateIndex + 1; i < len(p.state.ChannelModelsCandidates); i++ {
+		candidate := p.state.ChannelModelsCandidates[i]
+		if candidate == nil || candidate.Channel == nil ||
+			(currentChannel != nil && candidate.Channel.ID == currentChannel.ID) {
+			continue
+		}
+		if hasRequestAvailableAPIKey(ctx, candidate.Channel) {
+			return i
+		}
+	}
+
+	return -1
 }
 
 // resetPassThroughStreamState cancels the current attempt's fan-out goroutine (if any)
@@ -592,22 +611,11 @@ func (p *PersistentOutboundTransformer) NextChannel(ctx context.Context) error {
 	// so it exits promptly and releases its upstream HTTP connection.
 	p.resetPassThroughStreamState()
 
-	for {
-		p.state.CurrentCandidateIndex++
-		if p.state.CurrentCandidateIndex >= len(p.state.ChannelModelsCandidates) {
-			return errors.New("no more candidates available for retry")
-		}
-
-		candidate := p.state.ChannelModelsCandidates[p.state.CurrentCandidateIndex]
-		if hasRequestAvailableAPIKey(ctx, candidate.Channel) {
-			break
-		}
-
-		log.Debug(ctx, "skipping retry candidate with no request-eligible API key",
-			log.Int("channel_id", candidate.Channel.ID),
-			log.Int("index", p.state.CurrentCandidateIndex),
-		)
+	nextCandidateIndex := p.nextChannelCandidateIndex(ctx)
+	if nextCandidateIndex < 0 {
+		return errors.New("no more candidates available for retry")
 	}
+	p.state.CurrentCandidateIndex = nextCandidateIndex
 
 	p.state.CurrentModelIndex = 0
 
@@ -671,6 +679,9 @@ func (p *PersistentOutboundTransformer) CanRetryContext(ctx context.Context, err
 	// Local admission rejection: the same channel cannot make progress until the
 	// local queue/RPM state changes, so bounce immediately to the next channel.
 	if isChannelQueueError(err) || isLocalRPMExhaustedError(err) {
+		return false
+	}
+	if isTransportFailure(err) {
 		return false
 	}
 
