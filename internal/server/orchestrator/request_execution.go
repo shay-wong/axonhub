@@ -2,11 +2,13 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tidwall/gjson"
 
@@ -28,26 +30,6 @@ var (
 	imageDataURLRegex = regexp.MustCompile(`(?i)data:image/[a-z0-9.+-]+;base64,[a-zA-Z0-9+/_=-]+`)
 	longBase64Regex   = regexp.MustCompile(`[a-zA-Z0-9+/_-]{128,}={0,2}`)
 )
-
-const maxResponsesDiagnosticOutputTypes = 20
-
-type responsesExecutionDiagnostic struct {
-	Status               string                    `json:"status"`
-	IncompleteReason     string                    `json:"incomplete_reason,omitempty"`
-	OutputTypes          []string                  `json:"output_types,omitempty"`
-	RefusalSummary       string                    `json:"refusal_summary,omitempty"`
-	MessageSummary       string                    `json:"message_summary,omitempty"`
-	Error                *responsesDiagnosticError `json:"error,omitempty"`
-	OutputTypesTruncated bool                      `json:"output_types_truncated,omitempty"`
-}
-
-type responsesDiagnosticError struct {
-	Type      string `json:"type,omitempty"`
-	Code      string `json:"code,omitempty"`
-	Message   string `json:"message,omitempty"`
-	Param     string `json:"param,omitempty"`
-	RequestID string `json:"request_id,omitempty"`
-}
 
 // sanitizeResponseBody redacts obvious secrets and truncates the body for safe logging.
 func sanitizeResponseBody(body []byte, maxLen int) []byte {
@@ -87,118 +69,6 @@ func sanitizeDiagnosticText(text string, maxLen int) string {
 	}
 
 	return text
-}
-
-func responsesDiagnostic(response *httpclient.Response) (*responsesExecutionDiagnostic, string, bool) {
-	if response == nil || len(response.Body) == 0 {
-		return nil, "", false
-	}
-	var wire struct {
-		Object            string  `json:"object"`
-		ID                string  `json:"id"`
-		Status            *string `json:"status"`
-		IncompleteDetails *struct {
-			Reason string `json:"reason"`
-		} `json:"incomplete_details"`
-		Output []struct {
-			Type    string  `json:"type"`
-			Text    *string `json:"text"`
-			Refusal *string `json:"refusal"`
-			Content []struct {
-				Type    string  `json:"type"`
-				Text    *string `json:"text"`
-				Refusal *string `json:"refusal"`
-			} `json:"content"`
-		} `json:"output"`
-		Error *responsesDiagnosticError `json:"error"`
-	}
-	if err := json.Unmarshal(response.Body, &wire); err != nil {
-		return nil, "", false
-	}
-	responsesRequest := response.Request != nil && response.Request.APIFormat == llm.APIFormatOpenAIResponse.String()
-	if !responsesRequest && wire.Object != "response" {
-		return nil, "", false
-	}
-	if wire.Object != "response" && wire.ID == "" && wire.Status == nil && len(wire.Output) == 0 && wire.Error == nil {
-		return nil, "", false
-	}
-
-	diagnostic := &responsesExecutionDiagnostic{Status: "unknown"}
-	if wire.Status != nil && strings.TrimSpace(*wire.Status) != "" {
-		diagnostic.Status = sanitizeDiagnosticText(*wire.Status, 64)
-	}
-	if wire.IncompleteDetails != nil {
-		diagnostic.IncompleteReason = sanitizeDiagnosticText(wire.IncompleteDetails.Reason, 128)
-	}
-	if wire.Error != nil {
-		diagnostic.Error = &responsesDiagnosticError{
-			Type:      sanitizeDiagnosticText(wire.Error.Type, 128),
-			Code:      sanitizeDiagnosticText(wire.Error.Code, 128),
-			Message:   sanitizeDiagnosticText(wire.Error.Message, 512),
-			Param:     sanitizeDiagnosticText(wire.Error.Param, 128),
-			RequestID: sanitizeDiagnosticText(wire.Error.RequestID, 128),
-		}
-	}
-
-	for _, item := range wire.Output {
-		if len(diagnostic.OutputTypes) < maxResponsesDiagnosticOutputTypes {
-			diagnostic.OutputTypes = append(diagnostic.OutputTypes, sanitizeDiagnosticText(item.Type, 64))
-		} else {
-			diagnostic.OutputTypesTruncated = true
-		}
-		if diagnostic.RefusalSummary == "" && item.Refusal != nil {
-			diagnostic.RefusalSummary = sanitizeDiagnosticText(*item.Refusal, 512)
-		}
-		if diagnostic.MessageSummary == "" && item.Text != nil {
-			diagnostic.MessageSummary = sanitizeDiagnosticText(*item.Text, 512)
-		}
-		for _, content := range item.Content {
-			if diagnostic.RefusalSummary == "" && content.Type == "refusal" && content.Refusal != nil {
-				diagnostic.RefusalSummary = sanitizeDiagnosticText(*content.Refusal, 512)
-			}
-			if diagnostic.MessageSummary == "" && content.Type == "output_text" && content.Text != nil {
-				diagnostic.MessageSummary = sanitizeDiagnosticText(*content.Text, 512)
-			}
-		}
-	}
-
-	return diagnostic, wire.ID, true
-}
-
-func responsesDiagnosticForError(response *httpclient.Response, err error, request *httpclient.Request) (*responsesExecutionDiagnostic, string, bool) {
-	if diagnostic, externalID, ok := responsesDiagnostic(response); ok {
-		return diagnostic, externalID, true
-	}
-
-	httpErr, ok := xerrors.As[*httpclient.Error](err)
-	if !ok || len(httpErr.Body) == 0 {
-		return nil, "", false
-	}
-
-	return responsesDiagnostic(&httpclient.Response{Body: httpErr.Body, Request: request})
-}
-
-func sanitizedResponsesDiagnosticError(err error) error {
-	if errors.Is(err, context.Canceled) {
-		return context.Canceled
-	}
-
-	message := sanitizeDiagnosticText(ExtractErrorMessage(err), 512)
-	if responseErr, ok := xerrors.As[*llm.ResponseError](err); ok {
-		sanitized := *responseErr
-		sanitized.Detail = responseErr.Detail
-		sanitized.Detail.Message = message
-
-		return &sanitized
-	}
-	if httpErr, ok := xerrors.As[*httpclient.Error](err); ok {
-		return &llm.ResponseError{
-			StatusCode: httpErr.StatusCode,
-			Detail:     llm.ErrorDetail{Message: message},
-		}
-	}
-
-	return errors.New(message)
 }
 
 // persistRequestExecutionMiddleware ensures a request execution exists and handles error updates.
@@ -396,14 +266,20 @@ func (m *persistRequestExecutionMiddleware) OnOutboundRawError(ctx context.Conte
 	defer cancel()
 
 	var updateErr error
-	if diagnostic, externalID, ok := responsesDiagnosticForError(m.rawResponse, err, state.RawProviderRequest); ok {
+	if responseBody, ok := extractErrorResponseBody(m.rawResponse, err); ok {
 		updateErr = state.RequestService.UpdateRequestExecutionTerminated(
 			persistCtx,
 			state.RequestExec.ID,
-			sanitizedResponsesDiagnosticError(err),
-			externalID,
-			diagnostic,
+			errorForExecutionPersistence(m.rawResponse, err),
+			terminalResponseID(responseBody),
+			responseBody,
 			latencyMetrics(state.Perf),
+		)
+	} else if errors.Is(err, context.Canceled) {
+		updateErr = state.RequestService.UpdateRequestExecutionCanceled(
+			persistCtx,
+			state.RequestExec.ID,
+			ExtractErrorMessage(err),
 		)
 	} else {
 		updateErr = state.RequestService.UpdateRequestExecutionFailed(
@@ -418,7 +294,7 @@ func (m *persistRequestExecutionMiddleware) OnOutboundRawError(ctx context.Conte
 	}
 }
 
-// ExtractErrorInfo extracts HTTP status code and sanitized response body from error.
+// ExtractErrorInfo extracts the HTTP status code from an error.
 func ExtractErrorInfo(err error) *biz.ExecutionErrorInfo {
 	httpErr, ok := xerrors.As[*httpclient.Error](err)
 	if !ok {
@@ -427,6 +303,65 @@ func ExtractErrorInfo(err error) *biz.ExecutionErrorInfo {
 
 	return &biz.ExecutionErrorInfo{
 		StatusCode: &httpErr.StatusCode,
+	}
+}
+
+func extractErrorResponseBody(response *httpclient.Response, err error) ([]byte, bool) {
+	httpErr, ok := xerrors.As[*httpclient.Error](err)
+	if ok && len(httpErr.Body) > 0 {
+		return jsonSafeResponseBody(httpErr.Body), true
+	}
+	if response != nil && len(response.Body) > 0 {
+		return jsonSafeResponseBody(response.Body), true
+	}
+
+	return nil, false
+}
+
+func jsonSafeResponseBody(body []byte) []byte {
+	if json.Valid(body) {
+		return body
+	}
+	if utf8.Valid(body) {
+		encoded, err := json.Marshal(string(body))
+		if err == nil {
+			return encoded
+		}
+	}
+
+	encoded := make([]byte, 0, len(body)*2)
+	encoded = append(encoded, `{"encoding":"base64","data":"`...)
+	encoded = base64.StdEncoding.AppendEncode(encoded, body)
+	return append(encoded, '"', '}')
+}
+
+func errorForExecutionPersistence(response *httpclient.Response, err error) error {
+	if errors.Is(err, context.Canceled) {
+		return context.Canceled
+	}
+
+	message := sanitizeDiagnosticText(ExtractErrorMessage(err), 512)
+	if responseErr, ok := xerrors.As[*llm.ResponseError](err); ok {
+		sanitized := *responseErr
+		sanitized.Detail = responseErr.Detail
+		sanitized.Detail.Message = message
+
+		return &sanitized
+	}
+
+	statusCode := 0
+	if httpErr, ok := xerrors.As[*httpclient.Error](err); ok {
+		statusCode = httpErr.StatusCode
+	} else if response != nil && response.StatusCode >= 400 {
+		statusCode = response.StatusCode
+	}
+	if statusCode == 0 {
+		return errors.New(message)
+	}
+
+	return &llm.ResponseError{
+		StatusCode: statusCode,
+		Detail:     llm.ErrorDetail{Message: message},
 	}
 }
 

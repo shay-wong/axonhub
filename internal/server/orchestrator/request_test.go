@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -326,8 +327,7 @@ func TestPersistRequestExecutionMiddleware_OnOutboundLlmResponse_PersistsTermina
 	}
 }
 
-// Conversion failures retain only the provider outcome needed to diagnose the failed execution.
-func TestPersistRequestExecutionMiddleware_OnOutboundRawError_PersistsResponsesDiagnostic(t *testing.T) {
+func TestPersistRequestExecutionMiddleware_OnOutboundRawError_PersistsRawResponsesBody(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
 	defer client.Close()
 
@@ -403,17 +403,7 @@ func TestPersistRequestExecutionMiddleware_OnOutboundRawError_PersistsResponsesD
 	require.Equal(t, requestexecution.StatusFailed, updated.Status)
 	require.Equal(t, "resp_diagnostic", updated.ExternalID)
 	require.Equal(t, "image conversion failed api_key=[REDACTED]", updated.ErrorMessage)
-	wantDiagnostic := `{
-		"status":"incomplete",
-		"incomplete_reason":"content_filter",
-		"output_types":["message","image_generation_call"],
-		"refusal_summary":"Policy refusal for [EMAIL REDACTED] credential {\"api_key\":\"[REDACTED]\"} [IMAGE DATA REDACTED]",
-		"message_summary":"Provider message api-key: [REDACTED]",
-		"error":{"type":"image_error","code":"generation_failed","message":"Provider exposed [API KEY REDACTED]","param":"prompt","request_id":"req_diagnostic"}
-	}`
-	require.JSONEq(t, wantDiagnostic, string(updated.ResponseBody))
-	require.NotContains(t, string(updated.ResponseBody), strings.Repeat("B", 128))
-	require.NotContains(t, string(updated.ResponseBody), "sk-")
+	require.JSONEq(t, string(providerBody), string(updated.ResponseBody))
 
 	// Non-2xx provider responses carry their body on httpclient.Error, not rawResponse.
 	httpExecution, err := client.RequestExecution.Create().
@@ -441,7 +431,142 @@ func TestPersistRequestExecutionMiddleware_OnOutboundRawError_PersistsResponsesD
 	require.Equal(t, "Provider exposed [API KEY REDACTED]", updatedHTTP.ErrorMessage)
 	require.NotNil(t, updatedHTTP.ResponseStatusCode)
 	require.Equal(t, 429, *updatedHTTP.ResponseStatusCode)
-	require.JSONEq(t, wantDiagnostic, string(updatedHTTP.ResponseBody))
+	require.JSONEq(t, string(providerBody), string(updatedHTTP.ResponseBody))
+
+	// Ordinary provider errors (for example #157431) must persist their original body too.
+	ordinaryExecution, err := client.RequestExecution.Create().
+		SetRequestID(requestRow.ID).
+		SetProjectID(project.ID).
+		SetChannelID(ch.ID).
+		SetModelID("gpt-5.4-mini").
+		SetFormat(llm.APIFormatOpenAIResponse.String()).
+		SetRequestBody([]byte(`{"model":"gpt-5.4-mini"}`)).
+		SetStatus(requestexecution.StatusProcessing).
+		Save(ctx)
+	require.NoError(t, err)
+
+	body := []byte(`{"code":"USAGE_LIMIT_EXCEEDED","message":"daily usage limit exceeded"}`)
+	state.RequestExec = ordinaryExecution
+	middleware.rawResponse = nil
+	middleware.OnOutboundRawError(ctx, &httpclient.Error{
+		StatusCode: 429,
+		Status:     "429 Too Many Requests",
+		Body:       body,
+	})
+
+	updatedOrdinary, err := client.RequestExecution.Get(ctx, ordinaryExecution.ID)
+	require.NoError(t, err)
+	require.Equal(t, requestexecution.StatusFailed, updatedOrdinary.Status)
+	require.NotNil(t, updatedOrdinary.ResponseStatusCode)
+	require.Equal(t, 429, *updatedOrdinary.ResponseStatusCode)
+	require.JSONEq(t, string(body), string(updatedOrdinary.ResponseBody))
+
+	// Cancellation without an upstream body remains canceled rather than failed.
+	canceledExecution, err := client.RequestExecution.Create().
+		SetRequestID(requestRow.ID).
+		SetProjectID(project.ID).
+		SetChannelID(ch.ID).
+		SetModelID("gpt-5.4-mini").
+		SetRequestBody([]byte(`{"model":"gpt-5.4-mini"}`)).
+		SetStatus(requestexecution.StatusProcessing).
+		Save(ctx)
+	require.NoError(t, err)
+	state.RequestExec = canceledExecution
+	middleware.rawResponse = nil
+	middleware.OnOutboundRawError(ctx, context.Canceled)
+
+	updatedCanceled, err := client.RequestExecution.Get(ctx, canceledExecution.ID)
+	require.NoError(t, err)
+	require.Equal(t, requestexecution.StatusCanceled, updatedCanceled.Status)
+	require.Empty(t, updatedCanceled.ResponseBody)
+
+	// Cancellation can also carry an upstream body, which must be retained.
+	bodyCanceledExecution, err := client.RequestExecution.Create().
+		SetRequestID(requestRow.ID).
+		SetProjectID(project.ID).
+		SetChannelID(ch.ID).
+		SetModelID("gpt-5.4-mini").
+		SetRequestBody([]byte(`{"model":"gpt-5.4-mini"}`)).
+		SetStatus(requestexecution.StatusProcessing).
+		Save(ctx)
+	require.NoError(t, err)
+	canceledBody := []byte(`{"error":{"message":"request canceled"}}`)
+	state.RequestExec = bodyCanceledExecution
+	middleware.OnOutboundRawError(ctx, &httpclient.Error{
+		StatusCode: 499,
+		Body:       canceledBody,
+		Err:        context.Canceled,
+	})
+
+	updatedBodyCanceled, err := client.RequestExecution.Get(ctx, bodyCanceledExecution.ID)
+	require.NoError(t, err)
+	require.Equal(t, requestexecution.StatusCanceled, updatedBodyCanceled.Status)
+	require.Equal(t, canceledBody, []byte(updatedBodyCanceled.ResponseBody))
+}
+
+func TestExtractErrorResponseBody(t *testing.T) {
+	body, ok := extractErrorResponseBody(
+		&httpclient.Response{Body: []byte(`{"source":"raw-response"}`)},
+		&httpclient.Error{Body: []byte(`{"source":"http-error"}`)},
+	)
+	require.True(t, ok)
+	require.JSONEq(t,
+		`{"source":"http-error"}`,
+		string(body),
+	)
+
+	body, ok = extractErrorResponseBody(&httpclient.Response{Body: []byte("upstream unavailable")}, errors.New("conversion failed"))
+	require.True(t, ok)
+	require.JSONEq(t,
+		`"upstream unavailable"`,
+		string(body),
+	)
+	body, ok = extractErrorResponseBody(&httpclient.Response{Body: []byte{'A', 0x01, 'B'}}, errors.New("conversion failed"))
+	require.True(t, ok)
+	require.True(t, json.Valid(body))
+	require.JSONEq(t, `"A\u0001B"`, string(body))
+
+	rawBytes := []byte{0xff, 0x00, 'A'}
+	body, ok = extractErrorResponseBody(&httpclient.Response{Body: rawBytes}, errors.New("conversion failed"))
+	require.True(t, ok)
+	var encoded struct {
+		Encoding string `json:"encoding"`
+		Data     string `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(body, &encoded))
+	require.Equal(t, "base64", encoded.Encoding)
+	decoded, err := base64.StdEncoding.DecodeString(encoded.Data)
+	require.NoError(t, err)
+	require.Equal(t, rawBytes, decoded)
+
+	body, ok = extractErrorResponseBody(nil, errors.New("connection reset"))
+	require.False(t, ok)
+	require.Nil(t, body)
+}
+
+func TestErrorForExecutionPersistence_PreservesCancellation(t *testing.T) {
+	err := errorForExecutionPersistence(nil, &httpclient.Error{
+		StatusCode: 499,
+		Body:       []byte(`{"error":"canceled"}`),
+		Err:        context.Canceled,
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+
+	err = errorForExecutionPersistence(nil, &llm.ResponseError{
+		StatusCode: 422,
+		Detail: llm.ErrorDetail{
+			Code:    "invalid_request",
+			Message: "Provider exposed sk-persist-secret",
+			Type:    "request_error",
+		},
+	})
+	responseErr, ok := err.(*llm.ResponseError)
+	require.True(t, ok)
+	require.Equal(t, 422, responseErr.StatusCode)
+	require.Equal(t, "invalid_request", responseErr.Detail.Code)
+	require.Equal(t, "request_error", responseErr.Detail.Type)
+	require.Equal(t, "Provider exposed [API KEY REDACTED]", responseErr.Detail.Message)
 }
 
 // A retried attempt must never persist the previous attempt's provider response.
@@ -454,48 +579,6 @@ func TestPersistRequestExecutionMiddleware_OnOutboundRawRequest_ClearsRawRespons
 	_, err := middleware.OnOutboundRawRequest(t.Context(), &httpclient.Request{})
 	require.NoError(t, err)
 	require.Nil(t, middleware.rawResponse)
-}
-
-func TestResponsesDiagnostic_RequiresResponsesMarkerWithoutRequestFormat(t *testing.T) {
-	diagnostic, externalID, ok := responsesDiagnostic(&httpclient.Response{
-		Body: []byte(`{"id":"not_a_response","status":"completed","output":[]}`),
-	})
-	require.False(t, ok)
-	require.Nil(t, diagnostic)
-	require.Empty(t, externalID)
-}
-
-// Codex image requests keep their original API format even though the aggregated body is a Responses object.
-func TestResponsesDiagnostic_AcceptsResponsesBodyForImageBridge(t *testing.T) {
-	diagnostic, externalID, ok := responsesDiagnostic(&httpclient.Response{
-		Body: []byte(`{"object":"response","id":"resp_image","status":"incomplete","output":[{"type":"message"}]}`),
-		Request: &httpclient.Request{
-			APIFormat: llm.APIFormatOpenAIImageEdit.String(),
-		},
-	})
-
-	require.True(t, ok)
-	require.Equal(t, "resp_image", externalID)
-	require.Equal(t, "incomplete", diagnostic.Status)
-	require.Equal(t, []string{"message"}, diagnostic.OutputTypes)
-}
-
-// Provider output cardinality must not make the persisted diagnostic unbounded.
-func TestResponsesDiagnostic_BoundsOutputTypes(t *testing.T) {
-	output := make([]map[string]string, maxResponsesDiagnosticOutputTypes+5)
-	for i := range output {
-		output[i] = map[string]string{"type": "message"}
-	}
-	body, err := json.Marshal(map[string]any{
-		"object": "response",
-		"output": output,
-	})
-	require.NoError(t, err)
-
-	diagnostic, _, ok := responsesDiagnostic(&httpclient.Response{Body: body})
-	require.True(t, ok)
-	require.Len(t, diagnostic.OutputTypes, maxResponsesDiagnosticOutputTypes)
-	require.True(t, diagnostic.OutputTypesTruncated)
 }
 
 func TestPersistRequestMiddleware_Name(t *testing.T) {
