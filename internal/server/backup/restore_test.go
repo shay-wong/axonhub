@@ -269,7 +269,7 @@ func TestBackupService_Restore_SystemModelSettingsRemapChannelIDs(t *testing.T) 
 	require.Equal(t, restoredChannel.ID, restoredSettings.DeveloperSettings[0].Associations[0].ChannelModel.ChannelID)
 }
 
-func TestBackupService_Restore_SystemModelSettingsDropsUnmappedChannelIDs(t *testing.T) {
+func TestBackupService_Restore_SystemModelSettingsPreservesChannelIDsWithoutChannelRestore(t *testing.T) {
 	client, service, ctx := setupBackupTest(t)
 	defer client.Close()
 
@@ -307,7 +307,36 @@ func TestBackupService_Restore_SystemModelSettingsDropsUnmappedChannelIDs(t *tes
 	require.NoError(t, err)
 	var restoredSettings biz.SystemModelSettings
 	require.NoError(t, json.Unmarshal([]byte(restoredConfig.Value), &restoredSettings))
-	require.Empty(t, restoredSettings.DeveloperSettings[0].Associations)
+	require.Equal(t, localChannel.ID, restoredSettings.DeveloperSettings[0].Associations[0].ChannelModel.ChannelID)
+}
+
+func TestBackupService_Restore_ModelSettingsPreservesChannelIDsWithoutChannelRestore(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	localChannel := createBackupTestChannel(t, client, ctx, "Local Channel", channel.TypeOpenai)
+	modelData := createBackupTestModel(t, client, ctx, "openai", "gpt-4")
+	settings := &objects.ModelSettings{Associations: []*objects.ModelAssociation{{
+		Type: "channel_model",
+		ChannelModel: &objects.ChannelModelAssociation{
+			ChannelID: localChannel.ID,
+			ModelID:   "gpt-4",
+		},
+	}}}
+	_, err := client.Model.UpdateOneID(modelData.ID).SetSettings(settings).Save(ctx)
+	require.NoError(t, err)
+
+	data, err := service.Backup(ctx, BackupOptions{IncludeModels: true})
+	require.NoError(t, err)
+	err = service.Restore(ctx, data, RestoreOptions{
+		IncludeModels:         true,
+		ModelConflictStrategy: ConflictStrategyOverwrite,
+	})
+	require.NoError(t, err)
+
+	restoredModel, err := client.Model.Get(ctx, modelData.ID)
+	require.NoError(t, err)
+	require.Equal(t, localChannel.ID, restoredModel.Settings.Associations[0].ChannelModel.ChannelID)
 }
 
 func TestBackupService_Restore(t *testing.T) {

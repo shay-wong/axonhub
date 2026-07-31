@@ -140,7 +140,7 @@ func (svc *BackupService) restore(ctx context.Context, db *ent.Client, backupDat
 	}
 
 	if opts.IncludeSystemConfigs {
-		if err := svc.restoreSystemConfigs(ctx, db, backupData.SystemConfigs, channelIDMap, opts.IncludeAPIKeys); err != nil {
+		if err := svc.restoreSystemConfigs(ctx, db, backupData.SystemConfigs, channelIDMap, opts.IncludeChannels, opts.IncludeAPIKeys); err != nil {
 			return err
 		}
 	}
@@ -186,7 +186,7 @@ func (svc *BackupService) restore(ctx context.Context, db *ent.Client, backupDat
 	return nil
 }
 
-func (svc *BackupService) restoreSystemConfigs(ctx context.Context, db *ent.Client, configs []*BackupSystemConfig, channelIDMap map[int]int, includeSecrets bool) error {
+func (svc *BackupService) restoreSystemConfigs(ctx context.Context, db *ent.Client, configs []*BackupSystemConfig, channelIDMap map[int]int, remapChannelIDs, includeSecrets bool) error {
 	ctx = ent.NewContext(ctx, db)
 	systemService := biz.NewSystemService(biz.SystemServiceParams{
 		Ent:         db,
@@ -204,7 +204,7 @@ func (svc *BackupService) restoreSystemConfigs(ctx context.Context, db *ent.Clie
 			continue
 		}
 
-		if err := restoreSystemConfig(ctx, systemService, config.Key, config.Value, channelIDMap, hasStoragePolicy); err != nil {
+		if err := restoreSystemConfig(ctx, systemService, config.Key, config.Value, channelIDMap, remapChannelIDs, hasStoragePolicy); err != nil {
 			return fmt.Errorf("failed to restore system configuration %q: %w", config.Key, err)
 		}
 	}
@@ -212,7 +212,7 @@ func (svc *BackupService) restoreSystemConfigs(ctx context.Context, db *ent.Clie
 	return nil
 }
 
-func restoreSystemConfig(ctx context.Context, svc *biz.SystemService, key, value string, channelIDMap map[int]int, hasStoragePolicy bool) error {
+func restoreSystemConfig(ctx context.Context, svc *biz.SystemService, key, value string, channelIDMap map[int]int, remapChannelIDs, hasStoragePolicy bool) error {
 	switch key {
 	case biz.SystemKeyBrandName:
 		return svc.SetBrandName(ctx, value)
@@ -257,11 +257,13 @@ func restoreSystemConfig(ctx context.Context, svc *biz.SystemService, key, value
 		if err != nil {
 			return err
 		}
-		for _, developer := range settings.DeveloperSettings {
-			if developer != nil {
-				modelSettings := &objects.ModelSettings{Associations: developer.Associations}
-				remapModelSettingsChannelIDs(modelSettings, channelIDMap)
-				developer.Associations = modelSettings.Associations
+		if remapChannelIDs {
+			for _, developer := range settings.DeveloperSettings {
+				if developer != nil {
+					modelSettings := &objects.ModelSettings{Associations: developer.Associations}
+					remapModelSettingsChannelIDs(modelSettings, channelIDMap)
+					developer.Associations = modelSettings.Associations
+				}
 			}
 		}
 		return svc.SetModelSettings(ctx, settings)
@@ -1052,7 +1054,9 @@ func (svc *BackupService) restoreModels(ctx context.Context, db *ent.Client, mod
 			continue
 		}
 
-		remapModelSettingsChannelIDs(modelData.Settings, channelIDMap)
+		if opts.IncludeChannels {
+			remapModelSettingsChannelIDs(modelData.Settings, channelIDMap)
+		}
 
 		existing, err := db.Model.Query().
 			Where(
