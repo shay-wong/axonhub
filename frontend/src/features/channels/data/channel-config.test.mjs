@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import ts from 'typescript';
 
 const dataDir = import.meta.dirname;
 const srcRoot = join(dataDir, '..', '..', '..');
@@ -13,6 +14,15 @@ function read(relativePath) {
 function parseLocale(locale) {
   return JSON.parse(read(`locales/${locale}/channels.json`));
 }
+
+test('Anthropic channels include Claude Opus 5 in their default models', () => {
+  const channelsConfig = ts.transpileModule(read('features/channels/data/config_channels.ts'), {
+    compilerOptions: { removeComments: true },
+  }).outputText;
+
+  assert.match(channelsConfig, /\n\s+anthropic:\s*{[^}]*defaultModels:\s*\[[^\]]*'claude-opus-5'/);
+  assert.match(channelsConfig, /\n\s+claudecode:\s*{[^}]*defaultModels:\s*\[[^\]]*'claude-opus-5'/);
+});
 
 test('Cline is available as a channel type in frontend schemas and configs', () => {
   const schema = read('features/channels/data/schema.ts');
