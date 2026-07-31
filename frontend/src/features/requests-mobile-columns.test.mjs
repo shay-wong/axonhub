@@ -15,3 +15,12 @@ test('mobile request table hides the beta speed-mode column by default below 768
   assert.match(table, /window\.innerWidth < MOBILE_BREAKPOINT/);
   assert.match(table, /Object\.fromEntries\(DEFAULT_MOBILE_HIDDEN_COLUMN_IDS\.map\(\(id\) => \[id, false\]\)\)/);
 });
+
+test('legacy user visibility overrides stay hidden on desktop and mobile', () => {
+  const legacy = { source: false, requestedServiceTier: false };
+  const mobileDefaults = { source: false, requestedServiceTier: false, channel: false };
+
+  assert.match(table, /else \{\s+overrides = parsed as VisibilityState;\s+\}/);
+  assert.deepEqual({ ...legacy }, legacy);
+  assert.deepEqual({ ...mobileDefaults, ...legacy }, mobileDefaults);
+});

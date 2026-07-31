@@ -145,17 +145,7 @@ export function RequestsTable({
             const stored = (parsed as { overrides?: VisibilityState }).overrides;
             if (stored && typeof stored === 'object') overrides = stored;
           } else {
-            // Legacy unversioned payload: plain visibility map that may include
-            // responsive defaults from the old mobile persistence. Drop
-            // false-valued entries for mobile-hidden columns (they were injected
-            // defaults, not user intent); keep true entries (explicit user shows)
-            // and any entry for non-mobile-hidden columns.
-            const legacy = parsed as VisibilityState;
-            Object.entries(legacy).forEach(([id, visible]) => {
-              if (visible === true || !DEFAULT_MOBILE_HIDDEN_COLUMN_IDS.includes(id)) {
-                overrides[id] = visible;
-              }
-            });
+            overrides = parsed as VisibilityState;
           }
         }
       }
