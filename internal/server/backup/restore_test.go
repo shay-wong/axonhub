@@ -269,74 +269,125 @@ func TestBackupService_Restore_SystemModelSettingsRemapChannelIDs(t *testing.T) 
 	require.Equal(t, restoredChannel.ID, restoredSettings.DeveloperSettings[0].Associations[0].ChannelModel.ChannelID)
 }
 
-func TestBackupService_Restore_SystemModelSettingsPreservesChannelIDsWithoutChannelRestore(t *testing.T) {
-	client, service, ctx := setupBackupTest(t)
-	defer client.Close()
+func TestBackupService_Restore_SystemModelSettingsMapsKnownChannelsAndPreservesWithoutPayload(t *testing.T) {
+	for _, test := range []struct {
+		name                  string
+		includeChannelPayload bool
+		includeChannels       bool
+	}{
+		{name: "restore excludes channels", includeChannelPayload: true},
+		{name: "backup omits channels", includeChannels: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client, service, ctx := setupBackupTest(t)
+			defer client.Close()
 
-	localChannel := createBackupTestChannel(t, client, ctx, "Local Channel", channel.TypeOpenai)
-	settings, err := json.Marshal(biz.SystemModelSettings{
-		DeveloperSettings: []*biz.DeveloperModelSettings{{
-			Developer: "openai",
-			Associations: []*objects.ModelAssociation{{
-				Type: "channel_model",
-				ChannelModel: &objects.ChannelModelAssociation{
-					ChannelID: localChannel.ID,
-					ModelID:   "gpt-4",
-				},
-			}},
-		}},
-	})
-	require.NoError(t, err)
+			localChannel := createBackupTestChannel(t, client, ctx, "Local Channel", channel.TypeOpenai)
+			associationChannelID := localChannel.ID
+			var channels []*BackupChannel
+			if test.includeChannelPayload {
+				associationChannelID = 456
+				channels = []*BackupChannel{{
+					Channel: ent.Channel{ID: associationChannelID, Name: localChannel.Name},
+				}}
+			}
+			settings, err := json.Marshal(biz.SystemModelSettings{
+				DeveloperSettings: []*biz.DeveloperModelSettings{{
+					Developer: "openai",
+					Associations: []*objects.ModelAssociation{{
+						Type: "channel_model",
+						ChannelModel: &objects.ChannelModelAssociation{
+							ChannelID: associationChannelID,
+							ModelID:   "gpt-4",
+						},
+					}},
+				}},
+			})
+			require.NoError(t, err)
 
-	data, err := json.Marshal(BackupData{
-		Version: BackupVersion,
-		SystemConfigs: []*BackupSystemConfig{{
-			Key:   biz.SystemKeyModelSettings,
-			Value: string(settings),
-		}},
-		Channels: []*BackupChannel{{
-			Channel: ent.Channel{ID: localChannel.ID, Name: "Source Channel"},
-		}},
-	})
-	require.NoError(t, err)
+			backupData := BackupData{
+				Version: BackupVersion,
+				SystemConfigs: []*BackupSystemConfig{{
+					Key:   biz.SystemKeyModelSettings,
+					Value: string(settings),
+				}},
+				Channels: channels,
+			}
 
-	err = service.Restore(ctx, data, RestoreOptions{IncludeSystemConfigs: true})
-	require.NoError(t, err)
+			data, err := json.Marshal(backupData)
+			require.NoError(t, err)
 
-	restoredConfig, err := client.System.Query().Where(system.KeyEQ(biz.SystemKeyModelSettings)).Only(ctx)
-	require.NoError(t, err)
-	var restoredSettings biz.SystemModelSettings
-	require.NoError(t, json.Unmarshal([]byte(restoredConfig.Value), &restoredSettings))
-	require.Equal(t, localChannel.ID, restoredSettings.DeveloperSettings[0].Associations[0].ChannelModel.ChannelID)
+			err = service.Restore(ctx, data, RestoreOptions{
+				IncludeSystemConfigs: true,
+				IncludeChannels:      test.includeChannels,
+			})
+			require.NoError(t, err)
+
+			restoredConfig, err := client.System.Query().Where(system.KeyEQ(biz.SystemKeyModelSettings)).Only(ctx)
+			require.NoError(t, err)
+			var restoredSettings biz.SystemModelSettings
+			require.NoError(t, json.Unmarshal([]byte(restoredConfig.Value), &restoredSettings))
+			require.Equal(t, localChannel.ID, restoredSettings.DeveloperSettings[0].Associations[0].ChannelModel.ChannelID)
+		})
+	}
 }
 
-func TestBackupService_Restore_ModelSettingsPreservesChannelIDsWithoutChannelRestore(t *testing.T) {
-	client, service, ctx := setupBackupTest(t)
-	defer client.Close()
+func TestBackupService_Restore_ModelSettingsMapsKnownChannelsAndPreservesWithoutPayload(t *testing.T) {
+	for _, test := range []struct {
+		name                  string
+		includeChannelPayload bool
+		includeChannels       bool
+	}{
+		{name: "restore excludes channels", includeChannelPayload: true},
+		{name: "backup omits channels", includeChannels: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client, service, ctx := setupBackupTest(t)
+			defer client.Close()
 
-	localChannel := createBackupTestChannel(t, client, ctx, "Local Channel", channel.TypeOpenai)
-	modelData := createBackupTestModel(t, client, ctx, "openai", "gpt-4")
-	settings := &objects.ModelSettings{Associations: []*objects.ModelAssociation{{
-		Type: "channel_model",
-		ChannelModel: &objects.ChannelModelAssociation{
-			ChannelID: localChannel.ID,
-			ModelID:   "gpt-4",
-		},
-	}}}
-	_, err := client.Model.UpdateOneID(modelData.ID).SetSettings(settings).Save(ctx)
-	require.NoError(t, err)
+			localChannel := createBackupTestChannel(t, client, ctx, "Local Channel", channel.TypeOpenai)
+			modelData := createBackupTestModel(t, client, ctx, "openai", "gpt-4")
+			associationChannelID := localChannel.ID
+			var channels []*BackupChannel
+			if test.includeChannelPayload {
+				associationChannelID = 456
+				channels = []*BackupChannel{{
+					Channel: ent.Channel{ID: associationChannelID, Name: localChannel.Name},
+				}}
+			}
+			modelData.Settings = &objects.ModelSettings{Associations: []*objects.ModelAssociation{{
+				Type: "channel_model",
+				ChannelModel: &objects.ChannelModelAssociation{
+					ChannelID: associationChannelID,
+					ModelID:   "gpt-4",
+				},
+				Regex: &objects.RegexAssociation{
+					Pattern: ".*",
+					Exclude: []*objects.ExcludeAssociation{{
+						ChannelIds: []int{associationChannelID, 999},
+					}},
+				},
+			}}}
 
-	data, err := service.Backup(ctx, BackupOptions{IncludeModels: true})
-	require.NoError(t, err)
-	err = service.Restore(ctx, data, RestoreOptions{
-		IncludeModels:         true,
-		ModelConflictStrategy: ConflictStrategyOverwrite,
-	})
-	require.NoError(t, err)
+			data, err := json.Marshal(BackupData{
+				Version:  BackupVersion,
+				Channels: channels,
+				Models:   []*BackupModel{{Model: *modelData}},
+			})
+			require.NoError(t, err)
+			err = service.Restore(ctx, data, RestoreOptions{
+				IncludeChannels:       test.includeChannels,
+				IncludeModels:         true,
+				ModelConflictStrategy: ConflictStrategyOverwrite,
+			})
+			require.NoError(t, err)
 
-	restoredModel, err := client.Model.Get(ctx, modelData.ID)
-	require.NoError(t, err)
-	require.Equal(t, localChannel.ID, restoredModel.Settings.Associations[0].ChannelModel.ChannelID)
+			restoredModel, err := client.Model.Get(ctx, modelData.ID)
+			require.NoError(t, err)
+			require.Equal(t, localChannel.ID, restoredModel.Settings.Associations[0].ChannelModel.ChannelID)
+			require.Equal(t, []int{localChannel.ID, 999}, restoredModel.Settings.Associations[0].Regex.Exclude[0].ChannelIds)
+		})
+	}
 }
 
 func TestBackupService_Restore(t *testing.T) {
@@ -505,7 +556,7 @@ func TestBackupService_Restore_RemapChannelIDsInModelSettingsAndAPIKeyProfiles(t
 								Regex: &objects.RegexAssociation{
 									Pattern: ".*",
 									Exclude: []*objects.ExcludeAssociation{
-										{ChannelIds: []int{oldChannelID}},
+										{ChannelIds: []int{oldChannelID, 999}},
 									},
 								},
 							},

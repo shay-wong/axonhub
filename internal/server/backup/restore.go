@@ -138,9 +138,10 @@ func (svc *BackupService) restore(ctx context.Context, db *ent.Client, backupDat
 	if err != nil {
 		return err
 	}
+	dropUnmappedChannelIDs := opts.IncludeChannels && len(backupData.Channels) > 0
 
 	if opts.IncludeSystemConfigs {
-		if err := svc.restoreSystemConfigs(ctx, db, backupData.SystemConfigs, channelIDMap, opts.IncludeChannels, opts.IncludeAPIKeys); err != nil {
+		if err := svc.restoreSystemConfigs(ctx, db, backupData.SystemConfigs, channelIDMap, dropUnmappedChannelIDs, opts.IncludeAPIKeys); err != nil {
 			return err
 		}
 	}
@@ -152,7 +153,7 @@ func (svc *BackupService) restore(ctx context.Context, db *ent.Client, backupDat
 	}
 
 	if opts.IncludeModels {
-		if err := svc.restoreModels(ctx, db, backupData.Models, opts, channelIDMap); err != nil {
+		if err := svc.restoreModels(ctx, db, backupData.Models, opts, channelIDMap, dropUnmappedChannelIDs); err != nil {
 			return err
 		}
 	}
@@ -186,7 +187,7 @@ func (svc *BackupService) restore(ctx context.Context, db *ent.Client, backupDat
 	return nil
 }
 
-func (svc *BackupService) restoreSystemConfigs(ctx context.Context, db *ent.Client, configs []*BackupSystemConfig, channelIDMap map[int]int, remapChannelIDs, includeSecrets bool) error {
+func (svc *BackupService) restoreSystemConfigs(ctx context.Context, db *ent.Client, configs []*BackupSystemConfig, channelIDMap map[int]int, dropUnmappedChannelIDs, includeSecrets bool) error {
 	ctx = ent.NewContext(ctx, db)
 	systemService := biz.NewSystemService(biz.SystemServiceParams{
 		Ent:         db,
@@ -204,7 +205,7 @@ func (svc *BackupService) restoreSystemConfigs(ctx context.Context, db *ent.Clie
 			continue
 		}
 
-		if err := restoreSystemConfig(ctx, systemService, config.Key, config.Value, channelIDMap, remapChannelIDs, hasStoragePolicy); err != nil {
+		if err := restoreSystemConfig(ctx, systemService, config.Key, config.Value, channelIDMap, dropUnmappedChannelIDs, hasStoragePolicy); err != nil {
 			return fmt.Errorf("failed to restore system configuration %q: %w", config.Key, err)
 		}
 	}
@@ -212,7 +213,7 @@ func (svc *BackupService) restoreSystemConfigs(ctx context.Context, db *ent.Clie
 	return nil
 }
 
-func restoreSystemConfig(ctx context.Context, svc *biz.SystemService, key, value string, channelIDMap map[int]int, remapChannelIDs, hasStoragePolicy bool) error {
+func restoreSystemConfig(ctx context.Context, svc *biz.SystemService, key, value string, channelIDMap map[int]int, dropUnmappedChannelIDs, hasStoragePolicy bool) error {
 	switch key {
 	case biz.SystemKeyBrandName:
 		return svc.SetBrandName(ctx, value)
@@ -257,13 +258,11 @@ func restoreSystemConfig(ctx context.Context, svc *biz.SystemService, key, value
 		if err != nil {
 			return err
 		}
-		if remapChannelIDs {
-			for _, developer := range settings.DeveloperSettings {
-				if developer != nil {
-					modelSettings := &objects.ModelSettings{Associations: developer.Associations}
-					remapModelSettingsChannelIDs(modelSettings, channelIDMap)
-					developer.Associations = modelSettings.Associations
-				}
+		for _, developer := range settings.DeveloperSettings {
+			if developer != nil {
+				modelSettings := &objects.ModelSettings{Associations: developer.Associations}
+				remapModelSettingsChannelIDs(modelSettings, channelIDMap, dropUnmappedChannelIDs)
+				developer.Associations = modelSettings.Associations
 			}
 		}
 		return svc.SetModelSettings(ctx, settings)
@@ -517,7 +516,7 @@ func (r *usageRestoreResolver) resolveAPIKeyID(apiKeyKey string) (int, bool) {
 	return 0, false
 }
 
-func remapModelSettingsChannelIDs(settings *objects.ModelSettings, channelIDMap map[int]int) {
+func remapModelSettingsChannelIDs(settings *objects.ModelSettings, channelIDMap map[int]int, dropUnmapped bool) {
 	if settings == nil {
 		return
 	}
@@ -530,32 +529,38 @@ func remapModelSettingsChannelIDs(settings *objects.ModelSettings, channelIDMap 
 		if assoc.ChannelModel != nil {
 			newID, ok := channelIDMap[assoc.ChannelModel.ChannelID]
 			if !ok {
-				return true
+				if dropUnmapped {
+					return true
+				}
+			} else {
+				assoc.ChannelModel.ChannelID = newID
 			}
-			assoc.ChannelModel.ChannelID = newID
 		}
 
 		if assoc.ChannelRegex != nil {
 			newID, ok := channelIDMap[assoc.ChannelRegex.ChannelID]
 			if !ok {
-				return true
+				if dropUnmapped {
+					return true
+				}
+			} else {
+				assoc.ChannelRegex.ChannelID = newID
 			}
-			assoc.ChannelRegex.ChannelID = newID
 		}
 
 		if assoc.Regex != nil {
-			remapExcludeAssociationChannelIDs(assoc.Regex.Exclude, channelIDMap)
+			remapExcludeAssociationChannelIDs(assoc.Regex.Exclude, channelIDMap, dropUnmapped)
 		}
 
 		if assoc.ModelID != nil {
-			remapExcludeAssociationChannelIDs(assoc.ModelID.Exclude, channelIDMap)
+			remapExcludeAssociationChannelIDs(assoc.ModelID.Exclude, channelIDMap, dropUnmapped)
 		}
 
 		return false
 	})
 }
 
-func remapExcludeAssociationChannelIDs(exclude []*objects.ExcludeAssociation, channelIDMap map[int]int) {
+func remapExcludeAssociationChannelIDs(exclude []*objects.ExcludeAssociation, channelIDMap map[int]int, dropUnmapped bool) {
 	for _, ex := range exclude {
 		if ex == nil || len(ex.ChannelIds) == 0 {
 			continue
@@ -565,6 +570,8 @@ func remapExcludeAssociationChannelIDs(exclude []*objects.ExcludeAssociation, ch
 		for _, oldID := range ex.ChannelIds {
 			if newID, ok := channelIDMap[oldID]; ok {
 				mappedIDs = append(mappedIDs, newID)
+			} else if !dropUnmapped {
+				mappedIDs = append(mappedIDs, oldID)
 			}
 		}
 		ex.ChannelIds = mappedIDs
@@ -1048,15 +1055,13 @@ func normalizeLegacyModelPrice(price *objects.ModelPrice) {
 	}
 }
 
-func (svc *BackupService) restoreModels(ctx context.Context, db *ent.Client, models []*BackupModel, opts RestoreOptions, channelIDMap map[int]int) error {
+func (svc *BackupService) restoreModels(ctx context.Context, db *ent.Client, models []*BackupModel, opts RestoreOptions, channelIDMap map[int]int, dropUnmappedChannelIDs bool) error {
 	for _, modelData := range models {
 		if modelData == nil {
 			continue
 		}
 
-		if opts.IncludeChannels {
-			remapModelSettingsChannelIDs(modelData.Settings, channelIDMap)
-		}
+		remapModelSettingsChannelIDs(modelData.Settings, channelIDMap, dropUnmappedChannelIDs)
 
 		existing, err := db.Model.Query().
 			Where(
