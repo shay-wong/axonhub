@@ -31,6 +31,7 @@ export const DEFAULT_MOBILE_HIDDEN_COLUMN_IDS = [
   'apiFormat',
   'passThrough',
   'reasoningEffort',
+  'requestedServiceTier',
   'stream',
   'source',
   'clientIP',
