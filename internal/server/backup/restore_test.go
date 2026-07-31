@@ -19,14 +19,302 @@ import (
 	"github.com/looplj/axonhub/internal/ent/model"
 	"github.com/looplj/axonhub/internal/ent/project"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
+	"github.com/looplj/axonhub/internal/ent/system"
 	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/internal/pkg/xcache"
 	"github.com/looplj/axonhub/internal/server/biz"
 )
+
+type recordingProviderQuotaInvalidator struct {
+	channelIDs []int
+}
+
+func (r *recordingProviderQuotaInvalidator) InvalidateChannelQuota(_ context.Context, channelID int) error {
+	r.channelIDs = append(r.channelIDs, channelID)
+	return nil
+}
+
+func TestBackupService_Restore_SystemConfigs(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+	service.systemService = biz.NewSystemService(biz.SystemServiceParams{
+		Ent:         client,
+		CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+	})
+
+	_, err := client.System.Create().
+		SetKey(biz.SystemKeyRetryPolicy).
+		SetValue(`{"max_channel_retries":1}`).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.System.Create().
+		SetKey(biz.SystemKeyProviderQuotaCollectionSettings).
+		SetValue(`{"enabled":true,"providers":{"codex":true}}`).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.System.Create().
+		SetKey(biz.SystemKeySecretKey).
+		SetValue("target-secret").
+		Save(ctx)
+	require.NoError(t, err)
+
+	cachedQuotaSettings, err := service.systemService.ProviderQuotaCollectionSettings(ctx)
+	require.NoError(t, err)
+	require.True(t, cachedQuotaSettings.Enabled)
+
+	data, err := json.Marshal(BackupData{
+		Version: BackupVersion,
+		SystemConfigs: []*BackupSystemConfig{
+			{Key: biz.SystemKeyRetryPolicy, Value: `{"max_channel_retries":4}`},
+			{Key: biz.SystemKeyProviderQuotaCollectionSettings, Value: `{"enabled":false,"providers":{"codex":false}}`},
+			{Key: biz.SystemKeyWebhookNotifierConfig, Value: `{"targets":[{"headers":[{"key":"Authorization","value":"webhook-secret"}]}]}`},
+			{Key: biz.SystemKeyProxyPresets, Value: `[{"name":"old","url":"http://proxy.example.com"},{"name":"new","url":"http://proxy.example.com","password":"proxy-secret"},{"name":"second","url":"http://proxy-2.example.com"}]`},
+			{Key: biz.SystemKeySecretKey, Value: "source-secret"},
+		},
+	})
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{IncludeSystemConfigs: true})
+	require.NoError(t, err)
+
+	retryPolicy, err := client.System.Query().Where(system.KeyEQ(biz.SystemKeyRetryPolicy)).Only(ctx)
+	require.NoError(t, err)
+	var restoredRetryPolicy biz.RetryPolicy
+	require.NoError(t, json.Unmarshal([]byte(retryPolicy.Value), &restoredRetryPolicy))
+	require.Equal(t, 4, restoredRetryPolicy.MaxChannelRetries)
+
+	quotaSettings, err := service.systemService.ProviderQuotaCollectionSettings(ctx)
+	require.NoError(t, err)
+	require.False(t, quotaSettings.Enabled)
+	require.False(t, quotaSettings.Providers["codex"])
+
+	secretKey, err := client.System.Query().Where(system.KeyEQ(biz.SystemKeySecretKey)).Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "target-secret", secretKey.Value)
+
+	_, err = client.System.Query().Where(system.KeyEQ(biz.SystemKeyWebhookNotifierConfig)).Only(ctx)
+	require.True(t, ent.IsNotFound(err))
+	_, err = client.System.Query().Where(system.KeyEQ(biz.SystemKeyProxyPresets)).Only(ctx)
+	require.True(t, ent.IsNotFound(err))
+
+	require.NoError(t, service.systemService.SetProxyPresets(ctx, []biz.ProxyPreset{{Name: "target", URL: "http://target.example.com"}}))
+	err = service.Restore(ctx, data, RestoreOptions{IncludeSystemConfigs: true, IncludeAPIKeys: true})
+	require.NoError(t, err)
+	webhookConfig, err := client.System.Query().Where(system.KeyEQ(biz.SystemKeyWebhookNotifierConfig)).Only(ctx)
+	require.NoError(t, err)
+	require.Contains(t, webhookConfig.Value, "webhook-secret")
+	proxyPresets, err := service.systemService.ProxyPresets(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []biz.ProxyPreset{
+		{Name: "new", URL: "http://proxy.example.com", Password: "proxy-secret"},
+		{Name: "second", URL: "http://proxy-2.example.com"},
+	}, proxyPresets)
+}
+
+func TestBackupService_Restore_InvalidSystemConfigRollsBack(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+	service.systemService = biz.NewSystemService(biz.SystemServiceParams{
+		Ent:         client,
+		CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+	})
+
+	require.NoError(t, service.systemService.SetTitle(ctx, "Original title"))
+	data, err := json.Marshal(BackupData{
+		Version: BackupVersion,
+		SystemConfigs: []*BackupSystemConfig{
+			{Key: biz.SystemKeyTitle, Value: "Restored title"},
+			{Key: biz.SystemKeyModelSettings, Value: `{"model_blacklist_regex":"["}`},
+		},
+	})
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{IncludeSystemConfigs: true})
+	require.ErrorContains(t, err, "invalid model blacklist regex")
+
+	title, err := client.System.Query().Where(system.KeyEQ(biz.SystemKeyTitle)).Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "Original title", title.Value)
+}
+
+func TestBackupService_Restore_InvalidProxyPresetsRollsBack(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+	service.systemService = biz.NewSystemService(biz.SystemServiceParams{
+		Ent:         client,
+		CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+	})
+
+	require.NoError(t, service.systemService.SetTitle(ctx, "Original title"))
+	data, err := json.Marshal(BackupData{
+		Version: BackupVersion,
+		SystemConfigs: []*BackupSystemConfig{
+			{Key: biz.SystemKeyTitle, Value: "Restored title"},
+			{Key: biz.SystemKeyProxyPresets, Value: `{"not":"an array"}`},
+		},
+	})
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{IncludeSystemConfigs: true, IncludeAPIKeys: true})
+	require.ErrorContains(t, err, "invalid JSON value")
+
+	title, err := client.System.Query().Where(system.KeyEQ(biz.SystemKeyTitle)).Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "Original title", title.Value)
+}
+
+func TestBackupService_Restore_StoragePolicyOverridesLegacyStoreChunks(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		configs []*BackupSystemConfig
+		want    bool
+	}{
+		{
+			name: "legacy only",
+			configs: []*BackupSystemConfig{
+				{Key: biz.SystemKeyStoreChunks, Value: "true"},
+			},
+			want: true,
+		},
+		{
+			name: "modern before legacy",
+			configs: []*BackupSystemConfig{
+				{Key: biz.SystemKeyStoragePolicy, Value: `{"store_chunks":false}`},
+				{Key: biz.SystemKeyStoreChunks, Value: "true"},
+			},
+			want: false,
+		},
+		{
+			name: "modern after legacy",
+			configs: []*BackupSystemConfig{
+				{Key: biz.SystemKeyStoreChunks, Value: "true"},
+				{Key: biz.SystemKeyStoragePolicy, Value: `{"store_chunks":false}`},
+			},
+			want: false,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client, service, ctx := setupBackupTest(t)
+			defer client.Close()
+			service.systemService = biz.NewSystemService(biz.SystemServiceParams{
+				Ent:         client,
+				CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+			})
+
+			data, err := json.Marshal(BackupData{Version: BackupVersion, SystemConfigs: test.configs})
+			require.NoError(t, err)
+			require.NoError(t, service.Restore(ctx, data, RestoreOptions{IncludeSystemConfigs: true}))
+
+			policy, err := service.systemService.StoragePolicy(ctx)
+			require.NoError(t, err)
+			require.Equal(t, test.want, policy.StoreChunks)
+		})
+	}
+}
+
+func TestBackupService_Restore_SystemModelSettingsRemapChannelIDs(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	const sourceChannelID = 456
+	settings, err := json.Marshal(biz.SystemModelSettings{
+		DeveloperSettings: []*biz.DeveloperModelSettings{{
+			Developer: "openai",
+			Associations: []*objects.ModelAssociation{{
+				Type: "channel_model",
+				ChannelModel: &objects.ChannelModelAssociation{
+					ChannelID: sourceChannelID,
+					ModelID:   "gpt-4",
+				},
+			}},
+		}},
+	})
+	require.NoError(t, err)
+
+	data, err := json.Marshal(BackupData{
+		Version: BackupVersion,
+		SystemConfigs: []*BackupSystemConfig{{
+			Key:   biz.SystemKeyModelSettings,
+			Value: string(settings),
+		}},
+		Channels: []*BackupChannel{{
+			Channel: ent.Channel{
+				ID:      sourceChannelID,
+				Type:    channel.TypeOpenai,
+				Name:    "System Settings Channel",
+				BaseURL: "https://api.example.com",
+				Status:  channel.StatusEnabled,
+			},
+			Credentials: objects.ChannelCredentials{APIKey: "backup-api-key"},
+		}},
+	})
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{
+		IncludeSystemConfigs:    true,
+		IncludeChannels:         true,
+		ChannelConflictStrategy: ConflictStrategyOverwrite,
+	})
+	require.NoError(t, err)
+
+	restoredChannel, err := client.Channel.Query().Where(channel.Name("System Settings Channel")).Only(ctx)
+	require.NoError(t, err)
+	require.NotEqual(t, sourceChannelID, restoredChannel.ID)
+
+	restoredConfig, err := client.System.Query().Where(system.KeyEQ(biz.SystemKeyModelSettings)).Only(ctx)
+	require.NoError(t, err)
+	var restoredSettings biz.SystemModelSettings
+	require.NoError(t, json.Unmarshal([]byte(restoredConfig.Value), &restoredSettings))
+	require.Equal(t, restoredChannel.ID, restoredSettings.DeveloperSettings[0].Associations[0].ChannelModel.ChannelID)
+}
+
+func TestBackupService_Restore_SystemModelSettingsDropsUnmappedChannelIDs(t *testing.T) {
+	client, service, ctx := setupBackupTest(t)
+	defer client.Close()
+
+	localChannel := createBackupTestChannel(t, client, ctx, "Local Channel", channel.TypeOpenai)
+	settings, err := json.Marshal(biz.SystemModelSettings{
+		DeveloperSettings: []*biz.DeveloperModelSettings{{
+			Developer: "openai",
+			Associations: []*objects.ModelAssociation{{
+				Type: "channel_model",
+				ChannelModel: &objects.ChannelModelAssociation{
+					ChannelID: localChannel.ID,
+					ModelID:   "gpt-4",
+				},
+			}},
+		}},
+	})
+	require.NoError(t, err)
+
+	data, err := json.Marshal(BackupData{
+		Version: BackupVersion,
+		SystemConfigs: []*BackupSystemConfig{{
+			Key:   biz.SystemKeyModelSettings,
+			Value: string(settings),
+		}},
+		Channels: []*BackupChannel{{
+			Channel: ent.Channel{ID: localChannel.ID, Name: "Source Channel"},
+		}},
+	})
+	require.NoError(t, err)
+
+	err = service.Restore(ctx, data, RestoreOptions{IncludeSystemConfigs: true})
+	require.NoError(t, err)
+
+	restoredConfig, err := client.System.Query().Where(system.KeyEQ(biz.SystemKeyModelSettings)).Only(ctx)
+	require.NoError(t, err)
+	var restoredSettings biz.SystemModelSettings
+	require.NoError(t, json.Unmarshal([]byte(restoredConfig.Value), &restoredSettings))
+	require.Empty(t, restoredSettings.DeveloperSettings[0].Associations)
+}
 
 func TestBackupService_Restore(t *testing.T) {
 	client, service, ctx := setupBackupTest(t)
 	defer client.Close()
+	invalidator := &recordingProviderQuotaInvalidator{}
+	service.providerQuotaInvalidator = invalidator
 
 	ch1 := createBackupTestChannel(t, client, ctx, "Channel 1", channel.TypeOpenai)
 	existingPrice := createBackupTestChannelModelPrice(t, client, ctx, ch1.ID, "gpt-4")
@@ -62,6 +350,7 @@ func TestBackupService_Restore(t *testing.T) {
 
 	require.Equal(t, channelsBefore, channelsAfter)
 	require.Equal(t, modelsBefore, modelsAfter)
+	require.Equal(t, []int{ch1.ID}, invalidator.channelIDs)
 
 	restoredChannel, err := client.Channel.Query().
 		Where(channel.Name(ch1.Name)).
@@ -1144,7 +1433,7 @@ func TestBackupService_Restore_LegacyModelPriceNormalizesVariantCodes(t *testing
 		},
 	}}}
 	data, err := json.Marshal(BackupData{
-		Version: BackupVersionV4,
+		Version: BackupVersionV5,
 		ChannelModelPrices: []*BackupChannelModelPrice{{
 			ChannelName: ch.Name,
 			ModelID:     "gpt-4",

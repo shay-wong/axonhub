@@ -2,6 +2,7 @@ package biz
 
 import (
 	"testing"
+	"time"
 
 	"github.com/looplj/axonhub/internal/build"
 	"github.com/stretchr/testify/require"
@@ -283,6 +284,20 @@ func TestUpdateChannel(t *testing.T) {
 	})
 }
 
+func TestUpdateChannels(t *testing.T) {
+	t.Run("stable check can include beta channel", func(t *testing.T) {
+		t.Setenv("AXONHUB_UPDATE_CHANNEL", "stable")
+
+		require.Equal(t, []string{updateChannelStable, updateChannelBeta}, updateChannels(true))
+	})
+
+	t.Run("beta build stays on beta channel", func(t *testing.T) {
+		t.Setenv("AXONHUB_UPDATE_CHANNEL", "beta")
+
+		require.Equal(t, []string{updateChannelBeta}, updateChannels(true))
+	})
+}
+
 func TestSelectLatestUpdateTag(t *testing.T) {
 	tests := []struct {
 		name string
@@ -365,6 +380,63 @@ func TestSelectLatestUpdateTagForChannel_UpstreamBetaTags(t *testing.T) {
 	betaTag, err := selectLatestUpdateTagForChannel(tags, updateChannelBeta)
 	require.NoError(t, err)
 	require.Equal(t, "v1.0.0-beta10", betaTag)
+}
+
+func TestSelectLatestGitHubRelease(t *testing.T) {
+	now := time.Date(2026, time.July, 30, 12, 0, 0, 0, time.UTC)
+	releases := []GitHubRelease{
+		{TagName: "v1.0.0-beta6", PublishedAt: now.Add(-time.Hour)},
+		{TagName: "v1.0.0-rc1", PublishedAt: now.Add(-2 * time.Hour)},
+		{TagName: "v0.9.43", PublishedAt: now.Add(-3 * time.Hour)},
+	}
+
+	t.Run("stable check skips prereleases", func(t *testing.T) {
+		got, err := selectLatestGitHubRelease(releases, []string{updateChannelStable}, now)
+		require.NoError(t, err)
+		require.Equal(t, "v0.9.43", got)
+	})
+
+	t.Run("beta option compares stable beta and rc releases", func(t *testing.T) {
+		got, err := selectLatestGitHubRelease(releases, []string{updateChannelStable, updateChannelBeta}, now)
+		require.NoError(t, err)
+		require.Equal(t, "v1.0.0-rc1", got)
+	})
+
+	t.Run("selects higher stable release after lower beta release", func(t *testing.T) {
+		got, err := selectLatestGitHubRelease([]GitHubRelease{
+			{TagName: "v1.9.0-beta1", PublishedAt: now.Add(-time.Hour)},
+			{TagName: "v2.0.0", PublishedAt: now.Add(-2 * time.Hour)},
+		}, []string{updateChannelStable, updateChannelBeta}, now)
+		require.NoError(t, err)
+		require.Equal(t, "v2.0.0", got)
+	})
+
+	t.Run("skips prerelease metadata without beta tag", func(t *testing.T) {
+		got, err := selectLatestGitHubRelease([]GitHubRelease{
+			{TagName: "v2.0.0", Prerelease: true, PublishedAt: now.Add(-time.Hour)},
+			{TagName: "v1.0.0", PublishedAt: now.Add(-2 * time.Hour)},
+		}, []string{updateChannelStable, updateChannelBeta}, now)
+		require.NoError(t, err)
+		require.Equal(t, "v1.0.0", got)
+	})
+
+	t.Run("skips drafts recent releases and other service tags", func(t *testing.T) {
+		got, err := selectLatestGitHubRelease([]GitHubRelease{
+			{TagName: "v1.0.0-beta6", Draft: true, PublishedAt: now.Add(-time.Hour)},
+			{TagName: "v1.0.0-beta5", PublishedAt: now.Add(-releaseCooldownDuration / 2)},
+			{TagName: "axonclaw/v2.0.0", PublishedAt: now.Add(-time.Hour)},
+			{TagName: "v1.0.0-beta4", Prerelease: true, PublishedAt: now.Add(-2 * time.Hour)},
+		}, []string{updateChannelStable, updateChannelBeta}, now)
+		require.NoError(t, err)
+		require.Equal(t, "v1.0.0-beta4", got)
+	})
+
+	t.Run("returns an error when no release is eligible", func(t *testing.T) {
+		_, err := selectLatestGitHubRelease([]GitHubRelease{
+			{TagName: "v1.0.0-beta6", PublishedAt: now.Add(-time.Hour)},
+		}, []string{updateChannelStable}, now)
+		require.EqualError(t, err, "no eligible release found")
+	})
 }
 
 func TestIsAxonHubTag(t *testing.T) {

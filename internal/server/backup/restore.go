@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +29,8 @@ import (
 	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/internal/pkg/xcache"
+	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
 )
 
@@ -45,7 +49,7 @@ func (svc *BackupService) Restore(ctx context.Context, data []byte, opts Restore
 		return err
 	}
 
-	if !lo.Contains([]string{BackupVersion, BackupVersionV4, BackupVersionV3, BackupVersionV2, BackupVersionV1}, backupData.Version) {
+	if !lo.Contains([]string{BackupVersion, BackupVersionV5, BackupVersionV4, BackupVersionV3, BackupVersionV2, BackupVersionV1}, backupData.Version) {
 		log.Warn(ctx, "backup version mismatch",
 			log.String("expected", BackupVersion),
 			log.String("got", backupData.Version))
@@ -78,7 +82,49 @@ func (svc *BackupService) Restore(ctx context.Context, data []byte, opts Restore
 
 	committed = true
 
+	if opts.IncludeSystemConfigs {
+		svc.systemService.InvalidateSystemValueCaches(ctx, systemConfigBackupKeys...)
+	}
+	if opts.IncludeChannels {
+		svc.invalidateRestoredChannelQuotas(ctx, backupData.Channels)
+	}
+
 	return nil
+}
+
+func (svc *BackupService) invalidateRestoredChannelQuotas(ctx context.Context, backupChannels []*BackupChannel) {
+	if svc.providerQuotaInvalidator == nil {
+		return
+	}
+
+	names := make([]string, 0, len(backupChannels))
+	seen := make(map[string]struct{}, len(backupChannels))
+	for _, backupChannel := range backupChannels {
+		if backupChannel == nil || backupChannel.Name == "" {
+			continue
+		}
+		if _, ok := seen[backupChannel.Name]; ok {
+			continue
+		}
+		seen[backupChannel.Name] = struct{}{}
+		names = append(names, backupChannel.Name)
+	}
+	if len(names) == 0 {
+		return
+	}
+
+	restoredChannels, err := svc.db.Channel.Query().Where(channel.NameIn(names...)).All(ctx)
+	if err != nil {
+		log.Warn(ctx, "failed to load restored channels for provider quota invalidation", log.Cause(err))
+		return
+	}
+	for _, restoredChannel := range restoredChannels {
+		if err := svc.providerQuotaInvalidator.InvalidateChannelQuota(ctx, restoredChannel.ID); err != nil {
+			log.Warn(ctx, "failed to invalidate provider quota after channel restore",
+				log.Int("channel_id", restoredChannel.ID),
+				log.Cause(err))
+		}
+	}
 }
 
 func (svc *BackupService) restore(ctx context.Context, db *ent.Client, backupData BackupData, opts RestoreOptions) error {
@@ -91,6 +137,12 @@ func (svc *BackupService) restore(ctx context.Context, db *ent.Client, backupDat
 	channelIDMap, err := svc.buildChannelIDMap(ctx, db, backupData.Channels)
 	if err != nil {
 		return err
+	}
+
+	if opts.IncludeSystemConfigs {
+		if err := svc.restoreSystemConfigs(ctx, db, backupData.SystemConfigs, channelIDMap, opts.IncludeAPIKeys); err != nil {
+			return err
+		}
 	}
 
 	if opts.IncludeModelPrices {
@@ -132,6 +184,156 @@ func (svc *BackupService) restore(ctx context.Context, db *ent.Client, backupDat
 	}
 
 	return nil
+}
+
+func (svc *BackupService) restoreSystemConfigs(ctx context.Context, db *ent.Client, configs []*BackupSystemConfig, channelIDMap map[int]int, includeSecrets bool) error {
+	ctx = ent.NewContext(ctx, db)
+	systemService := biz.NewSystemService(biz.SystemServiceParams{
+		Ent:         db,
+		CacheConfig: xcache.Config{Mode: xcache.ModeMemory},
+	})
+	hasStoragePolicy := lo.ContainsBy(configs, func(config *BackupSystemConfig) bool {
+		return config != nil && config.Key == biz.SystemKeyStoragePolicy
+	})
+
+	for _, config := range configs {
+		if config == nil || !lo.Contains(systemConfigBackupKeys, config.Key) {
+			continue
+		}
+		if isSecretBearingSystemConfig(config.Key) && !includeSecrets {
+			continue
+		}
+
+		if err := restoreSystemConfig(ctx, systemService, config.Key, config.Value, channelIDMap, hasStoragePolicy); err != nil {
+			return fmt.Errorf("failed to restore system configuration %q: %w", config.Key, err)
+		}
+	}
+
+	return nil
+}
+
+func restoreSystemConfig(ctx context.Context, svc *biz.SystemService, key, value string, channelIDMap map[int]int, hasStoragePolicy bool) error {
+	switch key {
+	case biz.SystemKeyBrandName:
+		return svc.SetBrandName(ctx, value)
+	case biz.SystemKeyBrandLogo:
+		return svc.SetBrandLogo(ctx, value)
+	case biz.SystemKeyTitle:
+		return svc.SetTitle(ctx, value)
+	case biz.SystemKeyStoreChunks:
+		if hasStoragePolicy {
+			return nil
+		}
+		enabled, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid boolean value: %w", err)
+		}
+		policy, err := svc.StoragePolicy(ctx)
+		if err != nil {
+			return err
+		}
+		policy.StoreChunks = enabled
+		return svc.SetStoragePolicy(ctx, policy)
+	case biz.SystemKeyStoragePolicy:
+		settings, err := decodeSystemConfig[biz.StoragePolicy](value)
+		if err != nil {
+			return err
+		}
+		return svc.SetStoragePolicy(ctx, &settings)
+	case biz.SystemKeyRetryPolicy:
+		settings, err := decodeSystemConfig[biz.RetryPolicy](value)
+		if err != nil {
+			return err
+		}
+		return svc.SetRetryPolicy(ctx, &settings)
+	case biz.SystemKeyWebhookNotifierConfig:
+		settings, err := decodeSystemConfig[biz.WebhookNotifierConfig](value)
+		if err != nil {
+			return err
+		}
+		return svc.SetWebhookNotifierConfig(ctx, &settings)
+	case biz.SystemKeyModelSettings:
+		settings, err := decodeSystemConfig[biz.SystemModelSettings](value)
+		if err != nil {
+			return err
+		}
+		for _, developer := range settings.DeveloperSettings {
+			if developer != nil {
+				modelSettings := &objects.ModelSettings{Associations: developer.Associations}
+				remapModelSettingsChannelIDs(modelSettings, channelIDMap)
+				developer.Associations = modelSettings.Associations
+			}
+		}
+		return svc.SetModelSettings(ctx, settings)
+	case biz.SystemKeyChannelSettings:
+		settings, err := decodeSystemConfig[biz.SystemChannelSettings](value)
+		if err != nil {
+			return err
+		}
+		return svc.SetChannelSetting(ctx, settings)
+	case biz.SystemKeyGeneralSettings:
+		settings, err := decodeSystemConfig[biz.SystemGeneralSettings](value)
+		if err != nil {
+			return err
+		}
+		return svc.SetGeneralSettings(ctx, settings)
+	case biz.SystemKeyUserAgentPassThrough:
+		enabled, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid boolean value: %w", err)
+		}
+		return svc.SetUserAgentPassThrough(ctx, enabled)
+	case biz.SystemKeyPassThrough:
+		enabled, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid boolean value: %w", err)
+		}
+		return svc.SetPassThrough(ctx, enabled)
+	case biz.SystemKeyQuotaEnforcementSettings:
+		settings, err := decodeSystemConfig[biz.QuotaEnforcementSettings](value)
+		if err != nil {
+			return err
+		}
+		return svc.SetQuotaEnforcementSettings(ctx, settings)
+	case biz.SystemKeyProviderQuotaCollectionSettings:
+		settings, err := decodeSystemConfig[biz.ProviderQuotaCollectionSettings](value)
+		if err != nil {
+			return err
+		}
+		supported := biz.SupportedProviderQuotaTypes()
+		for provider := range settings.Providers {
+			if !lo.Contains(supported, provider) {
+				return fmt.Errorf("unsupported provider quota type: %q", provider)
+			}
+		}
+		providers := lo.Map(supported, func(provider string, _ int) biz.ProviderQuotaCollectionProvider {
+			enabled, ok := settings.Providers[provider]
+			return biz.ProviderQuotaCollectionProvider{Provider: provider, Enabled: !ok || enabled}
+		})
+		return svc.UpdateProviderQuotaCollectionSettings(ctx, &settings.Enabled, providers)
+	case biz.SystemKeySecuritySettings:
+		settings, err := decodeSystemConfig[biz.SecuritySettings](value)
+		if err != nil {
+			return err
+		}
+		return svc.SetSecuritySettings(ctx, settings)
+	case biz.SystemKeyProxyPresets:
+		presets, err := decodeSystemConfig[[]biz.ProxyPreset](value)
+		if err != nil {
+			return err
+		}
+		return svc.SetProxyPresets(ctx, presets)
+	default:
+		return nil
+	}
+}
+
+func decodeSystemConfig[T any](value string) (T, error) {
+	var config T
+	if err := json.Unmarshal([]byte(value), &config); err != nil {
+		return config, fmt.Errorf("invalid JSON value: %w", err)
+	}
+	return config, nil
 }
 
 func (svc *BackupService) buildChannelIDMap(ctx context.Context, db *ent.Client, channels []*BackupChannel) (map[int]int, error) {
@@ -314,25 +516,29 @@ func (r *usageRestoreResolver) resolveAPIKeyID(apiKeyKey string) (int, bool) {
 }
 
 func remapModelSettingsChannelIDs(settings *objects.ModelSettings, channelIDMap map[int]int) {
-	if settings == nil || len(channelIDMap) == 0 {
+	if settings == nil {
 		return
 	}
 
-	for _, assoc := range settings.Associations {
+	settings.Associations = slices.DeleteFunc(settings.Associations, func(assoc *objects.ModelAssociation) bool {
 		if assoc == nil {
-			continue
+			return true
 		}
 
 		if assoc.ChannelModel != nil {
-			if newID, ok := channelIDMap[assoc.ChannelModel.ChannelID]; ok {
-				assoc.ChannelModel.ChannelID = newID
+			newID, ok := channelIDMap[assoc.ChannelModel.ChannelID]
+			if !ok {
+				return true
 			}
+			assoc.ChannelModel.ChannelID = newID
 		}
 
 		if assoc.ChannelRegex != nil {
-			if newID, ok := channelIDMap[assoc.ChannelRegex.ChannelID]; ok {
-				assoc.ChannelRegex.ChannelID = newID
+			newID, ok := channelIDMap[assoc.ChannelRegex.ChannelID]
+			if !ok {
+				return true
 			}
+			assoc.ChannelRegex.ChannelID = newID
 		}
 
 		if assoc.Regex != nil {
@@ -342,7 +548,9 @@ func remapModelSettingsChannelIDs(settings *objects.ModelSettings, channelIDMap 
 		if assoc.ModelID != nil {
 			remapExcludeAssociationChannelIDs(assoc.ModelID.Exclude, channelIDMap)
 		}
-	}
+
+		return false
+	})
 }
 
 func remapExcludeAssociationChannelIDs(exclude []*objects.ExcludeAssociation, channelIDMap map[int]int) {
@@ -351,11 +559,13 @@ func remapExcludeAssociationChannelIDs(exclude []*objects.ExcludeAssociation, ch
 			continue
 		}
 
-		for i, oldID := range ex.ChannelIds {
+		mappedIDs := ex.ChannelIds[:0]
+		for _, oldID := range ex.ChannelIds {
 			if newID, ok := channelIDMap[oldID]; ok {
-				ex.ChannelIds[i] = newID
+				mappedIDs = append(mappedIDs, newID)
 			}
 		}
+		ex.ChannelIds = mappedIDs
 	}
 }
 
@@ -724,7 +934,7 @@ func validateBackupModelPrice(price *objects.ModelPrice, backupVersion string) e
 	return price.Validate()
 }
 
-// validateLegacyModelPrice preserves the 1.0-1.3 backup contract where its
+// validateLegacyModelPrice preserves the 1.0-1.4 backup contract where its
 // behavior is unambiguous. Invalid tier boundaries are rejected instead of
 // being rewritten, because changing them would change future billing.
 func validateLegacyModelPrice(price *objects.ModelPrice) error {

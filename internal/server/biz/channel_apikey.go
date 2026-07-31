@@ -3,6 +3,7 @@ package biz
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -416,6 +417,9 @@ func (svc *ChannelService) DeleteDisabledAPIKeys(ctx context.Context, channelID 
 
 	if _, err := update.Save(ctx); err != nil {
 		return nil, fmt.Errorf("failed to delete disabled api keys: %w", err)
+	}
+	if !reflect.DeepEqual(ch.Credentials, newCredentials) {
+		svc.invalidateProviderQuotaAfterCommit(ctx, channelID)
 	}
 
 	log.Info(ctx, "Disabled API keys deleted",

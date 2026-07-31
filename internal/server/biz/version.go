@@ -46,11 +46,11 @@ type VersionCheckResult struct {
 }
 
 // CheckForUpdate checks if there is a newer version available on GitHub.
-func (s *SystemService) CheckForUpdate(ctx context.Context) (*VersionCheckResult, error) {
+func (s *SystemService) CheckForUpdate(ctx context.Context, includeBeta bool) (*VersionCheckResult, error) {
 	currentVersion := build.Version
 	repository := updateRepository()
 
-	latestVersion, err := s.fetchLatestGitHubRelease(ctx)
+	latestVersion, err := s.fetchLatestGitHubRelease(ctx, includeBeta)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch latest release: %w", err)
 	}
@@ -68,8 +68,8 @@ func (s *SystemService) CheckForUpdate(ctx context.Context) (*VersionCheckResult
 
 // fetchLatestGitHubRelease fetches the latest stable release tag from GitHub.
 // It skips beta and rc versions.
-func (s *SystemService) fetchLatestGitHubRelease(ctx context.Context) (string, error) {
-	return FetchLatestGitHubRelease(ctx)
+func (s *SystemService) fetchLatestGitHubRelease(ctx context.Context, includeBeta bool) (string, error) {
+	return FetchLatestGitHubRelease(ctx, includeBeta)
 }
 
 // isNewerVersion compares two semantic versions and returns true if latest is newer than current.
@@ -105,22 +105,22 @@ var compactPrereleasePattern = regexp.MustCompile(`(?i)-(alpha|beta|rc)([0-9]+)(
 // FetchLatestGitHubRelease fetches the latest version tag from the configured GitHub repository.
 // It checks releases first, falls back to tags, follows AXONHUB_UPDATE_CHANNEL, and waits for a cooldown period after release.
 // In monorepo mode, it only considers unprefixed axonhub tags (no service prefix).
-func FetchLatestGitHubRelease(ctx context.Context) (string, error) {
+func FetchLatestGitHubRelease(ctx context.Context, includeBeta bool) (string, error) {
 	repository := updateRepository()
-	channel := updateChannel()
+	channels := updateChannels(includeBeta)
 	candidateTags := make([]string, 0, 2)
 
-	releaseTag, releaseErr := fetchLatestGitHubReleaseFromRepository(ctx, repository, channel)
+	releaseTag, releaseErr := fetchLatestGitHubReleaseFromRepository(ctx, repository, channels)
 	if releaseErr == nil {
 		candidateTags = append(candidateTags, releaseTag)
 	}
 
-	tag, tagErr := fetchLatestGitHubTagFromRepository(ctx, repository, channel)
+	tag, tagErr := fetchLatestGitHubTagFromRepository(ctx, repository, channels)
 	if tagErr == nil {
 		candidateTags = append(candidateTags, tag)
 	}
 
-	latestTag, latestErr := selectLatestUpdateTagForChannel(candidateTags, channel)
+	latestTag, latestErr := selectLatestUpdateTagForChannels(candidateTags, channels...)
 	if latestErr == nil {
 		return latestTag, nil
 	}
@@ -152,6 +152,15 @@ func updateChannel() string {
 	return updateChannelStable
 }
 
+func updateChannels(includeBeta bool) []string {
+	channel := updateChannel()
+	if includeBeta && channel == updateChannelStable {
+		return []string{updateChannelStable, updateChannelBeta}
+	}
+
+	return []string{channel}
+}
+
 func normalizeUpdateChannel(channel string) string {
 	switch strings.ToLower(strings.TrimSpace(channel)) {
 	case updateChannelStable:
@@ -176,7 +185,7 @@ func normalizeGitHubRepository(repository string) string {
 	return repository
 }
 
-func fetchLatestGitHubReleaseFromRepository(ctx context.Context, repository, channel string) (string, error) {
+func fetchLatestGitHubReleaseFromRepository(ctx context.Context, repository string, channels []string) (string, error) {
 	baseURL := fmt.Sprintf("https://api.github.com/repos/%s/releases", repository)
 
 	u, err := url.Parse(baseURL)
@@ -185,7 +194,7 @@ func fetchLatestGitHubReleaseFromRepository(ctx context.Context, repository, cha
 	}
 
 	q := u.Query()
-	q.Set("per_page", "10")
+	q.Set("per_page", "100")
 	q.Set("page", "1")
 	u.RawQuery = q.Encode()
 	apiURL := u.String()
@@ -218,29 +227,18 @@ func fetchLatestGitHubReleaseFromRepository(ctx context.Context, repository, cha
 		return "", fmt.Errorf("failed to decode releases: %w", err)
 	}
 
-	now := time.Now().UTC()
+	return selectLatestGitHubRelease(releases, channels, time.Now().UTC())
+}
+
+func selectLatestGitHubRelease(releases []GitHubRelease, channels []string, now time.Time) (string, error) {
 	candidateTags := make([]string, 0, len(releases))
-
-	// Find the latest release for the configured channel after the cooldown period.
 	for _, release := range releases {
-		if release.Draft {
+		if release.Draft ||
+			(release.Prerelease && !isBetaReleaseTag(release.TagName)) ||
+			!isAxonHubTag(release.TagName) ||
+			!isUpdateChannelTagForAny(release.TagName, channels) {
 			continue
 		}
-
-		if release.Prerelease && channel == updateChannelStable {
-			continue
-		}
-
-		// Only consider axonhub tags (vX.Y.Z format, skip service-prefixed tags like "axonclaw/v1.0.0")
-		if !isAxonHubTag(release.TagName) {
-			continue
-		}
-
-		if !isUpdateChannelTag(release.TagName, channel) {
-			continue
-		}
-
-		// Check if the release has passed the cooldown period
 		if now.Sub(release.PublishedAt) < releaseCooldownDuration {
 			continue
 		}
@@ -248,15 +246,15 @@ func fetchLatestGitHubReleaseFromRepository(ctx context.Context, repository, cha
 		candidateTags = append(candidateTags, release.TagName)
 	}
 
-	latestTag, err := selectLatestUpdateTagForChannel(candidateTags, channel)
+	latestTag, err := selectLatestUpdateTagForChannels(candidateTags, channels...)
 	if err != nil {
-		return "", fmt.Errorf("no %s release found", channel)
+		return "", fmt.Errorf("no eligible release found")
 	}
 
 	return latestTag, nil
 }
 
-func fetchLatestGitHubTagFromRepository(ctx context.Context, repository, channel string) (string, error) {
+func fetchLatestGitHubTagFromRepository(ctx context.Context, repository string, channels []string) (string, error) {
 	baseURL := fmt.Sprintf("https://api.github.com/repos/%s/tags", repository)
 
 	u, err := url.Parse(baseURL)
@@ -303,9 +301,9 @@ func fetchLatestGitHubTagFromRepository(ctx context.Context, repository, channel
 		candidateTags = append(candidateTags, tag.Name)
 	}
 
-	latestTag, err := selectLatestUpdateTagForChannel(candidateTags, channel)
+	latestTag, err := selectLatestUpdateTagForChannels(candidateTags, channels...)
 	if err != nil {
-		return "", fmt.Errorf("no %s tag found", channel)
+		return "", fmt.Errorf("no eligible tag found")
 	}
 
 	return latestTag, nil
@@ -316,15 +314,24 @@ func selectLatestUpdateTag(tags []string) (string, error) {
 }
 
 func selectLatestUpdateTagForChannel(tags []string, channel string) (string, error) {
-	channel = normalizeUpdateChannel(channel)
-	if channel == "" {
-		channel = updateChannelStable
+	return selectLatestUpdateTagForChannels(tags, channel)
+}
+
+func selectLatestUpdateTagForChannels(tags []string, channels ...string) (string, error) {
+	normalizedChannels := make([]string, 0, len(channels))
+	for _, channel := range channels {
+		if normalized := normalizeUpdateChannel(channel); normalized != "" {
+			normalizedChannels = append(normalizedChannels, normalized)
+		}
+	}
+	if len(normalizedChannels) == 0 {
+		normalizedChannels = append(normalizedChannels, updateChannelStable)
 	}
 
 	var latest *updateVersion
 	latestTag := ""
 	for _, tag := range tags {
-		if !isAxonHubTag(tag) || !isUpdateChannelTag(tag, channel) {
+		if !isAxonHubTag(tag) || !isUpdateChannelTagForAny(tag, normalizedChannels) {
 			continue
 		}
 
@@ -340,7 +347,7 @@ func selectLatestUpdateTagForChannel(tags []string, channel string) (string, err
 	}
 
 	if latestTag == "" {
-		return "", fmt.Errorf("no %s version tag found", channel)
+		return "", fmt.Errorf("no eligible version tag found")
 	}
 
 	return latestTag, nil
@@ -356,6 +363,16 @@ func isUpdateChannelTag(tag, channel string) bool {
 	default:
 		return !isPrerelease
 	}
+}
+
+func isUpdateChannelTagForAny(tag string, channels []string) bool {
+	for _, channel := range channels {
+		if isUpdateChannelTag(tag, channel) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func isBetaReleaseTag(tag string) bool {

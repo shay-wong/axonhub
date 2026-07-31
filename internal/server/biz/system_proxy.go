@@ -48,27 +48,7 @@ func (s *SystemService) SaveProxyPreset(ctx context.Context, preset ProxyPreset)
 		return err
 	}
 
-	found := false
-
-	for i, p := range presets {
-		if p.URL == preset.URL {
-			presets[i] = preset
-			found = true
-
-			break
-		}
-	}
-
-	if !found {
-		presets = append(presets, preset)
-	}
-
-	jsonBytes, err := json.Marshal(presets) //nolint:gosec // G117: Password field is stored internally, not exposed to API responses
-	if err != nil {
-		return fmt.Errorf("failed to marshal proxy presets: %w", err)
-	}
-
-	return s.setSystemValue(ctx, SystemKeyProxyPresets, string(jsonBytes))
+	return s.SetProxyPresets(ctx, append(presets, preset))
 }
 
 // DeleteProxyPreset removes a proxy preset by URL.
@@ -85,7 +65,23 @@ func (s *SystemService) DeleteProxyPreset(ctx context.Context, url string) error
 		}
 	}
 
-	jsonBytes, err := json.Marshal(filtered) //nolint:gosec // G117: Password field is stored internally, not exposed to API responses
+	return s.SetProxyPresets(ctx, filtered)
+}
+
+// SetProxyPresets replaces all proxy presets, keeping the last preset for each URL.
+func (s *SystemService) SetProxyPresets(ctx context.Context, presets []ProxyPreset) error {
+	normalized := make([]ProxyPreset, 0, len(presets))
+	indices := make(map[string]int, len(presets))
+	for _, preset := range presets {
+		if index, ok := indices[preset.URL]; ok {
+			normalized[index] = preset
+			continue
+		}
+		indices[preset.URL] = len(normalized)
+		normalized = append(normalized, preset)
+	}
+
+	jsonBytes, err := json.Marshal(normalized) //nolint:gosec // G117: Password field is stored internally, not exposed to API responses
 	if err != nil {
 		return fmt.Errorf("failed to marshal proxy presets: %w", err)
 	}

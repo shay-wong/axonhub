@@ -13,9 +13,10 @@ import (
 type BackupServiceParams struct {
 	fx.In
 
-	Ent                *ent.Client
-	SystemService      *biz.SystemService
-	DataStorageService *biz.DataStorageService
+	Ent                  *ent.Client
+	SystemService        *biz.SystemService
+	DataStorageService   *biz.DataStorageService
+	ProviderQuotaService *biz.ProviderQuotaService
 }
 
 func NewBackupService(params BackupServiceParams) *BackupService {
@@ -24,6 +25,9 @@ func NewBackupService(params BackupServiceParams) *BackupService {
 		systemService:      params.SystemService,
 		dataStorageService: params.DataStorageService,
 	}
+	if params.ProviderQuotaService != nil {
+		svc.providerQuotaInvalidator = params.ProviderQuotaService
+	}
 
 	return svc
 }
@@ -31,8 +35,9 @@ func NewBackupService(params BackupServiceParams) *BackupService {
 type BackupService struct {
 	db *ent.Client
 
-	systemService      *biz.SystemService
-	dataStorageService *biz.DataStorageService
+	systemService            *biz.SystemService
+	dataStorageService       *biz.DataStorageService
+	providerQuotaInvalidator biz.ChannelProviderQuotaInvalidator
 }
 
 func (svc *BackupService) RegisterScheduledTasks(ctx context.Context, s *scheduler.Scheduler) error {
