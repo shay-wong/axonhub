@@ -23,6 +23,7 @@ import {
   IconGauge,
   IconHistory,
   IconPlugConnected,
+  IconShieldLock,
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -121,6 +122,7 @@ function DisabledAPIKeysTooltipContent({ channel, label }: { channel: Channel; l
 const StatusSwitchCell = memo(({ row, canWrite }: ChannelCellProps) => {
   const channel = row.original;
   const [dialogOpen, setDialogOpen] = useState(false);
+  const { channelPermissions } = usePermissions();
 
   const isEnabled = channel.status === 'enabled';
   const isArchived = channel.status === 'archived';
@@ -130,6 +132,10 @@ const StatusSwitchCell = memo(({ row, canWrite }: ChannelCellProps) => {
       setDialogOpen(true);
     }
   }, [canWrite, isArchived]);
+
+  if (!channelPermissions.canWrite) {
+    return <Badge variant='outline'>{channel.status}</Badge>;
+  }
 
   return (
     <div className='flex justify-center'>
@@ -391,6 +397,17 @@ const ActionCell = memo(({ row, canWrite }: ChannelCellProps) => {
             >
               <IconPlayerPlay size={16} className='mr-2' />
               {t('channels.actions.testAPIKeys', { count: apiKeysCount })}
+            </DropdownMenuItem>
+          )}
+          {canWrite && (
+            <DropdownMenuItem
+              onClick={() => {
+                setCurrentRow(channel);
+                setOpen('apiKeyRules');
+              }}
+            >
+              <IconShieldLock size={16} className='mr-2' />
+              {t('channels.dialogs.apiKeyRules.action')}
             </DropdownMenuItem>
           )}
           {viewModel.menuItems.map((item) => {
@@ -752,6 +769,7 @@ const OrderingWeightCell = memo(({ row, canWrite }: ChannelCellProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [weight, setWeight] = useState<string>(initialWeight?.toString() || '1');
   const updateChannel = useUpdateChannel();
+  const { channelPermissions } = usePermissions();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

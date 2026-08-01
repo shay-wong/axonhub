@@ -5,14 +5,7 @@ import { IconRefresh, IconRefreshOff, IconKey, IconAlertTriangle, IconTrash } fr
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -94,10 +87,7 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
   const deleteDisabledAPIKeys = useDeleteDisabledChannelAPIKeys();
 
   const isPending =
-    enableAPIKey.isPending ||
-    enableAllAPIKeys.isPending ||
-    enableSelectedAPIKeys.isPending ||
-    deleteDisabledAPIKeys.isPending;
+    enableAPIKey.isPending || enableAllAPIKeys.isPending || enableSelectedAPIKeys.isPending || deleteDisabledAPIKeys.isPending;
 
   const handleClose = () => {
     setOpen(null);
@@ -223,9 +213,7 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
             <IconKey className='h-5 w-5' />
             {t('channels.dialogs.disabledAPIKeys.title')}
           </DialogTitle>
-          <DialogDescription>
-            {t('channels.dialogs.disabledAPIKeys.description', { name: currentRow.name })}
-          </DialogDescription>
+          <DialogDescription>{t('channels.dialogs.disabledAPIKeys.description', { name: currentRow.name })}</DialogDescription>
         </DialogHeader>
 
         <div className='py-4'>
@@ -458,12 +446,7 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
                                 <Button size='sm' variant='outline' onClick={() => setConfirmDeletePopoverKey(null)}>
                                   {t('common.buttons.cancel')}
                                 </Button>
-                                <Button
-                                  size='sm'
-                                  variant='destructive'
-                                  onClick={() => handleDeleteKey(dk.key)}
-                                  disabled={isPending}
-                                >
+                                <Button size='sm' variant='destructive' onClick={() => handleDeleteKey(dk.key)} disabled={isPending}>
                                   {isPending ? t('common.buttons.processing') : t('common.buttons.confirm')}
                                 </Button>
                               </div>
@@ -491,9 +474,7 @@ export function ChannelsDisabledAPIKeysDialog({ open, onOpenChange }: ChannelsDi
                 </PopoverTrigger>
                 <PopoverContent className='w-80'>
                   <div className='flex flex-col gap-3'>
-                    <p className='text-sm'>
-                      {t('channels.dialogs.disabledAPIKeys.confirmEnableAll', { count: disabledKeys.length })}
-                    </p>
+                    <p className='text-sm'>{t('channels.dialogs.disabledAPIKeys.confirmEnableAll', { count: disabledKeys.length })}</p>
                     <div className='flex justify-end gap-2'>
                       <Button size='sm' variant='outline' onClick={() => setConfirmEnableAll(false)}>
                         {t('common.buttons.cancel')}

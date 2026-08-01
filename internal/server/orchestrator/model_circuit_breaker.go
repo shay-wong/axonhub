@@ -12,11 +12,10 @@ import (
 	"github.com/looplj/axonhub/llm/streams"
 )
 
-func withModelCircuitBreaker(outbound *PersistentOutboundTransformer, modelCircuitBreaker *biz.ModelCircuitBreaker, strategy string) pipeline.Middleware {
+func withModelCircuitBreaker(outbound *PersistentOutboundTransformer, modelCircuitBreaker *biz.ModelCircuitBreaker) pipeline.Middleware {
 	return &modelCircuitBreakerTracker{
 		outbound:            outbound,
 		modelCircuitBreaker: modelCircuitBreaker,
-		strategy:            strategy,
 	}
 }
 
@@ -26,7 +25,6 @@ type modelCircuitBreakerTracker struct {
 	outbound            *PersistentOutboundTransformer
 	modelCircuitBreaker *biz.ModelCircuitBreaker
 
-	strategy       string
 	probeActive    bool
 	probeChannelID int
 	probeModelID   string
@@ -37,7 +35,9 @@ func (m *modelCircuitBreakerTracker) Name() string {
 }
 
 func (m *modelCircuitBreakerTracker) OnOutboundRawRequest(ctx context.Context, request *httpclient.Request) (*httpclient.Request, error) {
-	if m.strategy != biz.LoadBalancerStrategyCircuitBreaker || m.modelCircuitBreaker == nil {
+	if m.outbound == nil || m.outbound.state == nil ||
+		m.outbound.state.RoutingPolicy.LoadBalancerStrategy != biz.LoadBalancerStrategyCircuitBreaker ||
+		m.modelCircuitBreaker == nil {
 		return request, nil
 	}
 	if shouldSkipHealthStateTrackingForState(ctx, m.outbound.state) {
@@ -72,7 +72,7 @@ func (m *modelCircuitBreakerTracker) OnOutboundRawRequest(ctx context.Context, r
 }
 
 func (m *modelCircuitBreakerTracker) OnOutboundLlmResponse(ctx context.Context, response *llm.Response) (*llm.Response, error) {
-	if m.outbound == nil || m.outbound.state == nil || m.modelCircuitBreaker == nil {
+	if !m.shouldTrack() {
 		return response, nil
 	}
 	if shouldSkipHealthStateTrackingForState(ctx, m.outbound.state) {
@@ -103,7 +103,7 @@ func (m *modelCircuitBreakerTracker) OnOutboundLlmResponse(ctx context.Context, 
 }
 
 func (m *modelCircuitBreakerTracker) OnOutboundRawError(ctx context.Context, err error) {
-	if m.outbound == nil || m.outbound.state == nil || m.modelCircuitBreaker == nil {
+	if !m.shouldTrack() {
 		return
 	}
 	if shouldSkipHealthStateTrackingForState(ctx, m.outbound.state) {
@@ -124,8 +124,8 @@ func (m *modelCircuitBreakerTracker) OnOutboundRawError(ctx context.Context, err
 		return
 	}
 
-	// Local queue rejections never reached upstream — must not count as model errors.
-	if isChannelQueueError(err) {
+	// Local skips never reached upstream — must not count as model errors.
+	if errors.Is(err, errSkipCandidateByCircuitBreaker) || isChannelQueueError(err) {
 		return
 	}
 
@@ -139,7 +139,7 @@ func (m *modelCircuitBreakerTracker) OnOutboundRawError(ctx context.Context, err
 }
 
 func (m *modelCircuitBreakerTracker) OnOutboundLlmStream(ctx context.Context, stream streams.Stream[*llm.Response]) (streams.Stream[*llm.Response], error) {
-	if m.outbound == nil || m.outbound.state == nil || m.modelCircuitBreaker == nil {
+	if !m.shouldTrack() {
 		return stream, nil
 	}
 	if shouldSkipHealthStateTrackingForState(ctx, m.outbound.state) {
@@ -166,6 +166,13 @@ func (m *modelCircuitBreakerTracker) OnOutboundLlmStream(ctx context.Context, st
 		recorded:            false,
 		modelCircuitBreaker: m.modelCircuitBreaker,
 	}, nil
+}
+
+func (m *modelCircuitBreakerTracker) shouldTrack() bool {
+	return m.outbound != nil &&
+		m.outbound.state != nil &&
+		m.outbound.state.RoutingPolicy.LoadBalancerStrategy == biz.LoadBalancerStrategyCircuitBreaker &&
+		m.modelCircuitBreaker != nil
 }
 
 func (m *modelCircuitBreakerTracker) releaseProbeLease() {

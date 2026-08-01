@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -320,8 +321,19 @@ func (svc *ChannelService) RecordPerformance(ctx context.Context, perf *Performa
 		if perf.APIKey != "" {
 			svc.apiKeyErrorCountsLock.Lock()
 
+			rulePrefix := perf.APIKey + ":rule:"
 			if svc.apiKeyErrorCounts[perf.ChannelID] != nil {
 				delete(svc.apiKeyErrorCounts[perf.ChannelID], perf.APIKey)
+				for key := range svc.apiKeyErrorCounts[perf.ChannelID] {
+					if strings.HasPrefix(key, rulePrefix) {
+						delete(svc.apiKeyErrorCounts[perf.ChannelID], key)
+					}
+				}
+			}
+			for key := range svc.apiKeyRuleActionsInFlight[perf.ChannelID] {
+				if strings.HasPrefix(key, rulePrefix) {
+					svc.apiKeyRuleActionsInFlight[perf.ChannelID][key] = true
+				}
 			}
 
 			svc.apiKeyErrorCountsLock.Unlock()
@@ -329,18 +341,24 @@ func (svc *ChannelService) RecordPerformance(ctx context.Context, perf *Performa
 	} else if !perf.Canceled {
 		policy := svc.SystemService.RetryPolicyOrDefault(ctx)
 
-		// API key auto-disable owns keyed failures for matching statuses. This
-		// keeps one bad upstream key from also tripping channel-level rules.
-		apiKeyPolicyMatched := false
-		if perf.APIKey != "" && !perf.TransportFailure {
-			apiKeyPolicyMatched = apiKeyAutoDisableMatchesStatus(policy, perf.ResponseStatusCode)
-			if svc.checkAndHandleAPIKeyError(ctx, perf, policy) {
+		matched := false
+		if perf.APIKey != "" {
+			matched, _ = svc.checkAndHandleChannelAPIKeyRules(ctx, perf)
+		}
+		if !matched {
+			// API key auto-disable owns keyed failures for matching statuses. This
+			// keeps one bad upstream key from also tripping channel-level rules.
+			apiKeyPolicyMatched := false
+			if perf.APIKey != "" && !perf.TransportFailure {
+				apiKeyPolicyMatched = apiKeyAutoDisableMatchesStatus(policy, perf.ResponseStatusCode)
+				if svc.checkAndHandleAPIKeyError(ctx, perf, policy) {
+					return
+				}
+			}
+
+			if !apiKeyPolicyMatched && svc.checkAndHandleChannelError(ctx, perf, policy) {
 				return
 			}
-		}
-
-		if !apiKeyPolicyMatched && svc.checkAndHandleChannelError(ctx, perf, policy) {
-			return
 		}
 	}
 
@@ -522,6 +540,7 @@ type PerformanceRecord struct {
 	// If response status code is 0, it means the request is successful.
 	ResponseStatusCode int
 	RetryAfterDuration *time.Duration
+	ErrorMessage       string
 	CompletionTokens   int64
 }
 
@@ -608,6 +627,12 @@ func (m *PerformanceRecord) MarkIncomplete() {
 	m.Success = false
 	m.RequestCompleted = true
 	m.EndTime = time.Now()
+}
+
+// MarkFailedWithMessage records the provider error text used by keyword rules.
+func (m *PerformanceRecord) MarkFailedWithMessage(errorCode int, errorMessage string) {
+	m.MarkFailed(errorCode)
+	m.ErrorMessage = errorMessage
 }
 
 // MarkCanceled marks the request as canceled by context.

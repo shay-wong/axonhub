@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/looplj/axonhub/internal/authz"
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/apikey"
@@ -86,7 +87,7 @@ func (r *channelResolver) DisabledAPIKeys(ctx context.Context, obj *ent.Channel)
 
 	now := time.Now()
 	activeDisabledKeys := lo.Filter(obj.DisabledAPIKeys, func(dk objects.DisabledAPIKey, _ int) bool {
-		return dk.DisabledUntil == nil || dk.DisabledUntil.After(now)
+		return !dk.IsExpiredAt(now)
 	})
 
 	return lo.ToSlicePtr(activeDisabledKeys), nil
@@ -776,20 +777,49 @@ func (r *queryResolver) AllChannelSummarys(ctx context.Context, includeArchived 
 		statusFilter = append(statusFilter, channel.StatusArchived)
 	}
 
-	channels, err := r.client.Channel.Query().
-		Where(channel.StatusIn(statusFilter...)).
-		Order(ent.Desc(channel.FieldOrderingWeight)).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query channels: %w", err)
-	}
-
 	projectID, ok := contexts.GetProjectID(ctx)
+	canReadChannels := authz.HasScope(ctx, scopes.ScopeReadChannels)
 	if !ok || projectID == 0 {
+		if !canReadChannels {
+			return nil, authz.RequireScope(ctx, scopes.ScopeReadChannels)
+		}
+		channels, err := r.client.Channel.Query().
+			Where(channel.StatusIn(statusFilter...)).
+			Order(ent.Desc(channel.FieldOrderingWeight)).
+			All(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query channels: %w", err)
+		}
 		return channels, nil
 	}
 
-	proj, err := r.client.Project.Get(ctx, projectID)
+	var (
+		channels []*ent.Channel
+		err      error
+	)
+	if canReadChannels {
+		channels, err = r.client.Channel.Query().
+			Where(channel.StatusIn(statusFilter...)).
+			Order(ent.Desc(channel.FieldOrderingWeight)).
+			All(ctx)
+	} else {
+		if !authz.HasScope(ctx, scopes.ScopeWriteRequests) && !authz.HasScope(ctx, scopes.ScopeWriteAPIKeys) {
+			return nil, authz.RequireScope(ctx, scopes.ScopeWriteRequests)
+		}
+		channels, err = authz.RunWithSystemBypass(ctx, "project-available-channels", func(ctx context.Context) ([]*ent.Channel, error) {
+			return r.client.Channel.Query().
+				Where(channel.StatusEQ(channel.StatusEnabled)).
+				Order(ent.Desc(channel.FieldOrderingWeight)).
+				All(ctx)
+		})
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to query project channels: %w", err)
+	}
+
+	proj, err := authz.RunWithSystemBypass(ctx, "project-available-channels-profile", func(ctx context.Context) (*ent.Project, error) {
+		return r.client.Project.Get(ctx, projectID)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}

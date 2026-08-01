@@ -9203,6 +9203,8 @@ type InvitationMutation struct {
 	deleted_at     *int
 	adddeleted_at  *int
 	token_hash     *string
+	role_id        *int
+	addrole_id     *int
 	expires_at     *time.Time
 	max_uses       *int
 	addmax_uses    *int
@@ -9514,6 +9516,76 @@ func (m *InvitationMutation) ResetProjectID() {
 	m.project = nil
 }
 
+// SetRoleID sets the "role_id" field.
+func (m *InvitationMutation) SetRoleID(i int) {
+	m.role_id = &i
+	m.addrole_id = nil
+}
+
+// RoleID returns the value of the "role_id" field in the mutation.
+func (m *InvitationMutation) RoleID() (r int, exists bool) {
+	v := m.role_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRoleID returns the old "role_id" field's value of the Invitation entity.
+// If the Invitation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvitationMutation) OldRoleID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRoleID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRoleID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRoleID: %w", err)
+	}
+	return oldValue.RoleID, nil
+}
+
+// AddRoleID adds i to the "role_id" field.
+func (m *InvitationMutation) AddRoleID(i int) {
+	if m.addrole_id != nil {
+		*m.addrole_id += i
+	} else {
+		m.addrole_id = &i
+	}
+}
+
+// AddedRoleID returns the value that was added to the "role_id" field in this mutation.
+func (m *InvitationMutation) AddedRoleID() (r int, exists bool) {
+	v := m.addrole_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearRoleID clears the value of the "role_id" field.
+func (m *InvitationMutation) ClearRoleID() {
+	m.role_id = nil
+	m.addrole_id = nil
+	m.clearedFields[invitation.FieldRoleID] = struct{}{}
+}
+
+// RoleIDCleared returns if the "role_id" field was cleared in this mutation.
+func (m *InvitationMutation) RoleIDCleared() bool {
+	_, ok := m.clearedFields[invitation.FieldRoleID]
+	return ok
+}
+
+// ResetRoleID resets all changes to the "role_id" field.
+func (m *InvitationMutation) ResetRoleID() {
+	m.role_id = nil
+	m.addrole_id = nil
+	delete(m.clearedFields, invitation.FieldRoleID)
+}
+
 // SetExpiresAt sets the "expires_at" field.
 func (m *InvitationMutation) SetExpiresAt(t time.Time) {
 	m.expires_at = &t
@@ -9736,7 +9808,7 @@ func (m *InvitationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *InvitationMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.created_at != nil {
 		fields = append(fields, invitation.FieldCreatedAt)
 	}
@@ -9751,6 +9823,9 @@ func (m *InvitationMutation) Fields() []string {
 	}
 	if m.project != nil {
 		fields = append(fields, invitation.FieldProjectID)
+	}
+	if m.role_id != nil {
+		fields = append(fields, invitation.FieldRoleID)
 	}
 	if m.expires_at != nil {
 		fields = append(fields, invitation.FieldExpiresAt)
@@ -9779,6 +9854,8 @@ func (m *InvitationMutation) Field(name string) (ent.Value, bool) {
 		return m.TokenHash()
 	case invitation.FieldProjectID:
 		return m.ProjectID()
+	case invitation.FieldRoleID:
+		return m.RoleID()
 	case invitation.FieldExpiresAt:
 		return m.ExpiresAt()
 	case invitation.FieldMaxUses:
@@ -9804,6 +9881,8 @@ func (m *InvitationMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldTokenHash(ctx)
 	case invitation.FieldProjectID:
 		return m.OldProjectID(ctx)
+	case invitation.FieldRoleID:
+		return m.OldRoleID(ctx)
 	case invitation.FieldExpiresAt:
 		return m.OldExpiresAt(ctx)
 	case invitation.FieldMaxUses:
@@ -9854,6 +9933,13 @@ func (m *InvitationMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetProjectID(v)
 		return nil
+	case invitation.FieldRoleID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRoleID(v)
+		return nil
 	case invitation.FieldExpiresAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -9886,6 +9972,9 @@ func (m *InvitationMutation) AddedFields() []string {
 	if m.adddeleted_at != nil {
 		fields = append(fields, invitation.FieldDeletedAt)
 	}
+	if m.addrole_id != nil {
+		fields = append(fields, invitation.FieldRoleID)
+	}
 	if m.addmax_uses != nil {
 		fields = append(fields, invitation.FieldMaxUses)
 	}
@@ -9902,6 +9991,8 @@ func (m *InvitationMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case invitation.FieldDeletedAt:
 		return m.AddedDeletedAt()
+	case invitation.FieldRoleID:
+		return m.AddedRoleID()
 	case invitation.FieldMaxUses:
 		return m.AddedMaxUses()
 	case invitation.FieldUsedCount:
@@ -9921,6 +10012,13 @@ func (m *InvitationMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddDeletedAt(v)
+		return nil
+	case invitation.FieldRoleID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRoleID(v)
 		return nil
 	case invitation.FieldMaxUses:
 		v, ok := value.(int)
@@ -9944,6 +10042,9 @@ func (m *InvitationMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *InvitationMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(invitation.FieldRoleID) {
+		fields = append(fields, invitation.FieldRoleID)
+	}
 	if m.FieldCleared(invitation.FieldExpiresAt) {
 		fields = append(fields, invitation.FieldExpiresAt)
 	}
@@ -9961,6 +10062,9 @@ func (m *InvitationMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *InvitationMutation) ClearField(name string) error {
 	switch name {
+	case invitation.FieldRoleID:
+		m.ClearRoleID()
+		return nil
 	case invitation.FieldExpiresAt:
 		m.ClearExpiresAt()
 		return nil
@@ -9986,6 +10090,9 @@ func (m *InvitationMutation) ResetField(name string) error {
 		return nil
 	case invitation.FieldProjectID:
 		m.ResetProjectID()
+		return nil
+	case invitation.FieldRoleID:
+		m.ResetRoleID()
 		return nil
 	case invitation.FieldExpiresAt:
 		m.ResetExpiresAt()

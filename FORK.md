@@ -18,15 +18,16 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 最近一次已合入 upstream 的 merge commit：`a302544a1eafe5b17cdd9cced72bdc94f2b64dc9`
-- 该 merge 的 upstream parent，也是本文比较基线：`9d4b2a8b6c26d5354317688a3b2ece3e1818dfb9`
-- 审计范围：`git diff 9d4b2a8b..HEAD`
+- 本次 upstream merge 的 fork parent：`e436f7c43ae75c2670946ea6d523a9d5f09b6889`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`c095efbf21d5c5dc27109937121d6bb46e44d3d5`
+- 本次 merge base：`9d4b2a8b6c26d5354317688a3b2ece3e1818dfb9`
+- 审计范围：`git diff c095efbf..HEAD`
 
-`upstream/unstable` 的移动 HEAD 只是待合并候选，不是本文基线。尚未合入的 upstream commit 不应被反向记录为 fork 功能。
+本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
 每次完成 upstream merge 后，必须在同一提交中：
 
-1. 将上述 merge commit 和 upstream parent 更新为新值。
+1. 将上述 fork parent、upstream parent 和 merge base 更新为新值。
 2. 重新检查所有 `等待上游吸收` 条目，删除已经等价吸收的条目。
 3. 检查所有 `长期保留` 不变量是否仍成立，并更新移动过的代码和测试锚点。
 4. 用新的 upstream parent 重新生成最终树差异，而不是沿用旧审计结论。
@@ -35,7 +36,7 @@
 
 ```bash
 git status --short --branch
-git show -s --format='%H %P %s' <latest-upstream-merge>
+git show -s --format='%H %P %s' HEAD
 git diff --stat <upstream-parent>..HEAD
 git diff <upstream-parent>..HEAD -- <path>
 git show <commit>
@@ -119,7 +120,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：Key-scoped provider 错误只累计和禁用对应 Key；transport/credential-agnostic failure 不禁用 Key；API Key policy 已处理的错误不再触发 channel 级禁用；临时禁用到期可恢复；状态图标只暴露当前状态允许且当前用户有权限的动作；倒计时、原因和安全身份显示一致。
 - 代码锚点：`internal/server/biz/channel_auto_disable.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_metrics.go`、`internal/server/orchestrator/performance.go`、`frontend/src/features/channels/data/channel-status-policy.ts`、`frontend/src/features/channels/data/disabled-api-key-status.ts`、`frontend/src/features/channels/components/channels-columns.tsx`。
 - 提交锚点：`2909ddaa`、`fe7809e8`、`c9f85a35`、`fda1159c`；相关 merge resolution：`94d4f989`。
-- 合并审核：逐一验证错误分类、计数所有权、永久/临时禁用、恢复动作和 permission gating；不要把完整 Key 暴露给只读用户。
+- 合并审核：upstream `c03c644b` 已吸收规则配置与动作入口，但 fork 的错误分类、测试流量隔离、多 Key 身份及 channel 状态机仍有额外语义；逐一验证计数所有权、永久/临时禁用、恢复动作和 permission gating，不要把完整 Key 暴露给只读用户。
 - 上游吸收条件：upstream 具备相同状态机、错误分类、权限和前端回归测试。
 - 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'DisableAPIKey|AutoDisable|CredentialAgnostic|TransportFailure'`；`cd frontend && node --test src/features/channels/data/channel-status-policy.test.mjs src/features/channels/data/disabled-api-key-status.test.mjs src/features/channels/data/disabled-api-key-dialog-contract.test.mjs`。
 
@@ -244,17 +245,6 @@ git show --remerge-diff <merge-commit>
 - 上游吸收条件：upstream 在普通、流式和 WebSocket 路径都有 canonical session 测试。
 - 验证：`cd llm && go test ./transformer/openai/codex ./transformer/openai/responses ./httpclient -run 'Session|Header|WebSocketExecutorReusesConnection'`。
 
-### U13 OTLP HTTP exporter 旧拼写兼容
-
-- 生命周期：`等待上游吸收`
-- 原始意图：兼容旧文档曾发布的错误拼写 `oltphttp`，避免已部署配置升级后启动失败；规范拼写仍是 `otlphttp`。
-- 必须保持：在合并 upstream `31be400ce2a30c1134177945f2dc16fd221c5519` 前，两种拼写都能启动同一个 OTLP HTTP exporter。
-- 代码锚点：`internal/metrics/config.go`、`internal/metrics/provider.go`、`internal/metrics/provider_test.go`、`config.example.yml`。
-- 提交锚点：`ce477a37`；upstream 处理：`31be400c` 只修正文档和示例。
-- 合并审核：本地决定是跟随 upstream 结束旧拼写兼容；合并 `31be400c` 时删除 `oltphttp` alias、对应测试和本文条目，不要把 alias 当长期 fork 能力。
-- 上游吸收条件：合并 `31be400c` 并确认部署配置已经使用 `otlphttp`。
-- 验证：删除前运行 `go test ./internal/metrics -run TestNewProviderAcceptsPublishedOltpHTTPSpelling`；删除后验证 `otlphttp` 正常且旧拼写按预期被拒绝。
-
 ### U14 测试流量与生产渠道健康状态隔离
 
 - 生命周期：`等待上游吸收`
@@ -273,7 +263,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：data storage 表格数据引用稳定，编辑输入不因 render 重置；禁用 Key 提示有可读对比度；thread/trace/detail 状态动作要求 `write_requests` 并携带当前 project header；prompt schema 接受 GraphQL project GUID；brand settings 可公开读取，但受保护 system settings 仍要求 `read_settings`。
 - 代码锚点：`frontend/src/features/data-storages/index.tsx`、`frontend/src/features/channels/components/channels-columns.tsx`、`frontend/src/features/request-status-management.test.mjs`、`frontend/src/features/threads/components/thread-detail-page.tsx`、`frontend/src/features/traces/components/trace-detail-page.tsx`、`frontend/src/features/prompts/data/schema.ts`、`frontend/src/features/system/data/system-permissions.test.mjs`。
 - 提交锚点：`b5d19692`、`151e1d4e`、`374cbd81`；相关 merge resolution：`3356f5bd`、`864c15a3`。
-- 合并审核：以行为测试逐项判断是否吸收，不要因为 upstream 重构组件就删除测试覆盖。
+- 合并审核：upstream `7cd1aee9` 已吸收部分 project role UI/effective scope 行为，但 data storage、状态动作、prompt GUID 和 system settings 边界仍需独立验证；以行为测试逐项判断，不要因为 upstream 重构组件就删除测试覆盖。
 - 上游吸收条件：对应 UI 行为和 permission test 已在 upstream 等价存在；允许逐项删除已吸收的小修复。
 - 验证：`cd frontend && node --test src/features/request-status-management.test.mjs src/features/prompts/data/schema.test.mjs src/features/system/data/system-permissions.test.mjs`；data storage 输入需做组件交互检查。
 
@@ -284,7 +274,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：effective project scopes 只在所属项目内计算；登录后只跳转到用户真实可访问的 dashboard/playground/profile；邀请绑定 active project，正确处理过期、max uses、并发注册/删除项目和 deleted row；token 使用 32-byte randomness；公开 get/register endpoint 分别限流；access log 使用 route template，不能记录真实 invitation token；错误使用结构化 4xx code。
 - 代码锚点：`frontend/src/config/route-permission.ts`、`frontend/src/features/auth/data/auth-redirect.ts`、`internal/server/biz/invitation.go`、`internal/server/biz/project.go`、`internal/server/api/invitation.go`、`internal/server/routes.go`、`internal/server/middleware/ip_rate_limit.go`、`internal/server/middleware/access_log.go`。
 - 提交锚点：merge resolution `94d4f989`。
-- 合并审核：分别验证 system/project scope、selected project、project deletion race、unlimited invitation expiry、token path logging 和 rate limit；前端 route guard 不是服务端授权替代品。
+- 合并审核：upstream `7cd1aee9` 已吸收角色绑定与部分 effective scope 行为，但 fork 仍保留 active project 串行化、删除竞争、过期/max-use、结构化错误、token logging 和 rate limit 约束；前端 route guard 不是服务端授权替代品。
 - 上游吸收条件：upstream 服务端和前端都提供等价边界及并发/权限测试。
 - 验证：`go test ./internal/authz ./internal/server/biz ./internal/server/api ./internal/server/middleware -run 'Invitation|ProjectPermission|IPRateLimit|RouteTemplate|SystemScope'`；`cd frontend && node --test src/features/auth/data/auth-redirect.test.mjs`。
 
@@ -306,7 +296,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：每个 priority group 先按 channel ID 去重；同一 channel 的 model fallback 可在选中后合并；跨 priority 仍只占一个 channel budget；不同 `APIFormat` 的候选绝不合并；selection tracking 每个实际候选 channel 只记一次。
 - 代码锚点：`internal/server/orchestrator/candidates.go`、`internal/server/orchestrator/candidates_loadbalance_test.go`。
 - 提交锚点：merge resolution `94d4f989`。
-- 合并审核：不要按 association candidate 数量截断；用“同 channel 同 priority”“同 channel 跨 priority”“同 channel 不同 API format”三个矩阵检查。
+- 合并审核：upstream `c095efbf` 已吸收可配置 load-balancer strategy，但未等价替代 fork 的不同 channel 重试预算和 API format 隔离；不要按 association candidate 数量截断，用“同 channel 同 priority”“同 channel 跨 priority”“同 channel 不同 API format”三个矩阵检查。
 - 上游吸收条件：upstream 提供相同 retry budget 含义和三类回归测试。
 - 验证：`go test ./internal/server/orchestrator -run 'CountsDistinctChannels|DoesNotMergeModelsAcrossAPIFormats'`。
 

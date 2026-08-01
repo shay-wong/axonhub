@@ -329,7 +329,8 @@ func convertToolChoiceToLLM(src *ToolChoice) *llm.ToolChoice {
 }
 
 // convertInputToMessages converts Responses API input to llm.Message slice.
-// It handles merging assistant-side items that Chat Completions expects in one message.
+// It merges assistant-side items, including consecutive tool calls, into the
+// message shape expected by Chat Completions.
 func convertInputToMessages(input *Input) ([]llm.Message, error) {
 	if input == nil {
 		return nil, nil

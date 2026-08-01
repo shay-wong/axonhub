@@ -15,6 +15,8 @@ import (
 	"github.com/looplj/axonhub/llm/streams"
 )
 
+const errorMatchBodyLimit = 8 * 1024
+
 // withPerformanceRecording creates a unified middleware that handles all performance tracking.
 // It initializes metrics, tracks first token in streams, and records final metrics.
 func withPerformanceRecording(outbound *PersistentOutboundTransformer) pipeline.Middleware {
@@ -120,12 +122,18 @@ func recordTerminalOutcomePerformance(ctx context.Context, state *PersistenceSta
 	switch response.TerminalOutcome() {
 	case llm.ResponseTerminalOutcomeFailed:
 		statusCode := http.StatusInternalServerError
-		if terminalErr := response.TerminalError(); terminalErr != nil && terminalErr.StatusCode != 0 {
-			statusCode = terminalErr.StatusCode
+		terminalErr := responsePersistenceTerminalError(response)
+		errorMessage := ""
+		if terminalErr != nil {
+			errorMessage = ExtractErrorMessage(terminalErr)
 		}
-		state.Perf.MarkFailed(statusCode)
+		if responseErr := response.TerminalError(); responseErr != nil && responseErr.StatusCode != 0 {
+			statusCode = responseErr.StatusCode
+		}
+		state.Perf.MarkFailedWithMessage(statusCode, errorMessage)
 	case llm.ResponseTerminalOutcomeIncomplete:
 		state.Perf.MarkIncomplete()
+		state.Perf.ErrorMessage = ExtractErrorMessage(responsePersistenceTerminalError(response))
 	case llm.ResponseTerminalOutcomeCanceled:
 		state.Perf.MarkCanceled()
 	default:
@@ -164,7 +172,7 @@ func recordPerformanceError(ctx context.Context, state *PersistenceState, err er
 	} else {
 		perf.TransportFailure = isTransportFailure(err)
 		errorCode := ExtractErrorCode(err)
-		perf.MarkFailed(errorCode)
+		perf.MarkFailedWithMessage(errorCode, extractErrorMessageForMatching(err))
 		if errorCode == http.StatusTooManyRequests {
 			if duration, ok := httpclient.ParseRetryAfter(err); ok {
 				perf.RetryAfterDuration = &duration
@@ -270,6 +278,21 @@ func ExtractErrorCode(err error) int {
 
 	// Default to 500
 	return 500
+}
+
+func extractErrorMessageForMatching(err error) string {
+	message := ExtractErrorMessage(err)
+	httpErr := &httpclient.Error{}
+	if !errors.As(err, &httpErr) || len(httpErr.Body) == 0 {
+		return message
+	}
+
+	body := httpErr.Body
+	if len(body) > errorMatchBodyLimit {
+		body = body[:errorMatchBodyLimit]
+	}
+
+	return message + "\n" + string(body)
 }
 
 type NoopPerformanceRecording struct {

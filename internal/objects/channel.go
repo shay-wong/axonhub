@@ -262,12 +262,27 @@ type DisabledAPIKey struct {
 	DisableAction string     `json:"disableAction,omitempty"`
 	ErrorCode     int        `json:"errorCode"`
 	Reason        string     `json:"reason,omitempty"`
+	ExpiresAt     *time.Time `json:"expiresAt,omitempty"`
 }
 
 type ChannelAPIKeyConfig struct {
 	Key    string `json:"key"`
 	Name   string `json:"name,omitempty"`
 	Weight int    `json:"weight,omitempty"`
+}
+
+// IsExpiredAt reports whether a temporary API key disable has elapsed.
+func (dk DisabledAPIKey) IsExpiredAt(now time.Time) bool {
+	expiresAt := dk.DisabledUntil
+	if expiresAt == nil {
+		expiresAt = dk.ExpiresAt
+	}
+	return expiresAt != nil && !expiresAt.After(now)
+}
+
+// IsExpired reports whether a temporary API key disable has elapsed now.
+func (dk DisabledAPIKey) IsExpired() bool {
+	return dk.IsExpiredAt(time.Now())
 }
 
 type ChannelCredentials struct {
@@ -367,10 +382,7 @@ func (c *ChannelCredentials) GetEnabledAPIKeyConfigsAt(disabledKeys []DisabledAP
 
 	disabledSet := make(map[string]struct{}, len(disabledKeys))
 	for _, dk := range disabledKeys {
-		if dk.Key == "" {
-			continue
-		}
-		if dk.DisabledUntil != nil && !dk.DisabledUntil.After(now) {
+		if dk.Key == "" || dk.IsExpiredAt(now) {
 			continue
 		}
 
@@ -480,7 +492,25 @@ const (
 )
 
 type ChannelPolicies struct {
-	Stream CapabilityPolicy `json:"stream,omitempty"`
+	Stream                 CapabilityPolicy        `json:"stream,omitempty"`
+	APIKeyAutoDisableRules []APIKeyAutoDisableRule `json:"apiKeyAutoDisableRules,omitempty"`
+}
+
+type APIKeyAutoDisableAction string
+
+const (
+	APIKeyAutoDisableActionTemporary APIKeyAutoDisableAction = "temporary_disable"
+	APIKeyAutoDisableActionPermanent APIKeyAutoDisableAction = "permanent_disable_delete"
+)
+
+// APIKeyAutoDisableRule applies to one channel and matches status codes and/or
+// error-message patterns. At least one condition is required.
+type APIKeyAutoDisableRule struct {
+	StatusCodes            []int                   `json:"statusCodes,omitempty"`
+	KeywordPatterns        []string                `json:"keywordPatterns,omitempty"`
+	Times                  int                     `json:"times"`
+	Action                 APIKeyAutoDisableAction `json:"action"`
+	DisableDurationMinutes *int                    `json:"disableDurationMinutes,omitempty"`
 }
 
 // ParseOverrideOperations parses the override parameters string.

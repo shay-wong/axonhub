@@ -10,6 +10,41 @@ import (
 	"github.com/looplj/axonhub/internal/server/middleware"
 )
 
+func TestMemorySizeUnmarshalText(t *testing.T) {
+	tests := []struct {
+		input string
+		want  MemorySize
+	}{
+		{input: "512mb", want: 512 << 20},
+		{input: "512MB", want: 512 << 20},
+		{input: "1.5gb", want: 3 << 29},
+		{input: "64k", want: 64 << 10},
+		{input: "536870912", want: 512 << 20},
+		{input: "", want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			var got MemorySize
+			if err := got.UnmarshalText([]byte(tt.input)); err != nil {
+				t.Fatalf("UnmarshalText(%q) error = %v", tt.input, err)
+			}
+			if got != tt.want {
+				t.Fatalf("UnmarshalText(%q) = %d, want %d", tt.input, got, tt.want)
+			}
+		})
+	}
+
+	for _, input := range []string{"512TB", "invalid"} {
+		t.Run(input, func(t *testing.T) {
+			var got MemorySize
+			if err := got.UnmarshalText([]byte(input)); err == nil {
+				t.Fatalf("UnmarshalText(%q) unexpectedly succeeded", input)
+			}
+		})
+	}
+}
+
 func TestNewDisablesTrustedProxyHeadersByDefault(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

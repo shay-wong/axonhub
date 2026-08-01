@@ -25,6 +25,10 @@ const (
 	APIKeySelectionStrategyFailover       = "failover"
 )
 
+func NewChannelAPIKeyContextProvider(inner auth.APIKeyProvider) auth.APIKeyProvider {
+	return NewRecordingAPIKeyProvider(inner)
+}
+
 // TraceStickyKeyProvider selects an API key deterministically per traceID (if present),
 // using cached enabled keys from the channel snapshot.
 //

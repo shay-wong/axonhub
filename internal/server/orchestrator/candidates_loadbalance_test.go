@@ -89,6 +89,31 @@ func TestLoadBalancedSelector_Select_CountsDistinctChannelsAcrossPriorities(t *t
 	)
 }
 
+func TestLoadBalancedSelector_Select_TracksOnlyFinalSelectionAcrossPriorities(t *testing.T) {
+	candidates := []*ChannelModelsCandidate{
+		stickyTestCandidate(1, 0),
+		stickyTestCandidate(2, 0),
+		stickyTestCandidate(3, 1),
+		stickyTestCandidate(4, 1),
+	}
+	policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
+		Enabled:           true,
+		MaxChannelRetries: 2,
+	}}
+	tracker := &mockSelectionTracker{}
+	selector := WithLoadBalancedSelector(
+		&staticChannelSelector{candidates: candidates},
+		NewLoadBalancer(policy, tracker).WithoutWeightTieBreaker(),
+		policy,
+	)
+
+	result, err := selector.Select(t.Context(), &llm.Request{Model: "requested-model"})
+	require.NoError(t, err)
+	require.Len(t, result, 3)
+	require.Equal(t, 1, result[0].Channel.ID)
+	require.Equal(t, map[int]int{1: 1}, tracker.selections)
+}
+
 func TestLoadBalancedSelector_Select_CountsDistinctChannelsWithinPriority(t *testing.T) {
 	channelA := stickyTestCandidate(1, 0)
 	channelA.Models = []biz.ChannelModelEntry{{ActualModel: "model-a-primary"}}

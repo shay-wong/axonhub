@@ -199,6 +199,9 @@ func TestChatCompletionOrchestrator_Process_ResponsesLateStreamErrorRecordsFailu
 	project := createTestProject(t, ctx, client)
 	ch := createTestChannel(t, ctx, client)
 	channelService, requestService, systemService, usageLogService := setupTestServices(t, client)
+	retryPolicy := systemService.RetryPolicyOrDefault(ctx)
+	retryPolicy.LoadBalancerStrategy = biz.LoadBalancerStrategyCircuitBreaker
+	require.NoError(t, systemService.SetRetryPolicy(ctx, retryPolicy))
 	lateErr := errors.New("responses upstream connection reset")
 	executor := &mockExecutorWithErrorStream{
 		events: []*httpclient.StreamEvent{
@@ -827,6 +830,9 @@ func TestChatCompletionOrchestrator_Process_StreamingError(t *testing.T) {
 	project := createTestProject(t, ctx, client)
 	ch := createTestChannel(t, ctx, client)
 	channelService, requestService, systemService, usageLogService := setupTestServices(t, client)
+	retryPolicy := systemService.RetryPolicyOrDefault(ctx)
+	retryPolicy.LoadBalancerStrategy = biz.LoadBalancerStrategyCircuitBreaker
+	require.NoError(t, systemService.SetRetryPolicy(ctx, retryPolicy))
 
 	// Create a stream that emits some events then errors
 	midStreamErr := errors.New("upstream connection reset")

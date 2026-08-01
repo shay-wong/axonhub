@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -98,6 +99,15 @@ func (r *streamBodyThenError) Read(p []byte) (int, error) {
 }
 
 func (r *streamBodyThenError) Close() error { return nil }
+
+func TestExtractErrorMessageForMatchingCapsResponseBody(t *testing.T) {
+	body := []byte(strings.Repeat("x", errorMatchBodyLimit+1024))
+	err := &httpclient.Error{StatusCode: 500, Body: body}
+
+	message := extractErrorMessageForMatching(err)
+	expected := ExtractErrorMessage(err) + "\n" + string(body[:errorMatchBodyLimit])
+	require.Equal(t, expected, message)
+}
 
 // mockChannelService is a mock implementation of ChannelService for testing
 type mockChannelService struct{}
@@ -498,6 +508,9 @@ func TestPerformanceRecording_OnOutboundRawRequest_SkipsHealthStateTrackingForPe
 		Request: &ent.Request{
 			Source: request.SourceTest,
 		},
+		RoutingPolicy: EffectiveRoutingPolicy{
+			LoadBalancerStrategy: biz.LoadBalancerStrategyCircuitBreaker,
+		},
 		CurrentCandidate: &ChannelModelsCandidate{
 			Channel: channel,
 		},
@@ -548,7 +561,6 @@ func TestModelCircuitBreakerTracker_OnOutboundRawError_SkipsHealthStateTrackingF
 			state: state,
 		},
 		modelCircuitBreaker: modelCircuitBreaker,
-		strategy:            biz.LoadBalancerStrategyCircuitBreaker,
 	}
 
 	tracker.OnOutboundRawError(context.Background(), &httpclient.Error{StatusCode: http.StatusServiceUnavailable})
