@@ -18,10 +18,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`e436f7c43ae75c2670946ea6d523a9d5f09b6889`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`c095efbf21d5c5dc27109937121d6bb46e44d3d5`
-- 本次 merge base：`9d4b2a8b6c26d5354317688a3b2ece3e1818dfb9`
-- 审计范围：`git diff c095efbf..HEAD`
+- 本次 upstream merge 的 fork parent：`ec2c3b594498ccf4648dd5926a8fbb2f66cc12ae`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`ac70e652765bd3a0b7554fb7808ae87b62096049`
+- 本次 merge base：`c095efbf21d5c5dc27109937121d6bb46e44d3d5`
+- 审计范围：`git diff ac70e652..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -168,16 +168,16 @@ git show --remerge-diff <merge-commit>
 - 上游吸收条件：upstream 覆盖普通 `httpclient.Error.Body` 和流式终态的完整持久化矩阵，并保持 active body 隐藏。
 - 验证：`go test ./internal/server/orchestrator ./internal/server/biz -run 'Terminal|ResponseBody|RequestExecution|Failed'`。
 
-### U06 时效性模型目录和默认模型
+### U06 GPT-5.6 和 Claude Opus 5 默认模型
 
 - 生命周期：`等待上游吸收`
-- 原始意图：在 upstream 数据同步前提供当前可用的 GPT-5.6 系列和 Claude Opus 5 模型、价格、别名及默认模型。
-- 必须保持：目录 schema 可解析；GPT-5.6 aliases/prices 与 Codex default version 一致；Claude Opus 5 同时存在于 developer catalog、channel default 和 Claude Code default model；不能只同步展示数据而漏掉 transformer allowlist/default。
-- 代码锚点：`frontend/src/features/models/data/providers.json`、`frontend/src/features/models/data/providers.schema.ts`、`frontend/src/features/channels/data/config_channels.ts`、`llm/transformer/openai/codex/constants.go`、`llm/transformer/anthropic/claudecode/constants.go`。
+- 原始意图：让 GPT-5.6 和 Claude Opus 5 不仅出现在 developer catalog，还能被相关渠道和 transformer 作为默认可用模型。
+- 必须保持：Codex default models 包含 `gpt-5.6`；Anthropic 和 Claude Code 渠道默认模型包含 `claude-opus-5`；Claude Code transformer default models 同样包含 `claude-opus-5`。
+- 代码锚点：`frontend/src/features/channels/data/config_channels.ts`、`llm/transformer/openai/codex/constants.go`、`llm/transformer/anthropic/claudecode/constants.go`。
 - 提交锚点：`ab752d4b`、`0e91096d`、`44463a10`、`4eadf589`。
-- 合并审核：下一次 upstream merge 逐项比较 ID、alias、价格、默认值和测试；当前 upstream 已有部分相似数据，不能因此整条盲删。
-- 上游吸收条件：upstream 合入且当前 fork 实际使用的目录、alias、price 和 default 全部等价；等价部分可逐项删除。
-- 验证：`cd llm && go test ./transformer/openai/codex ./transformer/anthropic/claudecode`；`cd frontend && node --test src/features/models/data/providers-schema.test.mjs src/features/channels/data/channel-config.test.mjs`。
+- 合并审核：upstream `ac70e652` 已吸收 developer catalog 中的模型、价格和别名；后续只需核对渠道和 transformer 的默认模型，不能因展示数据存在就删除本条目。
+- 上游吸收条件：upstream 的 Codex、Anthropic channel 和 Claude Code 默认模型全部等价后删除。
+- 验证：`cd llm && go test ./transformer/openai/codex ./transformer/anthropic/claudecode`；`cd frontend && node --test src/features/channels/data/channel-config.test.mjs`。
 
 ### U07 SIGHUP 配置重载和 PID 文件生命周期
 
