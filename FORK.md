@@ -18,10 +18,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`18e579079a3b2f3b45a4aab43949ce1addfa36a8`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`31f898188cc05f13c0971d7ec9762997d9ff6c41`
-- 本次 merge base：`ac70e652765bd3a0b7554fb7808ae87b62096049`
-- 审计范围：`git diff 31f89818..HEAD`
+- 本次 upstream merge 的 fork parent：`a9da77d2be803be5c9e1380507bed2d766aeb0d4`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`b8640bbb70b5f7b12a3fd50bee389d3947e7e7c2`
+- 本次 merge base：`31f898188cc05f13c0971d7ec9762997d9ff6c41`
+- 审计范围：`git diff b8640bbb..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -42,6 +42,13 @@ git diff <upstream-parent>..HEAD -- <path>
 git show <commit>
 git show --remerge-diff <merge-commit>
 ```
+
+## Fork 发布版本
+
+- Upstream 版本来源：`internal/build/VERSION`；本次精确 upstream 基线版本为 `v1.0.0-beta8`。
+- Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
+- 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
+- 当前源码中的 `internal/build/VERSION` 为 upstream 值 `v1.0.0-beta8`，最近已发布 fork tag 为 `v1.0.0-beta6-fork.4`；本次 merge 后的下一个规范化 fork 版本是 `v1.0.0-beta8-fork.1`，发布前必须确认该 tag 尚未占用。
 
 ## 长期保留
 
@@ -244,6 +251,18 @@ git show --remerge-diff <merge-commit>
 - 合并审核：追踪最终 executor 收到的 header，不要只看 `TransformRequest` 的中间结果；同时测试两种 header spelling 和 connection reuse。
 - 上游吸收条件：upstream 在普通、流式和 WebSocket 路径都有 canonical session 测试。
 - 验证：`cd llm && go test ./transformer/openai/codex ./transformer/openai/responses ./httpclient -run 'Session|Header|WebSocketExecutorReusesConnection'`。
+
+### U13 Cline 混合渠道的 ClinePass 耗尽阻断
+
+- 生命周期：`等待上游吸收`
+- 原始意图：provider quota 当前按 channel/token limit 执行；混合渠道的 ClinePass 已耗尽时，不能降级为 `warning` 后继续把 `cline-pass/*` 请求路由到该渠道。
+- 必须保持：混合渠道任一有效 ClinePass 窗口耗尽时，渠道状态为 `exhausted`、`Ready=false`，token limit 同样保留耗尽状态，并在 `exhausted_only` 模式下过滤整条渠道；仅包含 Cline usage-billing 模型的渠道，其 credits 余额仍只作展示，不参与路由阻断。
+- 代码锚点：`internal/server/biz/provider_quota/cline_checker.go`、`internal/server/biz/provider_quota/cline_checker_test.go`、`internal/server/orchestrator/candidates_quota.go`、`internal/server/orchestrator/candidates_quota_test.go`。
+- 用户提示：`frontend/src/locales/en/system.json`、`frontend/src/locales/zh-CN/system.json`；这是已发布行为的维护记录补漏，不新增当前 changelog 条目。
+- 提交锚点：upstream 引入 `ad1176c19`；本地人工 merge resolution `42f7bd7a`。
+- 合并审核：upstream `8915be26` 仍把混合渠道的 ClinePass 耗尽降级为 `warning` 并保持可路由；冲突处理必须同时核对 channel status、`Ready`、limit status、候选过滤和中英文提示，不能只看配额窗口计算是否更新。
+- 上游吸收条件：upstream 提供等价的整渠道 fail-closed 行为，或实现按模型/配额池过滤并确保 `cline-pass/*` 请求不会命中已耗尽池，同时具备回归测试。
+- 验证：`go test ./internal/server/biz/provider_quota -run 'TestCline_CheckQuota_(MixedScopeExhaustsWholeChannelFromPassPool|DirectOnlyUsesBalanceInformationally)$'`；`go test ./internal/server/orchestrator -run 'TestProviderQuotaSelector_(ExhaustedOnlyMode|ChannelExhaustedOverridesPerLimitAvailable)$'`。
 
 ### U14 测试流量与生产渠道健康状态隔离
 

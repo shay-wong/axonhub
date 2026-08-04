@@ -702,7 +702,7 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 			},
 		}
 
-	case StreamEventTypeReasoningSummaryTextDelta:
+	case StreamEventTypeReasoningSummaryTextDelta, StreamEventTypeReasoningTextDelta:
 		// Reasoning content delta
 		s.state.reasoningContent.WriteString(streamEvent.Delta)
 		itemID := lo.FromPtr(streamEvent.ItemID)
@@ -739,7 +739,7 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 			return nil
 		}
 
-	case StreamEventTypeReasoningSummaryTextDone:
+	case StreamEventTypeReasoningSummaryTextDone, StreamEventTypeReasoningTextDone:
 		// Reasoning content completed - skip, content was already streamed via deltas
 		return nil // Intentionally skip this event
 

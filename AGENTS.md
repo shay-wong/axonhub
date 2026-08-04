@@ -10,6 +10,12 @@ This file provides guidance to AI coding assistants when working with code in th
 2. Do NOT restart the development server — it's already started and managed.
 3. All summary files should be stored in `.agent/summary` directory if available.
 
+## Fork Workflow
+
+- Before completing a task that adds, changes, or removes intentional fork behavior, or merges upstream, invoke `$fork-doc`. If the skill is unavailable, follow the maintenance contract in `FORK.md` manually.
+- Reuse still-valid decisions recorded in `FORK.md`; reconsider them only when current evidence adds, contradicts, invalidates, or leaves a decision unresolved.
+- Every fork release must use `<upstream-version>-fork.<N>`. Reset to `fork.1` when the merged upstream version changes; otherwise increment `N` from the highest released revision for that upstream version.
+
 ## Configuration
 
 - Backend API: port 8090, Frontend dev server: port 5173 (proxies to backend).
