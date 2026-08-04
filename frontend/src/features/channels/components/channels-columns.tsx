@@ -26,6 +26,7 @@ import {
   IconShieldLock,
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import { usePermissions } from '@/hooks/usePermissions';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
