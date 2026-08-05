@@ -19001,6 +19001,7 @@ type RequestExecutionMutation struct {
 	channel_api_key_suffix            *string
 	channel_api_key_headers           *[]string
 	appendchannel_api_key_headers     []string
+	reasoning_effort                  *string
 	request_body                      *objects.JSONRawMessage
 	appendrequest_body                objects.JSONRawMessage
 	response_body                     *objects.JSONRawMessage
@@ -19812,6 +19813,55 @@ func (m *RequestExecutionMutation) ResetChannelAPIKeyHeaders() {
 	m.channel_api_key_headers = nil
 	m.appendchannel_api_key_headers = nil
 	delete(m.clearedFields, requestexecution.FieldChannelAPIKeyHeaders)
+}
+
+// SetReasoningEffort sets the "reasoning_effort" field.
+func (m *RequestExecutionMutation) SetReasoningEffort(s string) {
+	m.reasoning_effort = &s
+}
+
+// ReasoningEffort returns the value of the "reasoning_effort" field in the mutation.
+func (m *RequestExecutionMutation) ReasoningEffort() (r string, exists bool) {
+	v := m.reasoning_effort
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReasoningEffort returns the old "reasoning_effort" field's value of the RequestExecution entity.
+// If the RequestExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestExecutionMutation) OldReasoningEffort(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReasoningEffort is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReasoningEffort requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReasoningEffort: %w", err)
+	}
+	return oldValue.ReasoningEffort, nil
+}
+
+// ClearReasoningEffort clears the value of the "reasoning_effort" field.
+func (m *RequestExecutionMutation) ClearReasoningEffort() {
+	m.reasoning_effort = nil
+	m.clearedFields[requestexecution.FieldReasoningEffort] = struct{}{}
+}
+
+// ReasoningEffortCleared returns if the "reasoning_effort" field was cleared in this mutation.
+func (m *RequestExecutionMutation) ReasoningEffortCleared() bool {
+	_, ok := m.clearedFields[requestexecution.FieldReasoningEffort]
+	return ok
+}
+
+// ResetReasoningEffort resets all changes to the "reasoning_effort" field.
+func (m *RequestExecutionMutation) ResetReasoningEffort() {
+	m.reasoning_effort = nil
+	delete(m.clearedFields, requestexecution.FieldReasoningEffort)
 }
 
 // SetRequestBody sets the "request_body" field.
@@ -20700,7 +20750,7 @@ func (m *RequestExecutionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RequestExecutionMutation) Fields() []string {
-	fields := make([]string, 0, 28)
+	fields := make([]string, 0, 29)
 	if m.created_at != nil {
 		fields = append(fields, requestexecution.FieldCreatedAt)
 	}
@@ -20745,6 +20795,9 @@ func (m *RequestExecutionMutation) Fields() []string {
 	}
 	if m.channel_api_key_headers != nil {
 		fields = append(fields, requestexecution.FieldChannelAPIKeyHeaders)
+	}
+	if m.reasoning_effort != nil {
+		fields = append(fields, requestexecution.FieldReasoningEffort)
 	}
 	if m.request_body != nil {
 		fields = append(fields, requestexecution.FieldRequestBody)
@@ -20823,6 +20876,8 @@ func (m *RequestExecutionMutation) Field(name string) (ent.Value, bool) {
 		return m.ChannelAPIKeySuffix()
 	case requestexecution.FieldChannelAPIKeyHeaders:
 		return m.ChannelAPIKeyHeaders()
+	case requestexecution.FieldReasoningEffort:
+		return m.ReasoningEffort()
 	case requestexecution.FieldRequestBody:
 		return m.RequestBody()
 	case requestexecution.FieldResponseBody:
@@ -20888,6 +20943,8 @@ func (m *RequestExecutionMutation) OldField(ctx context.Context, name string) (e
 		return m.OldChannelAPIKeySuffix(ctx)
 	case requestexecution.FieldChannelAPIKeyHeaders:
 		return m.OldChannelAPIKeyHeaders(ctx)
+	case requestexecution.FieldReasoningEffort:
+		return m.OldReasoningEffort(ctx)
 	case requestexecution.FieldRequestBody:
 		return m.OldRequestBody(ctx)
 	case requestexecution.FieldResponseBody:
@@ -21027,6 +21084,13 @@ func (m *RequestExecutionMutation) SetField(name string, value ent.Value) error 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetChannelAPIKeyHeaders(v)
+		return nil
+	case requestexecution.FieldReasoningEffort:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReasoningEffort(v)
 		return nil
 	case requestexecution.FieldRequestBody:
 		v, ok := value.(objects.JSONRawMessage)
@@ -21236,6 +21300,9 @@ func (m *RequestExecutionMutation) ClearedFields() []string {
 	if m.FieldCleared(requestexecution.FieldChannelAPIKeyHeaders) {
 		fields = append(fields, requestexecution.FieldChannelAPIKeyHeaders)
 	}
+	if m.FieldCleared(requestexecution.FieldReasoningEffort) {
+		fields = append(fields, requestexecution.FieldReasoningEffort)
+	}
 	if m.FieldCleared(requestexecution.FieldResponseBody) {
 		fields = append(fields, requestexecution.FieldResponseBody)
 	}
@@ -21300,6 +21367,9 @@ func (m *RequestExecutionMutation) ClearField(name string) error {
 		return nil
 	case requestexecution.FieldChannelAPIKeyHeaders:
 		m.ClearChannelAPIKeyHeaders()
+		return nil
+	case requestexecution.FieldReasoningEffort:
+		m.ClearReasoningEffort()
 		return nil
 	case requestexecution.FieldResponseBody:
 		m.ClearResponseBody()
@@ -21380,6 +21450,9 @@ func (m *RequestExecutionMutation) ResetField(name string) error {
 		return nil
 	case requestexecution.FieldChannelAPIKeyHeaders:
 		m.ResetChannelAPIKeyHeaders()
+		return nil
+	case requestexecution.FieldReasoningEffort:
+		m.ResetReasoningEffort()
 		return nil
 	case requestexecution.FieldRequestBody:
 		m.ResetRequestBody()

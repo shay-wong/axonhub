@@ -18,10 +18,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`a9da77d2be803be5c9e1380507bed2d766aeb0d4`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`b8640bbb70b5f7b12a3fd50bee389d3947e7e7c2`
-- 本次 merge base：`31f898188cc05f13c0971d7ec9762997d9ff6c41`
-- 审计范围：`git diff b8640bbb..HEAD`
+- 本次 upstream merge 的 fork parent：`7fb56e290889abb82a5434c97a831f0e8dfa8409`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`7ed4400595c2d73ca14e0131a86657058f261852`
+- 本次 merge base：`b8640bbb70b5f7b12a3fd50bee389d3947e7e7c2`
+- 审计范围：`git diff 7ed44005..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -45,10 +45,11 @@ git show --remerge-diff <merge-commit>
 
 ## Fork 发布版本
 
-- Upstream 版本来源：`internal/build/VERSION`；本次精确 upstream 基线版本为 `v1.0.0-beta8`。
+- Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta6`。
+- 本次合入源码中的 `internal/build/VERSION` 为开发版本标记 `v1.0.0-beta8`，不是 fork release tag 的 upstream 发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 当前源码中的 `internal/build/VERSION` 为 upstream 值 `v1.0.0-beta8`，最近已发布 fork tag 为 `v1.0.0-beta6-fork.4`；本次 merge 后的下一个规范化 fork 版本是 `v1.0.0-beta8-fork.1`，发布前必须确认该 tag 尚未占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta6-fork.5`；本次 merge 后的下一个规范化 fork 版本是 `v1.0.0-beta6-fork.6`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -68,11 +69,11 @@ git show --remerge-diff <merge-commit>
 - 生命周期：`长期保留`
 - 原始意图：一个 channel 可以管理多个 upstream API Key，并在不泄露完整 secret 的前提下识别、测试和按权重路由每个 Key。
 - 必须保持：优先读取 `apiKeyConfigs`，兼容旧 `apiKey`/`apiKeys`；Key 去重且非正权重归一为 `100`；支持 `trace_sticky`、`weighted_sticky` 和 `failover`；日志和 UI 只显示别名及安全后缀；失败重试优先排除当前 Key 并轮换同一 channel 的其他可用 Key。
-- 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel_apikey_identity.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_apikey_provider.go`、`internal/server/orchestrator/retry.go`、`frontend/src/features/channels/data/api-key-display.ts`、`frontend/src/features/channels/components/channels-action-dialog.tsx`、`frontend/src/features/channels/components/channels-test-api-keys-dialog.tsx`。
+- 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel_apikey_identity.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_apikey_provider.go`、`internal/server/orchestrator/retry.go`、`frontend/src/features/channels/data/api-key-display.ts`、`frontend/src/features/channels/data/channel-input.ts`、`frontend/src/features/channels/components/channels-action-dialog.tsx`、`frontend/src/features/channels/components/channels-api-key-management-dialog.tsx`。
 - 提交锚点：`d6e092ba`、`2909ddaa`、`88980c6e`、`1a69f0c4`、`31b3ad18`、`d53787b1`。
-- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
+- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
 - 吸收/删除条件：只有 fork 明确放弃多 Key 权重策略，或 upstream 提供等价的稳定身份、路由算法、兼容迁移和脱敏展示时才能删除。
-- 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'APIKey|Weighted|Failover|Retry'`；`cd frontend && node --test src/features/channels/data/api-key-display.test.mjs`。
+- 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'APIKey|Weighted|Failover|Retry'`；`cd frontend && node --test src/features/channels/data/api-key-display.test.mjs src/features/channels/data/channel-input.test.mjs`。
 
 ### F03 按渠道启用 Codex 风格 Responses 转换
 

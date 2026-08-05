@@ -63,6 +63,7 @@ type TransformOptions {
   replaceDeveloperRoleWithSystem: Boolean!
   codexStyleResponses: Boolean!
   reasoningEffortMapping: [ReasoningEffortMapping!]
+  downgradeMidConversationSystem: Boolean
 }
 
 type SyncChannelModelsPayload {
@@ -81,6 +82,7 @@ input TransformOptionsInput {
   replaceDeveloperRoleWithSystem: Boolean
   codexStyleResponses: Boolean
   reasoningEffortMapping: [ReasoningEffortMappingInput!]
+  downgradeMidConversationSystem: Boolean
 }
 
 enum ProxyType {

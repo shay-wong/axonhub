@@ -1331,6 +1331,7 @@ enum ChannelType @goModel(model: "github.com/looplj/axonhub/internal/ent/channel
   ollama_anthropic
   evolink
   evolink_anthropic
+  groq
 }
 """
 ChannelWhereInput is used for filtering Channel objects.
@@ -4658,6 +4659,10 @@ type RequestExecution implements Node {
   Header names that carried the upstream channel API key for this execution
   """
   channelAPIKeyHeaders: [String!] @goField(forceResolver: true)
+  """
+  Final reasoning effort sent to the upstream provider
+  """
+  reasoningEffort: String
   requestBody: JSONRawMessage! @goField(forceResolver: true)
   responseBody: JSONRawMessage @goField(forceResolver: true)
   responseChunks: [JSONRawMessage!] @goField(forceResolver: true)
@@ -4929,6 +4934,24 @@ input RequestExecutionWhereInput {
   speedModeNotNil: Boolean
   speedModeEqualFold: String
   speedModeContainsFold: String
+  """
+  reasoning_effort field predicates
+  """
+  reasoningEffort: String
+  reasoningEffortNEQ: String
+  reasoningEffortIn: [String!]
+  reasoningEffortNotIn: [String!]
+  reasoningEffortGT: String
+  reasoningEffortGTE: String
+  reasoningEffortLT: String
+  reasoningEffortLTE: String
+  reasoningEffortContains: String
+  reasoningEffortHasPrefix: String
+  reasoningEffortHasSuffix: String
+  reasoningEffortIsNil: Boolean
+  reasoningEffortNotNil: Boolean
+  reasoningEffortEqualFold: String
+  reasoningEffortContainsFold: String
   """
   error_message field predicates
   """

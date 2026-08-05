@@ -4082,6 +4082,11 @@ func (_q *RequestExecutionQuery) collectField(ctx context.Context, oneNode bool,
 				selectedFields = append(selectedFields, requestexecution.FieldChannelAPIKeyHeaders)
 				fieldSeen[requestexecution.FieldChannelAPIKeyHeaders] = struct{}{}
 			}
+		case "reasoningEffort":
+			if _, ok := fieldSeen[requestexecution.FieldReasoningEffort]; !ok {
+				selectedFields = append(selectedFields, requestexecution.FieldReasoningEffort)
+				fieldSeen[requestexecution.FieldReasoningEffort] = struct{}{}
+			}
 		case "requestBody":
 			if _, ok := fieldSeen[requestexecution.FieldRequestBody]; !ok {
 				selectedFields = append(selectedFields, requestexecution.FieldRequestBody)

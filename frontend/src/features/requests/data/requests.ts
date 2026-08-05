@@ -71,6 +71,7 @@ function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChann
                   status
                   requestedServiceTier
                   speedMode
+                  reasoningEffort
                   passThroughApplied${executionChannelFields}
                 }
                 cursor
@@ -257,6 +258,7 @@ function buildRequestExecutionsQuery(permissions: { canViewChannels: boolean; ca
                 responseStatusCode
                 status
                 format
+                reasoningEffort
                 stream
                 requestURL
                 passThroughApplied

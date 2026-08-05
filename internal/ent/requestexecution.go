@@ -53,6 +53,8 @@ type RequestExecution struct {
 	ChannelAPIKeySuffix string `json:"channel_api_key_suffix,omitempty"`
 	// Header names that carried the upstream channel API key for this execution
 	ChannelAPIKeyHeaders []string `json:"channel_api_key_headers,omitempty"`
+	// Final reasoning effort sent to the upstream provider
+	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
 	// RequestBody holds the value of the "request_body" field.
 	RequestBody objects.JSONRawMessage `json:"request_body,omitempty"`
 	// ResponseBody holds the value of the "response_body" field.
@@ -157,7 +159,7 @@ func (*RequestExecution) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case requestexecution.FieldID, requestexecution.FieldProjectID, requestexecution.FieldRequestID, requestexecution.FieldChannelID, requestexecution.FieldDataStorageID, requestexecution.FieldResponseStatusCode, requestexecution.FieldMetricsLatencyMs, requestexecution.FieldMetricsFirstTokenLatencyMs, requestexecution.FieldMetricsReasoningDurationMs:
 			values[i] = new(sql.NullInt64)
-		case requestexecution.FieldExternalID, requestexecution.FieldSource, requestexecution.FieldModelID, requestexecution.FieldFormat, requestexecution.FieldRequestedServiceTier, requestexecution.FieldSpeedMode, requestexecution.FieldChannelAPIKeyName, requestexecution.FieldChannelAPIKeySuffix, requestexecution.FieldErrorMessage, requestexecution.FieldStatus, requestexecution.FieldRequestURL:
+		case requestexecution.FieldExternalID, requestexecution.FieldSource, requestexecution.FieldModelID, requestexecution.FieldFormat, requestexecution.FieldRequestedServiceTier, requestexecution.FieldSpeedMode, requestexecution.FieldChannelAPIKeyName, requestexecution.FieldChannelAPIKeySuffix, requestexecution.FieldReasoningEffort, requestexecution.FieldErrorMessage, requestexecution.FieldStatus, requestexecution.FieldRequestURL:
 			values[i] = new(sql.NullString)
 		case requestexecution.FieldCreatedAt, requestexecution.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -273,6 +275,13 @@ func (_m *RequestExecution) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.ChannelAPIKeyHeaders); err != nil {
 					return fmt.Errorf("unmarshal field channel_api_key_headers: %w", err)
 				}
+			}
+		case requestexecution.FieldReasoningEffort:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field reasoning_effort", values[i])
+			} else if value.Valid {
+				_m.ReasoningEffort = new(string)
+				*_m.ReasoningEffort = value.String
 			}
 		case requestexecution.FieldRequestBody:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -464,6 +473,11 @@ func (_m *RequestExecution) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("channel_api_key_headers=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ChannelAPIKeyHeaders))
+	builder.WriteString(", ")
+	if v := _m.ReasoningEffort; v != nil {
+		builder.WriteString("reasoning_effort=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("request_body=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RequestBody))

@@ -19,6 +19,7 @@ import {
   IconCopy,
   IconCoin,
   IconLoader2,
+  IconKey,
   IconKeyOff,
   IconGauge,
   IconHistory,
@@ -92,12 +93,6 @@ const clampWeight = (value: number) => formatWeight(Math.min(MAX_WEIGHT, Math.ma
 
 function assertNever(value: never): never {
   throw new Error(`Unhandled channel status action: ${value}`);
-}
-
-function getConfiguredAPIKeys(channel: Channel): string[] {
-  const keys = channel.credentials?.apiKeys?.filter((key) => key.trim().length > 0) ?? [];
-  if (keys.length > 0) return keys;
-  return channel.credentials?.apiKeyConfigs?.map((config) => config.key.trim()).filter((key) => key.length > 0) ?? [];
 }
 
 function DisabledAPIKeysTooltipContent({ channel, label }: { channel: Channel; label: string }) {
@@ -264,8 +259,6 @@ const ActionCell = memo(({ row, canWrite }: ChannelCellProps) => {
     viewModel,
     toAction,
   } = channelStatusActions;
-  const apiKeysCount = getConfiguredAPIKeys(channel).length;
-  const hasMultipleAPIKeys = canWrite && apiKeysCount > 1;
 
   const handleDefaultTest = async () => {
     try {
@@ -389,15 +382,15 @@ const ActionCell = memo(({ row, canWrite }: ChannelCellProps) => {
             <IconPlugConnected size={16} className='mr-2' />
             {t('channels.endpoints.title')}
           </DropdownMenuItem>
-          {hasMultipleAPIKeys && (
+          {canWrite && (
             <DropdownMenuItem
               onClick={() => {
                 setCurrentRow(channel);
-                setOpen('testAPIKeys');
+                setOpen('keyManagement');
               }}
             >
-              <IconPlayerPlay size={16} className='mr-2' />
-              {t('channels.actions.testAPIKeys', { count: apiKeysCount })}
+              <IconKey size={16} className='mr-2' />
+              {t('channels.actions.keyManagement')}
             </DropdownMenuItem>
           )}
           {canWrite && (
@@ -770,7 +763,6 @@ const OrderingWeightCell = memo(({ row, canWrite }: ChannelCellProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [weight, setWeight] = useState<string>(initialWeight?.toString() || '1');
   const updateChannel = useUpdateChannel();
-  const { channelPermissions } = usePermissions();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

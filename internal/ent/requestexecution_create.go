@@ -213,6 +213,20 @@ func (_c *RequestExecutionCreate) SetChannelAPIKeyHeaders(v []string) *RequestEx
 	return _c
 }
 
+// SetReasoningEffort sets the "reasoning_effort" field.
+func (_c *RequestExecutionCreate) SetReasoningEffort(v string) *RequestExecutionCreate {
+	_c.mutation.SetReasoningEffort(v)
+	return _c
+}
+
+// SetNillableReasoningEffort sets the "reasoning_effort" field if the given value is not nil.
+func (_c *RequestExecutionCreate) SetNillableReasoningEffort(v *string) *RequestExecutionCreate {
+	if v != nil {
+		_c.SetReasoningEffort(*v)
+	}
+	return _c
+}
+
 // SetRequestBody sets the "request_body" field.
 func (_c *RequestExecutionCreate) SetRequestBody(v objects.JSONRawMessage) *RequestExecutionCreate {
 	_c.mutation.SetRequestBody(v)
@@ -575,6 +589,10 @@ func (_c *RequestExecutionCreate) createSpec() (*RequestExecution, *sqlgraph.Cre
 	if value, ok := _c.mutation.ChannelAPIKeyHeaders(); ok {
 		_spec.SetField(requestexecution.FieldChannelAPIKeyHeaders, field.TypeJSON, value)
 		_node.ChannelAPIKeyHeaders = value
+	}
+	if value, ok := _c.mutation.ReasoningEffort(); ok {
+		_spec.SetField(requestexecution.FieldReasoningEffort, field.TypeString, value)
+		_node.ReasoningEffort = &value
 	}
 	if value, ok := _c.mutation.RequestBody(); ok {
 		_spec.SetField(requestexecution.FieldRequestBody, field.TypeJSON, value)
@@ -1036,6 +1054,9 @@ func (u *RequestExecutionUpsertOne) UpdateNewValues() *RequestExecutionUpsertOne
 		}
 		if _, exists := u.create.mutation.ChannelAPIKeyHeaders(); exists {
 			s.SetIgnore(requestexecution.FieldChannelAPIKeyHeaders)
+		}
+		if _, exists := u.create.mutation.ReasoningEffort(); exists {
+			s.SetIgnore(requestexecution.FieldReasoningEffort)
 		}
 		if _, exists := u.create.mutation.RequestBody(); exists {
 			s.SetIgnore(requestexecution.FieldRequestBody)
@@ -1568,6 +1589,9 @@ func (u *RequestExecutionUpsertBulk) UpdateNewValues() *RequestExecutionUpsertBu
 			}
 			if _, exists := b.mutation.ChannelAPIKeyHeaders(); exists {
 				s.SetIgnore(requestexecution.FieldChannelAPIKeyHeaders)
+			}
+			if _, exists := b.mutation.ReasoningEffort(); exists {
+				s.SetIgnore(requestexecution.FieldReasoningEffort)
 			}
 			if _, exists := b.mutation.RequestBody(); exists {
 				s.SetIgnore(requestexecution.FieldRequestBody)
