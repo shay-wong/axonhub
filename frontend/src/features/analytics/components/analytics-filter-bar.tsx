@@ -1,19 +1,17 @@
 import { useState, useCallback } from 'react';
+import { IconCalendar, IconX, IconFilter } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { IconCalendar, IconX, IconFilter, IconLoader2, IconRefresh, IconSearch } from '@tabler/icons-react';
+import { useAnalyticsFilterStore } from '@/stores/analyticsStore';
 import { cn } from '@/lib/utils';
 import { useDebounce } from '@/hooks/use-debounce';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useAnalyticsFilterStore } from '@/stores/analyticsStore';
 import { useAnalyticsFilterOptions } from '../data/analytics';
-import type { AnalyticsFilterDimension, AnalyticsFilterOption } from '../data/analytics';
+import type { AnalyticsFilterDimension } from '../data/analytics';
+import { AnalyticsFacetedFilter } from './analytics-faceted-filter';
 
 // Calendar Date → 'YYYY-MM-DD' 字符串（直接取本地年月日，不做时区转换）
 function formatDate(date: Date): string {
@@ -27,124 +25,6 @@ function formatDate(date: Date): string {
 function parseDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d);
-}
-
-interface MultiSelectProps {
-  label: string;
-  placeholder: string;
-  options: AnalyticsFilterOption[];
-  selected: string[];
-  onChange: (values: string[]) => void;
-  search: string;
-  onSearchChange: (value: string) => void;
-  isLoading?: boolean;
-  isFetching?: boolean;
-  isError?: boolean;
-  onRetry: () => void;
-}
-
-function MultiSelect({
-  label,
-  placeholder,
-  options,
-  selected,
-  onChange,
-  search,
-  onSearchChange,
-  isLoading,
-  isFetching,
-  isError,
-  onRetry,
-}: MultiSelectProps) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-
-  const toggle = (id: string) => {
-    if (selected.includes(id)) {
-      onChange(selected.filter((value) => value !== id));
-    } else {
-      onChange([...selected, id]);
-    }
-  };
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (!nextOpen) {
-      onSearchChange('');
-    }
-  };
-
-  return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <Button
-          variant='outline'
-          role='combobox'
-          aria-expanded={open}
-          className='h-8 min-w-[140px] justify-between text-xs font-normal'
-        >
-          <span className='truncate'>
-            {selected.length > 0 ? `${label} (${selected.length})` : placeholder}
-          </span>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className='w-[220px] p-0' align='start'>
-        <div className='border-b p-2'>
-          <div className='relative'>
-            <IconSearch className='absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground' />
-            <Input
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-              placeholder={placeholder}
-              className='h-8 px-7 text-xs'
-            />
-            {isFetching && (
-              <IconLoader2 className='absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground' />
-            )}
-          </div>
-        </div>
-        <div className='max-h-[300px] overflow-auto p-1'>
-          {isError ? (
-            <div className='flex flex-col items-center gap-2 px-2 py-4 text-center text-xs text-muted-foreground'>
-              <span>{t('common.errors.loadFailed')}</span>
-              <Button type='button' variant='ghost' size='sm' className='h-7 text-xs' onClick={onRetry}>
-                <IconRefresh className='mr-1 h-3 w-3' />
-                {t('common.buttons.retry')}
-              </Button>
-            </div>
-          ) : isLoading ? (
-            <div className='flex items-center justify-center py-4'>
-              <Skeleton className='h-4 w-full' />
-            </div>
-          ) : options.length === 0 ? (
-            <div className='px-2 py-4 text-center text-xs text-muted-foreground'>
-              {placeholder}
-            </div>
-          ) : (
-            options.map((option) => (
-              <button
-                key={option.id}
-                type='button'
-                className={cn(
-                  'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent',
-                  selected.includes(option.id) && 'bg-accent'
-                )}
-                onClick={() => toggle(option.id)}
-              >
-                <input
-                  type='checkbox'
-                  checked={selected.includes(option.id)}
-                  onChange={() => {}}
-                  className='h-3 w-3'
-                />
-                <span className='truncate'>{option.label}</span>
-              </button>
-            ))
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
 }
 
 interface DateRangePickerProps {
@@ -195,22 +75,14 @@ function DateRangePicker({ startDate, endDate, onStartChange, onEndChange }: Dat
         <PopoverTrigger asChild>
           <Button
             variant='outline'
-            className={cn(
-              'h-8 w-[130px] justify-start text-left text-xs font-normal',
-              !startDate && 'text-muted-foreground'
-            )}
+            className={cn('h-8 w-[130px] justify-start text-left text-xs font-normal', !startDate && 'text-muted-foreground')}
           >
             <IconCalendar className='mr-1 h-3 w-3' />
             {startDate || t('analytics.filter.startDate')}
           </Button>
         </PopoverTrigger>
         <PopoverContent className='w-auto p-0' align='start'>
-          <Calendar
-            mode='single'
-            selected={startDate ? parseDate(startDate) : undefined}
-            onSelect={handleStartDateSelect}
-            initialFocus
-          />
+          <Calendar mode='single' selected={startDate ? parseDate(startDate) : undefined} onSelect={handleStartDateSelect} initialFocus />
         </PopoverContent>
       </Popover>
 
@@ -220,10 +92,7 @@ function DateRangePicker({ startDate, endDate, onStartChange, onEndChange }: Dat
         <PopoverTrigger asChild>
           <Button
             variant='outline'
-            className={cn(
-              'h-8 w-[130px] justify-start text-left text-xs font-normal',
-              !endDate && 'text-muted-foreground'
-            )}
+            className={cn('h-8 w-[130px] justify-start text-left text-xs font-normal', !endDate && 'text-muted-foreground')}
           >
             <IconCalendar className='mr-1 h-3 w-3' />
             {endDate || t('analytics.filter.endDate')}
@@ -246,16 +115,8 @@ function DateRangePicker({ startDate, endDate, onStartChange, onEndChange }: Dat
 export function AnalyticsFilterBar() {
   const { t } = useTranslation();
   const filter = useAnalyticsFilterStore((state) => state.filter);
-  const {
-    setStartTime,
-    setEndTime,
-    setProjectIDs,
-    setChannelIDs,
-    setModelIDs,
-    setAPIKeyIDs,
-    setUserIDs,
-    resetFilter,
-  } = useAnalyticsFilterStore();
+  const { setStartTime, setEndTime, setProjectIDs, setChannelIDs, setModelIDs, setAPIKeyIDs, setUserIDs, resetFilter } =
+    useAnalyticsFilterStore();
   const { hasSystemScope } = usePermissions();
   const canReadDashboard = hasSystemScope('read_dashboard');
   const canReadProjects = hasSystemScope('read_projects');
@@ -290,11 +151,13 @@ export function AnalyticsFilterBar() {
   const apiKeyOptionsQuery = useAnalyticsFilterOptions('apiKey', debouncedAPIKeySearch, canReadAPIKeys);
   const userOptionsQuery = useAnalyticsFilterOptions('user', debouncedUserSearch, canFilterByUsers);
 
-  const projectOptions = projectOptionsQuery.data ?? [];
-  const channelOptions = channelOptionsQuery.data ?? [];
-  const modelOptions = modelOptionsQuery.data ?? [];
-  const apiKeyOptions = apiKeyOptionsQuery.data ?? [];
-  const userOptions = userOptionsQuery.data ?? [];
+  const toFacetedOptions = (options: { id: string; label: string }[] | undefined) =>
+    (options ?? []).map((option) => ({ label: option.label, value: option.id }));
+  const projectOptions = toFacetedOptions(projectOptionsQuery.data);
+  const channelOptions = toFacetedOptions(channelOptionsQuery.data);
+  const modelOptions = toFacetedOptions(modelOptionsQuery.data);
+  const apiKeyOptions = toFacetedOptions(apiKeyOptionsQuery.data);
+  const userOptions = toFacetedOptions(userOptionsQuery.data);
 
   const handleStartDate = useCallback(
     (date: Date | null) => {
@@ -346,11 +209,11 @@ export function AnalyticsFilterBar() {
     (canFilterByUsers && filter.userIDs);
 
   return (
-    <div className='space-y-3 rounded-lg border bg-card p-4'>
+    <div className='bg-card space-y-3 rounded-lg border p-4'>
       {/* Date Filters */}
       <div className='flex flex-wrap items-center gap-2'>
         <div className='flex items-center gap-1.5 text-sm font-medium'>
-          <IconFilter className='h-4 w-4 text-muted-foreground' />
+          <IconFilter className='text-muted-foreground h-4 w-4' />
           {t('analytics.filter.dateRange')}
         </div>
 
@@ -388,12 +251,11 @@ export function AnalyticsFilterBar() {
       {/* Dimension Filters */}
       <div className='flex flex-wrap items-center gap-2'>
         {canReadProjects && (
-          <MultiSelect
-            label={t('analytics.filter.project')}
-            placeholder={t('analytics.filter.selectProject')}
+          <AnalyticsFacetedFilter
+            title={t('analytics.filter.project')}
             options={projectOptions}
-            selected={filter.projectIDs || []}
-            onChange={setProjectIDs}
+            selectedValues={filter.projectIDs || []}
+            onSelectedValuesChange={setProjectIDs}
             search={searches.project}
             onSearchChange={(value) => updateSearch('project', value)}
             isLoading={projectOptionsQuery.isLoading}
@@ -404,12 +266,11 @@ export function AnalyticsFilterBar() {
         )}
 
         {canReadChannels && (
-          <MultiSelect
-            label={t('analytics.filter.channel')}
-            placeholder={t('analytics.filter.selectChannel')}
+          <AnalyticsFacetedFilter
+            title={t('analytics.filter.channel')}
             options={channelOptions}
-            selected={filter.channelIDs || []}
-            onChange={setChannelIDs}
+            selectedValues={filter.channelIDs || []}
+            onSelectedValuesChange={setChannelIDs}
             search={searches.channel}
             onSearchChange={(value) => updateSearch('channel', value)}
             isLoading={channelOptionsQuery.isLoading}
@@ -420,12 +281,11 @@ export function AnalyticsFilterBar() {
         )}
 
         {canReadDashboard && (
-          <MultiSelect
-            label={t('analytics.filter.model')}
-            placeholder={t('analytics.filter.selectModel')}
+          <AnalyticsFacetedFilter
+            title={t('analytics.filter.model')}
             options={modelOptions}
-            selected={filter.modelIDs || []}
-            onChange={setModelIDs}
+            selectedValues={filter.modelIDs || []}
+            onSelectedValuesChange={setModelIDs}
             search={searches.model}
             onSearchChange={(value) => updateSearch('model', value)}
             isLoading={modelOptionsQuery.isLoading}
@@ -436,12 +296,11 @@ export function AnalyticsFilterBar() {
         )}
 
         {canReadAPIKeys && (
-          <MultiSelect
-            label={t('analytics.filter.apiKey')}
-            placeholder={t('analytics.filter.selectAPIKey')}
+          <AnalyticsFacetedFilter
+            title={t('analytics.filter.apiKey')}
             options={apiKeyOptions}
-            selected={filter.apiKeyIDs || []}
-            onChange={setAPIKeyIDs}
+            selectedValues={filter.apiKeyIDs || []}
+            onSelectedValuesChange={setAPIKeyIDs}
             search={searches.apiKey}
             onSearchChange={(value) => updateSearch('apiKey', value)}
             isLoading={apiKeyOptionsQuery.isLoading}
@@ -452,12 +311,11 @@ export function AnalyticsFilterBar() {
         )}
 
         {canFilterByUsers && (
-          <MultiSelect
-            label={t('analytics.filter.user')}
-            placeholder={t('analytics.filter.selectUser')}
+          <AnalyticsFacetedFilter
+            title={t('analytics.filter.user')}
             options={userOptions}
-            selected={filter.userIDs || []}
-            onChange={setUserIDs}
+            selectedValues={filter.userIDs || []}
+            onSelectedValuesChange={setUserIDs}
             search={searches.user}
             onSearchChange={(value) => updateSearch('user', value)}
             isLoading={userOptionsQuery.isLoading}
@@ -469,86 +327,12 @@ export function AnalyticsFilterBar() {
 
         {/* Reset Button */}
         {hasFilters && (
-          <Button variant='ghost' size='sm' className='h-8 text-xs text-muted-foreground' onClick={resetFilter}>
+          <Button variant='ghost' size='sm' className='text-muted-foreground h-8 text-xs' onClick={resetFilter}>
             <IconX className='mr-1 h-3 w-3' />
             {t('analytics.filter.reset')}
           </Button>
         )}
       </div>
-
-      {/* Active Filters Display */}
-      {hasFilters && (
-        <div className='flex flex-wrap gap-1'>
-          {filter.startTime && (
-            <Badge variant='secondary' className='text-xs'>
-              {t('analytics.filter.startDate')}: {filter.startTime}
-              <button type='button' className='ml-1' onClick={() => setStartTime(null)}>
-                <IconX className='h-3 w-3' />
-              </button>
-            </Badge>
-          )}
-          {filter.endTime && (
-            <Badge variant='secondary' className='text-xs'>
-              {t('analytics.filter.endDate')}: {filter.endTime}
-              <button type='button' className='ml-1' onClick={() => setEndTime(null)}>
-                <IconX className='h-3 w-3' />
-              </button>
-            </Badge>
-          )}
-          {canReadProjects && filter.projectIDs?.map((id) => {
-            const name = projectOptions.find((option) => option.id === id)?.label || id;
-            return (
-              <Badge key={id} variant='secondary' className='text-xs'>
-                {name}
-                <button type='button' className='ml-1' onClick={() => setProjectIDs(filter.projectIDs!.filter((i) => i !== id))}>
-                  <IconX className='h-3 w-3' />
-                </button>
-              </Badge>
-            );
-          })}
-          {canReadChannels && filter.channelIDs?.map((id) => {
-            const name = channelOptions.find((option) => option.id === id)?.label || id;
-            return (
-              <Badge key={id} variant='secondary' className='text-xs'>
-                {name}
-                <button type='button' className='ml-1' onClick={() => setChannelIDs(filter.channelIDs!.filter((i) => i !== id))}>
-                  <IconX className='h-3 w-3' />
-                </button>
-              </Badge>
-            );
-          })}
-          {canReadDashboard && filter.modelIDs?.map((id) => (
-            <Badge key={id} variant='secondary' className='text-xs'>
-              {id}
-              <button type='button' className='ml-1' onClick={() => setModelIDs(filter.modelIDs!.filter((i) => i !== id))}>
-                <IconX className='h-3 w-3' />
-              </button>
-            </Badge>
-          ))}
-          {canReadAPIKeys && filter.apiKeyIDs?.map((id) => {
-            const name = apiKeyOptions.find((option) => option.id === id)?.label || id;
-            return (
-              <Badge key={id} variant='secondary' className='text-xs'>
-                {name}
-                <button type='button' className='ml-1' onClick={() => setAPIKeyIDs(filter.apiKeyIDs!.filter((i) => i !== id))}>
-                  <IconX className='h-3 w-3' />
-                </button>
-              </Badge>
-            );
-          })}
-          {canFilterByUsers && filter.userIDs?.map((id) => {
-            const name = userOptions.find((option) => option.id === id)?.label || id;
-            return (
-              <Badge key={id} variant='secondary' className='text-xs'>
-                {name}
-                <button type='button' className='ml-1' onClick={() => setUserIDs(filter.userIDs!.filter((i) => i !== id))}>
-                  <IconX className='h-3 w-3' />
-                </button>
-              </Badge>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

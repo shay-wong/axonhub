@@ -18,10 +18,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`7fb56e290889abb82a5434c97a831f0e8dfa8409`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`7ed4400595c2d73ca14e0131a86657058f261852`
-- 本次 merge base：`b8640bbb70b5f7b12a3fd50bee389d3947e7e7c2`
-- 审计范围：`git diff 7ed44005..HEAD`
+- 本次 upstream merge 的 fork parent：`a326aed403b3939dcac38f08d711c800b9cd3e32`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`d6ed9c6288ae1642a5a1e8f76db7a8abc0b223af`
+- 本次 merge base：`7ed4400595c2d73ca14e0131a86657058f261852`
+- 审计范围：`git diff d6ed9c62..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -49,7 +49,7 @@ git show --remerge-diff <merge-commit>
 - 本次合入源码中的 `internal/build/VERSION` 为开发版本标记 `v1.0.0-beta8`，不是 fork release tag 的 upstream 发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta6-fork.5`；本次 merge 后的下一个规范化 fork 版本是 `v1.0.0-beta6-fork.6`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta6-fork.6`；本次 merge 后的下一个规范化 fork 版本是 `v1.0.0-beta6-fork.7`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -91,9 +91,9 @@ git show --remerge-diff <merge-commit>
 - 生命周期：`长期保留`
 - 原始意图：准确识别 Codex/OpenAI/Anthropic 的 Fast 请求意图和 provider 实际应用的 tier，并用正确价格计费、持久化和展示。
 - 必须保持：request intent、provider-applied tier 和 request-derived pricing override 分开建模；Codex `priority` 只在 provider tier 为空或 default 时覆盖计费；明确的非 default provider tier 优先；Anthropic `speed=fast` 使用 Fast price key；定时价格表保留 prompt cache variants；请求列表展示最终/请求 tier，并在移动端默认隐藏高密度列但保留用户旧版列偏好。
-- 代码锚点：`llm/service_tier.go`、`internal/server/orchestrator/service_tier.go`、`internal/objects/price.go`、`internal/ent/schema/request_execution.go`、`internal/ent/schema/usage_log.go`、`internal/server/biz/usage_log.go`、`frontend/src/features/channels/data/model-price-form.ts`、`frontend/src/features/requests/utils/service-tier.ts`、`frontend/src/features/requests/components/requests-columns.tsx`、`frontend/src/features/requests/components/requests-table.tsx`、`frontend/src/locales/en/requests.json`、`frontend/src/locales/zh-CN/requests.json`。
+- 代码锚点：`llm/service_tier.go`、`internal/server/orchestrator/service_tier.go`、`internal/objects/price.go`、`internal/ent/schema/request_execution.go`、`internal/ent/schema/usage_log.go`、`internal/server/biz/usage_log.go`、`frontend/src/features/channels/data/model-price-form.ts`、`frontend/src/features/channels/components/channels-model-price-dialog.tsx`、`frontend/src/features/requests/utils/service-tier.ts`、`frontend/src/features/requests/utils/column-visibility.ts`、`frontend/src/features/requests/components/requests-columns.tsx`、`frontend/src/features/requests/components/requests-table.tsx`、`frontend/src/features/requests-mobile-columns.test.mjs`、`frontend/src/locales/en/requests.json`、`frontend/src/locales/zh-CN/requests.json`。
 - 提交锚点：`d4793bf7`、`7c45f58e`、`251b8770`、`f155d3d8`、`822da75c`、`8c64997f`；相关 merge resolution：`864c15a3`、`ee209fd8`。
-- 合并审核：schema、Ent、GraphQL、backup、billing 和 UI 必须作为一个行为链审核；禁止让 request-side Fast 意图覆盖 provider 明确返回的其他 tier；生成文件冲突应修改 schema 后重新生成。
+- 合并审核：schema、Ent、GraphQL、backup、billing 和 UI 必须作为一个行为链审核；禁止让 request-side Fast 意图覆盖 provider 明确返回的其他 tier；生成文件冲突应修改 schema 后重新生成。Upstream `359cf840` 已重构请求表布局，`d6ed9c62` 已虚拟化价格卡片；合并后仍须保留 Fast 列及旧列偏好迁移，并让虚拟化卡片完整承载 service-tier、prompt-cache 和 schedule 编辑。
 - 吸收/删除条件：只有 upstream 的字段、价格键、计费优先级、备份兼容和 UI 含义全部等价时才能替换本地实现。
 - 验证：`cd llm && go test ./transformer/openai ./transformer/openai/responses ./transformer/anthropic`；`go test ./internal/server/orchestrator ./internal/server/biz ./internal/server/backup ./internal/server/gql`；`cd frontend && node --test src/features/channels/data/model-price-catalog.test.mjs src/features/channels/data/model-price-form.test.mjs src/features/requests/utils/service-tier.test.mjs src/features/requests-mobile-columns.test.mjs`。
 
@@ -150,7 +150,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：Tool Search 定义、调用和 output 可往返；`tool_search_output` 回放满足 upstream 必填字段；流式空参数不会生成错误调用；Responses 并行调用转 Chat 时正确聚合；Anthropic bridge 保留 deferred tools；仅在 done 事件出现的函数参数仍被保存；不同 namespace tool 不混淆。
 - 代码锚点：`llm/tools.go`、`llm/metadata.go`、`llm/transformer/anthropic/`、`llm/transformer/openai/responses/`。
 - 提交锚点：`e1d68898`、`8bf41241`、`5c201803`、`62edb839`、`41ba05ab`、`8a2a02c6`；相关 merge resolution：`24d949cd`。
-- 合并审核：按 tool definition、call、delta、done、output 和 replay 六个阶段检查；不能只验证非流式 happy path。
+- 合并审核：按 tool definition、call、delta、done、output 和 replay 六个阶段检查；不能只验证非流式 happy path。Upstream `2c6efdb1` 已吸收 done-only 参数、等价 JSON 和迟到 identity 处理，但 Tool Search、跨协议 round-trip、terminal/refusal 行为和大整数精度仍须独立保留并验证。
 - 上游吸收条件：upstream 在 OpenAI Responses、Anthropic 和 Chat 三条转换链提供等价 round-trip 测试。
 - 验证：`cd llm && go test ./transformer/openai/responses ./transformer/anthropic -run 'ToolSearch|tool_search|FunctionCall|NamespaceTool|Deferred'`。
 
@@ -305,7 +305,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：只统计 production usage；日期范围有上限并按配置 timezone 正确跨越 DST；project/channel/API Key/user/model 维度分别校验 system scope，project membership scope 不能冒充 system scope；保留 deleted channel attribution；用户维度和 personal Key 过滤正确；前端只请求和展示获授权维度，错误与 truncation 明示。
 - 代码锚点：`internal/authz/scope.go`、`internal/server/gql/analytics.graphql`、`internal/server/gql/analytics.resolvers.go`、`internal/server/gql/analytics_helpers.go`、`frontend/src/features/analytics/`、`frontend/src/stores/analyticsStore.ts`。
 - 提交锚点：merge resolution `ee209fd8`。
-- 合并审核：检查 SQL/Ent predicate、timezone segmentation、limit/truncation、deleted relation fallback 和前端 query enablement；不能只比较图表外观。
+- 合并审核：检查 SQL/Ent predicate、timezone segmentation、limit/truncation、deleted relation fallback 和前端 query enablement；不能只比较图表外观。Upstream `ce8d6e7d` 已吸收 faceted filter 交互，但未替代 fork 的权限 gating、服务端搜索、日期感知 model options、错误重试和 user/API Key 联合权限约束。
 - 上游吸收条件：upstream 有等价 resolver、authorization、DST、production-only、deleted attribution 和前端 error/truncation 测试。
 - 验证：`go test ./internal/authz ./internal/server/gql -run 'Analytics|SystemScope'`；运行 frontend analytics unit tests（若新增统一入口，应在本文同步命令）。
 

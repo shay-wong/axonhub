@@ -1,8 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useFieldArray, useForm, useWatch, type Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { IconPlus, IconTrash, IconCopy } from '@tabler/icons-react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -12,7 +13,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AutoCompleteSelect } from '@/components/auto-complete-select';
 import { ModelPriceEditor } from '@/components/model-price-editor';
@@ -400,9 +400,9 @@ const PriceCard = memo(function PriceCard({
   return (
     <Card className='overflow-hidden'>
       <CardContent className='pt-6'>
-        {/* Mobile: single column layout */}
-        <div className='flex flex-col gap-3 md:hidden'>
-          <div className='flex h-8 items-center justify-between'>
+        {/* Single responsive layout: 1 column on mobile, [model | editors | actions] grid on desktop */}
+        <div className='grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)_auto] md:gap-x-4 md:gap-y-3'>
+          <div className='flex h-8 min-w-0 items-center justify-between'>
             <FormLabel className='truncate pr-2'>{t('price.model')}</FormLabel>
             <div className='flex gap-1'>
               <Button
@@ -414,76 +414,22 @@ const PriceCard = memo(function PriceCard({
               >
                 <IconCopy size={14} />
               </Button>
-              <Button type='button' variant='ghost' size='icon-sm' className='text-destructive' onClick={() => onRemovePrice(priceIndex)}>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon-sm'
+                className='text-destructive md:hidden'
+                onClick={() => onRemovePrice(priceIndex)}
+              >
                 <IconTrash size={16} />
               </Button>
             </div>
           </div>
-          <FormField
-            control={control}
-            name={`prices.${priceIndex}.modelId`}
-            render={({ field }) => (
-              <FormItem>
-                <Select
-                  onValueChange={(value) => {
-                    field.onChange(value);
-                    onModelSelected(priceIndex, value);
-                  }}
-                  value={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger size='sm' className='h-8 w-full' title={field.value || ''}>
-                      <SelectValue placeholder={t('price.model')} className='truncate' />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {availableModels.map((model) => (
-                      <SelectItem key={model} value={model} title={model}>
-                        {model}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <div className='flex h-8 items-center'>
-            <FormLabel className='truncate'>{t('price.items')}</FormLabel>
-          </div>
-          <ModelPriceEditor
-            control={control}
-            priceIndex={priceIndex}
-            currencyCode={currencyCode}
-            hideHeader
-            onAddItem={onAddItem}
-            onRemoveItem={onRemoveItem}
-            onAddVariant={onAddVariant}
-            onRemoveVariant={onRemoveVariant}
-          />
-          <PriceScheduleEditor control={control} priceIndex={priceIndex} currencyCode={currencyCode} defaultTimezone={defaultTimezone} />
-        </div>
-
-        {/* Desktop: grid layout */}
-        <div className='hidden md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)_auto] md:gap-x-4 md:gap-y-3'>
-          <div className='flex h-8 min-w-0 items-center justify-between'>
-            <FormLabel className='truncate pr-2'>{t('price.model')}</FormLabel>
-            <Button
-              type='button'
-              variant='ghost'
-              size='icon-sm'
-              onClick={() => onDuplicatePrice(priceIndex)}
-              title={t('common.actions.duplicate')}
-            >
-              <IconCopy size={14} />
-            </Button>
-          </div>
-
-          <div className='flex h-8 min-w-0 items-center'>
+          <div className='hidden h-8 min-w-0 items-center md:flex'>
             <FormLabel className='truncate'>{t('price.items')}</FormLabel>
           </div>
 
-          <div className='flex items-start justify-end'>
+          <div className='hidden items-start justify-end md:flex'>
             <Button type='button' variant='ghost' size='icon-sm' className='text-destructive' onClick={() => onRemovePrice(priceIndex)}>
               <IconTrash size={16} />
             </Button>
@@ -522,6 +468,9 @@ const PriceCard = memo(function PriceCard({
           </div>
 
           <div className='min-w-0'>
+            <div className='flex h-8 items-center md:hidden'>
+              <FormLabel className='truncate'>{t('price.items')}</FormLabel>
+            </div>
             <ModelPriceEditor
               control={control}
               priceIndex={priceIndex}
@@ -578,12 +527,44 @@ export function ChannelsModelPriceDialog() {
     name: 'prices',
   });
 
+  const priceListRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: fields.length,
+    getScrollElement: () => priceListRef.current,
+    estimateSize: () => 300,
+    overscan: 6,
+    getItemKey: (index) => fields[index]?.id ?? index,
+  });
+
+  // Appended cards must scroll into view only AFTER fields render (virtualizer count
+  // updates), otherwise scrollToIndex clamps to the previous last card.
+  const pendingScrollToNewCardRef = useRef(false);
+  useEffect(() => {
+    if (pendingScrollToNewCardRef.current && fields.length > 0) {
+      pendingScrollToNewCardRef.current = false;
+      rowVirtualizer.scrollToIndex(fields.length - 1, { align: 'auto' });
+    }
+  }, [fields.length, rowVirtualizer]);
+
   const supportedModels = useMemo(() => currentRow?.supportedModels || [], [currentRow?.supportedModels]);
-  const watchedPrices = useWatch({ control, name: 'prices' });
-  const availableModelsByIndex = useMemo(
-    () => buildAvailableModelsByIndex(watchedPrices || [], supportedModels),
-    [supportedModels, watchedPrices]
-  );
+  const watchedPrices = useWatch({
+    control,
+    name: 'prices',
+    // deep-equal guard: identical values (e.g. deleting an empty card) must not
+    // trigger re-renders of the dialog or invalidate the availableModels cache.
+    compute: (value) => value,
+  });
+  // Cache per-card available model lists by (selected modelIds, supportedModels) signature.
+  // Editing a price field or deleting an empty card changes `watchedPrices` but not the
+  // signature, so the memoized arrays keep their references and every PriceCard memo holds.
+  const availableModelsCache = useRef<{ key: string; value: string[][] }>({ key: '', value: [] });
+  const availableModelsByIndex = useMemo(() => {
+    const key = `${(watchedPrices || []).map((p) => p?.modelId || '').join('\u0000')}\u0001${supportedModels.join('\u0000')}`;
+    if (availableModelsCache.current.key === key) return availableModelsCache.current.value;
+    const value = buildAvailableModelsByIndex(watchedPrices || [], supportedModels);
+    availableModelsCache.current = { key, value };
+    return value;
+  }, [supportedModels, watchedPrices]);
 
   const { data: providersData } = useProvidersData();
 
@@ -649,26 +630,38 @@ export function ChannelsModelPriceDialog() {
     reset();
   }, [setOpen, reset]);
 
-  const onSubmitError = useCallback((errors: Record<string, any>) => {
-    const messages: string[] = [];
-    const collectErrors = (obj: any, path: string = '') => {
-      if (!obj) return;
-      if (obj.message && typeof obj.message === 'string') {
-        messages.push(obj.message);
-      }
-      for (const key of Object.keys(obj)) {
-        if (key === 'message' || key === 'type' || key === 'ref') continue;
-        const val = obj[key];
-        if (val && typeof val === 'object') {
-          collectErrors(val, path ? `${path}.${key}` : key);
+  const onSubmitError = useCallback(
+    (errors: Record<string, any>) => {
+      // Virtualized list: the first invalid card may be outside the rendered range,
+      // so scroll it into view before surfacing the error message.
+      const priceErrors = errors?.prices;
+      if (Array.isArray(priceErrors)) {
+        const firstIndex = priceErrors.findIndex((e) => e && typeof e === 'object' && Object.keys(e).length > 0);
+        if (firstIndex >= 0) {
+          rowVirtualizer.scrollToIndex(firstIndex, { align: 'start' });
         }
       }
-    };
-    collectErrors(errors);
-    if (messages.length > 0) {
-      toast.error(messages[0]);
-    }
-  }, []);
+      const messages: string[] = [];
+      const collectErrors = (obj: any, path: string = '') => {
+        if (!obj) return;
+        if (obj.message && typeof obj.message === 'string') {
+          messages.push(obj.message);
+        }
+        for (const key of Object.keys(obj)) {
+          if (key === 'message' || key === 'type' || key === 'ref') continue;
+          const val = obj[key];
+          if (val && typeof val === 'object') {
+            collectErrors(val, path ? `${path}.${key}` : key);
+          }
+        }
+      };
+      collectErrors(errors);
+      if (messages.length > 0) {
+        toast.error(messages[0]);
+      }
+    },
+    [rowVirtualizer]
+  );
 
   const onSubmit = useCallback(
     async (data: PriceFormData) => {
@@ -688,6 +681,8 @@ export function ChannelsModelPriceDialog() {
   );
 
   const addPrice = useCallback(() => {
+    // New card is appended at the end; scroll into view once it renders.
+    pendingScrollToNewCardRef.current = true;
     append({
       modelId: '',
       price: {
@@ -735,6 +730,8 @@ export function ChannelsModelPriceDialog() {
         return;
       }
 
+      // New card is appended at the end; scroll into view once it renders.
+      pendingScrollToNewCardRef.current = true;
       append({
         modelId,
         price: {
@@ -914,6 +911,8 @@ export function ChannelsModelPriceDialog() {
   const duplicatePrice = useCallback(
     (index: number) => {
       const priceData = getValues(`prices.${index}.price`);
+      // New card is appended at the end; scroll into view once it renders.
+      pendingScrollToNewCardRef.current = true;
       append({
         modelId: '',
         price: structuredClone(priceData),
@@ -1015,6 +1014,11 @@ export function ChannelsModelPriceDialog() {
                           added += 1;
                         });
 
+                        if (added > 0) {
+                          // New cards are appended at the end; scroll into view once rendered.
+                          pendingScrollToNewCardRef.current = true;
+                        }
+
                         if (applied || added) {
                           toast.success(t('price.apply.bulkSuccess', { applied, added }));
                         }
@@ -1031,39 +1035,50 @@ export function ChannelsModelPriceDialog() {
                 </div>
               </CardContent>
             </Card>
-            <ScrollArea className='min-h-40 w-full min-w-0 flex-1 md:min-h-0 [&>[data-slot=scroll-area-viewport]]:!overflow-x-hidden'>
-              <div className='space-y-4 py-4 pr-4'>
-                {fields.map((field, index) => (
-                  <PriceCard
-                    key={field.id}
-                    availableModels={availableModelsByIndex[index] || supportedModels}
-                    catalogTierNames={catalogTierNamesByIndex[index] || new Set<string>()}
-                    control={control}
-                    t={t}
-                    priceIndex={index}
-                    currencyCode={settings?.currencyCode}
-                    defaultTimezone={settings?.timezone || 'UTC'}
-                    onAddItem={addItem}
-                    onModelSelected={onModelSelected}
-                    onDuplicatePrice={duplicatePrice}
-                    onRemoveItem={removeItem}
-                    onRemovePrice={removePrice}
-                    onAddVariant={addVariant}
-                    onAddServiceTierItem={addServiceTierItem}
-                    onAddServiceTierVariant={addServiceTierVariant}
-                    onRemoveVariant={removeVariant}
-                    onRemoveServiceTierItem={removeServiceTierItem}
-                    onRemoveServiceTierVariant={removeServiceTierVariant}
-                  />
-                ))}
-
-                {fields.length === 0 && !isLoading && (
-                  <div className='text-muted-foreground flex flex-col items-center justify-center py-12'>
-                    <p>{t('price.noPrices')}</p>
-                  </div>
-                )}
+            <div ref={priceListRef} className='min-h-40 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto pt-4 pr-4 md:min-h-0'>
+              {fields.length === 0 && !isLoading && (
+                <div className='text-muted-foreground flex flex-col items-center justify-center py-12'>
+                  <p>{t('price.noPrices')}</p>
+                </div>
+              )}
+              <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+                {rowVirtualizer.getVirtualItems().map((vi) => {
+                  const index = vi.index;
+                  const field = fields[index];
+                  if (!field) return null;
+                  return (
+                    <div
+                      key={vi.key}
+                      data-index={index}
+                      ref={rowVirtualizer.measureElement}
+                      className='absolute top-0 left-0 w-full pb-4'
+                      style={{ transform: `translateY(${vi.start}px)` }}
+                    >
+                      <PriceCard
+                        availableModels={availableModelsByIndex[index] || supportedModels}
+                        catalogTierNames={catalogTierNamesByIndex[index] || new Set<string>()}
+                        control={control}
+                        t={t}
+                        priceIndex={index}
+                        currencyCode={settings?.currencyCode}
+                        defaultTimezone={settings?.timezone || 'UTC'}
+                        onAddItem={addItem}
+                        onModelSelected={onModelSelected}
+                        onDuplicatePrice={duplicatePrice}
+                        onRemoveItem={removeItem}
+                        onRemovePrice={removePrice}
+                        onAddVariant={addVariant}
+                        onAddServiceTierItem={addServiceTierItem}
+                        onAddServiceTierVariant={addServiceTierVariant}
+                        onRemoveVariant={removeVariant}
+                        onRemoveServiceTierItem={removeServiceTierItem}
+                        onRemoveServiceTierVariant={removeServiceTierVariant}
+                      />
+                    </div>
+                  );
+                })}
               </div>
-            </ScrollArea>
+            </div>
 
             <DialogFooter className='mt-6 shrink-0 gap-2 sm:justify-between'>
               <Button type='button' variant='outline' onClick={addPrice}>
