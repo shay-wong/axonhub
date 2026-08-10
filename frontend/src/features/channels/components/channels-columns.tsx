@@ -24,7 +24,7 @@ import {
   IconGauge,
   IconHistory,
   IconPlugConnected,
-  IconShieldLock,
+  IconClockPlay,
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -397,11 +397,11 @@ const ActionCell = memo(({ row, canWrite }: ChannelCellProps) => {
             <DropdownMenuItem
               onClick={() => {
                 setCurrentRow(channel);
-                setOpen('apiKeyRules');
+                setOpen('availability');
               }}
             >
-              <IconShieldLock size={16} className='mr-2' />
-              {t('channels.dialogs.apiKeyRules.action')}
+              <IconClockPlay size={16} className='mr-2' />
+              {t('channels.dialogs.availability.action')}
             </DropdownMenuItem>
           )}
           {viewModel.menuItems.map((item) => {
@@ -604,6 +604,9 @@ const NameCell = memo(({ row, canWrite }: ChannelCellProps) => {
     <div className={cn('truncate font-medium', hasError && 'text-destructive')}>{row.getValue('name')}</div>
   );
 
+  // Both indicators are shown independently: a channel disabled because every
+  // credential is unavailable carries an error *and* disabled credentials, and
+  // hiding the key icon behind the error would lose the reason it went down.
   const content = (
     <div className='flex justify-center'>
       <div className='flex max-w-56 items-center gap-2'>

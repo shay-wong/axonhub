@@ -8,6 +8,7 @@ import (
 
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/log"
+	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
@@ -72,12 +73,18 @@ func (m *performanceRecording) OnOutboundRawRequest(ctx context.Context, request
 	perf.Stream = streamFlag
 	perf.SkipHealthStateTracking = shouldSkipHealthStateTrackingForState(ctx, m.outbound.state)
 
-	// Get the API key used for this request from context (set by TraceStickyKeyProvider)
+	// Get the API key used for this request from context (set by TraceStickyKeyProvider).
+	// OAuth channels authenticate from Credentials.OAuth and never pass through the
+	// key provider, so they carry no context key. Identify them by the fixed OAuth
+	// credential ref instead, which lets auto-disable and scheduled recovery treat an
+	// OAuth channel as an ordinary one-credential channel.
 	if apiKey, ok := contexts.GetChannelAPIKey(ctx); ok {
 		perf.APIKey = apiKey
 		identity := channel.APIKeyIdentity(apiKey)
 		perf.APIKeyName = identity.Name
 		perf.APIKeySuffix = identity.Suffix
+	} else if channel.Credentials.IsOAuth() {
+		perf.APIKey = objects.OAuthCredentialRef
 	}
 
 	m.outbound.state.Perf = &perf

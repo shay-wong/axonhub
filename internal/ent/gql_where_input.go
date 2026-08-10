@@ -1005,6 +1005,18 @@ type ChannelWhereInput struct {
 	TemporaryDisabledReasonEqualFold    *string  `json:"temporaryDisabledReasonEqualFold,omitempty"`
 	TemporaryDisabledReasonContainsFold *string  `json:"temporaryDisabledReasonContainsFold,omitempty"`
 
+	// "auto_disabled_at" field predicates.
+	AutoDisabledAt       *time.Time  `json:"autoDisabledAt,omitempty"`
+	AutoDisabledAtNEQ    *time.Time  `json:"autoDisabledAtNEQ,omitempty"`
+	AutoDisabledAtIn     []time.Time `json:"autoDisabledAtIn,omitempty"`
+	AutoDisabledAtNotIn  []time.Time `json:"autoDisabledAtNotIn,omitempty"`
+	AutoDisabledAtGT     *time.Time  `json:"autoDisabledAtGT,omitempty"`
+	AutoDisabledAtGTE    *time.Time  `json:"autoDisabledAtGTE,omitempty"`
+	AutoDisabledAtLT     *time.Time  `json:"autoDisabledAtLT,omitempty"`
+	AutoDisabledAtLTE    *time.Time  `json:"autoDisabledAtLTE,omitempty"`
+	AutoDisabledAtIsNil  bool        `json:"autoDisabledAtIsNil,omitempty"`
+	AutoDisabledAtNotNil bool        `json:"autoDisabledAtNotNil,omitempty"`
+
 	// "remark" field predicates.
 	Remark             *string  `json:"remark,omitempty"`
 	RemarkNEQ          *string  `json:"remarkNEQ,omitempty"`
@@ -1561,6 +1573,36 @@ func (i *ChannelWhereInput) P() (predicate.Channel, error) {
 	}
 	if i.TemporaryDisabledReasonContainsFold != nil {
 		predicates = append(predicates, channel.TemporaryDisabledReasonContainsFold(*i.TemporaryDisabledReasonContainsFold))
+	}
+	if i.AutoDisabledAt != nil {
+		predicates = append(predicates, channel.AutoDisabledAtEQ(*i.AutoDisabledAt))
+	}
+	if i.AutoDisabledAtNEQ != nil {
+		predicates = append(predicates, channel.AutoDisabledAtNEQ(*i.AutoDisabledAtNEQ))
+	}
+	if len(i.AutoDisabledAtIn) > 0 {
+		predicates = append(predicates, channel.AutoDisabledAtIn(i.AutoDisabledAtIn...))
+	}
+	if len(i.AutoDisabledAtNotIn) > 0 {
+		predicates = append(predicates, channel.AutoDisabledAtNotIn(i.AutoDisabledAtNotIn...))
+	}
+	if i.AutoDisabledAtGT != nil {
+		predicates = append(predicates, channel.AutoDisabledAtGT(*i.AutoDisabledAtGT))
+	}
+	if i.AutoDisabledAtGTE != nil {
+		predicates = append(predicates, channel.AutoDisabledAtGTE(*i.AutoDisabledAtGTE))
+	}
+	if i.AutoDisabledAtLT != nil {
+		predicates = append(predicates, channel.AutoDisabledAtLT(*i.AutoDisabledAtLT))
+	}
+	if i.AutoDisabledAtLTE != nil {
+		predicates = append(predicates, channel.AutoDisabledAtLTE(*i.AutoDisabledAtLTE))
+	}
+	if i.AutoDisabledAtIsNil {
+		predicates = append(predicates, channel.AutoDisabledAtIsNil())
+	}
+	if i.AutoDisabledAtNotNil {
+		predicates = append(predicates, channel.AutoDisabledAtNotNil())
 	}
 	if i.Remark != nil {
 		predicates = append(predicates, channel.RemarkEQ(*i.Remark))

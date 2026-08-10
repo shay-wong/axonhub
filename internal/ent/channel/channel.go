@@ -63,6 +63,8 @@ const (
 	FieldTemporaryDisabledErrorCode = "temporary_disabled_error_code"
 	// FieldTemporaryDisabledReason holds the string denoting the temporary_disabled_reason field in the database.
 	FieldTemporaryDisabledReason = "temporary_disabled_reason"
+	// FieldAutoDisabledAt holds the string denoting the auto_disabled_at field in the database.
+	FieldAutoDisabledAt = "auto_disabled_at"
 	// FieldRemark holds the string denoting the remark field in the database.
 	FieldRemark = "remark"
 	// FieldEndpoints holds the string denoting the endpoints field in the database.
@@ -150,6 +152,7 @@ var Columns = []string{
 	FieldTemporaryDisabledUntil,
 	FieldTemporaryDisabledErrorCode,
 	FieldTemporaryDisabledReason,
+	FieldAutoDisabledAt,
 	FieldRemark,
 	FieldEndpoints,
 }
@@ -391,6 +394,11 @@ func ByTemporaryDisabledErrorCode(opts ...sql.OrderTermOption) OrderOption {
 // ByTemporaryDisabledReason orders the results by the temporary_disabled_reason field.
 func ByTemporaryDisabledReason(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTemporaryDisabledReason, opts...).ToFunc()
+}
+
+// ByAutoDisabledAt orders the results by the auto_disabled_at field.
+func ByAutoDisabledAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAutoDisabledAt, opts...).ToFunc()
 }
 
 // ByRemark orders the results by the remark field.

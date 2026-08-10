@@ -843,6 +843,11 @@ func (_q *ChannelQuery) collectField(ctx context.Context, oneNode bool, opCtx *g
 				selectedFields = append(selectedFields, channel.FieldTemporaryDisabledReason)
 				fieldSeen[channel.FieldTemporaryDisabledReason] = struct{}{}
 			}
+		case "autoDisabledAt":
+			if _, ok := fieldSeen[channel.FieldAutoDisabledAt]; !ok {
+				selectedFields = append(selectedFields, channel.FieldAutoDisabledAt)
+				fieldSeen[channel.FieldAutoDisabledAt] = struct{}{}
+			}
 		case "remark":
 			if _, ok := fieldSeen[channel.FieldRemark]; !ok {
 				selectedFields = append(selectedFields, channel.FieldRemark)

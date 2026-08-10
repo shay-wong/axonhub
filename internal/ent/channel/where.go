@@ -120,6 +120,11 @@ func TemporaryDisabledReason(v string) predicate.Channel {
 	return predicate.Channel(sql.FieldEQ(FieldTemporaryDisabledReason, v))
 }
 
+// AutoDisabledAt applies equality check predicate on the "auto_disabled_at" field. It's identical to AutoDisabledAtEQ.
+func AutoDisabledAt(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldEQ(FieldAutoDisabledAt, v))
+}
+
 // Remark applies equality check predicate on the "remark" field. It's identical to RemarkEQ.
 func Remark(v string) predicate.Channel {
 	return predicate.Channel(sql.FieldEQ(FieldRemark, v))
@@ -913,6 +918,56 @@ func TemporaryDisabledReasonEqualFold(v string) predicate.Channel {
 // TemporaryDisabledReasonContainsFold applies the ContainsFold predicate on the "temporary_disabled_reason" field.
 func TemporaryDisabledReasonContainsFold(v string) predicate.Channel {
 	return predicate.Channel(sql.FieldContainsFold(FieldTemporaryDisabledReason, v))
+}
+
+// AutoDisabledAtEQ applies the EQ predicate on the "auto_disabled_at" field.
+func AutoDisabledAtEQ(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldEQ(FieldAutoDisabledAt, v))
+}
+
+// AutoDisabledAtNEQ applies the NEQ predicate on the "auto_disabled_at" field.
+func AutoDisabledAtNEQ(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldNEQ(FieldAutoDisabledAt, v))
+}
+
+// AutoDisabledAtIn applies the In predicate on the "auto_disabled_at" field.
+func AutoDisabledAtIn(vs ...time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldIn(FieldAutoDisabledAt, vs...))
+}
+
+// AutoDisabledAtNotIn applies the NotIn predicate on the "auto_disabled_at" field.
+func AutoDisabledAtNotIn(vs ...time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldNotIn(FieldAutoDisabledAt, vs...))
+}
+
+// AutoDisabledAtGT applies the GT predicate on the "auto_disabled_at" field.
+func AutoDisabledAtGT(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldGT(FieldAutoDisabledAt, v))
+}
+
+// AutoDisabledAtGTE applies the GTE predicate on the "auto_disabled_at" field.
+func AutoDisabledAtGTE(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldGTE(FieldAutoDisabledAt, v))
+}
+
+// AutoDisabledAtLT applies the LT predicate on the "auto_disabled_at" field.
+func AutoDisabledAtLT(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldLT(FieldAutoDisabledAt, v))
+}
+
+// AutoDisabledAtLTE applies the LTE predicate on the "auto_disabled_at" field.
+func AutoDisabledAtLTE(v time.Time) predicate.Channel {
+	return predicate.Channel(sql.FieldLTE(FieldAutoDisabledAt, v))
+}
+
+// AutoDisabledAtIsNil applies the IsNil predicate on the "auto_disabled_at" field.
+func AutoDisabledAtIsNil() predicate.Channel {
+	return predicate.Channel(sql.FieldIsNull(FieldAutoDisabledAt))
+}
+
+// AutoDisabledAtNotNil applies the NotNil predicate on the "auto_disabled_at" field.
+func AutoDisabledAtNotNil() predicate.Channel {
+	return predicate.Channel(sql.FieldNotNull(FieldAutoDisabledAt))
 }
 
 // RemarkEQ applies the EQ predicate on the "remark" field.

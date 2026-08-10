@@ -117,6 +117,7 @@ var schemaGraph = func() *sqlgraph.Schema {
 			channel.FieldTemporaryDisabledUntil:     {Type: field.TypeTime, Column: channel.FieldTemporaryDisabledUntil},
 			channel.FieldTemporaryDisabledErrorCode: {Type: field.TypeInt, Column: channel.FieldTemporaryDisabledErrorCode},
 			channel.FieldTemporaryDisabledReason:    {Type: field.TypeString, Column: channel.FieldTemporaryDisabledReason},
+			channel.FieldAutoDisabledAt:             {Type: field.TypeTime, Column: channel.FieldAutoDisabledAt},
 			channel.FieldRemark:                     {Type: field.TypeString, Column: channel.FieldRemark},
 			channel.FieldEndpoints:                  {Type: field.TypeJSON, Column: channel.FieldEndpoints},
 		},
@@ -1824,6 +1825,11 @@ func (f *ChannelFilter) WhereTemporaryDisabledErrorCode(p entql.IntP) {
 // WhereTemporaryDisabledReason applies the entql string predicate on the temporary_disabled_reason field.
 func (f *ChannelFilter) WhereTemporaryDisabledReason(p entql.StringP) {
 	f.Where(p.Field(channel.FieldTemporaryDisabledReason))
+}
+
+// WhereAutoDisabledAt applies the entql time.Time predicate on the auto_disabled_at field.
+func (f *ChannelFilter) WhereAutoDisabledAt(p entql.TimeP) {
+	f.Where(p.Field(channel.FieldAutoDisabledAt))
 }
 
 // WhereRemark applies the entql string predicate on the remark field.

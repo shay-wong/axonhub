@@ -13,15 +13,16 @@
 5. `等待上游吸收` 表示这是通用修复或时效性数据；upstream 具备等价行为和回归测试后，删除本地实现和本文条目。
 6. 提交锚点只用于追溯原始思路。最终审核必须检查当前代码，因为后续 merge resolution 可能扩展或移动实现。
 7. 本文中的命令是验证索引。执行时仍须遵守 `AGENTS.md`，尤其是未经用户明确要求不得运行 lint 或 build。
+8. 面向用户的 fork 能力以 `docs/en` 和 `docs/zh` 为完整维护语言，并同步各自索引、英文/中文 README 与 `CHANGELOG.md`；`README.ja-JP.md` 当前是链接到英文文档的入口，不视为完整日文文档树。纯 upstream 能力进入基线时不重复登记为 fork changelog。
 
 ## Upstream 基线
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`a326aed403b3939dcac38f08d711c800b9cd3e32`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`d6ed9c6288ae1642a5a1e8f76db7a8abc0b223af`
-- 本次 merge base：`7ed4400595c2d73ca14e0131a86657058f261852`
-- 审计范围：`git diff d6ed9c62..HEAD`
+- 本次 upstream merge 的 fork parent：`c722d38fa585a6ba62807b952b98a205bd21086a`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`4495aa3cda4620c9d530a48dde5b586468a2e0d4`
+- 本次 merge base：`d6ed9c6288ae1642a5a1e8f76db7a8abc0b223af`
+- 审计范围：`git diff 4495aa3c..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -49,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次合入源码中的 `internal/build/VERSION` 为开发版本标记 `v1.0.0-beta8`，不是 fork release tag 的 upstream 发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta6-fork.6`；本次 merge 后的下一个规范化 fork 版本是 `v1.0.0-beta6-fork.7`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta6-fork.7`；本次 merge 后的下一个规范化 fork 版本是 `v1.0.0-beta6-fork.8`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -126,9 +127,9 @@ git show --remerge-diff <merge-commit>
 - 生命周期：`等待上游吸收`
 - 原始意图：单个坏 Key 不应误伤整个 channel，自动禁用和人工恢复必须有可解释、可授权且稳定的状态转换。
 - 必须保持：Key-scoped provider 错误只累计和禁用对应 Key；transport/credential-agnostic failure 不禁用 Key；API Key policy 已处理的错误不再触发 channel 级禁用；临时禁用到期可恢复；状态图标只暴露当前状态允许且当前用户有权限的动作；倒计时、原因和安全身份显示一致。
-- 代码锚点：`internal/server/biz/channel_auto_disable.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_metrics.go`、`internal/server/orchestrator/performance.go`、`frontend/src/features/channels/data/channel-status-policy.ts`、`frontend/src/features/channels/data/disabled-api-key-status.ts`、`frontend/src/features/channels/components/channels-columns.tsx`。
+- 代码锚点：`internal/server/biz/channel_auto_disable.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_metrics.go`、`internal/server/orchestrator/performance.go`、`frontend/src/features/channels/data/channel-status-policy.ts`、`frontend/src/features/channels/data/disabled-api-key-status.ts`、`frontend/src/features/channels/components/channels-columns.tsx`、`frontend/src/features/channels/components/channels-availability-dialog.tsx`。
 - 提交锚点：`2909ddaa`、`fe7809e8`、`c9f85a35`、`fda1159c`；相关 merge resolution：`94d4f989`。
-- 合并审核：upstream `c03c644b` 已吸收规则配置与动作入口，但 fork 的错误分类、测试流量隔离、多 Key 身份及 channel 状态机仍有额外语义；逐一验证计数所有权、永久/临时禁用、恢复动作和 permission gating，不要把完整 Key 暴露给只读用户。
+- 合并审核：upstream `783611df` 已吸收按凭据禁用、OAuth 固定身份、cron 恢复、保留凭据的永久禁用和 availability UI；fork 仍额外保留 transport/credential-agnostic 错误分类、API Key policy 计数所有权、测试流量隔离、多 Key 别名/权重身份、channel 临时禁用状态和 permission gating。逐一验证这些额外语义，不要把完整 Key 暴露给只读用户。
 - 上游吸收条件：upstream 具备相同状态机、错误分类、权限和前端回归测试。
 - 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'DisableAPIKey|AutoDisable|CredentialAgnostic|TransportFailure'`；`cd frontend && node --test src/features/channels/data/channel-status-policy.test.mjs src/features/channels/data/disabled-api-key-status.test.mjs src/features/channels/data/disabled-api-key-dialog-contract.test.mjs`。
 
@@ -139,7 +140,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：Lite header 与 `reasoning.context=all_turns` 成对保留；`parallel_tool_calls` 约束不丢失；provider-private 数据保存在现有 `ProviderExtensions` sidecar，不污染通用 `llm.Request`；clone 和 retry 后仍存在。
 - 代码锚点：`llm/model.go`、`llm/provider_extensions.go`、`llm/transformer/openai/responses/request_extensions.go`、`llm/transformer/openai/responses/model.go`、`llm/transformer/openai/responses/inbound.go`、`llm/transformer/openai/responses/outbound_convert.go`、`llm/transformer/openai/codex/outbound_executor_test.go`。
 - 提交锚点：`f60fb767`、`753b2f26`。
-- 合并审核：必须同时比较 headers 和 JSON body；只保留 Lite header 而丢失 context 会形成 upstream 拒绝的非法组合。
+- 合并审核：upstream `a6bfffa8` 已吸收 polymorphic `reasoning_content` 和 Responses body pass-through 时的 Codex metadata header allowlist，但没有覆盖 `ProviderExtensions`、Lite header/context 配对、`parallel_tool_calls`、clone/retry 或最终 session canonicalization。必须同时比较 headers 和 JSON body；只保留 Lite header 而丢失 context 会形成 upstream 拒绝的非法组合。
 - 上游吸收条件：upstream 有真实 inbound-to-Codex-outbound 测试，覆盖 context、parallel tool calls、clone 和 retry。
 - 验证：`cd llm && go test ./transformer/openai/codex ./transformer/openai/responses -run 'ResponsesLiteRequirements|ConvertReasoning'`。
 
@@ -161,7 +162,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：Responses 混合流式内容保持分段和顺序；Cline 空 `choices` 遥测不向客户端透出但最终 usage 保留；interleaved reasoning 按 item 顺序输出；空或不可解析的 upstream error 回退到 status/raw status/通用消息，不返回空字符串；direct stream 和 aggregation 语义一致。
 - 代码锚点：`llm/transformer/openai/responses/inbound_stream.go`、`llm/transformer/openai/responses/outbound.go`、`llm/transformer/openai/responses/aggregator.go`、`llm/transformer/anthropic/inbound_stream.go`、`llm/transformer/cline/outbound.go`。
 - 提交锚点：`9909a8cc`、`a686efc3`、`042d41ec`；相关 merge resolution：`94d4f989`。
-- 合并审核：分别检查 direct stream、aggregate、normal completion、incomplete、provider error 和 transport error；不要把 empty-success retry 与 HTTP error formatting 混为一谈。
+- 合并审核：upstream `4495aa3c` 已吸收 Chat `finish_reason` 与 Responses abnormal terminal status 的双向映射；fork 仍使用精确的 `response.incomplete`、`response.failed`、`response.cancelled` 终态事件，并保留混合分段、reasoning 顺序、空 error、Cline usage 及 direct/aggregate 一致性。分别检查 direct stream、aggregate、normal completion、incomplete、provider error 和 transport error；不要把 empty-success retry 与 HTTP error formatting 混为一谈。
 - 上游吸收条件：upstream 覆盖混合分段、reasoning 顺序、最终 usage、空 error 和 direct/aggregate 一致性。
 - 验证：`cd llm && go test ./transformer/openai/responses ./transformer/anthropic ./transformer/cline`。
 
@@ -238,7 +239,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：最多保留 1 MiB；读取 `limit+1` 才能可靠判断截断；`Truncated` 从 `httpclient.Error` 贯穿 pipeline、transformer、非流式和流式 API error；只有实际截断时输出 `truncated: true`。
 - 代码锚点：`llm/httpclient/client.go`、`llm/httpclient/errors.go`、`llm/pipeline/error.go`、`internal/server/api/chat.go`、`internal/server/api/upstream_error_policy.go`。
 - 提交锚点：`fe27b4db`。
-- 合并审核：不能只保留大小限制而丢掉 truncated evidence；检查 JSON error、plain text、streaming 和 policy-masked error。
+- 合并审核：upstream `2d7d7c86` 重构 SSE writer 并加入默认关闭的 keep-alive；合并时可复用其 heartbeat，但不能只保留大小限制而丢掉 `truncated` evidence。检查 JSON error、plain text、无 heartbeat/有 heartbeat streaming 和 policy-masked error。
 - 上游吸收条件：upstream 同时具备上限、可靠检测和全链路传播测试。
 - 验证：`cd llm && go test ./httpclient ./pipeline -run 'LimitsErrorResponseBody|Truncat'`；`go test ./internal/server/api -run Truncat`。
 
@@ -272,7 +273,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：test source 不进入 channel/API Key failure counters、EWMA、load balancer、auto-disable、dashboard/channel metrics；测试成功也不能清空生产已累计的失败状态；测试 request/execution 本身仍可保存和查看。
 - 代码锚点：`internal/ent/schema/request_execution.go`、`internal/server/orchestrator/health_state.go`、`internal/server/orchestrator/performance.go`、`internal/server/biz/channel_metrics.go`、`internal/server/gql/channel_performance_helpers.go`、`internal/server/gql/qb/throughput.go`。
 - 提交锚点：`c9080fa2`。
-- 合并审核：同时检查实时内存状态、应用重启后的数据库重建、dashboard raw query 和 auto-disable；只在一层过滤不够。
+- 合并审核：upstream `783611df` 的凭据恢复实现没有覆盖测试流量隔离；同时检查实时内存状态、应用重启后的数据库重建、dashboard raw query 和 auto-disable，只在一层过滤不够。
 - 上游吸收条件：upstream 在上述四层统一排除 test source，并保留诊断记录。
 - 验证：`go test ./internal/server/biz ./internal/server/orchestrator ./internal/server/gql ./internal/server/db -run 'TestSource|SkipHealthStateTracking|Probe|BackfillRequestExecutionSource'`。
 

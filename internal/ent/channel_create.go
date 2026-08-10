@@ -265,6 +265,20 @@ func (_c *ChannelCreate) SetNillableTemporaryDisabledReason(v *string) *ChannelC
 	return _c
 }
 
+// SetAutoDisabledAt sets the "auto_disabled_at" field.
+func (_c *ChannelCreate) SetAutoDisabledAt(v time.Time) *ChannelCreate {
+	_c.mutation.SetAutoDisabledAt(v)
+	return _c
+}
+
+// SetNillableAutoDisabledAt sets the "auto_disabled_at" field if the given value is not nil.
+func (_c *ChannelCreate) SetNillableAutoDisabledAt(v *time.Time) *ChannelCreate {
+	if v != nil {
+		_c.SetAutoDisabledAt(*v)
+	}
+	return _c
+}
+
 // SetRemark sets the "remark" field.
 func (_c *ChannelCreate) SetRemark(v string) *ChannelCreate {
 	_c.mutation.SetRemark(v)
@@ -630,6 +644,10 @@ func (_c *ChannelCreate) createSpec() (*Channel, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.TemporaryDisabledReason(); ok {
 		_spec.SetField(channel.FieldTemporaryDisabledReason, field.TypeString, value)
 		_node.TemporaryDisabledReason = &value
+	}
+	if value, ok := _c.mutation.AutoDisabledAt(); ok {
+		_spec.SetField(channel.FieldAutoDisabledAt, field.TypeTime, value)
+		_node.AutoDisabledAt = &value
 	}
 	if value, ok := _c.mutation.Remark(); ok {
 		_spec.SetField(channel.FieldRemark, field.TypeString, value)
@@ -1123,6 +1141,24 @@ func (u *ChannelUpsert) ClearTemporaryDisabledReason() *ChannelUpsert {
 	return u
 }
 
+// SetAutoDisabledAt sets the "auto_disabled_at" field.
+func (u *ChannelUpsert) SetAutoDisabledAt(v time.Time) *ChannelUpsert {
+	u.Set(channel.FieldAutoDisabledAt, v)
+	return u
+}
+
+// UpdateAutoDisabledAt sets the "auto_disabled_at" field to the value that was provided on create.
+func (u *ChannelUpsert) UpdateAutoDisabledAt() *ChannelUpsert {
+	u.SetExcluded(channel.FieldAutoDisabledAt)
+	return u
+}
+
+// ClearAutoDisabledAt clears the value of the "auto_disabled_at" field.
+func (u *ChannelUpsert) ClearAutoDisabledAt() *ChannelUpsert {
+	u.SetNull(channel.FieldAutoDisabledAt)
+	return u
+}
+
 // SetRemark sets the "remark" field.
 func (u *ChannelUpsert) SetRemark(v string) *ChannelUpsert {
 	u.Set(channel.FieldRemark, v)
@@ -1593,6 +1629,27 @@ func (u *ChannelUpsertOne) UpdateTemporaryDisabledReason() *ChannelUpsertOne {
 func (u *ChannelUpsertOne) ClearTemporaryDisabledReason() *ChannelUpsertOne {
 	return u.Update(func(s *ChannelUpsert) {
 		s.ClearTemporaryDisabledReason()
+	})
+}
+
+// SetAutoDisabledAt sets the "auto_disabled_at" field.
+func (u *ChannelUpsertOne) SetAutoDisabledAt(v time.Time) *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetAutoDisabledAt(v)
+	})
+}
+
+// UpdateAutoDisabledAt sets the "auto_disabled_at" field to the value that was provided on create.
+func (u *ChannelUpsertOne) UpdateAutoDisabledAt() *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdateAutoDisabledAt()
+	})
+}
+
+// ClearAutoDisabledAt clears the value of the "auto_disabled_at" field.
+func (u *ChannelUpsertOne) ClearAutoDisabledAt() *ChannelUpsertOne {
+	return u.Update(func(s *ChannelUpsert) {
+		s.ClearAutoDisabledAt()
 	})
 }
 
@@ -2238,6 +2295,27 @@ func (u *ChannelUpsertBulk) UpdateTemporaryDisabledReason() *ChannelUpsertBulk {
 func (u *ChannelUpsertBulk) ClearTemporaryDisabledReason() *ChannelUpsertBulk {
 	return u.Update(func(s *ChannelUpsert) {
 		s.ClearTemporaryDisabledReason()
+	})
+}
+
+// SetAutoDisabledAt sets the "auto_disabled_at" field.
+func (u *ChannelUpsertBulk) SetAutoDisabledAt(v time.Time) *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.SetAutoDisabledAt(v)
+	})
+}
+
+// UpdateAutoDisabledAt sets the "auto_disabled_at" field to the value that was provided on create.
+func (u *ChannelUpsertBulk) UpdateAutoDisabledAt() *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.UpdateAutoDisabledAt()
+	})
+}
+
+// ClearAutoDisabledAt clears the value of the "auto_disabled_at" field.
+func (u *ChannelUpsertBulk) ClearAutoDisabledAt() *ChannelUpsertBulk {
+	return u.Update(func(s *ChannelUpsert) {
+		s.ClearAutoDisabledAt()
 	})
 }
 

@@ -18,10 +18,19 @@ import (
 	"github.com/looplj/axonhub/internal/pkg/xcontext"
 )
 
-const allAPIKeysPermanentlyDisabledMessagePrefix = "All API keys permanently disabled"
+const (
+	allAPIKeysPermanentlyDisabledMessagePrefix = "All API keys permanently disabled"
+	allKeysDisabledErrorPrefix                 = "All API keys disabled"
+)
 
-// DisableAPIKey permanently disables the specified upstream API key.
-func (svc *ChannelService) DisableAPIKey(ctx context.Context, channelID int, key string, errorCode int, reason string) error {
+// DisableAPIKey disables the specified upstream credential. An optional expiry
+// preserves the legacy scheduled-recovery call contract.
+func (svc *ChannelService) DisableAPIKey(ctx context.Context, channelID int, key string, errorCode int, reason string, expiresAt ...*time.Time) error {
+	if len(expiresAt) > 0 && expiresAt[0] != nil {
+		duration := time.Until(*expiresAt[0])
+		return svc.ApplyAPIKeyDisableAction(ctx, channelID, key, DisableActionTemporary, &duration, errorCode, reason)
+	}
+
 	return svc.ApplyAPIKeyDisableAction(ctx, channelID, key, DisableActionPermanent, nil, errorCode, reason)
 }
 
@@ -56,7 +65,9 @@ func (svc *ChannelService) ApplyAPIKeyDisableAction(
 	}
 	identity := (&Channel{Channel: ch}).APIKeyIdentity(key)
 
-	allKeys := ch.Credentials.GetAllAPIKeys()
+	// 检查 key 是否在 credentials 中。OAuth 渠道用固定的 OAuthCredentialRef 作为
+	// 唯一凭证标识，所以这里按凭证引用而非明文 key 匹配。
+	allKeys := ch.Credentials.GetAllCredentialRefs()
 
 	found := slices.Contains(allKeys, key)
 	if !found {
@@ -98,20 +109,25 @@ func (svc *ChannelService) ApplyAPIKeyDisableAction(
 		newDisabledKeys = append(newDisabledKeys, disabledKey)
 	}
 
-	// 计算 enabled keys
-	enabledKeys := ch.Credentials.GetEnabledAPIKeysAt(newDisabledKeys, now)
+	// 计算 enabled 凭证
+	enabledKeys := ch.Credentials.GetEnabledCredentialRefsAt(newDisabledKeys, now)
 
 	// 更新 channel
 	update := svc.entFromContext(ctx).Channel.UpdateOneID(channelID).
 		SetDisabledAPIKeys(newDisabledKeys)
 
 	channelDisabled := false
-	if len(enabledKeys) == 0 && allDisabledAPIKeysPermanent(ch.Credentials.GetAllAPIKeys(), newDisabledKeys, now) {
+	if len(enabledKeys) == 0 && (key == objects.OAuthCredentialRef || allDisabledAPIKeysPermanent(allKeys, newDisabledKeys, now)) {
 		channelDisabled = true
 	}
 	if channelDisabled {
 		update.SetStatus(channel.StatusDisabled)
-		update.SetErrorMessage(fmt.Sprintf("%s (last error: %d)", allAPIKeysPermanentlyDisabledMessagePrefix, errorCode))
+		messagePrefix := allAPIKeysPermanentlyDisabledMessagePrefix
+		if key == objects.OAuthCredentialRef && action == DisableActionTemporary {
+			messagePrefix = allKeysDisabledErrorPrefix
+		}
+		update.SetErrorMessage(fmt.Sprintf("%s (last error: %d)", messagePrefix, errorCode))
+		update.SetAutoDisabledAt(now)
 		fields := []log.Field{
 			log.Int("channel_id", channelID),
 			log.String("channel_name", ch.Name),
@@ -457,8 +473,9 @@ func applyRecoveredChannelStatus(
 	disabledKeys []objects.DisabledAPIKey,
 ) *ent.ChannelUpdateOne {
 	if ch.Status != channel.StatusDisabled || ch.ErrorMessage == nil ||
-		!strings.HasPrefix(*ch.ErrorMessage, allAPIKeysPermanentlyDisabledMessagePrefix) ||
-		len(credentials.GetEnabledAPIKeys(disabledKeys)) == 0 {
+		(!strings.HasPrefix(*ch.ErrorMessage, allAPIKeysPermanentlyDisabledMessagePrefix) &&
+			!strings.HasPrefix(*ch.ErrorMessage, allKeysDisabledErrorPrefix)) ||
+		len(credentials.GetEnabledCredentialRefs(disabledKeys)) == 0 {
 		return update
 	}
 
@@ -467,7 +484,7 @@ func applyRecoveredChannelStatus(
 		log.String("channel_name", ch.Name),
 	)
 
-	return update.SetStatus(channel.StatusEnabled).ClearErrorMessage()
+	return update.SetStatus(channel.StatusEnabled).ClearErrorMessage().ClearAutoDisabledAt()
 }
 
 // cleanupExpiredDisabledAPIKeys prunes elapsed temporary disables and restores

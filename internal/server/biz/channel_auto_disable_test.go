@@ -1416,7 +1416,7 @@ func TestChannelService_ChannelAPIKeyRulePermanentActionKeepsLastKeyDisabled(t *
 			{
 				StatusCodes: []int{401},
 				Times:       1,
-				Action:      objects.APIKeyAutoDisableActionPermanent,
+				Action:      objects.APIKeyAutoDisableActionPermanentDelete,
 			},
 		}}).
 		Save(ctx)
