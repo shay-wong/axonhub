@@ -10,7 +10,7 @@ const visibilitySource = await readFile(new URL('./requests/utils/column-visibil
 const { outputText: visibilityModule } = ts.transpileModule(visibilitySource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 });
-const { migrateRequestColumnVisibilityPayload } = await import(
+const { migrateRequestColumnVisibilityPayload, REQUEST_COLUMN_VISIBILITY_STORAGE_VERSION } = await import(
   `data:text/javascript;base64,${Buffer.from(visibilityModule).toString('base64')}`
 );
 
@@ -25,6 +25,7 @@ test('mobile request table hides the beta speed-mode column by default below 768
 });
 
 test('migrates v2 visibility overrides to the redesigned request columns', () => {
+  assert.equal(REQUEST_COLUMN_VISIBILITY_STORAGE_VERSION, 6);
   assert.deepEqual(
     migrateRequestColumnVisibilityPayload({
       v: 2,
@@ -42,13 +43,15 @@ test('migrates v2 visibility overrides to the redesigned request columns', () =>
       source: false,
       requestedServiceTier: false,
       caller: false,
-      usage: false,
+      tokens: false,
+      readCache: false,
+      writeCache: false,
       duration: true,
     }
   );
 });
 
-test('preserves new IDs and keeps a consolidated column visible when any legacy source remained visible', () => {
+test('preserves current IDs and legacy consolidated visibility semantics', () => {
   assert.deepEqual(
     migrateRequestColumnVisibilityPayload({
       v: 2,
@@ -63,9 +66,21 @@ test('preserves new IDs and keeps a consolidated column visible when any legacy 
         latency: true,
       },
     }),
-    { caller: true, usage: false, duration: false }
+    { caller: true, tokens: false, readCache: false, writeCache: false, duration: false }
   );
-  assert.deepEqual(migrateRequestColumnVisibilityPayload({ v: 2, overrides: { tokens: false } }), { usage: true });
+  assert.deepEqual(migrateRequestColumnVisibilityPayload({ v: 2, overrides: { tokens: false } }), {
+    tokens: true,
+    readCache: true,
+    writeCache: true,
+  });
+  assert.deepEqual(
+    migrateRequestColumnVisibilityPayload({ v: 3, overrides: { usage: false, caller: true, duration: false } }),
+    { caller: true, duration: false, tokens: false, readCache: false, writeCache: false }
+  );
+  assert.deepEqual(migrateRequestColumnVisibilityPayload({ v: 6, overrides: { tokens: false, readCache: true } }), {
+    tokens: false,
+    readCache: true,
+  });
   assert.deepEqual(migrateRequestColumnVisibilityPayload({ source: false, requestedServiceTier: true, createdAt: false }), {
     requestedServiceTier: true,
     createdAt: false,

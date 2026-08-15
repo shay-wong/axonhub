@@ -1,8 +1,8 @@
 export type RequestColumnVisibility = Record<string, boolean>;
 
-export const REQUEST_COLUMN_VISIBILITY_STORAGE_VERSION = 3;
+export const REQUEST_COLUMN_VISIBILITY_STORAGE_VERSION = 6;
 
-const WRAPPED_STORAGE_VERSIONS = new Set([2, REQUEST_COLUMN_VISIBILITY_STORAGE_VERSION]);
+const WRAPPED_STORAGE_VERSIONS = new Set([2, 3, 4, 5, REQUEST_COLUMN_VISIBILITY_STORAGE_VERSION]);
 const LEGACY_RESPONSIVE_DEFAULT_IDS = new Set([
   'apiFormat',
   'passThrough',
@@ -25,6 +25,7 @@ const LEGACY_COLUMN_GROUPS = [
   { target: 'usage', sources: ['tokens', 'readCache', 'writeCache'] },
   { target: 'duration', sources: ['latency'] },
 ] as const;
+const CURRENT_USAGE_COLUMN_IDS = ['tokens', 'readCache', 'writeCache'] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -49,14 +50,26 @@ export function migrateRequestColumnVisibilityPayload(payload: unknown): Request
     });
   }
 
-  for (const { target, sources } of LEGACY_COLUMN_GROUPS) {
-    if (visibility[target] === undefined) {
-      const hasLegacyValue = sources.some((source) => visibility[source] !== undefined);
-      if (hasLegacyValue) {
-        visibility[target] = sources.some((source) => visibility[source] !== false);
+  if (version === undefined || version === 2) {
+    for (const { target, sources } of LEGACY_COLUMN_GROUPS) {
+      if (visibility[target] === undefined) {
+        const hasLegacyValue = sources.some((source) => visibility[source] !== undefined);
+        if (hasLegacyValue) {
+          visibility[target] = sources.some((source) => visibility[source] !== false);
+        }
       }
+      sources.forEach((source) => delete visibility[source]);
     }
-    sources.forEach((source) => delete visibility[source]);
+  }
+
+  if (version === undefined || version === 2 || version === 3) {
+    const usage = visibility.usage;
+    if (usage !== undefined) {
+      CURRENT_USAGE_COLUMN_IDS.forEach((id) => {
+        if (visibility[id] === undefined) visibility[id] = usage;
+      });
+    }
+    delete visibility.usage;
   }
 
   return visibility;
