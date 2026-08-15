@@ -62,6 +62,7 @@ test('Fenno exposes a third-party Codex channel', () => {
   const schema = read('features/channels/data/schema.ts');
   const channelsConfig = read('features/channels/data/config_channels.ts');
   const providersConfig = read('features/channels/data/config_providers.ts');
+  const transformOptionsDialog = read('features/channels/components/channels-transform-options-dialog.tsx');
 
   assert.match(schema, /channelTypeSchema[\s\S]*'fenno'/);
   assert.match(
@@ -69,13 +70,22 @@ test('Fenno exposes a third-party Codex channel', () => {
     /fenno:\s*{[\s\S]*baseURL:\s*'https:\/\/api\.fenno\.ai'[\s\S]*apiFormat:\s*OPENAI_RESPONSES[\s\S]*icon:\s*FennoIcon/
   );
   assert.match(channelsConfig, /fenno:\s*{[\s\S]*color:\s*'bg-\[#EEF2FF\] text-\[#3155C6\] border-\[#C7D2FE\]'/);
+  assert.match(channelsConfig, /fenno:\s*{[^}]*supportsCodexStyleResponses:\s*true/);
+  assert.match(channelsConfig, /codex:\s*{[^}]*supportsCodexStyleResponses:\s*true/);
   assert.match(providersConfig, /fenno:\s*{[\s\S]*icon:\s*FennoIcon[\s\S]*channelTypes:\s*\[\s*'fenno'\s*\]/);
+  assert.match(transformOptionsDialog, /CHANNEL_CONFIGS\[currentRow\.type\]\.supportsCodexStyleResponses/);
+  assert.match(transformOptionsDialog, /\{supportsCodexStyleResponses && \(/);
   const fennoIcon = read('features/channels/components/fenno-icon.tsx');
   assert.match(fennoIcon, /@\/assets\/fenno-icon\.webp/);
   assert.doesNotMatch(fennoIcon, /https?:\/\//);
   assert.ok(existsSync(join(srcRoot, 'assets/fenno-icon.webp')));
   assert.ok(channelsConfig.indexOf('qiniu_anthropic:') < channelsConfig.indexOf('fenno:'));
   assert.ok(providersConfig.indexOf('qiniu:') < providersConfig.indexOf('fenno:'));
+
+  const en = parseLocale('en');
+  const zh = parseLocale('zh-CN');
+  assert.match(en['channels.dialogs.fields.transformOptions.codexStyleResponses.description'], /Codex and Fenno/);
+  assert.match(zh['channels.dialogs.fields.transformOptions.codexStyleResponses.description'], /Codex 和 Fenno/);
 });
 
 test('Cline has localized channel and provider labels', () => {

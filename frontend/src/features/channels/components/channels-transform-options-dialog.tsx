@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Form, FormField, FormItem, FormLabel, FormMessage, FormControl } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useUpdateChannel } from '../data/channels';
+import { CHANNEL_CONFIGS } from '../data/config_channels';
 import { Channel, ReasoningEffortMapping, TransformOptions } from '../data/schema';
 import { mergeChannelSettingsForUpdate } from '../utils/merge';
 
@@ -54,7 +55,7 @@ const EFFORT_SUGGESTIONS = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
 export function ChannelsTransformOptionsDialog({ open, onOpenChange, currentRow }: Props) {
   const { t } = useTranslation();
   const updateChannel = useUpdateChannel();
-  const isCodexChannel = currentRow.type === 'codex';
+  const supportsCodexStyleResponses = CHANNEL_CONFIGS[currentRow.type].supportsCodexStyleResponses;
 
   const form = useForm<TransformOptionsFormValues>({
     resolver: zodResolver(transformOptionsFormSchema),
@@ -222,7 +223,7 @@ export function ChannelsTransformOptionsDialog({ open, onOpenChange, currentRow 
                     )}
                   />
 
-                  {isCodexChannel && (
+                  {supportsCodexStyleResponses && (
                     <FormField
                       control={form.control}
                       name='codexStyleResponses'

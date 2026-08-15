@@ -989,7 +989,8 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 			if err != nil {
 				return fmt.Errorf("failed to get existing channel settings: %w", err)
 			}
-			if existing.Type != *input.Type && existing.Settings != nil && existing.Settings.TransformOptions.CodexStyleResponses {
+			if existing.Type != *input.Type && existing.Settings != nil && existing.Settings.TransformOptions.CodexStyleResponses &&
+				!supportsCodexStyleResponses(*input.Type) {
 				settings := *existing.Settings
 				settings.TransformOptions.CodexStyleResponses = false
 				mut.SetSettings(&settings)
@@ -1090,9 +1091,13 @@ func normalizeChannelSettingsForType(channelType channel.Type, settings *objects
 		return
 	}
 
-	if channelType != channel.TypeCodex {
+	if !supportsCodexStyleResponses(channelType) {
 		settings.TransformOptions.CodexStyleResponses = false
 	}
+}
+
+func supportsCodexStyleResponses(channelType channel.Type) bool {
+	return channelType == channel.TypeCodex || channelType == channel.TypeFenno
 }
 
 // UpdateChannelStatus updates the status of a channel.

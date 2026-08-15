@@ -79,13 +79,14 @@ git show --remerge-diff <merge-commit>
 ### F03 按渠道启用 Codex 风格 Responses 转换
 
 - 生命周期：`长期保留`
-- 原始意图：运营人员可以只对选定 channel 启用 Codex 风格的 Responses 默认值，而不是全局改变所有 OpenAI-compatible 请求。
-- 必须保持：`TransformOptions.CodexStyleResponses` 是按 channel 的显式开关；关闭时保留调用方原始语义；开启时补充 Codex 原生字段和缺失默认值，包括缺失 `service_tier` 时使用 `priority`，但不能覆盖显式值，也不能影响图像请求。
-- 代码锚点：`internal/objects/channel.go`、`internal/server/orchestrator/transform_options.go`、`llm/transformer/openai/codex/outbound.go`、`frontend/src/features/channels/components/channels-transform-options-dialog.tsx`、`frontend/src/features/channels/data/schema.ts`。
-- 提交锚点：`f5cdeb74`；相关 merge resolution：`543e25b7`、`cf45f92e`。
+- 原始意图：运营人员可以只对选定的官方 Codex 或兼容 channel 启用 Codex 风格的 Responses 默认值，而不是全局改变所有 OpenAI-compatible 请求。
+- 必须保持：`TransformOptions.CodexStyleResponses` 是 `codex` 和 `fenno` channel 的显式开关且默认关闭；关闭时保留调用方原始语义；开启时补充 Codex 原生字段和缺失默认值，包括缺失 `service_tier` 时使用 `priority`，但不能覆盖显式值，也不能影响图像请求。
+- 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel.go`、`internal/server/biz/channel_test.go`、`internal/server/orchestrator/transform_options.go`、`llm/transformer/openai/codex/outbound.go`、`frontend/src/features/channels/components/channels-transform-options-dialog.tsx`、`frontend/src/features/channels/data/config_channels.ts`、`frontend/src/features/channels/data/channel-config.test.mjs`、`frontend/src/features/channels/data/schema.ts`。
+- 用户文档：`docs/en/guides/channel-management.md`、`docs/zh/guides/channel-management.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
+- 提交锚点：`f5cdeb74`；相关 merge resolution：`543e25b7`、`cf45f92e`；本次 Fenno 支持可用 `git log -S'supportsCodexStyleResponses' -- frontend/src/features/channels/data/config_channels.ts` 定位。
 - 合并审核：upstream `9dfd6ac0`、`fc1d27da`、`c0233704` 和 `6f9bfc5f` 已补充 Claude Code cache compatibility、Responses 限制、Codex headers 与缺失 reasoning context 的默认值，但没有提供按 channel 显式启用的完整默认值开关。仍须逐项比较配置粒度、默认字段、显式值优先级、session ID 和图像请求例外。
 - 吸收/删除条件：只有 upstream 提供相同配置粒度和请求语义时，才可用 upstream 实现替换；能力本身长期保留。
-- 验证：`go test ./internal/server/orchestrator -run TestApplyTransformOptions_CodexStyleResponses`；`cd llm && go test ./transformer/openai/codex -run CodexStyleResponses`。
+- 验证：`go test ./internal/server/biz -run 'TestChannelService_(Create|Update)ChannelNormalizesCodexStyleResponsesByType'`；`go test ./internal/server/orchestrator -run TestApplyTransformOptions_CodexStyleResponses`；`cd llm && go test ./transformer/openai/codex -run CodexStyleResponses`；`cd frontend && node --test src/features/channels/data/channel-config.test.mjs`。
 
 ### F04 Fast tier 识别、计费、价格表和展示
 

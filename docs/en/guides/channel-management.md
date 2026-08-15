@@ -69,6 +69,12 @@ sk-key-3
 - Different requests randomly select from available Keys
 - If one Key fails, the system automatically switches to another
 
+## Codex-style Responses
+
+`codex` and `fenno` channels can opt into **Use Codex-style Responses** under **Settings → Transform Options**. The option is disabled by default.
+
+When enabled, AxonHub fills missing Codex-native Responses defaults, including `service_tier: priority`, while preserving values explicitly sent by the caller. Image requests are not changed. Leave the option disabled when the upstream should receive the caller's original Responses semantics unchanged.
+
 ## Model Renaming
 
 AxonHub provides multiple mechanisms to rename or alias models at the channel level. When a request arrives, the channel resolves the request model to the actual upstream model through the following priority chain:

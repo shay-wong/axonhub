@@ -3,6 +3,7 @@
 ### Added
 
 - Added per-channel API key rules with status/keyword matching, configurable error thresholds, temporary auto-recovery, and permanent disable/delete actions.
+- Allowed Fenno channels to opt into Codex-style Responses defaults; the option remains disabled by default.
 
 v0.4.0
 

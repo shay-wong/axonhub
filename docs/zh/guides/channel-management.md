@@ -67,6 +67,12 @@
 - 不同请求会随机选择可用的 Key
 - 某个 Key 出错时，系统会自动切换到其他 Key
 
+## Codex 风格 Responses
+
+`codex` 和 `fenno` 渠道可以在 **设置 → 转换选项** 中显式开启 **使用 Codex 风格 Responses**。该选项默认关闭。
+
+开启后，AxonHub 会补齐缺失的 Codex 原生 Responses 默认值，包括 `service_tier: priority`，但不会覆盖调用方已经显式传入的值，也不会改变图像请求。若上游需要完整保留调用方原始 Responses 语义，请保持关闭。
+
 ## 模型重命名
 
 AxonHub 在渠道层面提供多种模型重命名和别名机制。当请求到达时，渠道按以下优先级链解析请求模型到实际上游模型：

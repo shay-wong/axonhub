@@ -281,6 +281,37 @@ func TestChannelService_CreateChannelNormalizesCodexStyleResponsesByType(t *test
 	require.NoError(t, err)
 	require.NotNil(t, codexCh.Settings)
 	require.True(t, codexCh.Settings.TransformOptions.CodexStyleResponses)
+
+	fennoCh, err := svc.CreateChannel(ctx, ent.CreateChannelInput{
+		Type:                    channel.TypeFenno,
+		BaseURL:                 lo.ToPtr("https://api.fenno.ai"),
+		Name:                    "Fenno Codex Style Kept",
+		Credentials:             objects.ChannelCredentials{APIKey: "key"},
+		SupportedModels:         []string{"gpt-5.2-codex"},
+		DefaultTestModel:        "gpt-5.2-codex",
+		AutoSyncSupportedModels: lo.ToPtr(false),
+		Settings: &objects.ChannelSettings{
+			TransformOptions: objects.TransformOptions{
+				CodexStyleResponses: true,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, fennoCh.Settings)
+	require.True(t, fennoCh.Settings.TransformOptions.CodexStyleResponses)
+
+	fennoDefaultCh, err := svc.CreateChannel(ctx, ent.CreateChannelInput{
+		Type:             channel.TypeFenno,
+		BaseURL:          lo.ToPtr("https://api.fenno.ai"),
+		Name:             "Fenno Codex Style Default",
+		Credentials:      objects.ChannelCredentials{APIKey: "key"},
+		SupportedModels:  []string{"gpt-5.2"},
+		DefaultTestModel: "gpt-5.2",
+		Settings:         &objects.ChannelSettings{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, fennoDefaultCh.Settings)
+	require.False(t, fennoDefaultCh.Settings.TransformOptions.CodexStyleResponses)
 }
 
 func TestChannelService_XAISubscriptionAlwaysUsesOfficialBaseURL(t *testing.T) {
@@ -517,8 +548,37 @@ func TestChannelService_UpdateChannelNormalizesCodexStyleResponsesByType(t *test
 	require.NotNil(t, updatedCodex.Settings)
 	require.True(t, updatedCodex.Settings.TransformOptions.CodexStyleResponses)
 
-	targetType := channel.TypeOpenai
+	fennoCh, err := client.Channel.Create().
+		SetType(channel.TypeFenno).
+		SetName("Fenno Update").
+		SetBaseURL("https://api.fenno.ai").
+		SetCredentials(objects.ChannelCredentials{APIKey: "key"}).
+		SetSupportedModels([]string{"gpt-5.2-codex"}).
+		SetDefaultTestModel("gpt-5.2-codex").
+		Save(ctx)
+	require.NoError(t, err)
+
+	updatedFenno, err := svc.UpdateChannel(ctx, fennoCh.ID, &ent.UpdateChannelInput{
+		Settings: &objects.ChannelSettings{
+			TransformOptions: objects.TransformOptions{
+				CodexStyleResponses: true,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updatedFenno.Settings)
+	require.True(t, updatedFenno.Settings.TransformOptions.CodexStyleResponses)
+
+	targetType := channel.TypeFenno
 	switched, err := svc.UpdateChannel(ctx, codexCh.ID, &ent.UpdateChannelInput{
+		Type: &targetType,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, switched.Settings)
+	require.True(t, switched.Settings.TransformOptions.CodexStyleResponses)
+
+	targetType = channel.TypeOpenai
+	switched, err = svc.UpdateChannel(ctx, codexCh.ID, &ent.UpdateChannelInput{
 		Type: &targetType,
 	})
 	require.NoError(t, err)
