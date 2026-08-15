@@ -34,6 +34,6 @@ test('status action columns require write_requests', () => {
 test('status actions on detail pages require write_requests', () => {
   for (const source of [files.threadDetail, files.traceDetail]) {
     assert.match(source, /const canWrite = hasScope\('write_requests'\);/);
-    assert.match(source, /\{canWrite && \(\(\) => \{/);
+    assert.match(source, /\{canWrite\s*&&\s*\(\(\)\s*=>\s*\{/);
   }
 });
