@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`6f6b662d7b144a9ef9fe09b6ac10c9c86392eb4c`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`852b8c6f9d3953309df55d4c7872e12fbfbd45f3`
-- 本次 merge base：`4495aa3cda4620c9d530a48dde5b586468a2e0d4`
-- 审计范围：`git diff 852b8c6f..HEAD`
+- 本次 upstream merge 的 fork parent：`0570ceef11820ddba2b527ffee3bded6934a912a`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`4476e7780b1b55da0cb950d7dfb197e0882f262d`
+- 本次 merge base：`852b8c6f9d3953309df55d4c7872e12fbfbd45f3`
+- 审计范围：`git diff 4476e778..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -83,7 +83,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：`TransformOptions.CodexStyleResponses` 是按 channel 的显式开关；关闭时保留调用方原始语义；开启时补充 Codex 原生字段和缺失默认值，包括缺失 `service_tier` 时使用 `priority`，但不能覆盖显式值，也不能影响图像请求。
 - 代码锚点：`internal/objects/channel.go`、`internal/server/orchestrator/transform_options.go`、`llm/transformer/openai/codex/outbound.go`、`frontend/src/features/channels/components/channels-transform-options-dialog.tsx`、`frontend/src/features/channels/data/schema.ts`。
 - 提交锚点：`f5cdeb74`；相关 merge resolution：`543e25b7`、`cf45f92e`。
-- 合并审核：upstream `9dfd6ac0`、`fc1d27da` 和 `c0233704` 已补充 Claude Code cache compatibility、Responses 限制与 Codex headers，但没有提供按 channel 显式启用的默认值开关。仍须逐项比较配置粒度、默认字段、显式值优先级、session ID 和图像请求例外。
+- 合并审核：upstream `9dfd6ac0`、`fc1d27da`、`c0233704` 和 `6f9bfc5f` 已补充 Claude Code cache compatibility、Responses 限制、Codex headers 与缺失 reasoning context 的默认值，但没有提供按 channel 显式启用的完整默认值开关。仍须逐项比较配置粒度、默认字段、显式值优先级、session ID 和图像请求例外。
 - 吸收/删除条件：只有 upstream 提供相同配置粒度和请求语义时，才可用 upstream 实现替换；能力本身长期保留。
 - 验证：`go test ./internal/server/orchestrator -run TestApplyTransformOptions_CodexStyleResponses`；`cd llm && go test ./transformer/openai/codex -run CodexStyleResponses`。
 
@@ -140,7 +140,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：Lite header 与 `reasoning.context=all_turns` 成对保留；`parallel_tool_calls` 约束不丢失；provider-private 数据保存在现有 `ProviderExtensions` sidecar，不污染通用 `llm.Request`；clone 和 retry 后仍存在。
 - 代码锚点：`llm/model.go`、`llm/provider_extensions.go`、`llm/transformer/openai/responses/request_extensions.go`、`llm/transformer/openai/responses/model.go`、`llm/transformer/openai/responses/inbound.go`、`llm/transformer/openai/responses/outbound_convert.go`、`llm/transformer/openai/codex/outbound_executor_test.go`。
 - 提交锚点：`f60fb767`、`753b2f26`。
-- 合并审核：upstream `a6bfffa8` 已吸收 polymorphic `reasoning_content` 和 Responses body pass-through 时的 Codex metadata header allowlist，`c0233704` 又补充 Codex identity headers；但仍没有覆盖 `ProviderExtensions`、Lite header/context 配对、`parallel_tool_calls`、clone/retry 或最终 session canonicalization。必须同时比较 headers 和 JSON body；只保留 Lite header 而丢失 context 会形成 upstream 拒绝的非法组合。
+- 合并审核：upstream `a6bfffa8` 已吸收 polymorphic `reasoning_content` 和 Responses body pass-through 时的 Codex metadata header allowlist，`c0233704` 补充 Codex identity headers，`6f9bfc5f` 又补齐缺失的 Lite reasoning context 并覆盖真实 inbound-to-Codex-outbound 路径；但仍没有等价覆盖 `parallel_tool_calls`、clone/retry 或最终 session canonicalization。必须同时比较 headers 和 JSON body；只保留 Lite header 而丢失 context 会形成 upstream 拒绝的非法组合。
 - 上游吸收条件：upstream 有真实 inbound-to-Codex-outbound 测试，覆盖 context、parallel tool calls、clone 和 retry。
 - 验证：`cd llm && go test ./transformer/openai/codex ./transformer/openai/responses -run 'ResponsesLiteRequirements|ConvertReasoning'`。
 
