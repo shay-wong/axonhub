@@ -432,6 +432,23 @@ func TestIsTerminalStreamEvent_AudioDoneEvents(t *testing.T) {
 	require.False(t, IsTerminalStreamEvent(&httpclient.StreamEvent{Type: "audio/mpeg"}))
 }
 
+func TestIsTerminalStreamEvent_ResponsesTerminalEvents(t *testing.T) {
+	for _, eventType := range []string{
+		"response.completed",
+		"response.failed",
+		"response.incomplete",
+		"response.cancelled",
+		"response.canceled",
+	} {
+		t.Run(eventType, func(t *testing.T) {
+			require.True(t, IsTerminalStreamEvent(&httpclient.StreamEvent{Type: eventType}))
+			require.True(t, IsTerminalStreamEvent(&httpclient.StreamEvent{Data: []byte(`{"type":"` + eventType + `"}`)}))
+		})
+	}
+
+	require.ErrorIs(t, streamTerminalError(&httpclient.StreamEvent{Data: []byte(`{"type":"response.canceled"}`)}), context.Canceled)
+}
+
 // TestInboundPersistentStream_Close_IncompleteStillPersistsChunks ensures a clean
 // upstream EOF without terminal/completion still saves buffered chunks when
 // store_chunks is on — without marking the request completed.

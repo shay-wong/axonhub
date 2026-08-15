@@ -174,7 +174,7 @@ func streamTerminalError(event *httpclient.StreamEvent) error {
 		}
 
 		return fmt.Errorf("response incomplete: %s", reason)
-	case "response.cancelled":
+	case "response.cancelled", "response.canceled":
 		return fmt.Errorf("response canceled: %w", context.Canceled)
 	default:
 		return nil
@@ -202,8 +202,8 @@ func terminalResponseID(body []byte) string {
 	return gjson.GetBytes(body, "id").String()
 }
 
-// isTerminalStreamEvent checks both SSE metadata and JSON data for a successful
-// protocol-level or semantic completion marker.
+// isTerminalStreamEvent checks both SSE metadata and JSON data for a
+// protocol-level terminal marker.
 func isTerminalStreamEvent(event *httpclient.StreamEvent) bool {
 	if event == nil {
 		return false
@@ -211,8 +211,12 @@ func isTerminalStreamEvent(event *httpclient.StreamEvent) bool {
 
 	// For chat completions, check for [DONE] event
 	if bytes.Equal(event.Data, llm.DoneStreamEvent.Data) ||
-		// For Responses API, check for response.completed event
+		// For Responses API, check for successful and abnormal terminal events
 		event.Type == "response.completed" ||
+		event.Type == "response.failed" ||
+		event.Type == "response.incomplete" ||
+		event.Type == "response.cancelled" ||
+		event.Type == "response.canceled" ||
 		// For Anthropic Messages API, check for message_stop event
 		event.Type == "message_stop" ||
 		// For OpenAI audio APIs (TTS sse / STT stream) which have no [DONE] sentinel:
@@ -230,7 +234,8 @@ func isTerminalStreamEvent(event *httpclient.StreamEvent) bool {
 	// the trailing [DONE] marker is read by the server.
 	eventType := gjson.GetBytes(event.Data, "type").String()
 	switch eventType {
-	case "response.completed", "message_stop", "speech.audio.done", "transcript.text.done":
+	case "response.completed", "response.failed", "response.incomplete", "response.cancelled", "response.canceled",
+		"message_stop", "speech.audio.done", "transcript.text.done":
 		return true
 	}
 
@@ -250,7 +255,7 @@ func isTerminalStreamEvent(event *httpclient.StreamEvent) bool {
 	return completed
 }
 
-// IsTerminalStreamEvent reports whether an SSE event successfully completes a stream.
+// IsTerminalStreamEvent reports whether an SSE event terminates a stream.
 func IsTerminalStreamEvent(event *httpclient.StreamEvent) bool {
 	return isTerminalStreamEvent(event)
 }

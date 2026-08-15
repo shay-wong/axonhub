@@ -159,12 +159,12 @@ git show --remerge-diff <merge-commit>
 
 - 生命周期：`等待上游吸收`
 - 原始意图：转换器不能丢失混合内容、usage、reasoning 顺序或 upstream 错误，也不能让遥测空 chunk 污染客户端流。
-- 必须保持：Responses 混合流式内容保持分段和顺序；Cline 空 `choices` 遥测不向客户端透出但最终 usage 保留；interleaved reasoning 按 item 顺序输出；空或不可解析的 upstream error 回退到 status/raw status/通用消息，不返回空字符串；direct stream 和 aggregation 语义一致。
-- 代码锚点：`llm/transformer/openai/responses/inbound_stream.go`、`llm/transformer/openai/responses/outbound.go`、`llm/transformer/openai/responses/aggregator.go`、`llm/transformer/anthropic/inbound_stream.go`、`llm/transformer/cline/outbound.go`。
-- 提交锚点：`9909a8cc`、`a686efc3`、`042d41ec`；相关 merge resolution：`94d4f989`。
+- 必须保持：Responses 混合流式内容保持分段和顺序；Cline 空 `choices` 遥测不向客户端透出但最终 usage 保留；interleaved reasoning 按 item 顺序输出；空或不可解析的 upstream error 回退到 status/raw status/通用消息，不返回空字符串；`response.completed`、`response.failed`、`response.incomplete`、`response.cancelled` 和 `response.canceled` 在 SSE metadata 或 JSON data 中都被识别为终态；direct stream 和 aggregation 语义一致。
+- 代码锚点：`internal/server/orchestrator/inbound.go`、`llm/transformer/openai/responses/inbound_stream.go`、`llm/transformer/openai/responses/outbound.go`、`llm/transformer/openai/responses/aggregator.go`、`llm/transformer/anthropic/inbound_stream.go`、`llm/transformer/cline/outbound.go`。
+- 提交锚点：`9909a8cc`、`a686efc3`、`042d41ec`；相关 merge resolution：`94d4f989`；本次终态识别变更可用 `git log -S'response.canceled' -- internal/server/orchestrator/inbound.go` 定位。
 - 合并审核：upstream `4495aa3c` 已吸收 Chat `finish_reason` 与 Responses abnormal terminal status 的双向映射；`889bc8ee`、`35133b6e`、`3b7e8618` 又吸收 clean EOF 检测、pre-content retry、单次 `[DONE]`、资源上限和客户端 incomplete 报告。fork 仍使用精确的 `response.incomplete`、`response.failed`、`response.cancelled` 终态事件，并保留混合分段、reasoning 顺序、空 error、Cline usage 及 direct/aggregate 一致性。分别检查 direct stream、aggregate、normal completion、incomplete、provider error 和 transport error；不要把 empty-success retry 与 HTTP error formatting 混为一谈。
 - 上游吸收条件：upstream 覆盖混合分段、reasoning 顺序、最终 usage、空 error 和 direct/aggregate 一致性。
-- 验证：`cd llm && go test ./transformer/openai/responses ./transformer/anthropic ./transformer/cline`。
+- 验证：`go test ./internal/server/orchestrator -run 'TestIsTerminalStreamEvent_ResponsesTerminalEvents'`；`cd llm && go test ./transformer/openai/responses ./transformer/anthropic ./transformer/cline`。
 
 ### U05 失败执行响应体和终态诊断持久化
 
