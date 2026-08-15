@@ -307,6 +307,16 @@ func TestHasCredentialsForProvider_KimiCodeAPIKeyConfigs(t *testing.T) {
 	require.True(t, hasCredentialsForProvider(ch))
 }
 
+func TestHasCredentialsForProvider_OpenCodeGoAPIKeyConfigs(t *testing.T) {
+	ch := &ent.Channel{
+		Type: channel.TypeOpencodeGo,
+		Credentials: objects.ChannelCredentials{APIKeyConfigs: []objects.ChannelAPIKeyConfig{
+			{Key: "opencode-go-key", Weight: 100},
+		}},
+	}
+	require.True(t, hasCredentialsForProvider(ch))
+}
+
 func TestHasCredentialsForProvider_ClineNoKey(t *testing.T) {
 	ch := &ent.Channel{Type: channel.TypeCline, Credentials: objects.ChannelCredentials{}}
 	require.False(t, hasCredentialsForProvider(ch))

@@ -69,12 +69,12 @@ git show --remerge-diff <merge-commit>
 
 - 生命周期：`长期保留`
 - 原始意图：一个 channel 可以管理多个 upstream API Key，并在不泄露完整 secret 的前提下识别、测试和按权重路由每个 Key。
-- 必须保持：优先读取 `apiKeyConfigs`，兼容旧 `apiKey`/`apiKeys`；Key 去重且非正权重归一为 `100`；支持 `trace_sticky`、`weighted_sticky` 和 `failover`；日志和 UI 只显示别名及安全后缀；失败重试优先排除当前 Key 并轮换同一 channel 的其他可用 Key。
-- 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel_apikey_identity.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_apikey_provider.go`、`internal/server/orchestrator/retry.go`、`frontend/src/features/channels/data/api-key-display.ts`、`frontend/src/features/channels/data/channel-input.ts`、`frontend/src/features/channels/components/channels-action-dialog.tsx`、`frontend/src/features/channels/components/channels-api-key-management-dialog.tsx`。
+- 必须保持：优先读取 `apiKeyConfigs`，兼容旧 `apiKey`/`apiKeys`；Key 去重且非正权重归一为 `100`；支持 `trace_sticky`、`weighted_sticky` 和 `failover`；API-key quota 预检与 checker 使用同一归一化 Key 集合；日志和 UI 只显示别名及安全后缀；失败重试优先排除当前 Key 并轮换同一 channel 的其他可用 Key。
+- 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel_apikey_identity.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_apikey_provider.go`、`internal/server/biz/provider_quota.go`、`internal/server/biz/provider_quota_url_test.go`、`internal/server/orchestrator/retry.go`、`frontend/src/features/channels/data/api-key-display.ts`、`frontend/src/features/channels/data/channel-input.ts`、`frontend/src/features/channels/components/channels-action-dialog.tsx`、`frontend/src/features/channels/components/channels-api-key-management-dialog.tsx`。
 - 提交锚点：`d6e092ba`、`2909ddaa`、`88980c6e`、`1a69f0c4`、`31b3ad18`、`d53787b1`。
 - 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
 - 吸收/删除条件：只有 fork 明确放弃多 Key 权重策略，或 upstream 提供等价的稳定身份、路由算法、兼容迁移和脱敏展示时才能删除。
-- 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'APIKey|Weighted|Failover|Retry'`；`cd frontend && node --test src/features/channels/data/api-key-display.test.mjs src/features/channels/data/channel-input.test.mjs`。
+- 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'APIKey|ProviderQuota|Weighted|Failover|Retry'`；`cd frontend && node --test src/features/channels/data/api-key-display.test.mjs src/features/channels/data/channel-input.test.mjs`。
 
 ### F03 按渠道启用 Codex 风格 Responses 转换
 
@@ -216,7 +216,7 @@ git show --remerge-diff <merge-commit>
 - 原始意图：系统级查询、GraphQL schema、日志和 quota cache 都不能泄露个人 Key 或 provider secret，也不能在凭据变化后继续展示旧配额。
 - 必须保持：个人 API Key 始终只对创建者可见，系统 scope 不能绕过；API Key、disabled Key 和 provider quota identity 在事务提交后使缓存失效；quota checker 必须识别 `APIKeyConfigs` 等结构化凭据且不能记录或返回完整 secret；内部 quota routing 可最小化 bypass，但 GraphQL 配置读取要求 `read_settings`。
 - 代码锚点：`internal/scopes/rule_personal_apikey.go`、`internal/server/gql/dashboard.resolvers.go`、`internal/server/gql/axonhub.graphql`、`internal/server/biz/channel_provider_quota_hook.go`、`internal/server/biz/provider_quota.go`、`frontend/src/features/channels/data/channel-input.ts`。
-- 提交锚点：`b5bc14d2`、`e8656e4b`、`ccb025f8`；相关 merge resolution：`32d0699e`。
+- 提交锚点：`b5bc14d2`、`e8656e4b`、`ccb025f8`；相关 merge resolution：`32d0699e`；本次结构化 quota 凭据预检可用 `git log -S'TestHasCredentialsForProvider_OpenCodeGoAPIKeyConfigs' -- internal/server/biz/provider_quota_url_test.go` 定位。
 - 合并审核：upstream `6027d959` 已用官方 API Key usage endpoint 替代 OpenCode Go cookie scraper，并通过 beta9 migration 清除旧 cookie 配置；接受删除旧 `authCookie` schema 和 UI。其余路径仍须分别检查 secret read/log、duplicate channel、结构化 Key、cache cold/hot path 和事务 rollback；不能用前端隐藏代替服务端权限。
 - 上游吸收条件：upstream 有个人 Key ownership、结构化 quota credential、quota identity invalidation 和 `read_settings` 测试。
 - 验证：`go test ./internal/scopes ./internal/server/biz ./internal/server/gql -run 'Personal|APIKeyConfigs|ProviderQuota|ReadSettings'`；`cd frontend && node --test src/features/channels/data/channel-input.test.mjs`。

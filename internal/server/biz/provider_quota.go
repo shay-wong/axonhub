@@ -3,7 +3,6 @@ package biz
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -945,7 +944,7 @@ func hasCredentialsForProvider(ch *ent.Channel) bool {
 	if ch.Type == channel.TypeOpenai || ch.Type == channel.TypeOpenaiResponses {
 		providerType := provider_quota.DetectProviderFromURL(ch.BaseURL)
 		if _, ok := provider_quota.URLDetectedProviders()[providerType]; ok {
-			return strings.TrimSpace(ch.Credentials.APIKey) != "" || len(ch.Credentials.APIKeys) > 0
+			return len(ch.Credentials.GetAllAPIKeys()) > 0
 		}
 	}
 
@@ -954,15 +953,7 @@ func hasCredentialsForProvider(ch *ent.Channel) bool {
 	}
 
 	if ch.Type == channel.TypeCline {
-		if strings.TrimSpace(ch.Credentials.APIKey) != "" {
-			return true
-		}
-		for _, apiKey := range ch.Credentials.APIKeys {
-			if strings.TrimSpace(apiKey) != "" {
-				return true
-			}
-		}
-		return false
+		return len(ch.Credentials.GetAllAPIKeys()) > 0
 	}
 
 	if ch.Type == channel.TypeMoonshotCoding {
@@ -970,7 +961,7 @@ func hasCredentialsForProvider(ch *ent.Channel) bool {
 	}
 
 	return ch.Credentials.OAuth != nil || isOAuthJSON(ch.Credentials.APIKey) ||
-		strings.TrimSpace(ch.Credentials.APIKey) != "" || len(ch.Credentials.APIKeys) > 0
+		len(ch.Credentials.GetAllAPIKeys()) > 0
 }
 
 func (svc *ProviderQuotaService) mergeLimitsIntoQuotaData(quotaData provider_quota.QuotaData) map[string]any {
