@@ -49,7 +49,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     -tags=nomsgpack \
     -ldflags "-s -w -X 'github.com/looplj/axonhub/internal/build.Version=$(cat internal/build/VERSION 2>/dev/null || echo dev)' -X 'github.com/looplj/axonhub/internal/build.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)' -X 'github.com/looplj/axonhub/internal/build.Repository=${AXONHUB_UPDATE_REPOSITORY}' -X 'github.com/looplj/axonhub/internal/build.UpdateChannel=${AXONHUB_UPDATE_CHANNEL}'" \
     -o axonhub \
-    ./cmd/axonhub
+    ./cmd/axonhub && \
+    ./scripts/verify-go-sse-dependency-test.sh && \
+    ./scripts/verify-go-sse-dependency.sh ./axonhub
 
 FROM alpine
 

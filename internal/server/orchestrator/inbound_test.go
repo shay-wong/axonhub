@@ -422,14 +422,77 @@ func TestInboundPersistentStream_Close_PersistsTransformedTerminalErrorWithoutCl
 func TestIsTerminalStreamEvent_AudioDoneEvents(t *testing.T) {
 	// OpenAI audio SSE streams have no [DONE] sentinel; terminal completion is
 	// signaled by typed *.done events surfaced via StreamEvent.Type.
-	require.True(t, isTerminalStreamEvent(&httpclient.StreamEvent{Type: "speech.audio.done"}))
-	require.True(t, isTerminalStreamEvent(&httpclient.StreamEvent{Type: "transcript.text.done"}))
-	require.True(t, isTerminalStreamEvent(&httpclient.StreamEvent{Type: httpclient.BinaryStreamDoneEventType}))
+	require.True(t, IsTerminalStreamEvent(&httpclient.StreamEvent{Type: "speech.audio.done"}))
+	require.True(t, IsTerminalStreamEvent(&httpclient.StreamEvent{Type: "transcript.text.done"}))
+	require.True(t, IsTerminalStreamEvent(&httpclient.StreamEvent{Type: httpclient.BinaryStreamDoneEventType}))
 
 	// Other events must not be treated as terminal.
-	require.False(t, isTerminalStreamEvent(&httpclient.StreamEvent{Type: "speech.audio.delta"}))
-	require.False(t, isTerminalStreamEvent(&httpclient.StreamEvent{Type: "transcript.text.delta"}))
-	require.False(t, isTerminalStreamEvent(&httpclient.StreamEvent{Type: "audio/mpeg"}))
+	require.False(t, IsTerminalStreamEvent(&httpclient.StreamEvent{Type: "speech.audio.delta"}))
+	require.False(t, IsTerminalStreamEvent(&httpclient.StreamEvent{Type: "transcript.text.delta"}))
+	require.False(t, IsTerminalStreamEvent(&httpclient.StreamEvent{Type: "audio/mpeg"}))
+}
+
+// TestInboundPersistentStream_Close_IncompleteStillPersistsChunks ensures a clean
+// upstream EOF without terminal/completion still saves buffered chunks when
+// store_chunks is on — without marking the request completed.
+func TestInboundPersistentStream_Close_IncompleteStillPersistsChunks(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+	project := createTestProject(t, ctx, client)
+	ch := createTestChannel(t, ctx, client)
+	_, requestService, systemService, _ := setupTestServices(t, client)
+	require.NoError(t, systemService.SetStoragePolicy(ctx, &biz.StoragePolicy{
+		StoreChunks:       true,
+		StoreRequestBody:  true,
+		StoreResponseBody: true,
+	}))
+
+	req, err := client.Request.Create().
+		SetProjectID(project.ID).
+		SetChannelID(ch.ID).
+		SetModelID("gpt-4").
+		SetStatus(request.StatusProcessing).
+		SetRequestBody([]byte(`{"stream":true}`)).
+		SetStream(true).
+		Save(ctx)
+	require.NoError(t, err)
+
+	partial := &httpclient.StreamEvent{
+		Type: "chunk",
+		Data: []byte(`{"id":"chatcmpl-partial","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"hi"},"finish_reason":null}]}`),
+	}
+	mockStream := &mockStream{events: []*httpclient.StreamEvent{partial}}
+	mockTransformer := &mockInboundTransformer{
+		aggregateErr: errors.New("incomplete aggregation"),
+	}
+	state := &PersistenceState{}
+
+	stream := NewInboundPersistentStream(
+		ctx,
+		mockStream,
+		req,
+		&ent.RequestExecution{ID: 1},
+		requestService,
+		mockTransformer,
+		nil,
+		state,
+	)
+	require.True(t, stream.Next())
+	_ = stream.Current()
+	require.NoError(t, stream.Close())
+
+	require.False(t, state.StreamCompleted)
+
+	dbReq, err := client.Request.Get(ctx, req.ID)
+	require.NoError(t, err)
+	require.Equal(t, request.StatusFailed, dbReq.Status)
+	require.NotEmpty(t, dbReq.ResponseChunks, "failed request should keep response_chunks in DB")
+
+	chunks, err := requestService.LoadResponseChunks(ctx, dbReq)
+	require.NoError(t, err)
+	require.Len(t, chunks, 1)
 }
 
 func TestIsTerminalStreamEvent_SemanticCompletionInData(t *testing.T) {
@@ -471,7 +534,7 @@ func TestIsTerminalStreamEvent_SemanticCompletionInData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, isTerminalStreamEvent(tt.event))
+			require.Equal(t, tt.want, IsTerminalStreamEvent(tt.event))
 		})
 	}
 }

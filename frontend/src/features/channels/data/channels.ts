@@ -6,12 +6,6 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useErrorHandler } from '@/hooks/use-error-handler';
 import {
-  buildBulkCreateChannelsVariables,
-  buildCreateChannelVariables,
-  buildDuplicateChannelVariables,
-  buildUpdateChannelVariables,
-} from './channel-input';
-import {
   Channel,
   ChannelConnection,
   ChannelSummaryConnection,
@@ -128,7 +122,6 @@ const CREATE_CHANNEL_MUTATION = `
           replaceDeveloperRoleWithSystem
           codexStyleResponses
           reasoningEffortMapping { from to }
-          downgradeMidConversationSystem
         }
         passThroughUserAgent
         passThroughBody
@@ -138,12 +131,6 @@ const CREATE_CHANNEL_MUTATION = `
           regex
         }
         apiKeySelectionStrategy
-        providerQuota {
-          opencodeGo {
-            workspaceId
-            authCookieConfigured
-          }
-        }
       }
       orderingWeight
       temporaryDisabledUntil
@@ -223,7 +210,6 @@ const DUPLICATE_CHANNEL_MUTATION = `
           replaceDeveloperRoleWithSystem
           codexStyleResponses
           reasoningEffortMapping { from to }
-          downgradeMidConversationSystem
         }
         passThroughUserAgent
         passThroughBody
@@ -233,12 +219,6 @@ const DUPLICATE_CHANNEL_MUTATION = `
           regex
         }
         apiKeySelectionStrategy
-        providerQuota {
-          opencodeGo {
-            workspaceId
-            authCookieConfigured
-          }
-        }
       }
       orderingWeight
       temporaryDisabledUntil
@@ -318,7 +298,6 @@ const BULK_CREATE_CHANNELS_MUTATION = `
           replaceDeveloperRoleWithSystem
           codexStyleResponses
           reasoningEffortMapping { from to }
-          downgradeMidConversationSystem
         }
         passThroughUserAgent
         passThroughBody
@@ -328,12 +307,6 @@ const BULK_CREATE_CHANNELS_MUTATION = `
           regex
         }
         apiKeySelectionStrategy
-        providerQuota {
-          opencodeGo {
-            workspaceId
-            authCookieConfigured
-          }
-        }
       }
       orderingWeight
       temporaryDisabledUntil
@@ -413,7 +386,6 @@ const UPDATE_CHANNEL_MUTATION = `
           replaceDeveloperRoleWithSystem
           codexStyleResponses
           reasoningEffortMapping { from to }
-          downgradeMidConversationSystem
         }
         passThroughUserAgent
         passThroughBody
@@ -423,12 +395,6 @@ const UPDATE_CHANNEL_MUTATION = `
           regex
         }
         apiKeySelectionStrategy
-        providerQuota {
-          opencodeGo {
-            workspaceId
-            authCookieConfigured
-          }
-        }
       }
       orderingWeight
       errorMessage
@@ -629,7 +595,6 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
             replaceDeveloperRoleWithSystem
             codexStyleResponses
             reasoningEffortMapping { from to }
-            downgradeMidConversationSystem
           }
           passThroughUserAgent
           passThroughBody
@@ -637,12 +602,6 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
           retryableErrorPatterns {
             pattern
             regex
-          }
-          providerQuota {
-            opencodeGo {
-              workspaceId
-              authCookieConfigured
-            }
           }
         }
       }
@@ -986,7 +945,6 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
             replaceDeveloperRoleWithSystem
             codexStyleResponses
             reasoningEffortMapping { from to }
-            downgradeMidConversationSystem
           }
           passThroughUserAgent
           passThroughBody
@@ -994,12 +952,6 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
           retryableErrorPatterns {
             pattern
             regex
-          }
-          providerQuota {
-            opencodeGo {
-              workspaceId
-              authCookieConfigured
-            }
           }
         }
       }
@@ -1145,7 +1097,6 @@ const QUERY_CHANNELS_QUERY = `
               replaceDeveloperRoleWithSystem
               codexStyleResponses
               reasoningEffortMapping { from to }
-              downgradeMidConversationSystem
             }
             passThroughUserAgent
             passThroughBody
@@ -1162,12 +1113,6 @@ const QUERY_CHANNELS_QUERY = `
               regex
             }
             apiKeySelectionStrategy
-            providerQuota {
-              opencodeGo {
-                workspaceId
-                authCookieConfigured
-              }
-            }
           }
           orderingWeight
           errorMessage
@@ -1368,7 +1313,7 @@ export function useCreateChannel() {
 
   return useMutation({
     mutationFn: async (input: CreateChannelInput) => {
-      const data = await graphqlRequest<{ createChannel: Channel }>(CREATE_CHANNEL_MUTATION, buildCreateChannelVariables(input));
+      const data = await graphqlRequest<{ createChannel: Channel }>(CREATE_CHANNEL_MUTATION, { input });
       return channelSchema.parse(data.createChannel);
     },
     onSuccess: () => {
@@ -1388,10 +1333,7 @@ export function useDuplicateChannel() {
 
   return useMutation({
     mutationFn: async ({ sourceID, input }: { sourceID: string; input: CreateChannelInput }) => {
-      const data = await graphqlRequest<{ duplicateChannel: Channel }>(
-        DUPLICATE_CHANNEL_MUTATION,
-        buildDuplicateChannelVariables(sourceID, input)
-      );
+      const data = await graphqlRequest<{ duplicateChannel: Channel }>(DUPLICATE_CHANNEL_MUTATION, { sourceID, input });
       return channelSchema.parse(data.duplicateChannel);
     },
     onSuccess: () => {
@@ -1427,10 +1369,7 @@ export function useBulkCreateChannels() {
   return useMutation({
     mutationFn: async (input: BulkCreateChannelsInput) => {
       try {
-        const data = await graphqlRequest<{ bulkCreateChannels: Channel[] }>(
-          BULK_CREATE_CHANNELS_MUTATION,
-          buildBulkCreateChannelsVariables(input)
-        );
+        const data = await graphqlRequest<{ bulkCreateChannels: Channel[] }>(BULK_CREATE_CHANNELS_MUTATION, { input });
         return data.bulkCreateChannels.map((ch) => channelSchema.parse(ch));
       } catch (error) {
         handleError(error, { context: 'Batch Create Channels' });
@@ -1451,7 +1390,7 @@ export function useUpdateChannel() {
 
   return useMutation({
     mutationFn: async ({ id, input }: { id: string; input: UpdateChannelInput }) => {
-      const data = await graphqlRequest<{ updateChannel: Channel }>(UPDATE_CHANNEL_MUTATION, buildUpdateChannelVariables(id, input));
+      const data = await graphqlRequest<{ updateChannel: Channel }>(UPDATE_CHANNEL_MUTATION, { id, input });
       return channelSchema.parse(data.updateChannel);
     },
     onSuccess: (data) => {
@@ -1720,15 +1659,7 @@ export function useTestChannel(options?: { silent?: boolean }) {
   const silent = options?.silent ?? false;
 
   return useMutation({
-    mutationFn: async ({
-      channelID,
-      modelID,
-      proxy,
-    }: {
-      channelID: string;
-      modelID?: string;
-      proxy?: ProxyConfig;
-    }) => {
+    mutationFn: async ({ channelID, modelID, proxy }: { channelID: string; modelID?: string; proxy?: ProxyConfig }) => {
       try {
         const data = await graphqlRequest<{
           testChannel: {

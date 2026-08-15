@@ -19,8 +19,7 @@ func (svc *ChannelService) DuplicateChannel(ctx context.Context, sourceID int, i
 	err := svc.RunInTransaction(ctx, func(ctx context.Context) error {
 		db := svc.entFromContext(ctx)
 
-		source, err := db.Channel.Get(ctx, sourceID)
-		if err != nil {
+		if _, err := db.Channel.Get(ctx, sourceID); err != nil {
 			return fmt.Errorf("failed to get source channel: %w", err)
 		}
 
@@ -34,8 +33,6 @@ func (svc *ChannelService) DuplicateChannel(ctx context.Context, sourceID int, i
 		if existing != nil {
 			return xerrors.DuplicateNameError("channel", input.Name)
 		}
-
-		preserveOpenCodeGoQuotaAuthCookie(input.Settings, source.Settings)
 
 		ch, err := svc.createChannel(ctx, input)
 		if err != nil {

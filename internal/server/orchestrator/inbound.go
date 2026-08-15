@@ -19,6 +19,11 @@ import (
 	"github.com/looplj/axonhub/llm/transformer"
 )
 
+// ErrStreamIncomplete reports an upstream stream that ended without a terminal
+// event and without an aggregated complete response. The same value is persisted
+// on the request and delivered to the client, so both sides agree on the reason.
+var ErrStreamIncomplete = errors.New("stream ended without terminal event or completed response")
+
 // InboundPersistentStream wraps a stream and tracks all responses for final saving to database.
 // It implements the streams.Stream interface and handles persistence in the Close method.
 //
@@ -245,6 +250,11 @@ func isTerminalStreamEvent(event *httpclient.StreamEvent) bool {
 	return completed
 }
 
+// IsTerminalStreamEvent reports whether an SSE event successfully completes a stream.
+func IsTerminalStreamEvent(event *httpclient.StreamEvent) bool {
+	return isTerminalStreamEvent(event)
+}
+
 func (ts *InboundPersistentStream) Err() error {
 	return ts.stream.Err()
 }
@@ -281,9 +291,10 @@ func (ts *InboundPersistentStream) Close() error {
 	// regardless of what chunks we have. Stream errors indicate the upstream response
 	// was incomplete or corrupted.
 	if streamErr != nil && !errors.Is(streamErr, context.Canceled) && !errors.Is(streamErr, context.DeadlineExceeded) {
-		if ts.request != nil {
-			persistCtx := context.WithoutCancel(ctx)
+		persistCtx := context.WithoutCancel(ctx)
+		ts.persistFailureChunks(persistCtx)
 
+		if ts.request != nil {
 			if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request.ID, streamErr); err != nil {
 				log.Warn(persistCtx, "Failed to update request status from error", log.Cause(err))
 			}
@@ -310,9 +321,10 @@ func (ts *InboundPersistentStream) Close() error {
 	// Check if context was canceled (client disconnected before [DONE]).
 	// Skip the error path if we determined the stream actually completed successfully above.
 	if (ctxErr != nil || streamErr != nil) && !ts.state.StreamCompleted {
-		if ts.request != nil {
-			persistCtx := context.WithoutCancel(ctx)
+		persistCtx := context.WithoutCancel(ctx)
+		ts.persistFailureChunks(persistCtx)
 
+		if ts.request != nil {
 			errToReport := ctxErr
 			if errToReport == nil {
 				errToReport = streamErr
@@ -333,10 +345,12 @@ func (ts *InboundPersistentStream) Close() error {
 	if !ts.state.StreamCompleted {
 		log.Debug(ctx, "Stream ended without terminal event or completed response, treating as incomplete")
 
-		if ts.request != nil {
-			persistCtx := context.WithoutCancel(ctx)
+		persistCtx := context.WithoutCancel(ctx)
+		// Persist partial chunks for debugging; do not mark the request completed.
+		ts.persistFailureChunks(persistCtx)
 
-			errToReport := errors.New("stream ended without terminal event or completed response")
+		if ts.request != nil {
+			errToReport := ErrStreamIncomplete
 
 			if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request.ID, errToReport); err != nil {
 				log.Warn(persistCtx, "Failed to update request status from error", log.Cause(err))
@@ -425,6 +439,19 @@ func (ts *InboundPersistentStream) persistTerminalResponse(ctx context.Context, 
 
 	if err := ts.requestService.SaveRequestChunks(persistCtx, ts.request.ID, ts.responseChunks); err != nil {
 		log.Warn(persistCtx, "Failed to save terminal request chunks", log.Cause(err))
+	}
+}
+
+// persistFailureChunks stores buffered SSE chunks for a failed/incomplete stream
+// without marking the request completed. Used so truncated upstream responses remain
+// inspectable when store_chunks is enabled.
+func (ts *InboundPersistentStream) persistFailureChunks(ctx context.Context) {
+	if ts.request == nil || len(ts.responseChunks) == 0 {
+		return
+	}
+
+	if err := ts.requestService.SaveRequestChunks(ctx, ts.request.ID, ts.responseChunks); err != nil {
+		log.Warn(ctx, "Failed to save request chunks after stream failure", log.Cause(err))
 	}
 }
 

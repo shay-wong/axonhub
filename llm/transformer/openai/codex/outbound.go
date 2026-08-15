@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
+	"github.com/tidwall/gjson"
 
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/auth"
@@ -47,8 +48,15 @@ type OutboundTransformer struct {
 
 var (
 	_ transformer.Outbound               = (*OutboundTransformer)(nil)
+	_ transformer.PassThroughBodyPolicy  = (*OutboundTransformer)(nil)
 	_ pipeline.ChannelCustomizedExecutor = (*OutboundTransformer)(nil)
 )
+
+var responsesBlockedPassThroughFields = []string{
+	"max_output_tokens",
+	"max_completion_tokens",
+	"max_tokens",
+}
 
 type Params struct {
 	TokenProvider oauth.TokenGetter
@@ -97,6 +105,20 @@ func (t *OutboundTransformer) TokenProvider() oauth.TokenGetter {
 	return t.tokens
 }
 
+func (t *OutboundTransformer) AllowPassThroughBody(_ context.Context, llmReq *llm.Request, _ *httpclient.Request) bool {
+	if llmReq == nil || llmReq.APIFormat != llm.APIFormatOpenAIResponse || llmReq.RawRequest == nil {
+		return true
+	}
+
+	for _, field := range responsesBlockedPassThroughFields {
+		if gjson.GetBytes(llmReq.RawRequest.Body, field).Exists() {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (t *OutboundTransformer) TransformError(ctx context.Context, rawErr *httpclient.Error) *llm.ResponseError {
 	return t.responsesOutbound.TransformError(ctx, rawErr)
 }
@@ -122,6 +144,15 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 		rawOriginator = llmReq.RawRequest.Headers.Get("Originator")
 		rawUserAgent = llmReq.RawRequest.Headers.Get("User-Agent")
 		rawTurnMetadata = llmReq.RawRequest.Headers.Get(TurnMetadataHeader)
+
+		// Non-Codex inbound clients omit the Responses Lite signal. Fabricate it
+		// so the Codex upstream sees the same protocol shape as a real Codex
+		// client. This must be set on the raw request before the underlying
+		// Responses outbound runs: it reads this header to emit an explicit
+		// parallel_tool_calls=false body, matching what real Codex sends.
+		if strings.TrimSpace(rawHeaders.Get(ResponsesLiteHeader)) == "" {
+			rawHeaders.Set(ResponsesLiteHeader, "true")
+		}
 	}
 
 	creds, err := t.tokens.Get(ctx)
@@ -243,6 +274,46 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 			sessionID = ensureSessionID(ctx, rawSessionID, rawTurnMetadata)
 		}
 		hreq.Headers.Set(SessionHeaderHyphen, sessionID)
+	}
+
+	// Fabricate the remaining Codex identity headers for non-Codex inbound
+	// clients so the upstream always sees a complete Codex session shape.
+	sessionID = hreq.Headers.Get(SessionHeaderHyphen)
+	windowID := sessionID + ":0"
+	if hreq.Headers.Get(ThreadIDHeader) == "" {
+		// Codex clients send Thread-Id equal to Session-Id (both identify the
+		// conversation/thread); keep thread-scoped upstream behavior (e.g.
+		// prompt caching) consistent for non-Codex clients too.
+		hreq.Headers.Set(ThreadIDHeader, sessionID)
+	}
+	if hreq.Headers.Get(WindowIDHeader) == "" {
+		hreq.Headers.Set(WindowIDHeader, windowID)
+	}
+	if hreq.Headers.Get(TurnMetadataHeader) == "" {
+		installationID := ""
+		if accountID != "" {
+			// Deterministic per-account installation id derived from the
+			// ChatGPT account id.
+			installationID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(accountID)).String()
+		}
+		turnMetadata, _ := json.Marshal(TurnMetadata{
+			InstallationID:      installationID,
+			SessionID:           sessionID,
+			ThreadID:            sessionID,
+			TurnID:              uuid.NewString(),
+			WindowID:            windowID,
+			RequestKind:         "turn",
+			ThreadSource:        "user",
+			Sandbox:             "none",
+			TurnStartedAtUnixMS: turnStartedAtUnixMS(sessionID),
+		})
+		hreq.Headers.Set(TurnMetadataHeader, string(turnMetadata))
+	}
+	if hreq.Headers.Get(ClientRequestIDHeader) == "" {
+		hreq.Headers.Set(ClientRequestIDHeader, uuid.NewString())
+	}
+	if hreq.Headers.Get(BetaFeaturesHeader) == "" {
+		hreq.Headers.Set(BetaFeaturesHeader, fabricatedBetaFeatures)
 	}
 
 	hreq.Headers.Del(SessionHeader)

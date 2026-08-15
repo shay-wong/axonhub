@@ -27,8 +27,8 @@ import {
   IconClockPlay,
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
-import { usePermissions } from '@/hooks/usePermissions';
 import { cn } from '@/lib/utils';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -373,15 +373,17 @@ const ActionCell = memo(({ row, canWrite }: ChannelCellProps) => {
             <IconGauge size={16} className='mr-2' />
             {t('channels.dialogs.rateLimit.action')}
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              setCurrentRow(channel);
-              setOpen('endpoints');
-            }}
-          >
-            <IconPlugConnected size={16} className='mr-2' />
-            {t('channels.endpoints.title')}
-          </DropdownMenuItem>
+          {channel.type !== 'xai_subscription' && (
+            <DropdownMenuItem
+              onClick={() => {
+                setCurrentRow(channel);
+                setOpen('endpoints');
+              }}
+            >
+              <IconPlugConnected size={16} className='mr-2' />
+              {t('channels.endpoints.title')}
+            </DropdownMenuItem>
+          )}
           {canWrite && (
             <DropdownMenuItem
               onClick={() => {
@@ -539,10 +541,7 @@ function renderChannelStatusTooltipContent(
       );
     case 'disabledKeys':
       return (
-        <DisabledAPIKeysTooltipContent
-          channel={channel}
-          label={t('channels.actions.disabledAPIKeys', { count: disabledKeysCount })}
-        />
+        <DisabledAPIKeysTooltipContent channel={channel} label={t('channels.actions.disabledAPIKeys', { count: disabledKeysCount })} />
       );
     case 'disabledKeysReadOnly':
       return (

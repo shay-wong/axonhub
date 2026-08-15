@@ -11,15 +11,14 @@ func TestRedactGraphQLVariablesForLog(t *testing.T) {
 	variables := map[string]any{
 		"input": map[string]any{
 			"name": "OpenCode Go",
+			"credentials": map[string]any{
+				"accountId":    "acct_123",
+				"authCookie":   "secret-cookie",
+				"Auth_Cookie":  "case-secret-cookie",
+				"refreshToken": "refresh-secret",
+				"apiKeys":      []any{"key-1", "key-2"},
+			},
 			"settings": map[string]any{
-				"providerQuota": map[string]any{
-					"opencodeGo": map[string]any{
-						"workspaceId":  "wk_123",
-						"authCookie":   "secret-cookie",
-						"Auth_Cookie":  "case-secret-cookie",
-						"refreshToken": "refresh-secret",
-					},
-				},
 				"headerOverrideOperations": []any{
 					map[string]any{
 						"op":    "set",
@@ -38,9 +37,6 @@ func TestRedactGraphQLVariablesForLog(t *testing.T) {
 						"value": "body-replacement-secret",
 					},
 				},
-			},
-			"credentials": map[string]any{
-				"apiKeys": []any{"key-1", "key-2"},
 			},
 			"overrideHeaders": []any{
 				map[string]any{
@@ -77,8 +73,8 @@ func TestRedactGraphQLVariablesForLog(t *testing.T) {
 	require.NotContains(t, encodedText, "body-secret")
 	require.NotContains(t, encodedText, "body-replacement-secret")
 	require.Contains(t, encodedText, redactedGraphQLVariableValue)
-	require.Contains(t, encodedText, "wk_123")
+	require.Contains(t, encodedText, "acct_123")
 	require.Contains(t, encodedText, "safe")
 
-	require.Equal(t, "secret-cookie", variables["input"].(map[string]any)["settings"].(map[string]any)["providerQuota"].(map[string]any)["opencodeGo"].(map[string]any)["authCookie"])
+	require.Equal(t, "secret-cookie", variables["input"].(map[string]any)["credentials"].(map[string]any)["authCookie"])
 }

@@ -3,6 +3,7 @@ package responses
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -217,6 +218,218 @@ func TestOutboundTransformer_StreamTransformation_WithTestData(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOutboundTransformer_TransformStream_IncompleteResponseDoesNotEmitDone(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name   string
+		events []*httpclient.StreamEvent
+	}{
+		{name: "empty upstream stream"},
+		{
+			name: "with response ID",
+			events: []*httpclient.StreamEvent{
+				{Type: "response.created", Data: []byte(`{"type":"response.created","response":{"id":"resp_incomplete","object":"response","created_at":1700000000,"model":"gpt-5","status":"in_progress","output":[]}}`)},
+			},
+		},
+		{
+			name: "with empty response ID",
+			events: []*httpclient.StreamEvent{
+				{Type: "response.created", Data: []byte(`{"type":"response.created","response":{"id":"","object":"response","created_at":1700000000,"model":"gpt-5","status":"in_progress","output":[]}}`)},
+			},
+		},
+		{
+			name: "text delta without response ID",
+			events: []*httpclient.StreamEvent{
+				{Type: "response.output_text.delta", Data: []byte(`{"type":"response.output_text.delta","item_id":"msg_partial","output_index":0,"content_index":0,"delta":"partial"}`)},
+			},
+		},
+		{
+			name: "reasoning delta without response ID",
+			events: []*httpclient.StreamEvent{
+				{Type: "response.reasoning_summary_text.delta", Data: []byte(`{"type":"response.reasoning_summary_text.delta","item_id":"rs_partial","output_index":0,"summary_index":0,"delta":"partial"}`)},
+			},
+		},
+		{
+			name: "function call without response ID",
+			events: []*httpclient.StreamEvent{
+				{Type: "response.output_item.added", Data: []byte(`{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_partial","type":"function_call","call_id":"call_partial","name":"write_file","arguments":""}}`)},
+				{Type: "response.function_call_arguments.delta", Data: []byte(`{"type":"response.function_call_arguments.delta","item_id":"fc_partial","output_index":0,"delta":"{\"path\":\"/tmp/x\"}"}`)},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(tt.events))
+			require.NoError(t, err)
+
+			var responses []*llm.Response
+			for stream.Next() {
+				responses = append(responses, stream.Current())
+			}
+
+			require.ErrorIs(t, stream.Err(), ErrStreamIncomplete)
+			require.NotContains(t, responses, llm.DoneResponse)
+		})
+	}
+}
+
+func TestOutboundTransformer_TransformStream_ProviderDoneRequiresSemanticTerminal(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{Type: "response.created", Data: []byte(`{"type":"response.created","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"in_progress","output":[]}}`)},
+		{Data: []byte("[DONE]")},
+	}
+	stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.ErrorIs(t, err, ErrStreamIncomplete)
+	require.Equal(t, 0, countDoneResponses(responses))
+}
+
+func TestOutboundTransformer_TransformStream_ProviderDoneBeforeSemanticTerminalPreservesLateSourceError(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	sourceErr := errors.New("late source failure after bare provider done")
+	events := []*httpclient.StreamEvent{
+		{Type: "response.created", Data: []byte(`{"type":"response.created","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"in_progress","output":[]}}`)},
+		{Data: []byte("[DONE]")},
+	}
+	source := &responsesErrorAfterStream{items: events, err: sourceErr}
+	stream, err := trans.TransformStream(t.Context(), nil, source)
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.ErrorIs(t, err, sourceErr)
+	require.Equal(t, 0, countDoneResponses(responses))
+}
+
+func TestOutboundTransformer_TransformStream_ProviderDoneAfterSemanticTerminal(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
+		{Data: []byte("[DONE]")},
+	}
+	stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.NoError(t, err)
+	require.Equal(t, 1, countDoneResponses(responses))
+}
+
+func TestOutboundTransformer_TransformStream_DuplicateProviderDoneEmitsOnce(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
+		{Data: []byte("[DONE]")},
+		{Data: []byte("[DONE]")},
+	}
+	stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.NoError(t, err)
+	require.Equal(t, 1, countDoneResponses(responses))
+}
+
+func TestOutboundTransformer_TransformStream_ProviderDoneBeforeSourceErrorDoesNotEmitDone(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	sourceErr := errors.New("late source failure")
+	events := []*httpclient.StreamEvent{
+		{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
+		{Data: []byte("[DONE]")},
+		{Data: []byte("[DONE]")},
+	}
+	source := &responsesErrorAfterStream{items: events, err: sourceErr}
+	stream, err := trans.TransformStream(t.Context(), nil, source)
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.ErrorIs(t, err, sourceErr)
+	require.Equal(t, 0, countDoneResponses(responses))
+}
+
+type responsesErrorAfterStream struct {
+	items   []*httpclient.StreamEvent
+	index   int
+	current *httpclient.StreamEvent
+	err     error
+}
+
+func (s *responsesErrorAfterStream) Next() bool {
+	if s.index >= len(s.items) {
+		return false
+	}
+	s.current = s.items[s.index]
+	s.index++
+	return true
+}
+
+func (s *responsesErrorAfterStream) Current() *httpclient.StreamEvent { return s.current }
+func (s *responsesErrorAfterStream) Err() error                       { return s.err }
+func (s *responsesErrorAfterStream) Close() error                     { return nil }
+
+func TestOutboundTransformer_TransformStream_DuplicateSemanticTerminalEmitsOnce(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
+		{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"resp_done","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
+	}
+	stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.NoError(t, err)
+	require.Equal(t, 1, countDoneResponses(responses))
+	finishResponses := 0
+	for _, response := range responses {
+		if response != nil && len(response.Choices) > 0 && response.Choices[0].FinishReason != nil {
+			finishResponses++
+		}
+	}
+	require.Equal(t, 1, finishResponses)
+}
+
+func TestOutboundTransformer_TransformStream_SemanticTerminalSynthesizesOneDone(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	events := []*httpclient.StreamEvent{
+		{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"resp_complete","object":"response","created_at":1700000000,"model":"gpt-5","status":"completed","output":[]}}`)},
+	}
+	stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+	require.NoError(t, err)
+
+	responses, err := streams.All(stream)
+	require.NoError(t, err)
+	require.Equal(t, 1, countDoneResponses(responses))
+}
+
+func countDoneResponses(responses []*llm.Response) int {
+	count := 0
+	for _, response := range responses {
+		if response == llm.DoneResponse {
+			count++
+		}
+	}
+	return count
 }
 
 func TestOutboundTransformer_StreamTransformation_ErrorEvent(t *testing.T) {
@@ -1797,6 +2010,64 @@ func TestOutboundTransformer_TransformStream_MapsCompletedStatusToFinishReason(t
 			}
 
 			require.Equal(t, []string{tt.expectedReason}, finishReasons)
+		})
+	}
+}
+
+func TestOutboundTransformer_TransformStream_CreatedAtCompatibility(t *testing.T) {
+	trans, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	cases := []struct {
+		name      string
+		createdAt string
+	}{
+		{name: "integer created_at", createdAt: "1786360449"},
+		{name: "float-encoded integral created_at", createdAt: "1786360449.0"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			events := []*httpclient.StreamEvent{
+				{Type: "response.created", Data: []byte(fmt.Sprintf(`{"type":"response.created","response":{"id":"resp_parallel","object":"response","created_at":%s,"model":"parallel","status":"in_progress","output":[]}}`, tc.createdAt))},
+				{Type: "response.output_text.delta", Data: []byte(`{"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":"今日长鑫科技"}`)},
+				{Type: "response.output_text.delta", Data: []byte(`{"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":"的收盘价是多少。"}`)},
+				{Type: "response.completed", Data: []byte(fmt.Sprintf(`{"type":"response.completed","response":{"id":"resp_parallel","object":"response","created_at":%s,"model":"parallel","status":"completed","output":[]}}`, tc.createdAt))},
+			}
+
+			stream, err := trans.TransformStream(t.Context(), nil, streams.SliceStream(events))
+			require.NoError(t, err)
+
+			responses, err := streams.All(stream)
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, len(responses), 4)
+
+			// The response.created chunk carries the parsed unix timestamp.
+			require.Equal(t, int64(1786360449), responses[0].Created)
+			require.Equal(t, "resp_parallel", responses[0].ID)
+			require.Equal(t, "parallel", responses[0].Model)
+
+			// output_text.delta events must keep streaming past the float-encoded created_at.
+			var streamedText strings.Builder
+			for _, resp := range responses {
+				if len(resp.Choices) > 0 && resp.Choices[0].Delta != nil && resp.Choices[0].Delta.Content.Content != nil {
+					streamedText.WriteString(*resp.Choices[0].Delta.Content.Content)
+				}
+			}
+			require.Equal(t, "今日长鑫科技的收盘价是多少。", streamedText.String())
+
+			// response.completed emits finish_reason stop and preserves the timestamp.
+			var last *llm.Response
+			for i := len(responses) - 1; i >= 0; i-- {
+				if responses[i] != llm.DoneResponse {
+					last = responses[i]
+					break
+				}
+			}
+			require.NotNil(t, last)
+			require.Len(t, last.Choices, 1)
+			require.Equal(t, "stop", lo.FromPtr(last.Choices[0].FinishReason))
+			require.Equal(t, int64(1786360449), last.Created)
 		})
 	}
 }

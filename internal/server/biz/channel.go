@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -26,6 +27,7 @@ import (
 	"github.com/looplj/axonhub/internal/server/scheduler"
 	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/transformer"
+	xaisubscription "github.com/looplj/axonhub/llm/transformer/xai/subscription"
 )
 
 // ChannelModelEntry represents a model that the channel can handle.
@@ -595,13 +597,17 @@ func (svc *ChannelService) ListModels(ctx context.Context, input ListModelsInput
 // createChannel creates a new channel without triggering a reload.
 // This is useful for batch operations where reload should happen once at the end.
 func (svc *ChannelService) createChannel(ctx context.Context, input ent.CreateChannelInput) (*ent.Channel, error) {
+	if input.Type == channel.TypeXaiSubscription {
+		officialBaseURL := xaisubscription.DefaultBaseURL
+		input.BaseURL = &officialBaseURL
+		input.Endpoints = nil
+	}
 	if err := NormalizeAPIKeyAutoDisableRules(input.Policies); err != nil {
 		return nil, err
 	}
 
 	if input.Settings != nil {
 		normalizeChannelSettingsForType(input.Type, input.Settings)
-		normalizeOpenCodeGoQuotaAuthCookieCommand(input.Settings)
 
 		if input.Settings.BodyOverrideOperations != nil {
 			if err := ValidateBodyOverrideOperations(input.Settings.BodyOverrideOperations); err != nil {
@@ -764,67 +770,6 @@ func NormalizeRetryableErrorPatterns(settings *objects.ChannelSettings) error {
 	return nil
 }
 
-func normalizeOpenCodeGoQuotaAuthCookieCommand(settings *objects.ChannelSettings) {
-	if settings == nil || settings.ProviderQuota == nil || settings.ProviderQuota.OpencodeGo == nil {
-		return
-	}
-
-	if settings.ProviderQuota.OpencodeGo.ClearAuthCookie {
-		settings.ProviderQuota.OpencodeGo.AuthCookie = ""
-	}
-
-	settings.ProviderQuota.OpencodeGo.ClearAuthCookie = false
-}
-
-func preserveOpenCodeGoQuotaAuthCookie(settings *objects.ChannelSettings, existingSettings *objects.ChannelSettings) {
-	if settings == nil || settings.ProviderQuota == nil || settings.ProviderQuota.OpencodeGo == nil {
-		return
-	}
-
-	if settings.ProviderQuota.OpencodeGo.ClearAuthCookie {
-		settings.ProviderQuota.OpencodeGo.AuthCookie = ""
-		settings.ProviderQuota.OpencodeGo.ClearAuthCookie = false
-		return
-	}
-
-	if strings.TrimSpace(settings.ProviderQuota.OpencodeGo.AuthCookie) != "" {
-		settings.ProviderQuota.OpencodeGo.ClearAuthCookie = false
-		return
-	}
-
-	if existingSettings == nil || existingSettings.ProviderQuota == nil || existingSettings.ProviderQuota.OpencodeGo == nil {
-		return
-	}
-
-	existingCookie := existingSettings.ProviderQuota.OpencodeGo.AuthCookie
-	if strings.TrimSpace(existingCookie) == "" {
-		return
-	}
-
-	settings.ProviderQuota.OpencodeGo.AuthCookie = existingCookie
-	settings.ProviderQuota.OpencodeGo.ClearAuthCookie = false
-}
-
-func (svc *ChannelService) preserveOpenCodeGoQuotaAuthCookieForUpdate(ctx context.Context, id int, settings *objects.ChannelSettings) error {
-	if settings == nil || settings.ProviderQuota == nil || settings.ProviderQuota.OpencodeGo == nil {
-		return nil
-	}
-
-	if settings.ProviderQuota.OpencodeGo.ClearAuthCookie || strings.TrimSpace(settings.ProviderQuota.OpencodeGo.AuthCookie) != "" {
-		normalizeOpenCodeGoQuotaAuthCookieCommand(settings)
-		return nil
-	}
-
-	existing, err := svc.entFromContext(ctx).Channel.Get(ctx, id)
-	if err != nil {
-		return fmt.Errorf("failed to get existing channel settings: %w", err)
-	}
-
-	preserveOpenCodeGoQuotaAuthCookie(settings, existing.Settings)
-
-	return nil
-}
-
 // NormalizeAPIKeyAutoDisableRules validates and canonicalizes channel-scoped
 // API key rules before they are persisted.
 func NormalizeAPIKeyAutoDisableRules(policies *objects.ChannelPolicies) error {
@@ -917,6 +862,20 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 	if err := NormalizeAPIKeyAutoDisableRules(input.Policies); err != nil {
 		return nil, err
 	}
+	officialBaseURL := xaisubscription.DefaultBaseURL
+	if input.Type != nil && *input.Type == channel.TypeXaiSubscription {
+		input.BaseURL = &officialBaseURL
+		input.Endpoints = []objects.ChannelEndpoint{}
+	} else if input.Type == nil && (input.BaseURL != nil || input.Endpoints != nil) {
+		existing, err := svc.entFromContext(ctx).Channel.Query().Where(channel.IDEQ(id), channel.TypeEQ(channel.TypeXaiSubscription)).Exist(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check xAI subscription channel: %w", err)
+		}
+		if existing {
+			input.BaseURL = &officialBaseURL
+			input.Endpoints = []objects.ChannelEndpoint{}
+		}
+	}
 
 	// Check if name is being updated and if it conflicts with existing channels
 	if input.Name != nil {
@@ -979,14 +938,10 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 				return err
 			}
 			normalizeChannelSettingsForType(channelType, input.Settings)
-
-			if err := svc.preserveOpenCodeGoQuotaAuthCookieForUpdate(ctx, id, input.Settings); err != nil {
-				return err
-			}
 		}
 
 		var existingIdentity *ent.Channel
-		if input.Type != nil || input.BaseURL != nil || input.Credentials != nil || input.Settings != nil {
+		if input.Type != nil || input.BaseURL != nil || input.Credentials != nil {
 			var err error
 			existingIdentity, err = db.Channel.Query().
 				Where(channel.IDEQ(id)).
@@ -994,7 +949,6 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 					channel.FieldType,
 					channel.FieldBaseURL,
 					channel.FieldCredentials,
-					channel.FieldSettings,
 					channel.FieldUpdatedAt,
 				).
 				Only(ctx)
@@ -1082,8 +1036,7 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 		if existingIdentity != nil {
 			providerQuotaIdentityChanged = channel.Type != existingIdentity.Type ||
 				channel.BaseURL != existingIdentity.BaseURL ||
-				!reflect.DeepEqual(channel.Credentials, existingIdentity.Credentials) ||
-				!reflect.DeepEqual(channelProviderQuotaSettings(channel.Settings), channelProviderQuotaSettings(existingIdentity.Settings))
+				!reflect.DeepEqual(channel.Credentials, existingIdentity.Credentials)
 		}
 
 		if input.SupportedModels != nil {
@@ -1191,6 +1144,9 @@ func (svc *ChannelService) SaveChannelEndpoints(ctx context.Context, input SaveC
 	ch, err := svc.entFromContext(ctx).Channel.Get(ctx, input.ChannelID.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get channel: %w", err)
+	}
+	if ch.Type == channel.TypeXaiSubscription {
+		return nil, errors.New("xAI subscription channels do not support custom endpoints")
 	}
 
 	ch, err = svc.entFromContext(ctx).Channel.UpdateOne(ch).

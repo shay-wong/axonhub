@@ -860,6 +860,7 @@ const MODEL_SETTINGS_QUERY = `
       defaultModelAPIIncludeAll
       autoReasoningEffort
       modelBlacklistRegex
+      hideUnroutableModelsInList
       developerSettings {
         developer
         associations {
@@ -1009,6 +1010,7 @@ export interface ModelSettings {
   defaultModelAPIIncludeAll: boolean;
   autoReasoningEffort: boolean;
   modelBlacklistRegex: string;
+  hideUnroutableModelsInList: boolean;
   developerSettings: DeveloperModelSettings[];
 }
 
@@ -1018,6 +1020,7 @@ export interface UpdateModelSettingsInput {
   defaultModelAPIIncludeAll?: boolean;
   autoReasoningEffort?: boolean;
   modelBlacklistRegex?: string;
+  hideUnroutableModelsInList?: boolean;
   developerSettings?: DeveloperModelSettings[];
 }
 
@@ -1720,6 +1723,7 @@ const QUOTA_ENFORCEMENT_SETTINGS_QUERY = `
     quotaEnforcementSettings {
       enabled
       mode
+      allowedChannelIDs
     }
   }
 `;
@@ -1735,11 +1739,13 @@ export type QuotaEnforcementMode = 'EXHAUSTED_ONLY' | 'DE_PRIORITIZE';
 export interface QuotaEnforcementSettings {
   enabled: boolean;
   mode: QuotaEnforcementMode;
+  allowedChannelIDs: string[];
 }
 
 export interface UpdateQuotaEnforcementSettingsInput {
   enabled?: boolean;
   mode?: QuotaEnforcementMode;
+  allowedChannelIDs?: string[];
 }
 
 export function useQuotaEnforcementSettings() {

@@ -84,6 +84,7 @@ func NewChatCompletionOrchestrator(
 		PromptProtecter:    promptProtectionRuleService,
 		Middlewares: []pipeline.Middleware{
 			cc.StripBillingHeaderCCH(),
+			cc.SystemCacheCompatibility(),
 			stream.EnsureUsage(),
 		},
 		PipelineFactory:            pipeline.NewFactory(httpClient),
@@ -239,7 +240,7 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 	// Add global middlewares
 	middlewares = append(middlewares, processor.Middlewares...)
 
-	inbound, outbound := NewPersistentTransformers(state, processor.Inbound)
+	inbound, outbound := NewPersistentTransformers(state, processor.Inbound, processor.Middlewares...)
 
 	// Add inbound middlewares (executed after inbound.TransformRequest)
 	middlewares = append(middlewares,

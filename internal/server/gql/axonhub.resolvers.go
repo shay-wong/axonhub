@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/looplj/axonhub/internal/authz"
@@ -766,15 +765,6 @@ func (r *mutationResolver) UnretainThread(ctx context.Context, id objects.GUID) 
 	return true, nil
 }
 
-// AuthCookieConfigured is the resolver for the authCookieConfigured field.
-func (r *openCodeGoQuotaSettingsResolver) AuthCookieConfigured(ctx context.Context, obj *objects.OpenCodeGoQuotaSettings) (bool, error) {
-	if obj == nil {
-		return false, nil
-	}
-
-	return strings.TrimSpace(obj.AuthCookie) != "", nil
-}
-
 // AllChannelSummarys is the resolver for the allChannelSummarys field.
 func (r *queryResolver) AllChannelSummarys(ctx context.Context, includeArchived *bool) ([]*ent.Channel, error) {
 	statusFilter := []channel.Status{channel.StatusEnabled, channel.StatusDisabled}
@@ -1013,15 +1003,9 @@ func (r *Resolver) ChannelSettings() ChannelSettingsResolver { return &channelSe
 // Mutation returns MutationResolver implementation.
 func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 
-// OpenCodeGoQuotaSettings returns OpenCodeGoQuotaSettingsResolver implementation.
-func (r *Resolver) OpenCodeGoQuotaSettings() OpenCodeGoQuotaSettingsResolver {
-	return &openCodeGoQuotaSettingsResolver{r}
-}
-
 // Segment returns SegmentResolver implementation.
 func (r *Resolver) Segment() SegmentResolver { return &segmentResolver{r} }
 
 type channelSettingsResolver struct{ *Resolver }
 type mutationResolver struct{ *Resolver }
-type openCodeGoQuotaSettingsResolver struct{ *Resolver }
 type segmentResolver struct{ *Resolver }

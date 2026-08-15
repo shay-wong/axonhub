@@ -34,9 +34,6 @@ func TestChannelService_InvalidatesProviderQuotaWhenQuotaIdentityChanges(t *test
 		SetDisabledAPIKeys([]objects.DisabledAPIKey{{Key: "key-2"}}).
 		SetSupportedModels([]string{"opencode/go"}).
 		SetDefaultTestModel("opencode/go").
-		SetSettings(&objects.ChannelSettings{ProviderQuota: &objects.ChannelProviderQuotaSettings{
-			OpencodeGo: &objects.OpenCodeGoQuotaSettings{WorkspaceID: "workspace-1", AuthCookie: "cookie"},
-		}}).
 		Save(ctx)
 	require.NoError(t, err)
 
@@ -49,20 +46,12 @@ func TestChannelService_InvalidatesProviderQuotaWhenQuotaIdentityChanges(t *test
 	require.NoError(t, err)
 	require.Equal(t, []int{ch.ID}, invalidator.channelIDs)
 
-	_, err = svc.UpdateChannel(ctx, ch.ID, &ent.UpdateChannelInput{
-		Settings: &objects.ChannelSettings{ProviderQuota: &objects.ChannelProviderQuotaSettings{
-			OpencodeGo: &objects.OpenCodeGoQuotaSettings{WorkspaceID: "workspace-2"},
-		}},
-	})
-	require.NoError(t, err)
-	require.Equal(t, []int{ch.ID, ch.ID}, invalidator.channelIDs)
-
 	newName := "OpenCode Go renamed"
 	_, err = svc.UpdateChannel(ctx, ch.ID, &ent.UpdateChannelInput{Name: &newName})
 	require.NoError(t, err)
-	require.Equal(t, []int{ch.ID, ch.ID}, invalidator.channelIDs)
+	require.Equal(t, []int{ch.ID}, invalidator.channelIDs)
 
 	_, err = svc.DeleteDisabledAPIKeys(ctx, ch.ID, []string{"key-2"})
 	require.NoError(t, err)
-	require.Equal(t, []int{ch.ID, ch.ID, ch.ID}, invalidator.channelIDs)
+	require.Equal(t, []int{ch.ID, ch.ID}, invalidator.channelIDs)
 }

@@ -1,18 +1,13 @@
 package gql
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
@@ -47,35 +42,6 @@ func setupTestQueryResolver(t *testing.T) (*queryResolver, context.Context, *ent
 	resolver := &queryResolver{&Resolver{client: client}}
 
 	return resolver, ctx, client
-}
-
-type graphqlTestResponse struct {
-	Data   json.RawMessage `json:"data"`
-	Errors []struct {
-		Message string `json:"message"`
-	} `json:"errors"`
-}
-
-func serveGraphqlTestRequest(t *testing.T, srv http.Handler, ctx context.Context, query string, variables map[string]any) graphqlTestResponse {
-	t.Helper()
-
-	payload, err := json.Marshal(map[string]any{
-		"query":     query,
-		"variables": variables,
-	})
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPost, "/query", bytes.NewReader(payload)).WithContext(ctx)
-	req.Header.Set("Content-Type", "application/json")
-	recorder := httptest.NewRecorder()
-
-	srv.ServeHTTP(recorder, req)
-	require.Contains(t, []int{http.StatusOK, http.StatusUnprocessableEntity}, recorder.Code)
-
-	var response graphqlTestResponse
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-
-	return response
 }
 
 type dashboardUsageFixture struct {
@@ -268,157 +234,6 @@ func TestChannelResolver_DisabledAPIKeys_FiltersExpiredTemporaryKeys(t *testing.
 	require.NoError(t, err)
 	require.Len(t, keys, 2)
 	require.ElementsMatch(t, []string{"permanent-key", "active-temporary-key"}, []string{keys[0].Key, keys[1].Key})
-}
-
-func TestOpenCodeGoQuotaAuthCookieGraphQLSchema(t *testing.T) {
-	client := enttest.NewEntClient(t, "sqlite3", "file:opencode_go_quota?mode=memory&_fk=1")
-	defer client.Close()
-
-	ctx := context.Background()
-	ctx = ent.NewContext(ctx, client)
-	ctx = authz.WithTestBypass(ctx)
-
-	schema := handler.New(NewExecutableSchema(Config{
-		Resolvers: &Resolver{
-			client:         client,
-			channelService: biz.NewChannelServiceForTest(client),
-		},
-	}))
-	schema.AddTransport(transport.POST{})
-
-	createQuery := `
-mutation CreateOpenCodeGo($input: CreateChannelInput!) {
-  createChannel(input: $input) {
-    id
-    settings {
-      providerQuota {
-        opencodeGo {
-          workspaceId
-          authCookieConfigured
-        }
-      }
-    }
-  }
-}`
-	createVariables := map[string]any{
-		"input": map[string]any{
-			"type":             "opencode_go",
-			"baseURL":          "https://opencode.ai/zen/go/v1",
-			"name":             "OpenCode Go GraphQL",
-			"credentials":      map[string]any{},
-			"supportedModels":  []string{"openai/gpt-5"},
-			"defaultTestModel": "openai/gpt-5",
-			"settings": map[string]any{
-				"providerQuota": map[string]any{
-					"opencodeGo": map[string]any{
-						"workspaceId": "wk_graphql",
-						"authCookie":  "secret-cookie",
-					},
-				},
-			},
-		},
-	}
-
-	createResponse := serveGraphqlTestRequest(t, schema, ctx, createQuery, createVariables)
-	require.Empty(t, createResponse.Errors)
-
-	var createData struct {
-		CreateChannel struct {
-			ID       string `json:"id"`
-			Settings struct {
-				ProviderQuota struct {
-					OpencodeGo struct {
-						WorkspaceID          string `json:"workspaceId"`
-						AuthCookieConfigured bool   `json:"authCookieConfigured"`
-					} `json:"opencodeGo"`
-				} `json:"providerQuota"`
-			} `json:"settings"`
-		} `json:"createChannel"`
-	}
-	require.NoError(t, json.Unmarshal(createResponse.Data, &createData))
-	require.NotEmpty(t, createData.CreateChannel.ID)
-	require.Equal(t, "wk_graphql", createData.CreateChannel.Settings.ProviderQuota.OpencodeGo.WorkspaceID)
-	require.True(t, createData.CreateChannel.Settings.ProviderQuota.OpencodeGo.AuthCookieConfigured)
-
-	createdChannel, err := client.Channel.Query().
-		Where(channel.Name("OpenCode Go GraphQL")).
-		Only(ctx)
-	require.NoError(t, err)
-	require.NotNil(t, createdChannel.Settings)
-	require.Equal(t, "secret-cookie", createdChannel.Settings.ProviderQuota.OpencodeGo.AuthCookie)
-	require.False(t, createdChannel.Settings.ProviderQuota.OpencodeGo.ClearAuthCookie)
-
-	clearQuery := `
-mutation ClearOpenCodeGo($id: ID!, $input: UpdateChannelInput!) {
-  updateChannel(id: $id, input: $input) {
-    settings {
-      providerQuota {
-        opencodeGo {
-          workspaceId
-          authCookieConfigured
-        }
-      }
-    }
-  }
-}`
-	clearVariables := map[string]any{
-		"id": createData.CreateChannel.ID,
-		"input": map[string]any{
-			"settings": map[string]any{
-				"providerQuota": map[string]any{
-					"opencodeGo": map[string]any{
-						"workspaceId":     "wk_graphql",
-						"clearAuthCookie": true,
-					},
-				},
-			},
-		},
-	}
-
-	clearResponse := serveGraphqlTestRequest(t, schema, ctx, clearQuery, clearVariables)
-	require.Empty(t, clearResponse.Errors)
-
-	var clearData struct {
-		UpdateChannel struct {
-			Settings struct {
-				ProviderQuota struct {
-					OpencodeGo struct {
-						WorkspaceID          string `json:"workspaceId"`
-						AuthCookieConfigured bool   `json:"authCookieConfigured"`
-					} `json:"opencodeGo"`
-				} `json:"providerQuota"`
-			} `json:"settings"`
-		} `json:"updateChannel"`
-	}
-	require.NoError(t, json.Unmarshal(clearResponse.Data, &clearData))
-	require.Equal(t, "wk_graphql", clearData.UpdateChannel.Settings.ProviderQuota.OpencodeGo.WorkspaceID)
-	require.False(t, clearData.UpdateChannel.Settings.ProviderQuota.OpencodeGo.AuthCookieConfigured)
-
-	clearedChannel, err := client.Channel.Get(ctx, createdChannel.ID)
-	require.NoError(t, err)
-	require.Empty(t, clearedChannel.Settings.ProviderQuota.OpencodeGo.AuthCookie)
-	require.False(t, clearedChannel.Settings.ProviderQuota.OpencodeGo.ClearAuthCookie)
-
-	leakQuery := `
-mutation LeakOpenCodeGo($input: CreateChannelInput!) {
-  createChannel(input: $input) {
-    settings {
-      providerQuota {
-        opencodeGo {
-          authCookie
-        }
-      }
-    }
-  }
-}`
-	leakResponse := serveGraphqlTestRequest(t, schema, ctx, leakQuery, createVariables)
-	require.NotEmpty(t, leakResponse.Errors)
-
-	messages := make([]string, 0, len(leakResponse.Errors))
-	for _, gqlErr := range leakResponse.Errors {
-		messages = append(messages, gqlErr.Message)
-	}
-	require.Contains(t, strings.Join(messages, "\n"), "authCookie")
 }
 
 func TestMutationResolver_TestChannel_SourceTestSkipsHealthStateTracking(t *testing.T) {

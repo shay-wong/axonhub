@@ -123,13 +123,6 @@ type TransformOptions struct {
 	// Consumed by the OpenAI-shared outbound transformer. Other transformers ignore it
 	// for now. Strong-typed to mirror ModelMapping; see llm.ReasoningEffortMapping.
 	ReasoningEffortMapping []llm.ReasoningEffortMapping `json:"reasoningEffortMapping,omitempty"`
-
-	// DowngradeMidConversationSystem downgrades mid-conversation system messages (e.g. Claude Code
-	// reminders) to user before sending to OpenAI-compatible upstreams. OpenAI-compatible upstreams
-	// hoist all system messages to the front of the prompt, so a newly injected reminder rewrites
-	// the whole system prefix and defeats prompt caching. Downgrading them to user keeps the prefix
-	// stable across turns. true = enabled, nil/false = disabled (default).
-	DowngradeMidConversationSystem *bool `json:"downgradeMidConversationSystem,omitempty"`
 }
 
 type ChannelSettings struct {
@@ -221,25 +214,11 @@ type ChannelSettings struct {
 
 	// APIKeySelectionStrategy controls how a channel selects among upstream API keys.
 	APIKeySelectionStrategy string `json:"apiKeySelectionStrategy,omitempty"`
-
-	// ProviderQuota stores provider-specific credentials used only for quota
-	// polling. Keep upstream request credentials in ChannelCredentials.
-	ProviderQuota *ChannelProviderQuotaSettings `json:"providerQuota,omitempty"`
 }
 
 type RetryableErrorPattern struct {
 	Pattern string `json:"pattern"`
 	Regex   bool   `json:"regex,omitempty"`
-}
-
-type ChannelProviderQuotaSettings struct {
-	OpencodeGo *OpenCodeGoQuotaSettings `json:"opencodeGo,omitempty"`
-}
-
-type OpenCodeGoQuotaSettings struct {
-	WorkspaceID     string `json:"workspaceId,omitempty"`
-	AuthCookie      string `json:"authCookie,omitempty"`
-	ClearAuthCookie bool   `json:"clearAuthCookie,omitempty"`
 }
 
 type ChannelRateLimit struct {
@@ -510,6 +489,16 @@ func (c *ChannelCredentials) IsOAuth() bool {
 
 	// Backward compatibility: check if APIKey contains OAuth JSON
 	return isOAuthJSON(c.APIKey)
+}
+
+func (c *ChannelCredentials) ResolveOAuthCredentials() (*OAuthCredentials, error) {
+	if c != nil && c.OAuth != nil && strings.TrimSpace(c.OAuth.AccessToken) != "" {
+		return c.OAuth, nil
+	}
+	if c == nil {
+		return oauth.ParseCredentialsJSON("")
+	}
+	return oauth.ParseCredentialsJSON(c.APIKey)
 }
 
 // isOAuthJSON checks if a string is an OAuth JSON credential.

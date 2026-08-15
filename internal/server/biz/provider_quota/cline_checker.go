@@ -939,6 +939,20 @@ func clinePassPoolNote(scope clineModelScope, statusBasis string) string {
 	return "ClinePass is a separate provider; this quota applies to cline-pass/* models only."
 }
 
+// clineWindowLabel maps a Cline window key to the normalized window label.
+func clineWindowLabel(key string) string {
+	switch key {
+	case "last5h":
+		return QuotaWindow5h
+	case "last7d":
+		return QuotaWindow7d
+	case "last30d":
+		return QuotaWindow30d
+	default:
+		return key
+	}
+}
+
 func clineLimitStatuses(windows []clineWindow, allowExhausted bool) []QuotaLimitStatus {
 	limits := make([]QuotaLimitStatus, 0, len(windows))
 
@@ -959,6 +973,8 @@ func clineLimitStatuses(windows []clineWindow, allowExhausted bool) []QuotaLimit
 			UsageRatio:  usageRatio,
 			Ready:       IsReadyStatus(status),
 			NextResetAt: window.nextResetAt,
+			Window:      clineWindowLabel(window.key),
+			PeriodStart: window.windowStartAt,
 		})
 	}
 

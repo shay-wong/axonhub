@@ -9,6 +9,7 @@ import { X, RefreshCw, Search, ChevronLeft, ChevronRight, PanelLeft, Plus, Trash
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useHorizontalScroll } from '@/hooks/use-horizontal-scroll';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -27,7 +28,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { AutoCompleteSelect } from '@/components/auto-complete-select';
 import { SelectDropdown } from '@/components/select-dropdown';
 import { useProxyPresets, useSaveProxyPreset } from '@/features/system/data/system';
-import { usePermissions } from '@/hooks/usePermissions';
 import { antigravityOAuthExchange, antigravityOAuthStart } from '../data/antigravity';
 import { formatAPIKeyIdentity, maskAPIKeySuffix } from '../data/api-key-display';
 import {
@@ -68,6 +68,7 @@ import {
   updateChannelInputSchema,
   type ChannelAPIKeyConfig,
 } from '../data/schema';
+import { xaiDecodeSSO, xaiOAuthExchange, xaiOAuthStart } from '../data/xai';
 import { ProxyConfig, useOAuthFlow } from '../hooks/use-oauth-flow';
 import { mergeChannelSettingsForUpdate } from '../utils/merge';
 import { isValidModelPattern, matchesModelPattern } from '../utils/pattern';
@@ -189,13 +190,7 @@ function normalizeAPIKeySelectionStrategy(strategy?: string | null): APIKeySelec
 }
 
 function normalizeAPIKeyList(keys?: string[] | null): string[] {
-  return [
-    ...new Set(
-      (keys || [])
-        .map((key) => key.trim())
-        .filter((key) => key.length > 0)
-    ),
-  ];
+  return [...new Set((keys || []).map((key) => key.trim()).filter((key) => key.length > 0))];
 }
 
 function normalizeAPIKeyWeight(weight?: number | null): number {
@@ -263,10 +258,6 @@ function getResponsesWebSocketBaseURL(channelType: ChannelType): string | undefi
   if (channelType === 'codex') return CODEX_RESPONSES_WEBSOCKET_BASE_URL;
   if (channelType === 'openai_responses') return OPENAI_RESPONSES_WEBSOCKET_BASE_URL;
   return undefined;
-}
-
-function isOpenCodeGoChannelType(channelType: ChannelType | undefined): channelType is 'opencode_go' | 'opencode_go_anthropic' {
-  return channelType === 'opencode_go' || channelType === 'opencode_go_anthropic';
 }
 
 // Custom hook for debounced value
@@ -378,7 +369,7 @@ function getNextDuplicateName(name: string, existingNames: Set<string>) {
 }
 
 // Providers that are always OAuth (no third-party API key mode)
-const alwaysOAuthProviderKeys = ['antigravity', 'github_copilot'];
+const alwaysOAuthProviderKeys = ['antigravity', 'github_copilot', 'xai_subscription'];
 
 function isOfficialCodexChannel(channel: { credentials?: { apiKey?: string } }): boolean {
   try {
@@ -456,9 +447,10 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   );
   const [showGcpJsonData, setShowGcpJsonData] = useState(false);
   const [confirmDisableKey, setConfirmDisableKey] = useState<string | null>(null);
-  const [showOpenCodeGoAuthCookie, setShowOpenCodeGoAuthCookie] = useState(false);
   const [authMode, setAuthMode] = useState<'official' | 'auth-json' | 'third-party'>('official');
   const [codexAuthJSONText, setCodexAuthJSONText] = useState('');
+  const [xaiSSOToken, setXaiSSOToken] = useState('');
+  const [isImportingXAISSO, setIsImportingXAISSO] = useState(false);
   const [patternError, setPatternError] = useState<string | null>(null);
 
   // Debounced search values for better performance
@@ -534,6 +526,15 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     },
   });
 
+  const xaiOAuth = useOAuthFlow({
+    startFn: xaiOAuthStart,
+    exchangeFn: xaiOAuthExchange,
+    proxyConfig,
+    onSuccess: (credentials) => {
+      form.setValue('credentials.apiKey', credentials);
+    },
+  });
+
   const antigravityOAuth = useOAuthFlow({
     startFn: antigravityOAuthStart,
     exchangeFn: antigravityOAuthExchange,
@@ -603,9 +604,11 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       codexOAuth.reset();
       claudecodeOAuth.reset();
       antigravityOAuth.reset();
+      xaiOAuth.reset();
       setCodexAuthJSONText('');
+      setXaiSSOToken('');
     }
-  }, [open, codexOAuth, claudecodeOAuth, antigravityOAuth]);
+  }, [open, codexOAuth.reset, claudecodeOAuth.reset, antigravityOAuth.reset, xaiOAuth.reset]);
 
   useEffect(() => {
     if (!open) {
@@ -616,7 +619,6 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       setConfirmRemoveSelectedOpen(false);
       setConfirmRemoveKey(null);
       setConfirmDisableKey(null);
-      setShowOpenCodeGoAuthCookie(false);
       setPatternError(null);
       setApiKeyConfigsDirty(false);
       setFetchedModels([]);
@@ -641,8 +643,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       const container = providerListRef.current;
       if (target && container) {
         const isHorizontal =
-          (window.getComputedStyle(container).overflowX === 'auto' ||
-            window.getComputedStyle(container).overflowX === 'scroll') &&
+          (window.getComputedStyle(container).overflowX === 'auto' || window.getComputedStyle(container).overflowX === 'scroll') &&
           container.scrollWidth > container.clientWidth;
         if (isHorizontal) {
           const targetCenter = target.offsetLeft + target.clientWidth / 2;
@@ -771,7 +772,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             tags: currentRow.tags || [],
             remark: currentRow.remark || '',
             credentials: {
-              // OAuth 类型 (codex/claudecode/antigravity) 的凭据存储在 apiKey 字段，不放入 apiKeys
+              // OAuth 类型的凭据存储在 apiKey 字段，不放入 apiKeys
               apiKey: currentRow.credentials?.apiKey || undefined,
               apiKeys: getInitialAPIKeys(currentRow),
               apiKeyConfigs: currentRow.credentials?.apiKeyConfigs || undefined,
@@ -797,7 +798,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
               remark: duplicateFromRow.remark || '',
               settings: duplicateFromRow.settings ?? undefined,
               credentials: {
-                // OAuth 类型 (codex/claudecode/antigravity) 的凭据存储在 apiKey 字段，不放入 apiKeys
+                // OAuth 类型的凭据存储在 apiKey 字段，不放入 apiKeys
                 apiKey: duplicateFromRow.credentials?.apiKey || undefined,
                 apiKeys: getInitialAPIKeys(duplicateFromRow),
                 apiKeyConfigs: duplicateFromRow.credentials?.apiKeyConfigs || undefined,
@@ -856,10 +857,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
 
   // Keys that exist in the backend (used to hide disable/enable controls for unsaved new keys).
   // apiKeyConfigs can be the persisted representation when the legacy apiKeys array is empty.
-  const savedAPIKeySet = useMemo(
-    () => new Set(getInitialAPIKeys(currentRow)),
-    [currentRow]
-  );
+  const savedAPIKeySet = useMemo(() => new Set(getInitialAPIKeys(currentRow)), [currentRow]);
 
   const disableAPIKey = useDisableChannelAPIKey();
   const enableAPIKey = useEnableChannelAPIKey();
@@ -888,10 +886,9 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const isClineType = activeChannelType === 'cline';
   const isClaudeCodeType = activeChannelType === 'claudecode';
   const isCopilotType = activeChannelType === 'github_copilot';
-  const isOpenCodeGoType = isOpenCodeGoChannelType(activeChannelType);
-  const openCodeGoAuthCookieConfigured = !!initialRow?.settings?.providerQuota?.opencodeGo?.authCookieConfigured;
+  const isXAISubscriptionType = activeChannelType === 'xai_subscription';
   const showRegularAPIKeyFields =
-    (!(isCodexType || isClaudeCodeType || isCopilotType) || authMode === 'third-party') &&
+    (!(isCodexType || isClaudeCodeType || isCopilotType || isXAISubscriptionType) || authMode === 'third-party') &&
     selectedProvider !== 'antigravity' &&
     selectedType !== 'anthropic_gcp';
 
@@ -961,6 +958,21 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         form.setValue('type', 'codex');
         if (!isEdit) {
           const baseURL = responsesTransport === 'websocket' ? getResponsesWebSocketBaseURL('codex') : getDefaultBaseURL('codex');
+          if (baseURL) {
+            form.setValue('baseURL', baseURL, { shouldDirty: true });
+          }
+          setFetchedModels([]);
+          setUseFetchedModels(false);
+        }
+        return;
+      }
+
+      if (provider === 'xai_subscription') {
+        setSelectedApiFormat(OPENAI_RESPONSES);
+        setResponsesTransport('http');
+        form.setValue('type', 'xai_subscription');
+        if (!isEdit) {
+          const baseURL = getDefaultBaseURL('xai_subscription');
           if (baseURL) {
             form.setValue('baseURL', baseURL, { shouldDirty: true });
           }
@@ -1169,11 +1181,16 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     if (selectedProvider !== 'antigravity') {
       antigravityOAuth.reset();
     }
+    if (selectedProvider !== 'xai_subscription') {
+      xaiOAuth.reset();
+      setXaiSSOToken('');
+    }
 
     const providerToChannelType: Partial<Record<string, ChannelType>> = {
       claudecode: authMode === 'official' ? 'claudecode' : undefined,
       codex: authMode === 'official' || authMode === 'auth-json' ? 'codex' : undefined,
       antigravity: 'antigravity',
+      xai_subscription: 'xai_subscription',
     };
 
     const channelTypeForURL: ChannelType | undefined = providerToChannelType[selectedProvider];
@@ -1198,9 +1215,10 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     selectedProvider,
     authMode,
     form,
-    codexOAuth,
-    claudecodeOAuth,
-    antigravityOAuth,
+    codexOAuth.reset,
+    claudecodeOAuth.reset,
+    antigravityOAuth.reset,
+    xaiOAuth.reset,
     responsesTransport,
   ]);
 
@@ -1268,6 +1286,33 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     [t]
   );
 
+  const applyXAISSO = useCallback(async () => {
+    const token = xaiSSOToken.trim();
+    if (!token) {
+      toast.error(t('channels.dialogs.xaiSso.errors.required'));
+      return;
+    }
+
+    setIsImportingXAISSO(true);
+    try {
+      const result = await xaiDecodeSSO({
+        sso_token: token,
+        ...(proxyConfig ? { proxy: proxyConfig } : {}),
+      });
+      form.setValue('credentials.apiKey', result.credentials, {
+        shouldDirty: true,
+        shouldTouch: true,
+        shouldValidate: true,
+      });
+      setXaiSSOToken('');
+      toast.success(t('channels.dialogs.xaiSso.messages.imported'));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsImportingXAISSO(false);
+    }
+  }, [form, proxyConfig, t, xaiSSOToken]);
+
   const applyCodexAuthJSON = useCallback(async () => {
     try {
       const result = await codexDecodeAuthJSON({ auth_json: codexAuthJSONText });
@@ -1332,16 +1377,12 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         retryableStatusCodes,
         ...(showRegularAPIKeyFields ? { apiKeySelectionStrategy } : {}),
       };
-      const settingsForSubmit = isOpenCodeGoChannelType(dataWithModels.type as ChannelType | undefined)
-        ? values.settings
-        : {
-            ...(values.settings ?? {}),
-            providerQuota: null,
-          };
+      const settingsForSubmit = values.settings;
 
       const shouldUseProtocolDefaultBaseURL =
         (isCodexType && (authMode === 'official' || authMode === 'auth-json')) ||
-        (isClaudeCodeType && authMode === 'official' && !isDuplicate);
+        (isClaudeCodeType && authMode === 'official' && !isDuplicate) ||
+        isXAISubscriptionType;
       if (shouldUseProtocolDefaultBaseURL) {
         const currentType = selectedType || derivedChannelType;
         const baseURL =
@@ -1368,7 +1409,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         const updateInput = {
           ...dataWithModels,
           settings: nextSettings,
-          ...(isOAuthChannel ? { type: undefined } : {}),
+          ...(isOAuthChannel ? { type: currentRow.type } : {}),
         } as z.infer<typeof updateChannelInputSchema>;
 
         const apiKey = values.credentials?.apiKey || '';
@@ -1610,7 +1651,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     const apiKeys = form.watch('credentials.apiKeys');
     const hasApiKey = apiKeys?.some((key) => key.trim().length > 0);
 
-    if (isCodexType || isAntigravityType || isClineType) {
+    if (isCodexType || isAntigravityType || isClineType || isXAISubscriptionType) {
       return !!baseURL;
     }
 
@@ -1743,25 +1784,31 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     [form, t]
   );
 
-  const updateAPIKeyWeight = useCallback((key: string, weight: number) => {
-    setApiKeyConfigs((prev) =>
-      reconcileAPIKeyConfigs(
-        form.getValues('credentials.apiKeys'),
-        prev.map((config) => (config.key === key ? { ...config, weight: normalizeAPIKeyWeight(weight) } : config))
-      )
-    );
-    setApiKeyConfigsDirty(true);
-  }, [form]);
+  const updateAPIKeyWeight = useCallback(
+    (key: string, weight: number) => {
+      setApiKeyConfigs((prev) =>
+        reconcileAPIKeyConfigs(
+          form.getValues('credentials.apiKeys'),
+          prev.map((config) => (config.key === key ? { ...config, weight: normalizeAPIKeyWeight(weight) } : config))
+        )
+      );
+      setApiKeyConfigsDirty(true);
+    },
+    [form]
+  );
 
-  const updateAPIKeyName = useCallback((key: string, name: string) => {
-    setApiKeyConfigs((prev) =>
-      reconcileAPIKeyConfigs(
-        form.getValues('credentials.apiKeys'),
-        prev.map((config) => (config.key === key ? { ...config, name } : config))
-      )
-    );
-    setApiKeyConfigsDirty(true);
-  }, [form]);
+  const updateAPIKeyName = useCallback(
+    (key: string, name: string) => {
+      setApiKeyConfigs((prev) =>
+        reconcileAPIKeyConfigs(
+          form.getValues('credentials.apiKeys'),
+          prev.map((config) => (config.key === key ? { ...config, name } : config))
+        )
+      );
+      setApiKeyConfigsDirty(true);
+    },
+    [form]
+  );
 
   const handleAPIKeySelectionStrategyChange = useCallback((strategy: APIKeySelectionStrategy) => {
     setApiKeySelectionStrategy(strategy);
@@ -1848,7 +1895,6 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             setConfirmRemoveKey(null);
             setConfirmDisableKey(null);
             setShowApiKey(false);
-            setShowOpenCodeGoAuthCookie(false);
             // Reset proxy state
             if (initialRow?.settings?.proxy?.type) {
               setProxyType(initialRow.settings.proxy.type as ProxyType);
@@ -1905,7 +1951,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                         <FormLabel className='text-base font-semibold'>{t('channels.dialogs.fields.provider.label')}</FormLabel>
                         <div
                           ref={setProviderListRef}
-                          className={`flex-1 overflow-x-auto overflow-y-hidden pb-2 md:overflow-x-hidden md:overflow-y-auto md:pb-0 md:pr-2 ${isOAuthChannel ? 'cursor-not-allowed opacity-60' : ''}`}
+                          className={`flex-1 overflow-x-auto overflow-y-hidden pb-2 md:overflow-x-hidden md:overflow-y-auto md:pr-2 md:pb-0 ${isOAuthChannel ? 'cursor-not-allowed opacity-60' : ''}`}
                         >
                           <RadioGroup
                             value={selectedProvider}
@@ -1924,7 +1970,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                   ref={(el) => {
                                     providerRefs.current[provider.key] = el;
                                   }}
-                                  className={`flex items-center space-x-3 rounded-lg border p-3 transition-colors shrink-0 md:w-full ${
+                                  className={`flex shrink-0 items-center space-x-3 rounded-lg border p-3 transition-colors md:w-full ${
                                     isProviderDisabled
                                       ? isSelected
                                         ? 'border-primary bg-muted/80 cursor-not-allowed shadow-sm'
@@ -1939,7 +1985,10 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                     data-testid={`provider-${provider.key}`}
                                   />
                                   {Icon && <Icon size={20} className='flex-shrink-0' />}
-                                  <FormLabel htmlFor={`provider-${provider.key}`} className='flex-1 cursor-pointer whitespace-nowrap font-normal'>
+                                  <FormLabel
+                                    htmlFor={`provider-${provider.key}`}
+                                    className='flex-1 cursor-pointer font-normal whitespace-nowrap'
+                                  >
                                     {provider.label}
                                   </FormLabel>
                                 </div>
@@ -2314,6 +2363,42 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                         </div>
                       )}
 
+                      {isXAISubscriptionType && (
+                        <div className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
+                          <div className='col-span-2' />
+                          <div className='space-y-4 md:col-span-6'>
+                            {renderOAuthSection(xaiOAuth, t('channels.dialogs.fields.apiFormat.xaiSubscription.description'))}
+                            <div className='rounded-md border p-3'>
+                              <div className='space-y-2'>
+                                <FormLabel htmlFor='xai-sso-token' className='text-sm font-medium'>
+                                  {t('channels.dialogs.xaiSso.label')}
+                                </FormLabel>
+                                <Textarea
+                                  id='xai-sso-token'
+                                  value={xaiSSOToken}
+                                  onChange={(event) => setXaiSSOToken(event.target.value)}
+                                  spellCheck={false}
+                                  autoComplete='off'
+                                  placeholder={t('channels.dialogs.xaiSso.placeholder')}
+                                  className='min-h-[96px] resize-y font-mono text-xs'
+                                />
+                                <Button
+                                  type='button'
+                                  variant='secondary'
+                                  onClick={applyXAISSO}
+                                  disabled={isImportingXAISSO || !xaiSSOToken.trim()}
+                                >
+                                  {isImportingXAISSO
+                                    ? t('channels.dialogs.xaiSso.buttons.importing')
+                                    : t('channels.dialogs.xaiSso.buttons.import')}
+                                </Button>
+                                <p className='text-muted-foreground text-xs'>{t('channels.dialogs.xaiSso.description')}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       <FormField
                         control={form.control}
                         name='baseURL'
@@ -2330,7 +2415,10 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                 aria-invalid={!!fieldState.error}
                                 data-testid='channel-base-url-input'
                                 disabled={
-                                  (isCodexType && authMode !== 'third-party') || (isClaudeCodeType && authMode === 'official') || selectedProvider === 'antigravity'
+                                  (isCodexType && authMode !== 'third-party') ||
+                                  (isClaudeCodeType && authMode === 'official') ||
+                                  isXAISubscriptionType ||
+                                  selectedProvider === 'antigravity'
                                 }
                                 {...field}
                               />
@@ -2506,116 +2594,6 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                             </p>
                           </div>
                         </FormItem>
-                      )}
-
-                      {isOpenCodeGoType && (
-                        <>
-                          <FormField
-                            control={form.control}
-                            name='settings.providerQuota.opencodeGo.workspaceId'
-                            render={({ field }) => (
-                              <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
-                                <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
-                                  {t('channels.dialogs.fields.opencodeGoQuota.workspaceId.label')}
-                                </FormLabel>
-                                <div className='space-y-1 md:col-span-6'>
-                                  <Input
-                                    placeholder={t('channels.dialogs.fields.opencodeGoQuota.workspaceId.placeholder')}
-                                    autoComplete='off'
-                                    spellCheck={false}
-                                    className='font-mono text-sm'
-                                    data-testid='channel-opencode-go-workspace-id-input'
-                                    {...field}
-                                    value={field.value ?? ''}
-                                  />
-                                  <p className='text-muted-foreground text-xs'>
-                                    {t('channels.dialogs.fields.opencodeGoQuota.workspaceId.description')}
-                                  </p>
-                                  <FormMessage />
-                                </div>
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name='settings.providerQuota.opencodeGo.authCookie'
-                            render={({ field, fieldState }) => (
-                              <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
-                                <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
-                                  {t('channels.dialogs.fields.opencodeGoQuota.authCookie.label')}
-                                </FormLabel>
-                                <div className='space-y-1 md:col-span-6'>
-                                  <div className='relative'>
-                                    <Input
-                                      type={showOpenCodeGoAuthCookie ? 'text' : 'password'}
-                                      placeholder={t('channels.dialogs.fields.opencodeGoQuota.authCookie.placeholder')}
-                                      autoComplete='new-password'
-                                      data-form-type='other'
-                                      spellCheck={false}
-                                      className='pr-10 font-mono text-sm'
-                                      aria-invalid={!!fieldState.error}
-                                      data-testid='channel-opencode-go-auth-cookie-input'
-                                      disabled={form.watch('settings.providerQuota.opencodeGo.clearAuthCookie') === true}
-                                      {...field}
-                                      value={field.value ?? ''}
-                                    />
-                                    <Button
-                                      type='button'
-                                      variant='ghost'
-                                      size='sm'
-                                      className='absolute top-1/2 right-1 h-7 w-7 -translate-y-1/2 p-0'
-                                      aria-label={t('channels.dialogs.fields.opencodeGoQuota.authCookie.toggleVisibility')}
-                                      onClick={() => setShowOpenCodeGoAuthCookie((visible) => !visible)}
-                                    >
-                                      {showOpenCodeGoAuthCookie ? <EyeOff className='h-4 w-4' /> : <Eye className='h-4 w-4' />}
-                                    </Button>
-                                  </div>
-                                  <p className='text-muted-foreground text-xs'>
-                                    {t('channels.dialogs.fields.opencodeGoQuota.authCookie.description')}
-                                  </p>
-                                  <FormMessage />
-                                </div>
-                              </FormItem>
-                            )}
-                          />
-
-                          {openCodeGoAuthCookieConfigured && (
-                            <FormField
-                              control={form.control}
-                              name='settings.providerQuota.opencodeGo.clearAuthCookie'
-                              render={({ field }) => (
-                                <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
-                                  <div className='md:col-span-2' />
-                                  <div className='flex items-start gap-2 md:col-span-6'>
-                                    <Checkbox
-                                      checked={field.value === true}
-                                      onCheckedChange={(checked) => {
-                                        const shouldClear = checked === true;
-                                        field.onChange(shouldClear);
-                                        if (shouldClear) {
-                                          form.setValue('settings.providerQuota.opencodeGo.authCookie', '', {
-                                            shouldDirty: true,
-                                            shouldTouch: true,
-                                            shouldValidate: true,
-                                          });
-                                        }
-                                      }}
-                                    />
-                                    <div className='space-y-1'>
-                                      <FormLabel className='font-normal'>
-                                        {t('channels.dialogs.fields.opencodeGoQuota.clearAuthCookie.label')}
-                                      </FormLabel>
-                                      <p className='text-muted-foreground text-xs'>
-                                        {t('channels.dialogs.fields.opencodeGoQuota.clearAuthCookie.description')}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </FormItem>
-                              )}
-                            />
-                          )}
-                        </>
                       )}
 
                       <FormField
@@ -3289,9 +3267,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                       <PopoverContent className='w-72'>
                                         <div className='flex flex-col gap-3'>
                                           <p className='text-sm'>{t('channels.dialogs.fields.apiKey.confirmEnable')}</p>
-                                          <code className='bg-muted rounded px-2 py-1 text-xs'>
-                                            {formatAPIKeyIdentity(key, keyName)}
-                                          </code>
+                                          <code className='bg-muted rounded px-2 py-1 text-xs'>{formatAPIKeyIdentity(key, keyName)}</code>
                                           <div className='flex justify-end gap-2'>
                                             <Button size='sm' variant='outline' onClick={() => setConfirmDisableKey(null)}>
                                               {t('common.buttons.cancel')}
@@ -3314,7 +3290,13 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <span className='inline-flex'>
-                                          <Button type='button' variant='ghost' size='sm' className='text-muted-foreground h-7 w-7 p-0' disabled>
+                                          <Button
+                                            type='button'
+                                            variant='ghost'
+                                            size='sm'
+                                            className='text-muted-foreground h-7 w-7 p-0'
+                                            disabled
+                                          >
                                             <Ban className='h-4 w-4' />
                                           </Button>
                                         </span>
@@ -3329,16 +3311,20 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                       onOpenChange={(isOpen) => setConfirmDisableKey(isOpen ? key : null)}
                                     >
                                       <PopoverTrigger asChild>
-                                        <Button type='button' variant='ghost' size='sm' className='text-orange-500 h-7 w-7 p-0' disabled={disableAPIKey.isPending || isFetchingDisabledKeys}>
+                                        <Button
+                                          type='button'
+                                          variant='ghost'
+                                          size='sm'
+                                          className='h-7 w-7 p-0 text-orange-500'
+                                          disabled={disableAPIKey.isPending || isFetchingDisabledKeys}
+                                        >
                                           <Ban className='h-4 w-4' />
                                         </Button>
                                       </PopoverTrigger>
                                       <PopoverContent className='w-72'>
                                         <div className='flex flex-col gap-3'>
                                           <p className='text-sm'>{t('channels.dialogs.fields.apiKey.confirmDisable')}</p>
-                                          <code className='bg-muted rounded px-2 py-1 text-xs'>
-                                            {formatAPIKeyIdentity(key, keyName)}
-                                          </code>
+                                          <code className='bg-muted rounded px-2 py-1 text-xs'>{formatAPIKeyIdentity(key, keyName)}</code>
                                           <div className='flex justify-end gap-2'>
                                             <Button size='sm' variant='outline' onClick={() => setConfirmDisableKey(null)}>
                                               {t('common.buttons.cancel')}

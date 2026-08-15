@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/looplj/axonhub/internal/log"
-	"github.com/looplj/axonhub/internal/objects"
 )
 
 // ChannelProviderQuotaInvalidator lets ChannelService discard quota state when
@@ -36,12 +35,4 @@ func (svc *ChannelService) invalidateProviderQuotaAfterCommit(ctx context.Contex
 	runAfterCommit(ctx, func(ctx context.Context) {
 		svc.invalidateProviderQuota(ctx, channelID)
 	})
-}
-
-func channelProviderQuotaSettings(settings *objects.ChannelSettings) *objects.ChannelProviderQuotaSettings {
-	if settings == nil {
-		return nil
-	}
-
-	return settings.ProviderQuota
 }
