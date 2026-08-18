@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`8c9fbfc4318faa46a4e811ba9aa6aafe11cff8de`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`f2f80a9f2b2af7a8ac497a1f5176b99e58830a87`
-- 本次 merge base：`4476e7780b1b55da0cb950d7dfb197e0882f262d`
-- 审计范围：`git diff f2f80a9f..HEAD`
+- 本次 upstream merge 的 fork parent：`a62e1640f0067cc85fc6f02320aab4483c1b65f8`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`af4230039d6d50729c169eebf8c25faa532fd0fa`
+- 本次 merge base：`f2f80a9f2b2af7a8ac497a1f5176b99e58830a87`
+- 审计范围：`git diff af423003..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次合入源码中的 `internal/build/VERSION` 为开发版本标记 `v1.0.0-beta8`，不是 fork release tag 的 upstream 发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta7-fork.1`；upstream 发布基线仍为 `v1.0.0-beta7`，因此本次 merge 后的下一个规范化 fork 版本递增为 `v1.0.0-beta7-fork.2`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta7-fork.2`；upstream 发布基线仍为 `v1.0.0-beta7`，因此本次 merge 后的下一个规范化 fork 版本递增为 `v1.0.0-beta7-fork.3`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 

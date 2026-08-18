@@ -409,6 +409,9 @@ input SaveProxyPresetInput {
 input TriggerGcCleanupInput {
     requestsCleanupDays: Int!
     usageLogsCleanupDays: Int!
+    requestBodiesCleanupDays: Int
+    responseBodiesCleanupDays: Int
+    responseChunksCleanupDays: Int
 }
 
 type GcCleanupPreviewItem {
