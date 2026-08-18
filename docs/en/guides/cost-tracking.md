@@ -128,6 +128,8 @@ Each request's usage log contains:
 - **Token Details**: Breakdown of various token types
 - **Cost Information**: total_cost, cost_items, cost_price_reference_id
 
+Completed streaming responses keep their usage and cost records even if the client disconnects after receiving the terminal event.
+
 ### GraphQL API
 
 Query usage logs with cost information:

@@ -91,6 +91,11 @@ func (m *persistRequestMiddleware) OnInboundRawStream(
 
 func (m *persistRequestMiddleware) OnOutboundRawError(ctx context.Context, err error) {
 	m.llmResponse = nil
+	if m.inbound.state.StreamCompleted &&
+		(errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+		return
+	}
+
 	m.inbound.state.UsageLogEligible = false
 }
 

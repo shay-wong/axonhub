@@ -5,6 +5,10 @@
 - Added per-channel API key rules with status/keyword matching, configurable error thresholds, temporary auto-recovery, and permanent disable/delete actions.
 - Allowed Fenno channels to opt into Codex-style Responses defaults; the option remains disabled by default.
 
+### Fixed
+
+- Preserved usage and cost records when clients disconnect after a streaming response has already completed.
+
 v0.4.0
 
 - Introduced thread-aware tracing with zero-SDK integration and configurable trace headers

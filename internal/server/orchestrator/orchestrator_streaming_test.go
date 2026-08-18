@@ -123,6 +123,73 @@ func TestChatCompletionOrchestrator_Process_StreamingEmptyRetryPersistsFinalExec
 	require.Equal(t, "default", usageLog.ServiceTier)
 }
 
+func TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPersistsUsage(t *testing.T) {
+	ctx := authz.WithTestBypass(context.Background())
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
+	defer client.Close()
+	ctx = ent.NewContext(ctx, client)
+
+	project := createTestProject(t, ctx, client)
+	ch := createTestChannel(t, ctx, client)
+	channelService, requestService, systemService, usageLogService := setupTestServices(t, client)
+	executor := &mockExecutorWithErrorStream{
+		events: []*httpclient.StreamEvent{{
+			Type: "response.completed",
+			Data: []byte(`{"type":"response.completed","response":{"id":"resp_canceled_after_completed","object":"response","created_at":1700000000,"model":"gpt-4","status":"completed","service_tier":"default","output":[],"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}}`),
+		}},
+		streamErr: context.Canceled,
+	}
+	outbound, err := responseapi.NewOutboundTransformer(ch.BaseURL, ch.Credentials.APIKey)
+	require.NoError(t, err)
+	orchestrator := &ChatCompletionOrchestrator{
+		channelSelector:       &staticChannelSelector{candidates: channelsToTestCandidates([]*biz.Channel{{Channel: ch, Outbound: outbound}}, "gpt-4")},
+		Inbound:               responseapi.NewInboundTransformer(),
+		RequestService:        requestService,
+		ChannelService:        channelService,
+		PromptProvider:        &stubPromptProvider{},
+		SystemService:         systemService,
+		UsageLogService:       usageLogService,
+		PipelineFactory:       pipeline.NewFactory(executor),
+		ModelMapper:           NewModelMapper(),
+		channelLimiterManager: NewChannelLimiterManager(),
+		Middlewares:           []pipeline.Middleware{stream.EnsureUsage()},
+	}
+
+	httpRequest := &httpclient.Request{
+		Method:      http.MethodPost,
+		Path:        "/v1/responses",
+		Headers:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:        []byte(`{"model":"gpt-4","input":"hello","stream":true}`),
+		APIFormat:   string(llm.APIFormatOpenAIResponse),
+		RequestType: string(llm.RequestTypeChat),
+	}
+	ctx = contexts.WithProjectID(ctx, project.ID)
+	result, err := orchestrator.Process(ctx, httpRequest)
+	require.NoError(t, err)
+	require.NotNil(t, result.ChatCompletionStream)
+
+	for result.ChatCompletionStream.Next() {
+		_ = result.ChatCompletionStream.Current()
+	}
+	require.ErrorIs(t, result.ChatCompletionStream.Err(), context.Canceled)
+	require.NoError(t, result.ChatCompletionStream.Close())
+
+	dbRequest, err := client.Request.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, request.StatusCompleted, dbRequest.Status)
+
+	dbExecution, err := client.RequestExecution.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, requestexecution.StatusCompleted, dbExecution.Status)
+
+	usageLog, err := client.UsageLog.Query().Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, dbExecution.ID, usageLog.RequestExecutionID)
+	require.Equal(t, int64(10), usageLog.PromptTokens)
+	require.Equal(t, int64(2), usageLog.CompletionTokens)
+	require.Equal(t, "default", usageLog.AppliedServiceTier)
+}
+
 func TestChatCompletionOrchestrator_Process_FirstResponsesErrorPersistsRequestBody(t *testing.T) {
 	ctx := authz.WithTestBypass(context.Background())
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")

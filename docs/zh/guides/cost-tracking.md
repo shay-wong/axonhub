@@ -128,6 +128,8 @@ AxonHub 支持三种定价模式：
 - **Token 详情**: 各类细分 Token 数量
 - **成本信息**: total_cost, cost_items, cost_price_reference_id
 
+流式响应已完整结束时，即使客户端在收到终态事件后断开，也会保留对应的用量和费用记录。
+
 ### GraphQL API
 
 查询使用日志及成本信息：
