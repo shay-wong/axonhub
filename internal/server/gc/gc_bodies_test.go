@@ -23,6 +23,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/ent/schema/schematype"
+	"github.com/looplj/axonhub/internal/ent/thread"
 	"github.com/looplj/axonhub/internal/ent/trace"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/pkg/xcache"
@@ -95,6 +96,65 @@ func TestCleanupRequestBodies_SkipsRetainedTraces(t *testing.T) {
 	retained = client.Request.GetX(ctx, retained.ID)
 	require.JSONEq(t, `{"keep":true}`, string(retained.RequestBody))
 	require.JSONEq(t, `{"h":"1"}`, string(retained.RequestHeaders))
+}
+
+func TestCleanupBodyPayloads_PreservesActiveTraceUnderRetainedThread(t *testing.T) {
+	worker, ctx, client, proj := setupBodyCleanupWorker(t)
+
+	retainedThread := client.Thread.Create().
+		SetProjectID(proj.ID).
+		SetThreadID("retained-thread-body-gc").
+		SetStatus(thread.StatusRetained).
+		SaveX(ctx)
+	protectedTrace := client.Trace.Create().
+		SetProjectID(proj.ID).
+		SetThreadID(retainedThread.ID).
+		SetTraceID("protected-by-retained-thread").
+		SaveX(ctx)
+
+	oldAt := time.Now().AddDate(0, 0, -10)
+	req := client.Request.Create().
+		SetProjectID(proj.ID).
+		SetCreatedAt(oldAt).
+		SetTraceID(protectedTrace.ID).
+		SetModelID("gpt-4").
+		SetFormat("openai/chat_completions").
+		SetSource(request.SourceAPI).
+		SetStatus(request.StatusCompleted).
+		SetStream(false).
+		SetClientIP("127.0.0.1").
+		SetRequestBody(objects.JSONRawMessage(`{"prompt":"keep"}`)).
+		SetRequestHeaders(objects.JSONRawMessage(`{"h":"1"}`)).
+		SetResponseBody(objects.JSONRawMessage(`{"response":"keep"}`)).
+		SetResponseChunks([]objects.JSONRawMessage{objects.JSONRawMessage(`{"chunk":"keep"}`)}).
+		SaveX(ctx)
+	exec := createBodyTestExecution(t, ctx, client, req, oldAt, objects.JSONRawMessage(`{"upstream":"keep"}`), objects.JSONRawMessage(`{"x-api-key":"keep"}`))
+	exec = client.RequestExecution.UpdateOneID(exec.ID).
+		SetResponseBody(objects.JSONRawMessage(`{"response":"keep"}`)).
+		SetResponseChunks([]objects.JSONRawMessage{objects.JSONRawMessage(`{"chunk":"keep"}`)}).
+		SaveX(ctx)
+
+	preview, err := worker.previewBodyCleanup(ctx, biz.CleanupResourceRequestBodies, 7, time.Now())
+	require.NoError(t, err)
+	require.Zero(t, preview.EstimatedCount)
+
+	require.NoError(t, worker.cleanupRequestBodies(ctx, 7))
+	require.NoError(t, worker.cleanupResponseBodies(ctx, 7))
+	require.NoError(t, worker.cleanupResponseChunks(ctx, 7))
+
+	req = client.Request.GetX(ctx, req.ID)
+	require.JSONEq(t, `{"prompt":"keep"}`, string(req.RequestBody))
+	require.JSONEq(t, `{"h":"1"}`, string(req.RequestHeaders))
+	require.JSONEq(t, `{"response":"keep"}`, string(req.ResponseBody))
+	require.Len(t, req.ResponseChunks, 1)
+	require.JSONEq(t, `{"chunk":"keep"}`, string(req.ResponseChunks[0]))
+
+	exec = client.RequestExecution.GetX(ctx, exec.ID)
+	require.JSONEq(t, `{"upstream":"keep"}`, string(exec.RequestBody))
+	require.JSONEq(t, `{"x-api-key":"keep"}`, string(exec.RequestHeaders))
+	require.JSONEq(t, `{"response":"keep"}`, string(exec.ResponseBody))
+	require.Len(t, exec.ResponseChunks, 1)
+	require.JSONEq(t, `{"chunk":"keep"}`, string(exec.ResponseChunks[0]))
 }
 
 func TestCleanupResponseBodies_DoesNotTouchRequestBodies(t *testing.T) {

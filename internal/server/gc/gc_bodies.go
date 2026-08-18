@@ -12,7 +12,6 @@ import (
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
-	"github.com/looplj/axonhub/internal/ent/trace"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/server/biz"
@@ -81,7 +80,7 @@ func (w *Worker) previewBodyCleanup(ctx context.Context, resourceType string, da
 	reqCount, err := w.Ent.Request.Query().
 		Where(
 			request.CreatedAtLT(cutoff),
-			request.Not(request.HasTraceWith(trace.StatusEQ(trace.StatusRetained))),
+			request.Not(request.HasTraceWith(retainedTracePredicate())),
 		).
 		Count(ctx)
 	if err != nil {
@@ -92,7 +91,7 @@ func (w *Worker) previewBodyCleanup(ctx context.Context, resourceType string, da
 		Where(
 			requestexecution.CreatedAtLT(cutoff),
 			requestexecution.Not(requestexecution.HasRequestWith(
-				request.HasTraceWith(trace.StatusEQ(trace.StatusRetained)),
+				request.HasTraceWith(retainedTracePredicate()),
 			)),
 		).
 		Count(ctx)
@@ -124,7 +123,7 @@ func (w *Worker) stripRequestPayloads(ctx context.Context, kind bodyPayloadKind,
 			).
 			Where(
 				request.CreatedAtLT(cutoff),
-				request.Not(request.HasTraceWith(trace.StatusEQ(trace.StatusRetained))),
+				request.Not(request.HasTraceWith(retainedTracePredicate())),
 			)
 		if len(skipIDs) > 0 {
 			query = query.Where(request.IDNotIn(skipIDs...))
@@ -197,7 +196,7 @@ func (w *Worker) stripExecutionPayloads(ctx context.Context, kind bodyPayloadKin
 			Where(
 				requestexecution.CreatedAtLT(cutoff),
 				requestexecution.Not(requestexecution.HasRequestWith(
-					request.HasTraceWith(trace.StatusEQ(trace.StatusRetained)),
+					request.HasTraceWith(retainedTracePredicate()),
 				)),
 			)
 		if len(skipIDs) > 0 {

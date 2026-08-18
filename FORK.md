@@ -116,11 +116,11 @@ git show --remerge-diff <merge-commit>
 - 生命周期：`长期保留`
 - 原始意图：保留 thread 是对整条会话的数据保护，不应覆盖用户对单个 trace 已做出的 archive/retain 选择。
 - 必须保持：`Retain`/`Unretain` 只改变 thread 状态；trace 自身状态保持不变；GC 将“trace retained”或“所属 thread retained”都视为保护条件，并保护相关 request、execution 和 usage log。
-- 代码锚点：`internal/server/biz/thread.go`、`internal/server/biz/thread_test.go`、`internal/server/gc/gc.go`、`internal/server/gc/gc_test.go`。
-- 提交锚点：merge resolution `3356f5bd`。
-- 合并审核：upstream 当前的级联状态写入语义与本地策略不同；解决冲突时不能恢复级联 retain/unretain，也不能只保护 trace 表而删除关联 request/usage 数据。
+- 代码锚点：`internal/server/biz/thread.go`、`internal/server/biz/thread_test.go`、`internal/server/gc/gc.go`、`internal/server/gc/gc_test.go`、`internal/server/gc/gc_bodies.go`、`internal/server/gc/gc_bodies_test.go`。
+- 提交锚点：merge resolution `3356f5bd`；本次载荷 GC 保护修复可用 `git log -S'PreservesActiveTraceUnderRetainedThread' -- internal/server/gc/gc_bodies_test.go` 定位。
+- 合并审核：upstream 当前的级联状态写入语义与本地策略不同；解决冲突时不能恢复级联 retain/unretain，也不能只保护 trace 表而删除关联 request/usage 数据。请求、响应和 chunks 的独立载荷 GC 也必须复用 `retainedTracePredicate()`，不能剥离 retained thread 下 active trace 的 payload。
 - 吸收/删除条件：只有本地明确改回 upstream 的级联策略，或 upstream 接受相同的父级保护和子级状态独立语义时才能删除。
-- 验证：`go test ./internal/server/biz ./internal/server/gc -run 'TestThreadService_RetainPreservesTraceStatuses|TestWorker_cleanupTracesPreservesActiveTraceUnderRetainedThread'`。
+- 验证：`go test ./internal/server/biz ./internal/server/gc -run 'TestThreadService_RetainPreservesTraceStatuses|TestWorker_cleanupTracesPreservesActiveTraceUnderRetainedThread|TestCleanupBodyPayloads_PreservesActiveTraceUnderRetainedThread'`。
 
 ## 等待 Upstream 吸收
 
