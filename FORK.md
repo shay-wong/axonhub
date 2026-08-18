@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次合入源码中的 `internal/build/VERSION` 为开发版本标记 `v1.0.0-beta8`，不是 fork release tag 的 upstream 发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta7-fork.2`；upstream 发布基线仍为 `v1.0.0-beta7`，因此本次 merge 后的下一个规范化 fork 版本递增为 `v1.0.0-beta7-fork.3`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta7-fork.3`；upstream 发布基线仍为 `v1.0.0-beta7`，因此本次修复后的下一个规范化 fork 版本递增为 `v1.0.0-beta7-fork.4`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -322,6 +322,17 @@ git show --remerge-diff <merge-commit>
 - 合并审核：upstream `c095efbf` 已吸收可配置 load-balancer strategy，`b4d1fd04` 修复了 conditional association fallback，但两者都未等价替代 fork 的不同 channel 重试预算和 API format 隔离；不要按 association candidate 数量截断，用“同 channel 同 priority”“同 channel 跨 priority”“同 channel 不同 API format”三个矩阵检查，并同时保留 upstream 的条件 fallback 测试。
 - 上游吸收条件：upstream 提供相同 retry budget 含义和三类回归测试。
 - 验证：`go test ./internal/server/orchestrator -run 'CountsDistinctChannels|DoesNotMergeModelsAcrossAPIFormats'`。
+
+### U19 PostgreSQL beta9 数据迁移启动兼容
+
+- 生命周期：`等待上游吸收`
+- 原始意图：beta9 数据迁移不能把 PostgreSQL 原生时间列当作文本处理，导致 PostgreSQL 部署在启动迁移阶段反复退出。
+- 必须保持：只对 SQLite 文本序列化的 `channels.updated_at` 清理 Go monotonic clock 后缀；PostgreSQL `timestamptz` 和其他原生时间类型跳过该清理；旧 `settings.providerQuota` 清理仍按各数据库方言正常执行。
+- 代码锚点：`internal/ent/migrate/datamigrate/v1.0.0-beta9.go`、`internal/ent/migrate/datamigrate/v1.0.0-beta9_dialect_test.go`、`internal/ent/migrate/datamigrate/v1.0.0-beta9_test.go`。
+- 提交锚点：upstream `86eac3a7` 引入 SQLite 时间修复及不兼容的 PostgreSQL SQL；本地修复可用 `git log -S'SkipsMonotonicCleanupForPostgres' -- internal/ent/migrate/datamigrate` 定位。
+- 合并审核：不能在 PostgreSQL `timestamptz` 上恢复 `LIKE`、`split_part` 或 text cast 后回写；Go monotonic suffix 只可能由 SQLite 驱动的文本序列化保存，PostgreSQL 无需数据清理。
+- 上游吸收条件：upstream 将 monotonic suffix 清理限制到 SQLite，并有 PostgreSQL 跳过执行的回归测试。
+- 验证：`go test ./internal/ent/migrate/datamigrate -run 'Beta9'`。
 
 ## Upstream Merge 审核清单
 

@@ -33,7 +33,7 @@ func (v *V1_0_0_Beta9) Version() string {
 //     API keyed by the channel's own API key, so the key is never read again and
 //     must not linger in the database (it may hold a live session credential).
 //
-//  2. Strips the monotonic-clock suffix from channel updated_at values.
+//  2. Strips the monotonic-clock suffix from SQLite channel updated_at values.
 //     Setting a model price used to write time.Now() (with its "m=" monotonic
 //     reading and local timezone) into channels.updated_at. The SQLite driver
 //     serializes such values with time.Time.String(), persisting e.g.
@@ -81,23 +81,18 @@ func (v *V1_0_0_Beta9) purgeProviderQuota(ctx context.Context, client *ent.Clien
 		"Purged stale settings.providerQuota from channels")
 }
 
-// stripMonotonicUpdatedAt removes the " m=+..." monotonic suffix from
+// stripMonotonicUpdatedAt removes the " m=+..." monotonic suffix from SQLite
 // channels.updated_at values written by the old channel_price.go time.Now().
+// Native timestamp columns such as PostgreSQL timestamptz cannot store that
+// suffix and must not be handled with text operators.
 func (v *V1_0_0_Beta9) stripMonotonicUpdatedAt(ctx context.Context, client *ent.Client, dialectName string) error {
-	var stmt string
-	switch dialectName {
-	case dialect.Postgres:
-		stmt = `UPDATE channels SET updated_at = split_part(updated_at, ' m=', 1) WHERE updated_at LIKE '% m=%'`
-	case dialect.SQLite:
-		stmt = `UPDATE channels SET updated_at = substr(updated_at, 1, instr(updated_at, ' m=') - 1) WHERE updated_at LIKE '% m=%'`
-	default:
-		// MySQL/MariaDB and other dialects are not in scope for this cleanup;
-		// the "m=" suffix only ever originates from the default driver format.
-		log.Info(ctx, "Unsupported dialect, skipping channel updated_at monotonic cleanup",
+	if dialectName != dialect.SQLite {
+		log.Info(ctx, "Dialect does not require channel updated_at monotonic cleanup",
 			log.String("dialect", dialectName))
 		return nil
 	}
 
+	stmt := `UPDATE channels SET updated_at = substr(updated_at, 1, instr(updated_at, ' m=') - 1) WHERE updated_at LIKE '% m=%'`
 	return v.execWithAffectedLog(ctx, client, stmt,
 		"failed to strip monotonic suffix from channels.updated_at",
 		"Stripped monotonic suffix from channels.updated_at")
