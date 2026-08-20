@@ -7,7 +7,7 @@ import { zhCN, enUS } from 'date-fns/locale';
 import { Ban, FileText, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { extractNumberID } from '@/lib/utils';
+import { extractNumberID, formatUserName } from '@/lib/utils';
 import { formatDuration } from '@/utils/format-duration';
 import { usePaginationSearch } from '@/hooks/use-pagination-search';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -595,7 +595,14 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
                 return <Badge variant='secondary'>{t(`requests.source.${request.source}`)}</Badge>;
               }
 
-              return <span className='font-mono text-xs'>{request.apiKey?.name || '-'}</span>;
+              const callerName = formatUserName(request.apiKey?.user?.firstName, request.apiKey?.user?.lastName);
+
+              return (
+                <div className='flex min-w-[120px] flex-col gap-0.5'>
+                  <span className='font-mono text-xs'>{request.apiKey?.name || '-'}</span>
+                  {callerName && <span className='text-muted-foreground text-xs'>{callerName}</span>}
+                </div>
+              );
             },
             filterFn: (row, _id, value) => value.length === 0 || value.includes(row.original.apiKey?.id ?? ''),
           },

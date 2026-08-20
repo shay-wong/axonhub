@@ -8,7 +8,6 @@
 ### Fixed
 
 - Preserved usage and cost records when clients disconnect after a streaming response has already completed.
-- Prevented the beta9 data migration from failing on PostgreSQL `timestamptz` columns during startup.
 
 v0.4.0
 

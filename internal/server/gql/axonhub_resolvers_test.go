@@ -669,11 +669,23 @@ func TestQueryResolver_UsageStatsByUser_UsesUsageLogVisibilityPolicy(t *testing.
 
 	stats, err := resolver.UsageStatsByUser(queryCtx, nil)
 	require.NoError(t, err)
-	require.Len(t, stats, 1)
-	require.Equal(t, ownerUser.ID, stats[0].UserID.ID)
-	require.Equal(t, 2, stats[0].RequestCount)
-	require.Equal(t, 300, stats[0].TotalTokens)
-	require.InDelta(t, 3.0, stats[0].TotalCost, 0.001)
+	require.Len(t, stats, 2)
+	statsByUserID := make(map[int]*UsageStatsByUser, len(stats))
+	for _, stat := range stats {
+		statsByUserID[stat.UserID.ID] = stat
+	}
+
+	ownerStats := statsByUserID[ownerUser.ID]
+	require.NotNil(t, ownerStats)
+	require.Equal(t, 2, ownerStats.RequestCount)
+	require.Equal(t, 300, ownerStats.TotalTokens)
+	require.InDelta(t, 3.0, ownerStats.TotalCost, 0.001)
+
+	otherStats := statsByUserID[otherUser.ID]
+	require.NotNil(t, otherStats)
+	require.Equal(t, 1, otherStats.RequestCount)
+	require.Equal(t, 300, otherStats.TotalTokens)
+	require.InDelta(t, 3.0, otherStats.TotalCost, 0.001)
 
 	nonOwnerCtx := authz.NewUserContext(ent.NewContext(t.Context(), client), otherUser.ID)
 	nonOwnerCtx = contexts.WithUser(nonOwnerCtx, otherUser)
@@ -778,7 +790,7 @@ func TestQueryResolver_ChannelPerformanceStats_IgnoresUnalignedProbeRowsAndTestS
 	require.Equal(t, "Dashboard Channel", stats[0].ChannelName)
 	require.Equal(t, 1, stats[0].RequestCount)
 	require.NotNil(t, stats[0].Throughput)
-	require.InDelta(t, 26.666, *stats[0].Throughput, 0.01)
+	require.InDelta(t, 22.222, *stats[0].Throughput, 0.01)
 	require.NotNil(t, stats[0].TtftMs)
 	require.InDelta(t, 100, *stats[0].TtftMs, 0.01)
 

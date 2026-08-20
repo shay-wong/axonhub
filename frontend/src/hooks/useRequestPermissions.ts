@@ -10,6 +10,7 @@ export interface RequestPermissions {
   canViewChannels: boolean;
   canWriteChannels: boolean;
   canViewRoles: boolean;
+  canViewCallerUser: boolean;
 }
 
 export function useRequestPermissions(): RequestPermissions {
@@ -31,19 +32,25 @@ export function useRequestPermissions(): RequestPermissions {
     return getProjectEffectiveScopes(project);
   }, [selectedProjectId, user?.projects]);
 
+  const isProjectOwner = useMemo(() => {
+    if (isOwner) return true;
+    return user?.projects?.some((project) => project.projectID === selectedProjectId && project.isOwner) ?? false;
+  }, [isOwner, selectedProjectId, user?.projects]);
+
   const permissions = useMemo(() => {
     // 合并系统级和项目级权限
     const userScopes = [...systemScopes, ...projectScopes];
     const canWriteChannels = isOwner || systemScopes.includes('*') || systemScopes.includes('write_channels');
 
     // Owner用户拥有所有权限
-    if (isOwner || userScopes.includes('*')) {
+    if (isProjectOwner || userScopes.includes('*')) {
       return {
         canViewUsers: true,
         canViewApiKeys: true,
         canViewChannels: true,
         canWriteChannels,
         canViewRoles: true,
+        canViewCallerUser: isProjectOwner,
       };
     }
 
@@ -53,8 +60,9 @@ export function useRequestPermissions(): RequestPermissions {
       canViewChannels: userScopes.includes('read_channels'),
       canWriteChannels,
       canViewRoles: userScopes.includes('read_roles'),
+      canViewCallerUser: false,
     };
-  }, [systemScopes, projectScopes, isOwner]);
+  }, [systemScopes, projectScopes, isOwner, isProjectOwner]);
 
   return permissions;
 }
