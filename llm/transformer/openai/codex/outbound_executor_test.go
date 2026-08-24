@@ -1092,7 +1092,7 @@ func TestCodexOutbound_AppliesReasoningDefaultsWhenMissing(t *testing.T) {
 	assert.NotContains(t, body, "metadata")
 }
 
-func TestCodexOutbound_ResponsesLiteIsExplicitAndOfficialOnly(t *testing.T) {
+func TestCodexOutbound_ResponsesLiteIsExplicit(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("plain request does not fabricate Lite or reasoning context", func(t *testing.T) {
@@ -1147,7 +1147,7 @@ func TestCodexOutbound_ResponsesLiteIsExplicitAndOfficialOnly(t *testing.T) {
 		assert.Equal(t, "current_turn", reasoning["context"])
 	})
 
-	t.Run("relay removes Lite without rewriting client reasoning", func(t *testing.T) {
+	t.Run("relay preserves explicit Lite and fills missing reasoning context", func(t *testing.T) {
 		outbound := newTestCodexOutboundForBaseURL(t, "https://relay.example/v1")
 		headers := make(http.Header)
 		headers.Set("Content-Type", "application/json")
@@ -1158,7 +1158,7 @@ func TestCodexOutbound_ResponsesLiteIsExplicitAndOfficialOnly(t *testing.T) {
 				"model": "gpt-5.3-codex-spark",
 				"input": "Hello",
 				"stream": true,
-				"reasoning": {"context": "current_turn"}
+				"reasoning": {"effort": "high"}
 			}`),
 		}
 
@@ -1169,11 +1169,13 @@ func TestCodexOutbound_ResponsesLiteIsExplicitAndOfficialOnly(t *testing.T) {
 		outboundRequest, err := outbound.TransformRequest(ctx, llmRequest)
 		require.NoError(t, err)
 
-		assert.Empty(t, outboundRequest.Headers.Get(responses.ResponsesLiteHeader))
+		outboundRequest = httpclient.MergeInboundRequest(outboundRequest, inboundRequest)
+
+		assert.Equal(t, "true", outboundRequest.Headers.Get(responses.ResponsesLiteHeader))
 		body := decodeCodexRequestBody(t, outboundRequest)
 		reasoning, ok := body["reasoning"].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "current_turn", reasoning["context"])
+		assert.Equal(t, "all_turns", reasoning["context"])
 	})
 }
 

@@ -142,7 +142,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：Lite header 与 `reasoning.context=all_turns` 成对保留；`parallel_tool_calls` 约束不丢失；provider-private 数据保存在现有 `ProviderExtensions` sidecar，不污染通用 `llm.Request`；clone 和 retry 后仍存在。
 - 代码锚点：`llm/model.go`、`llm/provider_extensions.go`、`llm/transformer/openai/responses/request_extensions.go`、`llm/transformer/openai/responses/model.go`、`llm/transformer/openai/responses/inbound.go`、`llm/transformer/openai/responses/outbound_convert.go`、`llm/transformer/openai/codex/outbound_executor_test.go`。
 - 提交锚点：`f60fb767`、`753b2f26`。
-- 合并审核：upstream `a6bfffa8` 已吸收 polymorphic `reasoning_content` 和 Responses body pass-through 时的 Codex metadata header allowlist，`c0233704` 补充 Codex identity headers，`6f9bfc5f` 又补齐缺失的 Lite reasoning context 并覆盖真实 inbound-to-Codex-outbound 路径；但仍没有等价覆盖 `parallel_tool_calls`、clone/retry 或最终 session canonicalization。必须同时比较 headers 和 JSON body；只保留 Lite header 而丢失 context 会形成 upstream 拒绝的非法组合。
+- 合并审核：upstream `a6bfffa8` 已吸收 polymorphic `reasoning_content` 和 Responses body pass-through 时的 Codex metadata header allowlist，`c0233704` 补充 Codex identity headers，`6f9bfc5f` 又补齐缺失的 Lite reasoning context 并覆盖真实 inbound-to-Codex-outbound 路径；`49ade6f2` 支持兼容 relay 返回 completed JSON，但会删除 relay 上调用方明确发送的 Lite header。保留 JSON fallback，同时确保显式 Lite 在官方和兼容 relay 都不丢失、缺失 context 补为 `all_turns`；仍需覆盖 `parallel_tool_calls`、clone/retry 和最终 session canonicalization。必须同时比较 headers 和 JSON body；只保留 Lite header 而丢失 context 会形成 upstream 拒绝的非法组合。
 - 上游吸收条件：upstream 有真实 inbound-to-Codex-outbound 测试，覆盖 context、parallel tool calls、clone 和 retry。
 - 验证：`cd llm && go test ./transformer/openai/codex ./transformer/openai/responses -run 'ResponsesLiteRequirements|ConvertReasoning'`。
 

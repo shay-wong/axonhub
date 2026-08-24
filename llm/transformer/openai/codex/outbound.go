@@ -155,6 +155,7 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	rawOriginator := ""
 	rawUserAgent := ""
 	rawTurnMetadata := ""
+	responsesLite := false
 
 	var rawHeaders http.Header
 
@@ -168,11 +169,10 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 		rawUserAgent = llmReq.RawRequest.Headers.Get("User-Agent")
 		rawTurnMetadata = llmReq.RawRequest.Headers.Get(TurnMetadataHeader)
 
-		// Responses Lite selects a private Codex protocol mode. It is not
-		// identity metadata: never fabricate it for OpenAI-compatible clients.
-		// A client-selected Lite request is retained only for the official Codex
-		// backend; relays are not assumed to implement the same private protocol.
-		if !t.isOfficialCodex() || !strings.EqualFold(strings.TrimSpace(rawHeaders.Get(ResponsesLiteHeader)), "true") {
+		// Responses Lite is opt-in: preserve an explicit client signal for both
+		// official and compatible Codex upstreams, but never fabricate it.
+		responsesLite = strings.EqualFold(strings.TrimSpace(rawHeaders.Get(ResponsesLiteHeader)), "true")
+		if !responsesLite {
 			rawHeaders.Del(ResponsesLiteHeader)
 		}
 	}
@@ -226,6 +226,18 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 			reqCopy.ReasoningSummary = lo.ToPtr("auto")
 		}
 
+		// A Lite request without reasoning.context is invalid for compatible
+		// relays. Preserve explicit values and fill only the missing requirement.
+		if responsesLite {
+			if providerExt := reqCopy.ProviderExtensions; providerExt == nil || providerExt.OpenAIResponses == nil ||
+				providerExt.OpenAIResponses.Request == nil || providerExt.OpenAIResponses.Request.ReasoningContext == "" {
+				oaiExt := llm.EnsureOpenAIResponsesProviderExtensions(&reqCopy)
+				if oaiExt.Request == nil {
+					oaiExt.Request = &llm.OpenAIResponsesRequestExtensions{}
+				}
+				oaiExt.Request.ReasoningContext = "all_turns"
+			}
+		}
 	}
 
 	// Codex Responses rejects token limit fields, so strip them out.
