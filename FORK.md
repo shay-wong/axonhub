@@ -323,6 +323,18 @@ git show --remerge-diff <merge-commit>
 - 上游吸收条件：upstream 提供相同 retry budget 含义和三类回归测试。
 - 验证：`go test ./internal/server/orchestrator -run 'CountsDistinctChannels|DoesNotMergeModelsAcrossAPIFormats'`。
 
+### U19 内置模型目录 Schema 兼容
+
+- 生命周期：`等待上游吸收`
+- 原始意图：内置模型目录必须始终符合自身解析 schema，不能因单条上游模型数据格式错误而让整个目录加载失败。
+- 必须保持：`experimental` 继续表示结构化实验模式及其价格，不接受同名布尔值；预览状态使用现有 `status` 和 `metadata.lifecycle` 字段；合入新的 `providers.json` 数据后必须通过整表解析测试。
+- 代码锚点：`frontend/src/features/models/data/providers.json`、`frontend/src/features/models/data/providers.schema.ts`、`frontend/src/features/models/data/providers-schema.test.mjs`。
+- 用户文档：维护者内部数据兼容修复，不新增配置或 API，无独立用户文档和 changelog 条目。
+- 提交锚点：本次修复可用 `git log -S'\"experimental\": true' -- frontend/src/features/models/data/providers.json` 定位。
+- 合并审核：upstream `ef8809ff` 中 `deepseek-v4-flash-vision-exp` 的 `experimental: true` 与 upstream 自身的对象 schema 冲突；不要为单条冗余数据把该字段扩成布尔/对象联合类型，否则价格目录调用方还需额外分支。优先采用 upstream 的等价数据修复。
+- 上游吸收条件：upstream 删除或迁移该无效布尔值，并保留覆盖完整内置目录的 schema 解析测试。
+- 验证：`cd frontend && node --test src/features/models/data/providers-schema.test.mjs`。
+
 ## Upstream Merge 审核清单
 
 1. 确认 worktree、当前分支、upstream 默认分支和将要合入的精确 SHA。
