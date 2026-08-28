@@ -83,6 +83,19 @@ func modelString(model map[string]any, key string) string {
 	return value
 }
 
+func normalizeCatalogExperimental(data *catalogFile) {
+	if data == nil {
+		return
+	}
+	for _, provider := range data.Providers {
+		for _, model := range provider.Models {
+			if _, ok := model["experimental"].(map[string]any); !ok {
+				delete(model, "experimental")
+			}
+		}
+	}
+}
+
 func allowedSet(ids []string) map[string]struct{} {
 	out := make(map[string]struct{}, len(ids))
 	for _, id := range ids {

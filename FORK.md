@@ -57,11 +57,11 @@ git show --remerge-diff <merge-commit>
 ### F01 Fork 发布、更新和外部资产归属
 
 - 生命周期：`长期保留`
-- 原始意图：fork 的 release、Docker/Helm 制品、更新检查、问题链接和开发者模型目录必须指向当前 fork，不能静默回落到 `looplj/axonhub` 的版本或镜像。
-- 必须保持：`beta`/`stable` fork 发布通道独立；多架构 manifest 和 Helm 默认镜像属于 fork；版本比较识别 fork 后缀和 upstream prerelease；仓库、release、issues、developer catalog URL 可由构建环境覆盖，默认指向 `shay-wong/axonhub` 的 `beta`。
-- 代码锚点：`.github/workflows/stable-fork-release.yml`、`.github/workflows/docker-publish.yml`、`.github/workflows/helm-chart.yml`、`.goreleaser.yml`、`deploy/helm/values.yaml`、`internal/build/info.go`、`internal/server/biz/version.go`、`frontend/src/config/external-urls.ts`、`frontend/src/features/models/data/providers.ts`。
+- 原始意图：fork 的 release、Docker/Helm 制品、更新检查、问题链接和 fork 自有模型目录增量必须属于当前 fork，不能静默回落到 `looplj/axonhub` 的版本、镜像或额外模型数据。
+- 必须保持：`beta`/`stable` fork 发布通道独立；多架构 manifest 和 Helm 默认镜像属于 fork；版本比较识别 fork 后缀和 upstream prerelease；仓库、release 和 issues URL 可由构建环境覆盖且默认指向 `shay-wong/axonhub`；fork 自有模型增量由后端内嵌 `catalogdata/models.json` 承载，不再依赖浏览器直连仓库目录。
+- 代码锚点：`.github/workflows/stable-fork-release.yml`、`.github/workflows/docker-publish.yml`、`.github/workflows/helm-chart.yml`、`.goreleaser.yml`、`deploy/helm/values.yaml`、`internal/build/info.go`、`internal/server/biz/version.go`、`internal/server/biz/catalog.go`、`internal/server/biz/catalogdata/models.json`、`frontend/src/config/external-urls.ts`。
 - 提交锚点：`fc687607`、`de2aa90a`、`6b147cbb`、`cee45b4b`、`b77f8e5f`、`47ffb508`、`ce626e28`、`923482f8`、`a94eb373`。
-- 合并审核：重点检查 workflow 中 repository owner、tag、`latest` manifest、Chart image、`AXONHUB_UPDATE_CHANNEL` 和前端外链；不要接受重新硬编码 upstream 仓库的变更。
+- 合并审核：重点检查 workflow 中 repository owner、tag、`latest` manifest、Chart image、`AXONHUB_UPDATE_CHANNEL`、前端外链和后端内嵌模型增量；不要接受重新硬编码 upstream 仓库或丢失 fork `catalogdata/models.json` 的变更。
 - 吸收/删除条件：只有在 upstream 提供完全仓库无关的发布、更新和目录来源机制，且本 fork 不再需要本地默认值时才能删除。
 - 验证：`go test ./internal/server/biz -run 'TestSelectLatestGitHubRelease|Test.*Version'`；`cd frontend && node --test src/config/external-urls.test.mjs`；静态检查 workflow 和 Helm 默认镜像。
 
@@ -327,13 +327,13 @@ git show --remerge-diff <merge-commit>
 
 - 生命周期：`等待上游吸收`
 - 原始意图：内置模型目录必须始终符合自身解析 schema，不能因单条上游模型数据格式错误而让整个目录加载失败。
-- 必须保持：`experimental` 继续表示结构化实验模式及其价格，不接受同名布尔值；预览状态使用现有 `status` 和 `metadata.lifecycle` 字段；合入新的 `providers.json` 数据后必须通过整表解析测试。
-- 代码锚点：`frontend/src/features/models/data/providers.json`、`frontend/src/features/models/data/providers.schema.ts`、`frontend/src/features/models/data/providers-schema.test.mjs`。
+- 必须保持：`experimental` 继续表示结构化实验模式及其价格，不接受同名布尔值；后端在远程目录和内嵌快照的输入边界丢弃非对象值，前端 schema 仍只接受结构化对象；预览状态使用现有 `status` 和 `metadata.lifecycle` 字段；同步目录后必须通过后端归一化和前端整表解析测试。
+- 代码锚点：`internal/server/biz/catalog.go`、`internal/server/biz/catalog_filter.go`、`internal/server/biz/catalog_filter_test.go`、`internal/server/biz/catalogdata/providers.json`、`frontend/src/features/models/data/providers.schema.ts`、`frontend/src/features/models/data/providers-schema.test.mjs`、`scripts/sync/sync-model-developers.js`。
 - 用户文档：维护者内部数据兼容修复，不新增配置或 API，无独立用户文档和 changelog 条目。
-- 提交锚点：本次修复可用 `git log -S'\"experimental\": true' -- frontend/src/features/models/data/providers.json` 定位。
-- 合并审核：upstream `ef8809ff` 中 `deepseek-v4-flash-vision-exp` 的 `experimental: true` 与 upstream 自身的对象 schema 冲突；不要为单条冗余数据把该字段扩成布尔/对象联合类型，否则价格目录调用方还需额外分支。优先采用 upstream 的等价数据修复。
+- 提交锚点：本次修复可用 `git log -S'normalizeCatalogExperimental' -- internal/server/biz/catalog_filter.go` 定位。
+- 合并审核：upstream `4483c2e4` 已把目录拉取迁移到后端，`6f729f7c` 则用布尔/对象联合类型接受 `deepseek-v4-flash-vision-exp` 的 `experimental: true`；迁移架构可以保留，但联合类型不等价。必须在后端信任边界清洗无效值，并保持前端结构化 schema，避免价格目录调用方增加布尔分支。
 - 上游吸收条件：upstream 删除或迁移该无效布尔值，并保留覆盖完整内置目录的 schema 解析测试。
-- 验证：`cd frontend && node --test src/features/models/data/providers-schema.test.mjs`。
+- 验证：`go test ./internal/server/biz -run 'TestNormalizeCatalogExperimental|TestCatalogService'`；`cd frontend && node --test src/features/models/data/providers-schema.test.mjs`。
 
 ### U20 Release 二进制应用内更新
 

@@ -10,6 +10,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestNormalizeCatalogExperimental(t *testing.T) {
+	data := catalogFile{Providers: map[string]catalogProvider{
+		"test": {Models: []map[string]any{
+			{"id": "boolean", "experimental": true},
+			{"id": "structured", "experimental": map[string]any{"modes": map[string]any{"fast": map[string]any{}}}},
+		}},
+	}}
+
+	normalizeCatalogExperimental(&data)
+
+	require.NotContains(t, data.Providers["test"].Models[0], "experimental")
+	require.Contains(t, data.Providers["test"].Models[1], "experimental")
+}
+
 func TestFilterCatalogProviders(t *testing.T) {
 	t.Parallel()
 

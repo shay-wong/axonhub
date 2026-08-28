@@ -222,6 +222,7 @@ func (s *CatalogService) fetchUpstream(ctx context.Context, upstreamURL string) 
 	if data.Providers == nil {
 		return catalogFile{}, fmt.Errorf("catalog is missing providers")
 	}
+	normalizeCatalogExperimental(&data)
 
 	return data, nil
 }
@@ -285,6 +286,7 @@ func (s *CatalogService) fallbackCache() *catalogCache {
 	if err := json.Unmarshal(catalogFallbackJSON, &data); err != nil || data.Providers == nil {
 		data = catalogFile{Providers: map[string]catalogProvider{}}
 	}
+	normalizeCatalogExperimental(&data)
 
 	now := time.Now().UTC()
 

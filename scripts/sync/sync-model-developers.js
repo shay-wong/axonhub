@@ -280,6 +280,11 @@ function filterProviders(data, allowedIds) {
 	const filtered = {};
 
 	for (const [key, value] of Object.entries(data.providers)) {
+		for (const model of value.models || []) {
+			if (!isObject(model.experimental)) {
+				delete model.experimental;
+			}
+		}
 		if (allowedIds.includes(value.id)) {
 			filtered[key] = value;
 		}

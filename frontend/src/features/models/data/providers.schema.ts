@@ -82,7 +82,7 @@ export const providerModelSchema = z.object({
   open_weights: z.boolean().optional(),
   cost: modelCostSchema.optional(),
   limit: modelLimitSchema.optional().nullable(),
-  experimental: z.union([z.boolean(), modelExperimentalSchema]).optional(),
+  experimental: modelExperimentalSchema.optional(),
   display_name: z.string().optional(),
   extra_capabilities: z.record(z.string(), z.unknown()).optional(),
   vision: z.boolean().optional(),

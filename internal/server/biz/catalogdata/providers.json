@@ -1487,7 +1487,6 @@
           },
           "type": "chat",
           "knowledge": "2025-05",
-          "experimental": true,
           "vision": true
         },
         {
