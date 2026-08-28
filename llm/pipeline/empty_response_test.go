@@ -43,6 +43,15 @@ func TestHasResponseContent(t *testing.T) {
 		})
 	}
 
+	t.Run("alpha search response", func(t *testing.T) {
+		require.True(t, hasResponseContent(&llm.Response{
+			AlphaSearch: &llm.AlphaSearchResponse{Body: []byte(`{"ok":true}`)},
+		}))
+		require.False(t, hasResponseContent(&llm.Response{
+			AlphaSearch: &llm.AlphaSearchResponse{Body: nil},
+		}))
+	})
+
 	t.Run("message text content", func(t *testing.T) {
 		require.True(t, hasResponseContent(&llm.Response{
 			Choices: []llm.Choice{{
