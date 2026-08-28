@@ -70,7 +70,8 @@ services:
         condition: service_healthy
     user: "65532:65532"
     init: true
-    read_only: true
+    # AxonHub replaces /app/axonhub during verified in-app updates.
+    read_only: false
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
     cap_drop:
@@ -125,7 +126,7 @@ services:
   #     - ./config.yml:/app/config.yml:ro
   #     - ./data:/data
   #   user: "65532:65532"
-  #   read_only: true
+  #   read_only: false
   #   tmpfs:
   #     - /tmp:rw,noexec,nosuid,nodev,size=64m
   #   cap_drop:
@@ -188,7 +189,7 @@ services:
   #     - ./config.yml:/app/config.yml:ro
   #     # - axonhub_data:/data
   #   user: "65532:65532"
-  #   read_only: true
+  #   read_only: false
   #   tmpfs:
   #     - /tmp:rw,noexec,nosuid,nodev,size=64m
   #   cap_drop:

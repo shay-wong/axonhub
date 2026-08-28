@@ -352,6 +352,8 @@ response = client.chat.completions.create(
    http://localhost:8090
    ```
 
+Release 构建可在**系统设置 > 关于**中安装更新或从最近的兼容历史版本回滚；需要运行用户能写入可执行文件目录，并由 systemd 等 supervisor 在进程退出后拉起。Release builds can update or roll back to a recent compatible release from **System Settings > About** when the runtime user can write the executable directory and a supervisor such as systemd restarts the exited process.
+
 ---
 
 ### 🖥️ 服务器部署 | Server Deployment

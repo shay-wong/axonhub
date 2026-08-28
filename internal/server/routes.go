@@ -112,6 +112,10 @@ func SetupRoutes(server *Server, handlers Handlers, client *ent.Client, services
 			handlers.Graphql.Graphql.ServeHTTP(c.Writer, c.Request)
 		})
 		adminGroup.POST("/invitations", handlers.Invitation.Create)
+			adminGroup.POST("/system/update", handlers.System.InstallUpdate)
+			adminGroup.GET("/system/rollback-versions", handlers.System.GetRollbackVersions)
+			adminGroup.POST("/system/rollback", handlers.System.Rollback)
+			adminGroup.POST("/system/restart", handlers.System.Restart)
 
 		adminGroup.POST("/codex/oauth/start", handlers.Codex.StartOAuth)
 		adminGroup.POST("/codex/oauth/exchange", handlers.Codex.Exchange)

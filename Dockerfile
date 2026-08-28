@@ -61,6 +61,7 @@ RUN addgroup -S -g 65532 axonhub \
 
 WORKDIR /app
 COPY --from=backend-builder --chown=axonhub:axonhub /build/axonhub /app/axonhub
+RUN chown axonhub:axonhub /app
 
 # The service does not need root privileges at runtime. Keep this in the image
 # as well as in Compose so the protection is preserved for other deployments.

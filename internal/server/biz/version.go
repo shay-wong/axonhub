@@ -83,6 +83,7 @@ type GitHubRelease struct {
 	Prerelease  bool      `json:"prerelease"`
 	Draft       bool      `json:"draft"`
 	PublishedAt time.Time `json:"published_at"`
+	HTMLURL     string    `json:"html_url"`
 }
 
 type GitHubTag struct {

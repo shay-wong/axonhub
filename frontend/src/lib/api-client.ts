@@ -129,6 +129,18 @@ export const systemApi = {
       method: 'POST',
       body: data,
     }),
+
+  installUpdate: (includeBeta: boolean): Promise<{ success: boolean; message: string; needRestart: boolean }> =>
+    apiRequest('/admin/system/update', { method: 'POST', body: { includeBeta }, requireAuth: true }),
+
+  getRollbackVersions: (): Promise<{
+    versions: { version: string; publishedAt: string; releaseUrl: string }[];
+  }> => apiRequest('/admin/system/rollback-versions', { requireAuth: true }),
+
+  rollback: (version: string): Promise<{ success: boolean; message: string; needRestart: boolean }> =>
+    apiRequest('/admin/system/rollback', { method: 'POST', body: { version }, requireAuth: true }),
+
+  restart: (): Promise<{ success: boolean; message: string }> => apiRequest('/admin/system/restart', { method: 'POST', requireAuth: true }),
 };
 
 // Auth API endpoints

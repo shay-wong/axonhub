@@ -2,6 +2,7 @@
 
 ### Added
 
+- Added checksum-verified in-app updates, recent version history, and rollback with process-supervisor restart support for supported release and Docker deployments.
 - Added per-channel API key rules with status/keyword matching, configurable error thresholds, temporary auto-recovery, and permanent disable/delete actions.
 - Allowed Fenno channels to opt into Codex-style Responses defaults; the option remains disabled by default.
 

@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Tag to release'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -11,12 +17,14 @@ permissions:
 
 jobs:
   goreleaser:
+    if: ${{ inputs.tag != '' || !contains(github.ref_name, '-fork.') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -46,15 +54,15 @@ jobs:
           ./scripts/verify-go-sse-dependency.sh
 
       - name: Update VERSION file
-        if: ${{ !contains(github.ref_name, 'beta') && !contains(github.ref_name, 'rc') }}
+        if: ${{ !contains(inputs.tag || github.ref_name, 'beta') && !contains(inputs.tag || github.ref_name, 'rc') && !contains(inputs.tag || github.ref_name, '-fork.') }}
         run: |
-          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${{ inputs.tag || github.ref_name }}"
           echo "Updating VERSION file to: $VERSION"
           echo "$VERSION" > internal/build/VERSION
           git add internal/build/VERSION
 
       - name: Commit VERSION file
-        if: ${{ !contains(github.ref_name, 'beta') && !contains(github.ref_name, 'rc') }}
+        if: ${{ !contains(inputs.tag || github.ref_name, 'beta') && !contains(inputs.tag || github.ref_name, 'rc') && !contains(inputs.tag || github.ref_name, '-fork.') }}
         continue-on-error: true
         run: |
           # Configure git
@@ -66,7 +74,7 @@ jobs:
             echo "No changes to VERSION files"
           else
             # Commit VERSION files with [skip ci] to avoid triggering other workflows
-            git commit -m "chore: update VERSION to ${GITHUB_REF#refs/tags/} [skip ci]"
+            git commit -m "chore: update VERSION to ${{ inputs.tag || github.ref_name }} [skip ci]"
             git push origin HEAD:${{ github.event.repository.default_branch }}
           fi
 
@@ -75,12 +83,12 @@ jobs:
         with:
           distribution: goreleaser
           version: '~> v2'
-          args: release --clean --skip=validate
+          args: release --clean --skip=${{ inputs.tag != '' && 'validate,homebrew' || 'validate' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           AXONHUB_RELEASE_REPOSITORY: ${{ github.repository }}
           AXONHUB_UPDATE_REPOSITORY: ${{ vars.UPDATE_REPOSITORY || github.repository }}
-          AXONHUB_UPDATE_CHANNEL: ${{ (contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc')) && 'beta' || 'stable' }}
+          AXONHUB_UPDATE_CHANNEL: ${{ (contains(inputs.tag || github.ref_name, 'beta') || contains(inputs.tag || github.ref_name, 'rc')) && 'beta' || 'stable' }}
           VITE_GITHUB_REPOSITORY: ${{ github.repository }}
-          VITE_GITHUB_REF: ${{ github.ref_name }}
+          VITE_GITHUB_REF: ${{ inputs.tag || github.ref_name }}

@@ -331,6 +331,12 @@ docker run --rm -v axonhub_data:/target -v $(pwd)/backup:/backup alpine \
   tar xzf /backup/axonhub-data-20231110.tar.gz -C /target
 ```
 
+## In-App Updates
+
+Owners and users with the `write_settings` system scope can install a newer release or choose one of the three most recent compatible older releases from **System Settings > About**. Version history stays within the current stable/beta and fork release type. AxonHub downloads the matching release ZIP, verifies it against `checksums.txt`, replaces `/app/axonhub`, and then exits when you choose **Restart AxonHub**. The Compose `restart` policy starts the selected binary automatically.
+
+The container filesystem must allow the runtime user to write `/app`; the repository's Compose file is configured accordingly. Recreating the container from an older image discards the updated container layer, so use a current image when intentionally recreating the service.
+
 ## Troubleshooting
 
 ### Common Issues

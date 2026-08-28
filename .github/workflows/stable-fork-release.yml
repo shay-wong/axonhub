@@ -100,3 +100,26 @@ jobs:
       contents: read
       packages: write
     secrets: inherit
+
+  publish-binaries:
+    needs: create-fork-tag
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.create-fork-tag.outputs.release_name }}
+    permissions:
+      contents: write
+      packages: write
+    secrets: inherit
+
+  publish-release:
+    needs: [create-fork-tag, publish-binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish fork release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_NAME: ${{ needs.create-fork-tag.outputs.release_name }}
+        run: gh release edit "$RELEASE_NAME" --draft=false

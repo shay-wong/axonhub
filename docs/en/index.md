@@ -8,7 +8,7 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 
 | Document | Description |
 |----------|-------------|
-| [Quick Start Guide](getting-started/quick-start.md) | Get AxonHub up and running in minutes |
+| [Quick Start Guide](getting-started/quick-start.md) | Install, run, update, and roll back AxonHub |
 | [Request Processing](getting-started/request-processing.md) | Understand how AxonHub processes API requests |
 
 ### 📖 User Guides

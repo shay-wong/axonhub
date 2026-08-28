@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次合入源码中的 `internal/build/VERSION` 为开发版本标记 `v1.0.0-beta8`，不是 fork release tag 的 upstream 发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta7-fork.5`；upstream 发布基线仍为 `v1.0.0-beta7`，因此本次合并后的下一个规范化 fork 版本递增为 `v1.0.0-beta7-fork.6`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta7-fork.6`；upstream 发布基线仍为 `v1.0.0-beta7`，因此下一个规范化 fork 版本递增为 `v1.0.0-beta7-fork.7`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -334,6 +334,18 @@ git show --remerge-diff <merge-commit>
 - 合并审核：upstream `ef8809ff` 中 `deepseek-v4-flash-vision-exp` 的 `experimental: true` 与 upstream 自身的对象 schema 冲突；不要为单条冗余数据把该字段扩成布尔/对象联合类型，否则价格目录调用方还需额外分支。优先采用 upstream 的等价数据修复。
 - 上游吸收条件：upstream 删除或迁移该无效布尔值，并保留覆盖完整内置目录的 schema 解析测试。
 - 验证：`cd frontend && node --test src/features/models/data/providers-schema.test.mjs`。
+
+### U20 Release 二进制应用内更新
+
+- 生命周期：`长期保留`
+- 原始意图：Docker 和“可执行文件目录由运行用户拥有”的进程管理器托管 Release 部署，应能直接从管理界面完成版本升级和历史版本回滚，不再要求操作者手工进入服务器替换二进制。
+- 必须保持：复用现有 stable/beta 版本选择；只在受支持的非 Windows Release 构建显示安装入口；只接受 AxonHub 版本标签；历史列表最多展示严格早于当前版本的最近 3 个 Release，并保持 stable/beta 和 fork 类型一致；回滚目标必须重新通过服务端历史列表校验，不能信任前端传入任意 tag；升级与回滚均按当前平台下载 GoReleaser ZIP，必须校验同一 Release 的 `checksums.txt`；限制下载和解压大小；在可执行文件同目录保留 `.backup` 并原子替换；只有 `write_settings` 系统权限可查询历史、安装、回滚或重启；重启只退出进程并依赖 Docker/systemd 等 supervisor 拉起；fork 自动发布同时产生 Docker 镜像、ZIP 和 checksum，且 fork 发布不写 upstream Homebrew tap。
+- 代码锚点：`internal/server/biz/update.go`、`internal/server/api/system.go`、`internal/server/routes.go`、`frontend/src/features/system/components/about-settings.tsx`、`.github/workflows/release.yml`、`.github/workflows/stable-fork-release.yml`、`Dockerfile`、`docker-compose.yml`。
+- 用户文档：`docs/en/deployment/docker.md`、`docs/zh/deployment/docker.md`、`docs/en/getting-started/quick-start.md`、`docs/zh/getting-started/quick-start.md`、`docs/en/index.md`、`docs/zh/index.md`、`README.md`；发布说明：`CHANGELOG.md`。
+- 提交锚点：本次变更可用 `git log -S'InstallVersion' -- internal/server/biz/update.go` 定位。
+- 合并审核：不能把“检测到 tag”等同于“可安装”；fork tag 必须有公开 Release 资产。历史回滚也不能接受任意用户输入的 tag，必须保持同渠道、同 fork 类型、严格旧于当前版本并重新校验服务端白名单。保留 SHA-256 校验、可信 GitHub 下载域、大小限制、同文件系统替换、权限检查和 supervisor 重启边界。Docker 必须让非 root 运行用户能写可执行文件目录；不要引入 Docker socket。
+- 上游吸收条件：产品能力长期保留；仅在 fork 不再维护自有 Release，或 upstream 提供等价的二进制安装、发布资产和回归测试时重新评估。
+- 验证：`go test ./internal/server/biz -run '^TestUpdate'`；`go test ./internal/server/api -run '^TestSystemUpdateHandlersRequireWriteSettings$'`；`cd frontend && node --test src/features/system/data/update-contract.test.mjs`；检查 fork release 同时包含平台 ZIP、`checksums.txt` 和 Docker tag。
 
 ## Upstream Merge 审核清单
 

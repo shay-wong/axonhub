@@ -331,6 +331,12 @@ docker run --rm -v axonhub_data:/target -v $(pwd)/backup:/backup alpine \
   tar xzf /backup/axonhub-data-20231110.tar.gz -C /target
 ```
 
+## 应用内更新
+
+系统所有者和拥有 `write_settings` 系统权限的用户可以在**系统设置 > 关于**中安装新版本，或从最近 3 个兼容的旧版本中选择回滚。历史版本保持与当前版本相同的 stable/beta 和 fork 类型。AxonHub 会下载当前平台对应的 Release ZIP，使用 `checksums.txt` 校验后替换 `/app/axonhub`；选择**重启 AxonHub**后进程退出，Compose 的 `restart` 策略会自动以选定的二进制重新启动。
+
+容器文件系统必须允许运行用户写入 `/app`，仓库自带的 Compose 已按此配置。若使用旧镜像重新创建容器，更新后的容器可写层会被丢弃，因此主动重建服务时应同时使用当前镜像。
+
 ## 故障排除
 
 ### 常见问题

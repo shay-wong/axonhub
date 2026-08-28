@@ -52,6 +52,8 @@ This guide will help you get started with AxonHub quickly. In just a few minutes
 3. **Access the application**
    - Web interface: http://localhost:8090
 
+Release builds can install updates or roll back to one of the three most recent compatible older releases from **System Settings > About** when the account has `write_settings`, the process is managed by a supervisor such as systemd, and the runtime user can write the executable's directory. Foreground processes are not restarted automatically; Windows builds require manual replacement.
+
 ## First Steps
 
 ### 1. Configure Your First Channel

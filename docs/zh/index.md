@@ -8,7 +8,7 @@
 
 | 文档 | 描述 |
 |------|------|
-| [快速入门指南](getting-started/quick-start.md) | 在几分钟内启动并运行 AxonHub |
+| [快速入门指南](getting-started/quick-start.md) | 安装、运行、更新和回滚 AxonHub |
 | [请求处理流程](getting-started/request-processing.md) | 了解 AxonHub 如何处理 API 请求 |
 
 ### 📖 使用指南

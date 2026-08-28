@@ -15,6 +15,7 @@ import (
 
 	"github.com/looplj/axonhub/internal/build"
 	"github.com/looplj/axonhub/internal/log"
+	"github.com/looplj/axonhub/internal/scopes"
 	"github.com/looplj/axonhub/internal/server/assets"
 	"github.com/looplj/axonhub/internal/server/biz"
 )
@@ -23,16 +24,37 @@ type SystemHandlersParams struct {
 	fx.In
 
 	SystemService *biz.SystemService
+	UpdateService *biz.UpdateService
 }
 
 func NewSystemHandlers(params SystemHandlersParams) *SystemHandlers {
 	return &SystemHandlers{
 		SystemService: params.SystemService,
+		UpdateService: params.UpdateService,
 	}
 }
 
 type SystemHandlers struct {
 	SystemService *biz.SystemService
+	UpdateService *biz.UpdateService
+}
+
+type SystemUpdateResponse struct {
+	Success     bool   `json:"success"`
+	Message     string `json:"message"`
+	NeedRestart bool   `json:"needRestart"`
+}
+
+type InstallUpdateRequest struct {
+	IncludeBeta bool `json:"includeBeta"`
+}
+
+type RollbackRequest struct {
+	Version string `json:"version" binding:"required"`
+}
+
+type RollbackVersionsResponse struct {
+	Versions []biz.RollbackVersion `json:"versions"`
 }
 
 // SystemStatusResponse 系统状态响应.
@@ -97,6 +119,121 @@ func (h *SystemHandlers) Health(c *gin.Context) {
 		Version:   build.Version,
 		Build:     buildInfo,
 		Uptime:    buildInfo.Uptime,
+	})
+}
+
+// InstallUpdate downloads, verifies, and installs the newest eligible release.
+func (h *SystemHandlers) InstallUpdate(c *gin.Context) {
+	ctx := c.Request.Context()
+	if !scopes.UserHasScope(ctx, scopes.ScopeWriteSettings) {
+		JSONError(c, http.StatusForbidden, errors.New("permission denied"))
+		return
+	}
+
+	var request InstallUpdateRequest
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&request); err != nil {
+			JSONError(c, http.StatusBadRequest, errors.New("invalid update request"))
+			return
+		}
+	}
+
+	result, err := h.SystemService.CheckForUpdate(ctx, request.IncludeBeta)
+	if err != nil {
+		JSONError(c, http.StatusBadGateway, fmt.Errorf("check for update: %w", err))
+		return
+	}
+	if !result.HasUpdate {
+		JSONError(c, http.StatusConflict, biz.ErrNoUpdateAvailable)
+		return
+	}
+
+	if err := h.UpdateService.InstallVersion(ctx, result.LatestVersion); err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, biz.ErrUpdateInProgress) || errors.Is(err, biz.ErrUpdateUnsupported) {
+			status = http.StatusConflict
+		}
+		JSONError(c, status, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, SystemUpdateResponse{
+		Success:     true,
+		Message:     "Update installed successfully",
+		NeedRestart: true,
+	})
+}
+
+// GetRollbackVersions returns recent releases eligible for rollback.
+func (h *SystemHandlers) GetRollbackVersions(c *gin.Context) {
+	if !scopes.UserHasScope(c.Request.Context(), scopes.ScopeWriteSettings) {
+		JSONError(c, http.StatusForbidden, errors.New("permission denied"))
+		return
+	}
+
+	versions, err := h.UpdateService.ListRollbackVersions(c.Request.Context())
+	if err != nil {
+		status := http.StatusBadGateway
+		if errors.Is(err, biz.ErrUpdateUnsupported) {
+			status = http.StatusConflict
+		}
+		JSONError(c, status, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, RollbackVersionsResponse{Versions: versions})
+}
+
+// Rollback installs an older release selected from the server-provided history.
+func (h *SystemHandlers) Rollback(c *gin.Context) {
+	if !scopes.UserHasScope(c.Request.Context(), scopes.ScopeWriteSettings) {
+		JSONError(c, http.StatusForbidden, errors.New("permission denied"))
+		return
+	}
+
+	var request RollbackRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		JSONError(c, http.StatusBadRequest, errors.New("invalid rollback request"))
+		return
+	}
+	if err := h.UpdateService.RollbackToVersion(c.Request.Context(), request.Version); err != nil {
+		status := http.StatusInternalServerError
+		switch {
+		case errors.Is(err, biz.ErrRollbackVersionNotAllowed):
+			status = http.StatusBadRequest
+		case errors.Is(err, biz.ErrUpdateInProgress), errors.Is(err, biz.ErrUpdateUnsupported):
+			status = http.StatusConflict
+		}
+		JSONError(c, status, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, SystemUpdateResponse{
+		Success:     true,
+		Message:     "Rollback installed successfully",
+		NeedRestart: true,
+	})
+}
+
+// Restart exits after the response so the process supervisor can restart AxonHub.
+func (h *SystemHandlers) Restart(c *gin.Context) {
+	if !scopes.UserHasScope(c.Request.Context(), scopes.ScopeWriteSettings) {
+		JSONError(c, http.StatusForbidden, errors.New("permission denied"))
+		return
+	}
+	if !h.UpdateService.Supported() {
+		JSONError(c, http.StatusConflict, biz.ErrUpdateUnsupported)
+		return
+	}
+
+	if err := h.UpdateService.RestartAsync(); err != nil {
+		JSONError(c, http.StatusConflict, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, SystemUpdateResponse{
+		Success: true,
+		Message: "AxonHub is restarting",
 	})
 }
 
