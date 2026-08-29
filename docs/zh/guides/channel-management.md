@@ -73,6 +73,8 @@
 
 开启后，AxonHub 会补齐缺失的 Codex 原生 Responses 默认值，包括 `service_tier: priority`，但不会覆盖调用方已经显式传入的值，也不会改变图像请求。若上游需要完整保留调用方原始 Responses 语义，请保持关闭。
 
+无论该选项是否开启，显式传入的 `service_tier: ultrafast` 都会保留。OpenAI 目前只向获批的 GPT-5.6 Sol 客户开放 Ultrafast；账户不支持时，AxonHub 会原样返回上游错误。
+
 ## 模型重命名
 
 AxonHub 在渠道层面提供多种模型重命名和别名机制。当请求到达时，渠道按以下优先级链解析请求模型到实际上游模型：

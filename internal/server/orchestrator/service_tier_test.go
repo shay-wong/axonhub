@@ -104,6 +104,18 @@ func TestRequestPricingOverrideFromHTTPRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "uses Codex ultrafast request because response tier is not authoritative",
+			req: &httpclient.Request{
+				APIFormat: string(llm.APIFormatOpenAIResponse),
+				Body:      []byte(`{"service_tier":"ultrafast"}`),
+			},
+			channelType: channel.TypeCodex,
+			want: requestPricingOverride{
+				ServiceTier: llm.ServiceTierUltrafast,
+				Policy:      biz.RequestPricingOverrideWhenAppliedDefault,
+			},
+		},
+		{
 			name: "does not override public OpenAI applied tier",
 			req: &httpclient.Request{
 				APIFormat: string(llm.APIFormatOpenAIResponse),
@@ -163,6 +175,14 @@ func TestSpeedModeFromHTTPRequest(t *testing.T) {
 				Body:      []byte(`{"speed":"fast"}`),
 			},
 			want: "fast",
+		},
+		{
+			name: "maps OpenAI ultrafast service tier",
+			req: &httpclient.Request{
+				APIFormat: string(llm.APIFormatOpenAIResponse),
+				Body:      []byte(`{"service_tier":"ultrafast"}`),
+			},
+			want: "ultrafast",
 		},
 		{
 			name: "does not mix flex service tier into speed mode",

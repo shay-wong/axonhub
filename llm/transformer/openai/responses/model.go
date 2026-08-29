@@ -934,7 +934,7 @@ type Response struct {
 	SafetyIdentifier *string `json:"safety_identifier,omitempty"`
 
 	// Specifies the processing type used for serving the request.
-	// Any of "auto", "default", "flex", "scale", "priority".
+	// Any of "auto", "default", "flex", "scale", "priority", "ultrafast".
 	ServiceTier *string `json:"service_tier,omitempty"`
 
 	// Configuration options for a text response from the model.

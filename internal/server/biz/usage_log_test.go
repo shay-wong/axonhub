@@ -218,6 +218,8 @@ func TestUsageLogService_CreateUsageLog_WithPriceReferenceIDAndServiceTier(t *te
 
 func TestEffectiveServiceTier(t *testing.T) {
 	require.Equal(t, "priority", effectiveServiceTier("priority", RequestPricingOverrideWhenAppliedDefault, "priority", "default"))
+	require.Equal(t, "ultrafast", effectiveServiceTier("ultrafast", RequestPricingOverrideWhenAppliedDefault, "ultrafast", "default"))
+	require.Equal(t, "ultrafast", effectiveServiceTier("ultrafast", RequestPricingOverrideWhenAppliedDefault, "ultrafast", "ultrafast"))
 	require.Equal(t, "priority", effectiveServiceTier("priority", RequestPricingOverrideWhenAppliedDefault, "priority", ""))
 	require.Equal(t, "flex", effectiveServiceTier("priority", RequestPricingOverrideWhenAppliedDefault, "priority", "flex"))
 	require.Equal(t, "priority", effectiveServiceTier("priority", RequestPricingOverrideAlways, "", "standard"))

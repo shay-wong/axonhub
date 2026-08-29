@@ -99,6 +99,12 @@ Configure pricing for each channel and model in the admin dashboard:
    - Cache read price (`prompt_cached_tokens`)
    - Cache write price (`prompt_write_cached_tokens`)
 
+#### Service Tier Prices
+
+You can add exact service-tier price overrides such as `priority` and `ultrafast`. AxonHub records the tier requested by Codex and the tier actually reported by OpenAI, then uses the applied tier for billing. For Codex responses that omit the applied tier or report `default`, the explicit `priority` or `ultrafast` request remains the billing fallback. Without an explicit `ultrafast` price, AxonHub charges twice the effective Fast (`priority`) price; if Fast also has no override, this is twice the effective base price. Other unconfigured tiers use the base model price.
+
+OpenAI currently limits `ultrafast` to approved GPT-5.6 Sol customers. AxonHub forwards the explicit tier but does not bypass upstream access controls.
+
 #### Cache Write Variants (Anthropic)
 
 For Anthropic models, you can configure TTL variants for cache writes:

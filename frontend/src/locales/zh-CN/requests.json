@@ -57,6 +57,7 @@
   "requests.stream.nonStreaming": "非流式",
   "requests.passThrough.applied": "已命中",
   "requests.serviceTier.fast": "Fast",
+  "requests.serviceTier.ultrafast": "Ultrafast",
   "requests.source.api": "API",
   "requests.source.playground": "测试场",
   "requests.source.test": "测试",

@@ -75,6 +75,8 @@ sk-key-3
 
 When enabled, AxonHub fills missing Codex-native Responses defaults, including `service_tier: priority`, while preserving values explicitly sent by the caller. Image requests are not changed. Leave the option disabled when the upstream should receive the caller's original Responses semantics unchanged.
 
+An explicit `service_tier: ultrafast` is preserved whether this option is enabled or disabled. OpenAI currently restricts Ultrafast processing to approved GPT-5.6 Sol customers, so unsupported accounts receive the upstream error unchanged.
+
 ## Model Renaming
 
 AxonHub provides multiple mechanisms to rename or alias models at the channel level. When a request arrives, the channel resolves the request model to the actual upstream model through the following priority chain:

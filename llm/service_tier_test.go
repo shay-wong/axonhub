@@ -8,6 +8,7 @@ import (
 
 func TestCanonicalServiceTier(t *testing.T) {
 	require.Equal(t, ServiceTierPriority, CanonicalServiceTier(" Priority "))
+	require.Equal(t, ServiceTierUltrafast, CanonicalServiceTier(" ULTRAFAST "))
 	require.Equal(t, "provider-specific", CanonicalServiceTier("provider-specific"))
 }
 

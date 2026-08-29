@@ -78,9 +78,9 @@ func TestInboundTransformerStreamPreservesServiceTier(t *testing.T) {
 }
 
 func TestInboundTransformerResponsePreservesServiceTier(t *testing.T) {
-	response := convertToResponsesAPIResponse(&llm.Response{ServiceTier: "priority"})
+	response := convertToResponsesAPIResponse(&llm.Response{ServiceTier: "ultrafast"})
 	require.NotNil(t, response.ServiceTier)
-	require.Equal(t, "priority", *response.ServiceTier)
+	require.Equal(t, "ultrafast", *response.ServiceTier)
 }
 
 func TestResponsesOutboundServiceTierStaysWithinOpenAIFormats(t *testing.T) {

@@ -971,8 +971,10 @@ func TestComputeUsageCostForServiceTier(t *testing.T) {
 			{
 				ItemCode: objects.PriceItemCodeCompletion,
 				Pricing: objects.Pricing{
-					Mode:         objects.PricingModeUsagePerUnit,
-					UsagePerUnit: mustDecimalPtr("30"),
+					Mode: objects.PricingModeTiered,
+					UsageTiered: &objects.TieredPricing{
+						Tiers: []objects.PriceTier{{PricePerUnit: decimal.NewFromInt(30)}},
+					},
 				},
 			},
 		},
@@ -994,11 +996,36 @@ func TestComputeUsageCostForServiceTier(t *testing.T) {
 
 	_, standardTotal := ComputeUsageCostForServiceTier(usage, price, "")
 	_, priorityTotal := ComputeUsageCostForServiceTier(usage, price, "priority")
+	ultrafastItems, ultrafastTotal := ComputeUsageCostForServiceTier(usage, price, "ultrafast")
 	_, unknownTotal := ComputeUsageCostForServiceTier(usage, price, "unknown")
 
 	require.True(t, decimal.NewFromInt(35).Equal(standardTotal))
 	require.True(t, decimal.NewFromInt(40).Equal(priorityTotal))
+	require.True(t, decimal.NewFromInt(80).Equal(ultrafastTotal))
+	require.True(t, decimal.NewFromInt(20).Equal(ultrafastItems[0].Subtotal))
+	require.True(t, decimal.NewFromInt(60).Equal(ultrafastItems[1].Subtotal))
+	require.True(t, decimal.NewFromInt(60).Equal(ultrafastItems[1].TierBreakdown[0].Subtotal))
 	require.True(t, standardTotal.Equal(unknownTotal))
+
+	withoutFastPrice := price
+	withoutFastPrice.ServiceTierPrices = nil
+	_, ultrafastWithoutFastTotal := ComputeUsageCostForServiceTier(usage, withoutFastPrice, "ultrafast")
+	require.True(t, decimal.NewFromInt(70).Equal(ultrafastWithoutFastTotal))
+
+	price.ServiceTierPrices = append(price.ServiceTierPrices, objects.ServiceTierPrice{
+		ServiceTier: "ultrafast",
+		Items: []objects.ModelPriceItem{
+			{
+				ItemCode: objects.PriceItemCodeUsage,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: mustDecimalPtr("20"),
+				},
+			},
+		},
+	})
+	_, explicitUltrafastTotal := ComputeUsageCostForServiceTier(usage, price, "ultrafast")
+	require.True(t, decimal.NewFromInt(50).Equal(explicitUltrafastTotal))
 }
 
 func TestComputeUsageCostForServiceTierWithSchedule(t *testing.T) {
@@ -1055,7 +1082,9 @@ func TestComputeUsageCostForServiceTierWithSchedule(t *testing.T) {
 
 	_, standardTotal := ComputeUsageCostForServiceTier(usage, price, "", now)
 	_, priorityTotal := ComputeUsageCostForServiceTier(usage, price, "priority", now)
+	_, ultrafastTotal := ComputeUsageCostForServiceTier(usage, price, "ultrafast", now)
 
 	require.True(t, decimal.NewFromInt(5).Equal(standardTotal))
 	require.True(t, decimal.NewFromInt(13).Equal(priorityTotal))
+	require.True(t, decimal.NewFromInt(26).Equal(ultrafastTotal))
 }

@@ -146,9 +146,24 @@ func ComputeUsageCost(usage *llm.Usage, price objects.ModelPrice, now time.Time)
 }
 
 // ComputeUsageCostForServiceTier calculates usage cost using an exact service-tier price match.
-// Missing and unknown tiers use the model's effective base price items.
+// Ultrafast falls back to twice the effective Fast price; other missing and unknown tiers use the base price.
 func ComputeUsageCostForServiceTier(usage *llm.Usage, price objects.ModelPrice, serviceTier string, now ...time.Time) ([]objects.CostItem, decimal.Decimal) {
 	effectiveItems := effectivePriceItems(price, resolveCostTime(now...))
+	serviceTier = llm.CanonicalServiceTier(serviceTier)
+	if serviceTier == llm.ServiceTierUltrafast && !slices.ContainsFunc(price.ServiceTierPrices, func(tierPrice objects.ServiceTierPrice) bool {
+		return llm.CanonicalServiceTier(tierPrice.ServiceTier) == llm.ServiceTierUltrafast
+	}) {
+		items, total := computeUsageCostWithItems(usage, price.ItemsForServiceTierFromItems(llm.ServiceTierPriority, effectiveItems))
+		multiplier := decimal.NewFromInt(2)
+		for idx := range items {
+			items[idx].Subtotal = items[idx].Subtotal.Mul(multiplier)
+			for tierIdx := range items[idx].TierBreakdown {
+				items[idx].TierBreakdown[tierIdx].Subtotal = items[idx].TierBreakdown[tierIdx].Subtotal.Mul(multiplier)
+			}
+		}
+
+		return items, total.Mul(multiplier)
+	}
 
 	return computeUsageCostWithItems(usage, price.ItemsForServiceTierFromItems(serviceTier, effectiveItems))
 }

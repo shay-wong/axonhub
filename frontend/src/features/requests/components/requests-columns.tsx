@@ -244,6 +244,15 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
           );
         }
 
+        if (speedMode === 'ultrafast') {
+          return (
+            <Badge className='border-cyan-200 bg-cyan-100 text-cyan-800 dark:border-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-300'>
+              <Zap className='h-3 w-3' />
+              {t('requests.serviceTier.ultrafast')}
+            </Badge>
+          );
+        }
+
         return <Badge variant='outline'>{speedMode}</Badge>;
       },
     },

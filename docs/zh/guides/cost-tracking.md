@@ -99,6 +99,12 @@ AxonHub 支持三种定价模式：
    - 缓存读取价格 (`prompt_cached_tokens`)
    - 缓存写入价格 (`prompt_write_cached_tokens`)
 
+#### 服务档位价格
+
+可以为 `priority`、`ultrafast` 等服务档位分别添加精确价格。AxonHub 会同时记录 Codex 请求指定的档位和 OpenAI 实际返回的档位，并优先按实际档位计费；如果 Codex 响应未返回档位或返回 `default`，则显式请求的 `priority` 或 `ultrafast` 仍作为计费兜底。未配置独立 `ultrafast` 价格时，AxonHub 按当前有效 Fast（`priority`）价格的 2 倍计费；Fast 也未配置独立价格时，即为当前有效基础价格的 2 倍。其他未配置档位仍使用模型基础价格。
+
+OpenAI 目前只向获批的 GPT-5.6 Sol 客户开放 `ultrafast`。AxonHub 会透传显式档位，但不会绕过上游权限控制。
+
 #### 缓存写入变体（Anthropic）
 
 对于 Anthropic 模型，可以配置缓存写入的 TTL 变体：

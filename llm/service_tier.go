@@ -7,6 +7,8 @@ const (
 	ServiceTierDefault = "default"
 	// ServiceTierPriority is the OpenAI/Codex wire tier used by Codex fast mode.
 	ServiceTierPriority = "priority"
+	// ServiceTierUltrafast is the OpenAI/Codex wire tier used by Ultrafast mode.
+	ServiceTierUltrafast = "ultrafast"
 )
 
 // CanonicalServiceTier normalizes provider tier values for storage and price matching.

@@ -57,6 +57,7 @@
   "requests.stream.nonStreaming": "Non-streaming",
   "requests.passThrough.applied": "Applied",
   "requests.serviceTier.fast": "Fast",
+  "requests.serviceTier.ultrafast": "Ultrafast",
   "requests.source.api": "API",
   "requests.source.playground": "Playground",
   "requests.source.test": "Test",

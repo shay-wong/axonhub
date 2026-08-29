@@ -792,23 +792,24 @@ func TestCodexOutbound_DoesNotInjectCLIInstructions(t *testing.T) {
 	assert.NotContains(t, body, "service_tier")
 }
 
-func TestCodexOutbound_PreservesExplicitPriorityWithoutStylePreset(t *testing.T) {
-	ctx := context.Background()
-	outbound := newTestCodexOutbound(t)
-	serviceTier := "priority"
+func TestCodexOutbound_PreservesExplicitServiceTierWithoutStylePreset(t *testing.T) {
+	for _, serviceTier := range []string{"priority", "ultrafast"} {
+		t.Run(serviceTier, func(t *testing.T) {
+			outbound := newTestCodexOutbound(t)
+			hreq, err := outbound.TransformRequest(t.Context(), &llm.Request{
+				Model: "gpt-5.6-sol",
+				Messages: []llm.Message{{
+					Role:    "user",
+					Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
+				}},
+				ServiceTier: &serviceTier,
+			})
+			require.NoError(t, err)
 
-	hreq, err := outbound.TransformRequest(ctx, &llm.Request{
-		Model: "gpt-5-codex",
-		Messages: []llm.Message{{
-			Role:    "user",
-			Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
-		}},
-		ServiceTier: &serviceTier,
-	})
-	require.NoError(t, err)
-
-	body := decodeCodexRequestBody(t, hreq)
-	assert.Equal(t, "priority", body["service_tier"])
+			body := decodeCodexRequestBody(t, hreq)
+			assert.Equal(t, serviceTier, body["service_tier"])
+		})
+	}
 }
 
 func TestCodexOutbound_PreservesMinimalCompatTransforms(t *testing.T) {
@@ -1074,10 +1075,10 @@ func TestCodexOutbound_PreservesExplicitCodexStyleResponsesValues(t *testing.T) 
 	promptCacheKey := "caller-cache-key"
 	toolChoice := "required"
 	verbosity := "high"
-	serviceTier := "flex"
+	serviceTier := "ultrafast"
 
 	hreq, err := outbound.TransformRequest(ctx, &llm.Request{
-		Model: "gpt-5-codex",
+		Model: "gpt-5.6-sol",
 		Messages: []llm.Message{{
 			Role:    "user",
 			Content: llm.MessageContent{Content: lo.ToPtr("Hello")},

@@ -72,9 +72,10 @@ func requestPricingOverrideFromJSONBody(body []byte, apiFormat string, channelTy
 
 	if channelType == channel.TypeCodex && isOpenAIServiceTierFormat(apiFormat) {
 		serviceTier, ok := serviceTierFromJSONBody(body)
-		if ok && llm.CanonicalServiceTier(serviceTier) == llm.ServiceTierPriority {
+		serviceTier = llm.CanonicalServiceTier(serviceTier)
+		if ok && (serviceTier == llm.ServiceTierPriority || serviceTier == llm.ServiceTierUltrafast) {
 			return requestPricingOverride{
-				ServiceTier: llm.ServiceTierPriority,
+				ServiceTier: serviceTier,
 				Policy:      biz.RequestPricingOverrideWhenAppliedDefault,
 			}
 		}
@@ -102,8 +103,13 @@ func speedModeFromJSONBody(body []byte, apiFormat string) string {
 
 	if isOpenAIServiceTierFormat(apiFormat) {
 		serviceTier, ok := serviceTierFromJSONBody(body)
-		if ok && llm.CanonicalServiceTier(serviceTier) == llm.ServiceTierPriority {
-			return "fast"
+		if ok {
+			switch llm.CanonicalServiceTier(serviceTier) {
+			case llm.ServiceTierPriority:
+				return "fast"
+			case llm.ServiceTierUltrafast:
+				return "ultrafast"
+			}
 		}
 	}
 

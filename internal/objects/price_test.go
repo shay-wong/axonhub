@@ -545,6 +545,7 @@ func TestModelPrice_ItemsForServiceTier(t *testing.T) {
 	baseCompletion := decimal.NewFromInt(30)
 	fastInput := decimal.NewFromInt(10)
 	fastCache := decimal.NewFromInt(1)
+	ultrafastInput := decimal.NewFromInt(20)
 
 	price := ModelPrice{
 		Items: []ModelPriceItem{
@@ -583,6 +584,18 @@ func TestModelPrice_ItemsForServiceTier(t *testing.T) {
 					},
 				},
 			},
+			{
+				ServiceTier: "ultrafast",
+				Items: []ModelPriceItem{
+					{
+						ItemCode: PriceItemCodeUsage,
+						Pricing: Pricing{
+							Mode:         PricingModeUsagePerUnit,
+							UsagePerUnit: &ultrafastInput,
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -595,6 +608,8 @@ func TestModelPrice_ItemsForServiceTier(t *testing.T) {
 	require.True(t, baseCompletion.Equal(*priorityItems[1].Pricing.UsagePerUnit))
 	require.Equal(t, PriceItemCodePromptCachedToken, priorityItems[2].ItemCode)
 	require.True(t, fastCache.Equal(*priorityItems[2].Pricing.UsagePerUnit))
+	ultrafastItems := price.ItemsForServiceTier("ultrafast")
+	require.True(t, ultrafastInput.Equal(*ultrafastItems[0].Pricing.UsagePerUnit))
 	require.Equal(t, price.Items, price.ItemsForServiceTier(""))
 	require.Equal(t, price.Items, price.ItemsForServiceTier("default"))
 	require.Equal(t, price.Items, price.ItemsForServiceTier("unknown"))
