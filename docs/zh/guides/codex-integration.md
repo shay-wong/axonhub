@@ -8,6 +8,7 @@ AxonHub 可以作为 OpenAI 接口的直接替代方案，使 Codex 能够通过
 ### 关键点
 - AxonHub 支持多种 AI 协议/格式转换。你可以配置多个上游渠道（provider/channel），对外提供统一的 OpenAI 兼容接口，供 Codex 使用。
 - 你可以开启 `server.trace.codex_trace_enabled`（使用 `Session_id`）或配置 `server.trace.extra_trace_headers` 将 Codex 同一次对话的请求聚合到同一条 Trace。
+- Codex App 使用缺少 `call_id` 的 `automation_update` 输出启动定时任务时，AxonHub 也能兼容处理。
 
 ### 前置要求
 - 可访问的 AxonHub 实例。
@@ -83,6 +84,7 @@ AxonHub 的模型配置文件支持将请求模型映射到具体提供商模型
 ### 常见问题
 - **Codex 认证失败**：确保在启动 Codex 的同一 shell 会话中设置了 `AXONHUB_API_KEY`。
 - **模型结果异常**：检查 AxonHub 控制台中当前启用的配置文件映射，必要时禁用或调整规则。
+- **定时任务提示 `function_call_output` 缺少 `call_id`**：升级到包含 Codex 定时任务启动项兼容修复的 AxonHub 版本。
 
 ### 相关文档
 - [追踪指南](tracing.md)

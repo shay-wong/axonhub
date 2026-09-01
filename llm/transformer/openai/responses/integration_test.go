@@ -84,3 +84,38 @@ func TestTransformRequest_Integration(t *testing.T) {
 		})
 	}
 }
+
+func TestTransformRequest_NormalizesCodexAutomationBootstrap(t *testing.T) {
+	inbound := NewInboundTransformer()
+	outbound, err := NewOutboundTransformer("https://api.openai.com", "test-api-key")
+	require.NoError(t, err)
+
+	llmReq, err := inbound.TransformRequest(t.Context(), &httpclient.Request{
+		Headers: http.Header{"Content-Type": []string{"application/json"}},
+		Body: []byte(`{
+			"model": "gpt-5.6-sol",
+			"store": false,
+			"input": [{
+				"type": "function_call_output",
+				"id": "fco_automation_bootstrap",
+				"name": "automation_update",
+				"output": "Automation: Daily Skills maintenance"
+			}]
+		}`),
+	})
+	require.NoError(t, err)
+	require.Len(t, llmReq.Messages, 1)
+	require.Equal(t, "user", llmReq.Messages[0].Role)
+	require.Equal(t, "Automation: Daily Skills maintenance", *llmReq.Messages[0].Content.Content)
+
+	httpReq, err := outbound.TransformRequest(t.Context(), llmReq)
+	require.NoError(t, err)
+
+	var got Request
+	require.NoError(t, json.Unmarshal(httpReq.Body, &got))
+	require.Len(t, got.Input.Items, 1)
+	require.Equal(t, "message", got.Input.Items[0].Type)
+	require.Equal(t, "user", got.Input.Items[0].Role)
+	require.Len(t, got.Input.Items[0].Content.Items, 1)
+	require.Equal(t, "Automation: Daily Skills maintenance", *got.Input.Items[0].Content.Items[0].Text)
+}

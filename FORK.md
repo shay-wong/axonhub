@@ -347,6 +347,18 @@ git show --remerge-diff <merge-commit>
 - 上游吸收条件：产品能力长期保留；仅在 fork 不再维护自有 Release，或 upstream 提供等价的二进制安装、发布资产和回归测试时重新评估。
 - 验证：`go test ./internal/server/biz -run '^TestUpdate'`；`go test ./internal/server/api -run '^TestSystemUpdateHandlersRequireWriteSettings$'`；`cd frontend && node --test src/features/system/data/update-contract.test.mjs`；检查 fork release 同时包含平台 ZIP、`checksums.txt` 和 Docker tag。
 
+### U21 Codex 定时任务启动项兼容
+
+- 生命周期：`等待上游吸收`
+- 原始意图：Codex App 以缺少 `call_id` 的 `automation_update` function output 启动定时任务时，不能让所有 Responses 上游以 400 拒绝请求。
+- 必须保持：仅将缺少 `call_id` 且名称为 `automation_update` 的启动项转换为普通 user message；带 `call_id` 的真实工具结果继续使用既有工具续链语义；转换后发往上游的请求不再包含无锚点的 `function_call_output`。
+- 代码锚点：`llm/transformer/openai/responses/inbound.go`、`llm/transformer/openai/responses/integration_test.go`。
+- 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
+- 提交锚点：本次修复可用 `git log -S'Codex cron bootstraps' -- llm/transformer/openai/responses/inbound.go` 定位。
+- 合并审核：截至待合入 upstream `c9ea3207`，上游仍把该项转换为缺少 `call_id` 的 tool message。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
+- 上游吸收条件：upstream 能识别 Codex 定时任务启动项，并有真实请求形状的 inbound-to-outbound 回归测试。
+- 验证：`cd llm && go test ./transformer/openai/responses -run '^TestTransformRequest_NormalizesCodexAutomationBootstrap$' -count=1`。
+
 ## Upstream Merge 审核清单
 
 1. 确认 worktree、当前分支、upstream 默认分支和将要合入的精确 SHA。

@@ -628,6 +628,13 @@ func convertItemToMessage(item *Item) (*llm.Message, error) {
 		if item.Output == nil {
 			return nil, fmt.Errorf("%w: %s", transformer.ErrInvalidRequest, "function_call_output item must have non-nil Output")
 		}
+		// Codex cron bootstraps use automation_update output as the first prompt.
+		if item.CallID == "" && item.Name == "automation_update" {
+			return &llm.Message{
+				Role:    "user",
+				Content: convertToMessageContent(*item.Output),
+			}, nil
+		}
 		// Function call output - convert to tool message
 		msg := &llm.Message{
 			Role:       "tool",

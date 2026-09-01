@@ -8,6 +8,7 @@ AxonHub can act as a drop-in replacement for OpenAI endpoints, letting Codex con
 ### Key Points
 - AxonHub performs AI protocol/format transformation. You can configure multiple upstream channels (providers) and expose a single OpenAI-compatible interface for Codex.
 - You can aggregate Codex requests from the same conversation by enabling `server.trace.codex_trace_enabled` (uses `Session_id`) or adding extra headers via `server.trace.extra_trace_headers`.
+- Codex scheduled automations are supported even when the app starts them with an `automation_update` output that has no `call_id`.
 
 ### Prerequisites
 - AxonHub instance reachable from your development machine.
@@ -83,6 +84,7 @@ AxonHub model profiles remap incoming model names to provider-specific equivalen
 ### Troubleshooting
 - **Codex reports authentication errors**: ensure `AXONHUB_API_KEY` is exported in the same shell session that launches Codex.
 - **Unexpected model responses**: review active profile mappings in the AxonHub console; disable or adjust rules if necessary.
+- **Scheduled automation reports that `function_call_output` requires `call_id`**: upgrade AxonHub to a build containing the Codex automation bootstrap compatibility fix.
 
 ---
 
