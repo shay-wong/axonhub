@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   collectPriceFormValidationIssues,
   mapPriceFormDataToSaveInput,
+  mapSaveInputsToFormData,
   mapServerPricesToFormData,
   replaceCatalogServiceTierPrices,
 } from './model-price-form.ts';
@@ -138,6 +139,29 @@ test('preserves service-tier prices through query, form, and mutation mapping', 
       },
     },
   ]);
+});
+
+test('preserves service-tier prices imported from upstream JSON', () => {
+  const imported = [
+    {
+      modelId: 'gpt-5.3-codex',
+      price: {
+        items: [usageItem('prompt_tokens', ' 1 ')],
+        serviceTierPrices: [
+          {
+            serviceTier: ' Ultrafast ',
+            items: [usageItem('completion_tokens', ' 8 ')],
+          },
+        ],
+      },
+    },
+  ];
+
+  const formData = mapSaveInputsToFormData(imported);
+  assert.equal(formData.prices[0].price.serviceTierPrices[0].items[0].pricing.usagePerUnit, ' 8 ');
+  assert.equal(mapPriceFormDataToSaveInput(formData)[0].price.items[0].pricing.usagePerUnit, '1');
+  assert.equal(mapPriceFormDataToSaveInput(formData)[0].price.serviceTierPrices[0].serviceTier, 'ultrafast');
+  assert.equal(mapPriceFormDataToSaveInput(formData)[0].price.serviceTierPrices[0].items[0].pricing.usagePerUnit, '8');
 });
 
 test('preserves scheduled prompt cache variants through form and mutation mapping', () => {

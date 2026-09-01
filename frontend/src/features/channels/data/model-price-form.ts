@@ -70,6 +70,11 @@ function decimalToFormValue(value: string | number | null | undefined): string {
   return value == null ? '' : String(value);
 }
 
+function trimPriceValue(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
+
 function mapPricingToForm(pricing: ModelPriceItem['pricing']): PriceFormPricing {
   return {
     mode: pricing.mode,
@@ -101,13 +106,13 @@ function mapItemToForm(item: ModelPriceItem): PriceFormItem {
 function mapPricingToInput(pricing: PriceFormPricing): ModelPriceItem['pricing'] {
   return {
     mode: pricing.mode,
-    flatFee: pricing.flatFee || null,
-    usagePerUnit: pricing.usagePerUnit || null,
+    flatFee: trimPriceValue(pricing.flatFee),
+    usagePerUnit: trimPriceValue(pricing.usagePerUnit),
     usageTiered: pricing.usageTiered
       ? {
           tiers: pricing.usageTiered.tiers.map((tier) => ({
             upTo: tier.upTo,
-            pricePerUnit: tier.pricePerUnit,
+            pricePerUnit: tier.pricePerUnit.trim(),
           })),
         }
       : null,
@@ -134,33 +139,46 @@ function canonicalizeServiceTier(serviceTier: string): string {
   return serviceTier.trim().toLowerCase();
 }
 
+function mapModelPriceToFormData(price: ChannelModelPrice['price']): PriceFormPrice {
+  return {
+    items: price.items.map(mapItemToForm),
+    serviceTierPrices:
+      price.serviceTierPrices?.map((serviceTierPrice) => ({
+        serviceTier: serviceTierPrice.serviceTier,
+        items: serviceTierPrice.items.map(mapItemToForm),
+      })) || [],
+    schedule: price.schedule
+      ? {
+          timezone: price.schedule.timezone,
+          overrides: price.schedule.overrides.map((override) => ({
+            name: override.name,
+            priority: override.priority,
+            when: {
+              dailyTime: override.when.dailyTime || null,
+              weekdays: override.when.weekdays || null,
+              dateRange: override.when.dateRange || null,
+            },
+            items: override.items.map(mapItemToForm),
+          })),
+        }
+      : null,
+  };
+}
+
 export function mapServerPricesToFormData(currentPrices: readonly ChannelModelPrice[]): PriceFormData {
   return {
     prices: currentPrices.map((price) => ({
       modelId: price.modelID,
-      price: {
-        items: price.price.items.map(mapItemToForm),
-        serviceTierPrices:
-          price.price.serviceTierPrices?.map((serviceTierPrice) => ({
-            serviceTier: serviceTierPrice.serviceTier,
-            items: serviceTierPrice.items.map(mapItemToForm),
-          })) || [],
-        schedule: price.price.schedule
-          ? {
-              timezone: price.price.schedule.timezone,
-              overrides: price.price.schedule.overrides.map((override) => ({
-                name: override.name,
-                priority: override.priority,
-                when: {
-                  dailyTime: override.when.dailyTime || null,
-                  weekdays: override.when.weekdays || null,
-                  dateRange: override.when.dateRange || null,
-                },
-                items: override.items.map(mapItemToForm),
-              })),
-            }
-          : null,
-      },
+      price: mapModelPriceToFormData(price.price),
+    })),
+  };
+}
+
+export function mapSaveInputsToFormData(inputs: readonly SaveChannelModelPriceInput[]): PriceFormData {
+  return {
+    prices: inputs.map((input) => ({
+      modelId: input.modelId,
+      price: mapModelPriceToFormData(input.price),
     })),
   };
 }

@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useFieldArray, useForm, useWatch, type Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { IconPlus, IconTrash, IconCopy } from '@tabler/icons-react';
+import { IconCopy, IconDownload, IconPlus, IconTrash, IconUpload } from '@tabler/icons-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -26,10 +26,12 @@ import { buildProviderModelPrice } from '../data/model-price-catalog';
 import {
   collectPriceFormValidationIssues,
   mapPriceFormDataToSaveInput,
+  mapSaveInputsToFormData,
   mapServerPricesToFormData,
   replaceCatalogServiceTierPrices,
   type PriceFormData,
 } from '../data/model-price-form';
+import { saveChannelModelPriceInputSchema, type SaveChannelModelPriceInput } from '../data/schema';
 
 const priceItemCodes = ['prompt_tokens', 'completion_tokens', 'prompt_cached_tokens', 'prompt_write_cached_tokens'] as const;
 const pricingModes = ['flat_fee', 'usage_per_unit', 'usage_tiered', 'usage_volume'] as const;
@@ -625,10 +627,95 @@ export function ChannelsModelPriceDialog() {
     }
   }, [isOpen, currentPrices, reset]);
 
+  const importSessionRef = useRef({ channelId: '', open: false });
+  useEffect(() => {
+    importSessionRef.current = { channelId: currentRow?.id ?? '', open: isOpen };
+  }, [currentRow, isOpen]);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const handleClose = useCallback(() => {
+    importSessionRef.current = { channelId: '', open: false };
     setOpen(null);
     reset();
   }, [setOpen, reset]);
+
+  const handleExport = useCallback(() => {
+    if (!currentRow || !currentPrices || currentPrices.length === 0) {
+      toast.error(t('price.export.empty'));
+      return;
+    }
+
+    const payload = currentPrices.map((price) => ({ modelId: price.modelID, price: price.price }));
+    const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    const safeName = currentRow.name.trim().replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '') || 'channel';
+    anchor.href = url;
+    anchor.download = `${safeName}-model-prices.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    toast.success(t('price.export.success', { name: currentRow.name }));
+  }, [currentPrices, currentRow, t]);
+
+  const handleImportFile = useCallback(
+    async (file: File | undefined) => {
+      if (!file) return;
+
+      const startedSession = importSessionRef.current;
+      if (!startedSession.open || !startedSession.channelId) return;
+      if (file.size > 1024 * 1024) {
+        toast.error(t('price.import.fileTooLarge'));
+        return;
+      }
+
+      let raw: string;
+      try {
+        raw = await file.text();
+      } catch {
+        toast.error(t('price.import.invalidFile'));
+        return;
+      }
+
+      if (importSessionRef.current !== startedSession) return;
+
+      let parsed: SaveChannelModelPriceInput[];
+      try {
+        parsed = z.array(saveChannelModelPriceInputSchema).min(1).parse(JSON.parse(raw));
+      } catch {
+        toast.error(t('price.import.invalidFile'));
+        return;
+      }
+
+      const seen = new Set<string>();
+      for (const price of parsed) {
+        if (seen.has(price.modelId)) {
+          toast.error(t('price.import.duplicateModel', { modelId: price.modelId }));
+          return;
+        }
+        seen.add(price.modelId);
+      }
+
+      const supported = new Set(currentRow?.supportedModels || []);
+      const filtered = parsed.filter((price) => supported.has(price.modelId));
+      const skipped = parsed.length - filtered.length;
+      if (filtered.length === 0) {
+        toast.error(t('price.import.noSupportedModels'));
+        return;
+      }
+
+      reset(mapSaveInputsToFormData(filtered));
+      rowVirtualizer.scrollToIndex(0, { align: 'start' });
+      if (skipped > 0) {
+        toast.success(t('price.import.successSkipped', { count: filtered.length, skipped }));
+      } else {
+        toast.success(t('price.import.success', { count: filtered.length }));
+      }
+    },
+    [currentRow, reset, rowVirtualizer, t]
+  );
 
   const onSubmitError = useCallback(
     (errors: Record<string, any>) => {
@@ -1081,10 +1168,37 @@ export function ChannelsModelPriceDialog() {
             </div>
 
             <DialogFooter className='mt-6 shrink-0 gap-2 sm:justify-between'>
-              <Button type='button' variant='outline' onClick={addPrice}>
-                <IconPlus className='mr-2 h-4 w-4' />
-                {t('price.addPrice')}
-              </Button>
+              <div className='flex flex-wrap items-center gap-2'>
+                <Button type='button' variant='outline' onClick={addPrice}>
+                  <IconPlus className='mr-2 h-4 w-4' />
+                  {t('price.addPrice')}
+                </Button>
+                <Button type='button' variant='outline' onClick={handleExport} disabled={!currentPrices}>
+                  <IconDownload className='mr-2 h-4 w-4' />
+                  {t('price.export.button')}
+                </Button>
+                <Button
+                  type='button'
+                  variant='outline'
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!currentPrices}
+                  title={!currentPrices ? t('price.import.disabledLoading') : undefined}
+                >
+                  <IconUpload className='mr-2 h-4 w-4' />
+                  {t('price.import.button')}
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  className='hidden'
+                  type='file'
+                  accept='.json,application/json'
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    void handleImportFile(file);
+                  }}
+                />
+              </div>
               <div className='flex gap-2'>
                 <Button type='button' variant='ghost' onClick={handleClose}>
                   {t('common.buttons.cancel')}
