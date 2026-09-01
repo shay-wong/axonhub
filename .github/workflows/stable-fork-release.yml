@@ -123,3 +123,33 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_NAME: ${{ needs.create-fork-tag.outputs.release_name }}
         run: gh release edit "$RELEASE_NAME" --draft=false
+
+  notify-telegram:
+    needs: [create-fork-tag, publish-docker, publish-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Send Telegram release notification
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RELEASE_NAME: ${{ needs.create-fork-tag.outputs.release_name }}
+        run: |
+          set -euo pipefail
+
+          message=$(cat <<EOF
+          AxonHub release published
+          Version: ${RELEASE_NAME}
+          Channel: ${GITHUB_REF_NAME}
+          Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_NAME}
+          Workflow: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          EOF
+          )
+
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --url "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${message}"

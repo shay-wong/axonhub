@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次合入源码中的 `internal/build/VERSION` 为开发版本标记 `v1.0.0-beta8`，不是 fork release tag 的 upstream 发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta7-fork.7`；upstream 发布基线仍为 `v1.0.0-beta7`，因此下一个规范化 fork 版本递增为 `v1.0.0-beta7-fork.8`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta7-fork.8`；upstream 发布基线仍为 `v1.0.0-beta7`，因此下一个规范化 fork 版本递增为 `v1.0.0-beta7-fork.9`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -58,12 +58,12 @@ git show --remerge-diff <merge-commit>
 
 - 生命周期：`长期保留`
 - 原始意图：fork 的 release、Docker/Helm 制品、更新检查、问题链接和 fork 自有模型目录增量必须属于当前 fork，不能静默回落到 `looplj/axonhub` 的版本、镜像或额外模型数据。
-- 必须保持：`beta`/`stable` fork 发布通道独立；多架构 manifest 和 Helm 默认镜像属于 fork；版本比较识别 fork 后缀和 upstream prerelease；仓库、release 和 issues URL 可由构建环境覆盖且默认指向 `shay-wong/axonhub`；fork 自有模型增量由后端内嵌 `catalogdata/models.json` 承载，不再依赖浏览器直连仓库目录。
+- 必须保持：`beta`/`stable` fork 发布通道独立；多架构 manifest 和 Helm 默认镜像属于 fork；版本比较识别 fork 后缀和 upstream prerelease；fork tag、二进制 Release 和多架构 Docker 发布全部成功后，通过仓库 Secrets `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` 发送一次非阻塞 Telegram 通知；仓库、release 和 issues URL 可由构建环境覆盖且默认指向 `shay-wong/axonhub`；fork 自有模型增量由后端内嵌 `catalogdata/models.json` 承载，不再依赖浏览器直连仓库目录。
 - 代码锚点：`.github/workflows/stable-fork-release.yml`、`.github/workflows/docker-publish.yml`、`.github/workflows/helm-chart.yml`、`.goreleaser.yml`、`deploy/helm/values.yaml`、`internal/build/info.go`、`internal/server/biz/version.go`、`internal/server/biz/catalog.go`、`internal/server/biz/catalogdata/models.json`、`frontend/src/config/external-urls.ts`。
 - 提交锚点：`fc687607`、`de2aa90a`、`6b147cbb`、`cee45b4b`、`b77f8e5f`、`47ffb508`、`ce626e28`、`923482f8`、`a94eb373`。
-- 合并审核：重点检查 workflow 中 repository owner、tag、`latest` manifest、Chart image、`AXONHUB_UPDATE_CHANNEL`、前端外链和后端内嵌模型增量；不要接受重新硬编码 upstream 仓库或丢失 fork `catalogdata/models.json` 的变更。
+- 合并审核：重点检查 workflow 中 repository owner、tag、`latest` manifest、Chart image、Telegram 通知依赖与 Secrets 名称、`AXONHUB_UPDATE_CHANNEL`、前端外链和后端内嵌模型增量；不要接受重新硬编码 upstream 仓库或丢失 fork `catalogdata/models.json` 的变更。
 - 吸收/删除条件：只有在 upstream 提供完全仓库无关的发布、更新和目录来源机制，且本 fork 不再需要本地默认值时才能删除。
-- 验证：`go test ./internal/server/biz -run 'TestSelectLatestGitHubRelease|Test.*Version'`；`cd frontend && node --test src/config/external-urls.test.mjs`；静态检查 workflow 和 Helm 默认镜像。
+- 验证：`go test ./internal/server/biz -run 'TestSelectLatestGitHubRelease|Test.*Version'`；`cd frontend && node --test src/config/external-urls.test.mjs`；静态检查 workflow、Telegram 通知依赖/Secrets 和 Helm 默认镜像。
 
 ### F02 API Key 稳定身份、别名、权重和路由
 
