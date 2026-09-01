@@ -9,7 +9,7 @@
 
 ### Fixed
 
-- Preserved usage and cost records when clients disconnect after a streaming response has already completed.
+- Preserved usage and cost records when clients disconnect after a streaming response has already completed, without leaving a stale cancellation error on the completed execution.
 
 v0.4.0
 

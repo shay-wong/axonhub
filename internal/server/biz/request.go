@@ -903,10 +903,12 @@ func (s *RequestService) updateRequestExecutionResponse(
 	upd := client.RequestExecution.UpdateOneID(executionID).
 		SetStatus(status).
 		SetExternalID(externalId)
-	if errorMessage != "" {
+	if status == requestexecution.StatusCompleted {
+		upd = upd.ClearErrorMessage().ClearResponseStatusCode()
+	} else if errorMessage != "" {
 		upd = upd.SetErrorMessage(errorMessage)
 	}
-	if errorInfo != nil && errorInfo.StatusCode != nil {
+	if status != requestexecution.StatusCompleted && errorInfo != nil && errorInfo.StatusCode != nil {
 		upd = upd.SetResponseStatusCode(*errorInfo.StatusCode)
 	}
 

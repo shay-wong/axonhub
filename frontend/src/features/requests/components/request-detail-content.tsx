@@ -836,7 +836,7 @@ export function RequestDetailContent({ requestId, projectId, previewRequest, isP
                             </div>
                           </div>
 
-                          {(execution.errorMessage || (execution.status === 'failed' && execution.responseStatusCode)) && (
+                          {(execution.status === 'failed' || execution.status === 'canceled') && (execution.errorMessage || (execution.status === 'failed' && execution.responseStatusCode)) && (
                             <div className='bg-destructive/5 border-destructive/20 space-y-3 rounded-lg border p-4'>
                               <div className='flex items-center justify-between'>
                                 <span className='text-destructive flex items-center gap-2 text-sm font-semibold'>

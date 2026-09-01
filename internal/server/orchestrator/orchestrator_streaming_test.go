@@ -168,6 +168,11 @@ func TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPers
 	require.NoError(t, err)
 	require.NotNil(t, result.ChatCompletionStream)
 
+	_, err = client.RequestExecution.Update().
+		SetResponseStatusCode(http.StatusBadGateway).
+		Save(ctx)
+	require.NoError(t, err)
+
 	for result.ChatCompletionStream.Next() {
 		_ = result.ChatCompletionStream.Current()
 	}
@@ -181,6 +186,8 @@ func TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPers
 	dbExecution, err := client.RequestExecution.Query().Only(ctx)
 	require.NoError(t, err)
 	require.Equal(t, requestexecution.StatusCompleted, dbExecution.Status)
+	require.Empty(t, dbExecution.ErrorMessage)
+	require.Nil(t, dbExecution.ResponseStatusCode)
 
 	usageLog, err := client.UsageLog.Query().Only(ctx)
 	require.NoError(t, err)
