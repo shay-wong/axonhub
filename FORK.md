@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`c8d7efd8bc609df36caff6fe76167070e1e25b37`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`4483c2e4c685f27f37ddd666b3ff3bb48bebea50`
-- 本次 merge base：`ef8809ff9db9791b56e20417e2a2345b7110c728`
-- 审计范围：`git diff 4483c2e4..HEAD`
+- 本次 upstream merge 的 fork parent：`03e57f3c68ee7d5c2b10efd0611522a855931ca2`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`b62d3bcd33360a887e0892274f6c183ff9d4ef6a`
+- 本次 merge base：`4483c2e4c685f27f37ddd666b3ff3bb48bebea50`
+- 审计范围：`git diff b62d3bcd..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
