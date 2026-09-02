@@ -58,7 +58,7 @@ git show --remerge-diff <merge-commit>
 
 - 生命周期：`长期保留`
 - 原始意图：fork 的 release、Docker/Helm 制品、更新检查、问题链接和 fork 自有模型目录增量必须属于当前 fork，不能静默回落到 `looplj/axonhub` 的版本、镜像或额外模型数据。
-- 必须保持：`beta`/`stable` fork 发布通道独立；多架构 manifest 和 Helm 默认镜像属于 fork；版本比较识别 fork 后缀和 upstream prerelease；fork tag、二进制 Release 和多架构 Docker 发布全部成功后，通过仓库 Secrets `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` 发送一次非阻塞 Telegram 通知；仓库、release 和 issues URL 可由构建环境覆盖且默认指向 `shay-wong/axonhub`；fork 自有模型增量由后端内嵌 `catalogdata/models.json` 承载，不再依赖浏览器直连仓库目录。
+- 必须保持：`beta`/`stable` fork 发布通道独立；多架构 manifest 和 Helm 默认镜像属于 fork；版本比较识别 fork 后缀和 upstream prerelease；fork tag、二进制 Release 和多架构 Docker 发布全部成功后，通过仓库 Secrets `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` 发送一次非阻塞中文 Telegram 通知，并关闭 GitHub 英文链接预览；仓库、release 和 issues URL 可由构建环境覆盖且默认指向 `shay-wong/axonhub`；fork 自有模型增量由后端内嵌 `catalogdata/models.json` 承载，不再依赖浏览器直连仓库目录。
 - 代码锚点：`.github/workflows/stable-fork-release.yml`、`.github/workflows/docker-publish.yml`、`.github/workflows/helm-chart.yml`、`.goreleaser.yml`、`deploy/helm/values.yaml`、`internal/build/info.go`、`internal/server/biz/version.go`、`internal/server/biz/catalog.go`、`internal/server/biz/catalogdata/models.json`、`frontend/src/config/external-urls.ts`。
 - 提交锚点：`fc687607`、`de2aa90a`、`6b147cbb`、`cee45b4b`、`b77f8e5f`、`47ffb508`、`ce626e28`、`923482f8`、`a94eb373`。
 - 合并审核：重点检查 workflow 中 repository owner、tag、`latest` manifest、Chart image、Telegram 通知依赖与 Secrets 名称、`AXONHUB_UPDATE_CHANNEL`、前端外链和后端内嵌模型增量；不要接受重新硬编码 upstream 仓库或丢失 fork `catalogdata/models.json` 的变更。

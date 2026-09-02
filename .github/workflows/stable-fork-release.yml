@@ -140,11 +140,11 @@ jobs:
           set -euo pipefail
 
           message=$(cat <<EOF
-          AxonHub release published
-          Version: ${RELEASE_NAME}
-          Channel: ${GITHUB_REF_NAME}
-          Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_NAME}
-          Workflow: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          AxonHub 新版本已发布
+          版本：${RELEASE_NAME}
+          通道：${GITHUB_REF_NAME}
+          发布页面：https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_NAME}
+          构建记录：https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
           EOF
           )
 
@@ -152,4 +152,5 @@ jobs:
             --request POST \
             --url "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-            --data-urlencode "text=${message}"
+            --data-urlencode "text=${message}" \
+            --data-urlencode "disable_web_page_preview=true"
