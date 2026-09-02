@@ -1,7 +1,6 @@
 package responses
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -863,11 +862,20 @@ func prepareWebSocketPayloadForLease(payload map[string]any, lease *webSocketLea
 	lease.nextFullInput = cloneRawMessages(fullInput)
 
 	previousInput, previousResponseID := lease.pooled.previousTurn()
-	if !lease.reused || previousResponseID == "" || len(previousInput) == 0 {
+	if !lease.reused || previousResponseID == "" {
 		return nil
 	}
-	if explicitPreviousResponseID(payload) != "" && explicitPreviousResponseID(payload) != previousResponseID {
-		return &webSocketReconnectRequiredError{}
+	if explicitID := explicitPreviousResponseID(payload); explicitID != "" {
+		if explicitID != previousResponseID {
+			return &webSocketReconnectRequiredError{}
+		}
+
+		// Native WebSocket clients send only the new input together with the
+		// response ID returned on this connection. Preserve that delta as-is.
+		return nil
+	}
+	if len(previousInput) == 0 {
+		return nil
 	}
 
 	suffix, ok := inputSuffix(previousInput, fullInput)
@@ -946,15 +954,7 @@ func inputSuffix(previous, current []json.RawMessage) ([]json.RawMessage, bool) 
 }
 
 func jsonRawEqual(a, b json.RawMessage) bool {
-	var compactA bytes.Buffer
-	if err := json.Compact(&compactA, a); err != nil {
-		return bytes.Equal(a, b)
-	}
-	var compactB bytes.Buffer
-	if err := json.Compact(&compactB, b); err != nil {
-		return bytes.Equal(a, b)
-	}
-	return bytes.Equal(compactA.Bytes(), compactB.Bytes())
+	return equalJSONValues(string(a), string(b))
 }
 
 func cloneRawMessages(src []json.RawMessage) []json.RawMessage {
@@ -1093,7 +1093,7 @@ func (s *webSocketStream) Next() bool {
 				// future incremental sends. If the input exceeds the memory
 				// budget, keep the healthy WebSocket connection and let the
 				// next turn send full context instead of evicting the session.
-				s.lease.rememberTurn(responseID)
+				s.lease.rememberTurn(responseID, responseOutputFromWebSocketEvent(msg))
 			}
 		}
 		s.finish(evict)
@@ -1179,7 +1179,7 @@ func (s *webSocketStream) finish(evict bool) {
 	})
 }
 
-func (l *webSocketLease) rememberTurn(responseID string) bool {
+func (l *webSocketLease) rememberTurn(responseID string, output []json.RawMessage) bool {
 	if l == nil || l.pooled == nil {
 		return false
 	}
@@ -1187,7 +1187,8 @@ func (l *webSocketLease) rememberTurn(responseID string) bool {
 	if l.owner != nil {
 		maxInputBytes = l.owner.maxRetainedInput
 	}
-	return l.pooled.rememberTurn(l.nextFullInput, responseID, maxInputBytes)
+	input := append(cloneRawMessages(l.nextFullInput), output...)
+	return l.pooled.rememberTurn(input, responseID, maxInputBytes)
 }
 
 func responseIDFromWebSocketEvent(raw []byte) string {
@@ -1198,6 +1199,16 @@ func responseIDFromWebSocketEvent(raw []byte) string {
 	}
 	_ = json.Unmarshal(raw, &payload)
 	return payload.Response.ID
+}
+
+func responseOutputFromWebSocketEvent(raw []byte) []json.RawMessage {
+	var payload struct {
+		Response struct {
+			Output []json.RawMessage `json:"output"`
+		} `json:"response"`
+	}
+	_ = json.Unmarshal(raw, &payload)
+	return cloneRawMessages(payload.Response.Output)
 }
 
 func streamEventType(raw []byte) string {

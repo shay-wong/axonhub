@@ -836,7 +836,7 @@ func (r *Response) TerminalError() *ResponseError {
 				Message: "upstream response cancelled",
 				Type:    "server_error",
 			},
-			cause: context.Canceled,
+			Cause: context.Canceled,
 		}
 	}
 
@@ -854,7 +854,7 @@ func (r *Response) TerminalError() *ResponseError {
 					Message: "upstream response cancelled",
 					Type:    "server_error",
 				},
-				cause: context.Canceled,
+				Cause: context.Canceled,
 			}
 		case "error":
 			return &ResponseError{
@@ -945,6 +945,10 @@ type Usage struct {
 	// Output only. A detailed breakdown of the token count for each modality in the candidates.
 	// For gemini models only.
 	CompletionModalityTokenDetails []ModalityTokenCount `json:"completion_modality_token_details,omitempty"`
+
+	// Cost is the request cost calculated by AxonHub from channel model prices.
+	// Omitted when no matching price is configured or usage-cost injection is disabled.
+	Cost *float64 `json:"cost,omitempty"`
 }
 
 func (u *Usage) GetCompletionTokens() *int64 {
@@ -997,7 +1001,15 @@ type PromptTokensDetails struct {
 type ResponseError struct {
 	StatusCode int         `json:"-"`
 	Detail     ErrorDetail `json:"error"`
-	cause      error
+
+	// Cause keeps the underlying error (for example a transport failure) so callers
+	// can still match it with errors.Is / errors.As after classification.
+	Cause error `json:"-"`
+}
+
+// Unwrap exposes the underlying cause, if any.
+func (e ResponseError) Unwrap() error {
+	return e.Cause
 }
 
 func (e ResponseError) Error() string {
@@ -1027,10 +1039,6 @@ func (e ResponseError) Error() string {
 	}
 
 	return sb.String()
-}
-
-func (e ResponseError) Unwrap() error {
-	return e.cause
 }
 
 // ErrorDetail represents error details.

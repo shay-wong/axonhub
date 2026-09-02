@@ -77,6 +77,32 @@ func (s *UsageLogService) computeUsageCost(
 	return nil, nil, ""
 }
 
+// InjectUsageCost writes AxonHub-calculated cost onto usage using the same
+// effective service tier used for persisted billing.
+func (s *UsageLogService) InjectUsageCost(
+	ctx context.Context,
+	channelID int,
+	modelID string,
+	usage *llm.Usage,
+	requestedServiceTier string,
+	appliedServiceTier string,
+	requestPricingOverride string,
+	requestPricingOverridePolicy RequestPricingOverridePolicy,
+) {
+	if usage == nil {
+		return
+	}
+
+	serviceTier := effectiveServiceTier(
+		requestPricingOverride,
+		requestPricingOverridePolicy,
+		requestedServiceTier,
+		appliedServiceTier,
+	)
+	_, totalCost, _ := s.computeUsageCost(ctx, channelID, modelID, serviceTier, usage)
+	usage.Cost = totalCost
+}
+
 // NewUsageLogService creates a new UsageLogService.
 func NewUsageLogService(ent *ent.Client, systemService *SystemService, channelService *ChannelService) *UsageLogService {
 	return &UsageLogService{

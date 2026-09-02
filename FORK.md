@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`03e57f3c68ee7d5c2b10efd0611522a855931ca2`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`b62d3bcd33360a887e0892274f6c183ff9d4ef6a`
-- 本次 merge base：`4483c2e4c685f27f37ddd666b3ff3bb48bebea50`
-- 审计范围：`git diff b62d3bcd..HEAD`
+- 本次 upstream merge 的 fork parent：`1ece1038386ff07fa2fe84759b19550790d69ece`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`f1d2c8c068daca099596b9e69df85809238323dc`
+- 本次 merge base：`b62d3bcd33360a887e0892274f6c183ff9d4ef6a`
+- 审计范围：`git diff f1d2c8c0..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次合入源码中的 `internal/build/VERSION` 为开发版本标记 `v1.0.0-beta8`，不是 fork release tag 的 upstream 发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta7-fork.8`；upstream 发布基线仍为 `v1.0.0-beta7`，因此下一个规范化 fork 版本递增为 `v1.0.0-beta7-fork.9`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta7-fork.9`；upstream 发布基线仍为 `v1.0.0-beta7`，因此下一个规范化 fork 版本递增为 `v1.0.0-beta7-fork.10`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -96,7 +96,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`llm/service_tier.go`、`internal/server/orchestrator/service_tier.go`、`internal/server/orchestrator/request.go`、`internal/server/orchestrator/outbound.go`、`internal/server/orchestrator/orchestrator_streaming_test.go`、`internal/objects/price.go`、`internal/ent/schema/request_execution.go`、`internal/ent/schema/usage_log.go`、`internal/server/biz/cost_calc.go`、`internal/server/biz/cost_calc_test.go`、`internal/server/biz/usage_log.go`、`frontend/src/features/channels/data/model-price-form.ts`、`frontend/src/features/channels/components/channels-model-price-dialog.tsx`、`frontend/src/features/requests/utils/service-tier.ts`、`frontend/src/features/requests/utils/column-visibility.ts`、`frontend/src/features/requests/components/requests-columns.tsx`、`frontend/src/features/requests/components/requests-table.tsx`、`frontend/src/features/requests-mobile-columns.test.mjs`、`frontend/src/locales/en/requests.json`、`frontend/src/locales/zh-CN/requests.json`。
 - 用户文档：`docs/en/guides/cost-tracking.md`、`docs/zh/guides/cost-tracking.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：`d4793bf7`、`7c45f58e`、`251b8770`、`f155d3d8`、`822da75c`、`8c64997f`；相关 merge resolution：`864c15a3`、`ee209fd8`；本次 Ultrafast 支持可用 `git log -S'ServiceTierUltrafast' -- llm/service_tier.go` 定位；本次 v6 列偏好迁移可用 `git log -S'REQUEST_COLUMN_VISIBILITY_STORAGE_VERSION = 6' -- frontend/src/features/requests/utils/column-visibility.ts` 定位；本次完整流取消后的 usage 持久化修复可用 `git log -S'CanceledAfterResponsesCompletionPersistsUsage' -- internal/server/orchestrator/orchestrator_streaming_test.go` 定位；upstream 价格导入/导出与 service-tier 映射的整合可用 `git log -S'mapSaveInputsToFormData' -- frontend/src/features/channels/data/model-price-form.ts` 定位。
-- 合并审核：schema、Ent、GraphQL、backup、billing 和 UI 必须作为一个行为链审核；禁止让 request-side Fast 意图覆盖 provider 明确返回的其他 tier，也不能让完整终态响应后的客户端取消撤销 usage eligibility；生成文件冲突应修改 schema 后重新生成。Upstream `359cf840` 已重构请求表布局，`d6ed9c62` 已虚拟化价格卡片，`d1140628` 和 `24145b38` 又加入 cache rate 与列排序，`48e8b714` 新增价格 JSON 导入/导出；合并后仍须保留 Fast 列、拆分 cache 列与旧列偏好迁移，并让虚拟化卡片及导入/导出完整承载 service-tier、prompt-cache 和 schedule。
+- 合并审核：schema、Ent、GraphQL、backup、billing 和 UI 必须作为一个行为链审核；禁止让 request-side Fast 意图覆盖 provider 明确返回的其他 tier，也不能让完整终态响应后的客户端取消撤销 usage eligibility；生成文件冲突应修改 schema 后重新生成。Upstream `5ac75028` 新增跨 API 格式的 `usage.cost` 注入；必须复用落库时相同的 requested/applied/override/policy 决策，不能退回无 tier 的基础价格。Upstream `359cf840` 已重构请求表布局，`d6ed9c62` 已虚拟化价格卡片，`d1140628` 和 `24145b38` 又加入 cache rate 与列排序，`48e8b714` 新增价格 JSON 导入/导出；合并后仍须保留 Fast 列、拆分 cache 列与旧列偏好迁移，并让虚拟化卡片及导入/导出完整承载 service-tier、prompt-cache 和 schedule。
 - 吸收/删除条件：只有 upstream 的字段、价格键、计费优先级、备份兼容和 UI 含义全部等价时才能替换本地实现。
 - 验证：`cd llm && go test ./transformer/openai ./transformer/openai/responses ./transformer/anthropic`；`go test ./internal/server/biz -run 'TestComputeUsageCostForServiceTier'`；`go test ./internal/server/orchestrator -run 'TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPersistsUsage'`；`go test ./internal/server/orchestrator ./internal/server/biz ./internal/server/backup ./internal/server/gql`；`cd frontend && node --test src/features/channels/data/model-price-catalog.test.mjs src/features/channels/data/model-price-form.test.mjs src/features/requests/utils/service-tier.test.mjs src/features/requests-mobile-columns.test.mjs`。
 
@@ -164,7 +164,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：Responses 混合流式内容保持分段和顺序；Cline 空 `choices` 遥测不向客户端透出但最终 usage 保留；interleaved reasoning 按 item 顺序输出；空或不可解析的 upstream error 回退到 status/raw status/通用消息，不返回空字符串；`response.completed`、`response.failed`、`response.incomplete`、`response.cancelled` 和 `response.canceled` 在 SSE metadata 或 JSON data 中都被识别为终态；direct stream 和 aggregation 语义一致。
 - 代码锚点：`internal/server/orchestrator/inbound.go`、`llm/transformer/openai/responses/inbound_stream.go`、`llm/transformer/openai/responses/outbound.go`、`llm/transformer/openai/responses/aggregator.go`、`llm/transformer/anthropic/inbound_stream.go`、`llm/transformer/cline/outbound.go`。
 - 提交锚点：`9909a8cc`、`a686efc3`、`042d41ec`；相关 merge resolution：`94d4f989`；本次终态识别变更可用 `git log -S'response.canceled' -- internal/server/orchestrator/inbound.go` 定位。
-- 合并审核：upstream `4495aa3c` 已吸收 Chat `finish_reason` 与 Responses abnormal terminal status 的双向映射；`889bc8ee`、`35133b6e`、`3b7e8618` 又吸收 clean EOF 检测、pre-content retry、单次 `[DONE]`、资源上限和客户端 incomplete 报告。fork 仍使用精确的 `response.incomplete`、`response.failed`、`response.cancelled` 终态事件，并保留混合分段、reasoning 顺序、空 error、Cline usage 及 direct/aggregate 一致性。分别检查 direct stream、aggregate、normal completion、incomplete、provider error 和 transport error；不要把 empty-success retry 与 HTTP error formatting 混为一谈。
+- 合并审核：upstream `4495aa3c` 已吸收 Chat `finish_reason` 与 Responses abnormal terminal status 的双向映射；`889bc8ee`、`35133b6e`、`3b7e8618` 又吸收 clean EOF 检测、pre-content retry、单次 `[DONE]`、资源上限和客户端 incomplete 报告，`a0b37424` 将上游连接中断分类为稳定的 502 错误并保留失败 execution 延迟。fork 仍使用精确的 `response.incomplete`、`response.failed`、`response.cancelled` 终态事件，并保留混合分段、reasoning 顺序、空 error、Cline usage 及 direct/aggregate 一致性。终态事件后若仍出现非取消 transport error，必须按失败记录，不能因过早标记成功而吞掉健康计数。分别检查 direct stream、aggregate、normal completion、incomplete、provider error 和 transport error；不要把 empty-success retry 与 HTTP error formatting 混为一谈。
 - 上游吸收条件：upstream 覆盖混合分段、reasoning 顺序、最终 usage、空 error 和 direct/aggregate 一致性。
 - 验证：`go test ./internal/server/orchestrator -run 'TestIsTerminalStreamEvent_ResponsesTerminalEvents'`；`cd llm && go test ./transformer/openai/responses ./transformer/anthropic ./transformer/cline`。
 
@@ -252,7 +252,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：resolved session ID 写入 transformer metadata；真正发送前统一写入 `Session_id` 并删除 `session_id`；普通、流式、non-stream aggregation 和 WebSocket 复用使用同一 canonical identity；header merge 不修改源 map。
 - 代码锚点：`llm/transformer/openai/codex/outbound.go`、`llm/transformer/openai/codex/outbound_executor_test.go`、`llm/httpclient/utils.go`、`llm/transformer/openai/responses/websocket_executor.go`。
 - 提交锚点：`5f3eeb83`；相关 merge resolution：`cf45f92e`。
-- 合并审核：upstream `c0233704` 补充了 Codex identity headers，但没有覆盖发送前、retry 和 WebSocket 的 canonical session。追踪最终 executor 收到的 header，不要只看 `TransformRequest` 的中间结果；同时测试两种 header spelling 和 connection reuse。
+- 合并审核：upstream `c0233704` 补充了 Codex identity headers，`16f08fed` 新增 Responses WebSocket 与 HTTP transport finalization；本地 canonical session 规范化必须在 HTTP transport 删除 WebSocket-only 字段之前执行，WebSocket 路径也必须使用同一身份。追踪最终 executor 收到的 header，不要只看 `TransformRequest` 的中间结果；同时测试两种 header spelling、HTTP 字段清理和 connection reuse。
 - 上游吸收条件：upstream 在普通、流式和 WebSocket 路径都有 canonical session 测试。
 - 验证：`cd llm && go test ./transformer/openai/codex ./transformer/openai/responses ./httpclient -run 'Session|Header|WebSocketExecutorReusesConnection'`。
 
@@ -328,12 +328,12 @@ git show --remerge-diff <merge-commit>
 - 生命周期：`等待上游吸收`
 - 原始意图：内置模型目录必须始终符合自身解析 schema，不能因单条上游模型数据格式错误而让整个目录加载失败。
 - 必须保持：`experimental` 继续表示结构化实验模式及其价格，不接受同名布尔值；后端在远程目录和内嵌快照的输入边界丢弃非对象值，前端 schema 仍只接受结构化对象；预览状态使用现有 `status` 和 `metadata.lifecycle` 字段；同步目录后必须通过后端归一化和前端整表解析测试。
-- 代码锚点：`internal/server/biz/catalog.go`、`internal/server/biz/catalog_filter.go`、`internal/server/biz/catalog_filter_test.go`、`internal/server/biz/catalogdata/providers.json`、`frontend/src/features/models/data/providers.schema.ts`、`frontend/src/features/models/data/providers-schema.test.mjs`、`scripts/sync/sync-model-developers.js`。
+- 代码锚点：`internal/server/biz/catalog.go`、`internal/server/biz/catalog_filter.go`、`internal/server/biz/catalog_filter_test.go`、`internal/server/biz/catalogdata/providers.json`、`frontend/src/features/models/data/providers.schema.ts`、`frontend/src/features/models/data/providers.schema.test.mjs`、`frontend/src/features/models/data/providers-schema.test.mjs`、`scripts/sync/sync-model-developers.js`。
 - 用户文档：维护者内部数据兼容修复，不新增配置或 API，无独立用户文档和 changelog 条目。
 - 提交锚点：本次修复可用 `git log -S'normalizeCatalogExperimental' -- internal/server/biz/catalog_filter.go` 定位。
-- 合并审核：upstream `4483c2e4` 已把目录拉取迁移到后端，`6f729f7c` 则用布尔/对象联合类型接受 `deepseek-v4-flash-vision-exp` 的 `experimental: true`；迁移架构可以保留，但联合类型不等价。必须在后端信任边界清洗无效值，并保持前端结构化 schema，避免价格目录调用方增加布尔分支。
+- 合并审核：upstream `4483c2e4` 已把目录拉取迁移到后端，`6f729f7c` 则用布尔/对象联合类型接受 `deepseek-v4-flash-vision-exp` 的 `experimental: true`；`dbeed3e6` 新增完整内置目录的 schema 解析测试，可以保留，但不能替代 fork 对布尔 `experimental` 的拒绝断言和扩展价格结构覆盖。必须在后端信任边界清洗无效值，并保持前端结构化 schema，避免价格目录调用方增加布尔分支。
 - 上游吸收条件：upstream 删除或迁移该无效布尔值，并保留覆盖完整内置目录的 schema 解析测试。
-- 验证：`go test ./internal/server/biz -run 'TestNormalizeCatalogExperimental|TestCatalogService'`；`cd frontend && node --test src/features/models/data/providers-schema.test.mjs`。
+- 验证：`go test ./internal/server/biz -run 'TestNormalizeCatalogExperimental|TestCatalogService'`；`cd frontend && node --test src/features/models/data/providers.schema.test.mjs src/features/models/data/providers-schema.test.mjs`。
 
 ### U20 Release 二进制应用内更新
 

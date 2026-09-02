@@ -265,28 +265,30 @@ func (m *persistRequestExecutionMiddleware) OnOutboundRawError(ctx context.Conte
 	persistCtx, cancel := xcontext.DetachWithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
+	failure := ClassifyUpstreamTransportError(err)
+
 	var updateErr error
-	if responseBody, ok := extractErrorResponseBody(m.rawResponse, err); ok {
+	if responseBody, ok := extractErrorResponseBody(m.rawResponse, failure); ok {
 		updateErr = state.RequestService.UpdateRequestExecutionTerminated(
 			persistCtx,
 			state.RequestExec.ID,
-			errorForExecutionPersistence(m.rawResponse, err),
+			errorForExecutionPersistence(m.rawResponse, failure),
 			terminalResponseID(responseBody),
 			responseBody,
 			latencyMetrics(state.Perf),
 		)
-	} else if errors.Is(err, context.Canceled) {
+	} else if errors.Is(failure, context.Canceled) {
 		updateErr = state.RequestService.UpdateRequestExecutionCanceled(
 			persistCtx,
 			state.RequestExec.ID,
-			ExtractErrorMessage(err),
+			ExtractErrorMessage(failure),
 		)
 	} else {
 		updateErr = state.RequestService.UpdateRequestExecutionFailed(
 			persistCtx,
 			state.RequestExec.ID,
-			ExtractErrorMessage(err),
-			ExtractErrorInfo(err),
+			ExtractErrorMessage(failure),
+			ExtractErrorInfo(failure),
 		)
 	}
 	if updateErr != nil {
@@ -298,6 +300,11 @@ func (m *persistRequestExecutionMiddleware) OnOutboundRawError(ctx context.Conte
 func ExtractErrorInfo(err error) *biz.ExecutionErrorInfo {
 	httpErr, ok := xerrors.As[*httpclient.Error](err)
 	if !ok {
+		if respErr, ok := xerrors.As[*llm.ResponseError](err); ok && respErr.StatusCode != 0 {
+			statusCode := respErr.StatusCode
+			return &biz.ExecutionErrorInfo{StatusCode: &statusCode}
+		}
+
 		return nil
 	}
 

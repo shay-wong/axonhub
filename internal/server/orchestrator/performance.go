@@ -161,6 +161,9 @@ func (m *performanceRecording) OnOutboundLlmStream(ctx context.Context, stream s
 		ctx:    ctx,
 		stream: stream,
 		state:  m.outbound.state,
+		onClose: func() {
+			enqueueCompletedPerformance(ctx, m.outbound.state)
+		},
 	}, nil
 }
 
@@ -196,9 +199,11 @@ func recordPerformanceError(ctx context.Context, state *PersistenceState, err er
 //
 //nolint:containedctx // ctx is used for logging.
 type recordPerformanceStream struct {
-	ctx    context.Context
-	stream streams.Stream[*llm.Response]
-	state  *PersistenceState
+	ctx     context.Context
+	stream  streams.Stream[*llm.Response]
+	state   *PersistenceState
+	onClose func()
+	closed  bool
 
 	firstTokenSet     bool
 	reasoningStartSet bool
@@ -213,7 +218,7 @@ func (s *recordPerformanceStream) Current() *llm.Response {
 		return event
 	}
 
-	if !s.firstTokenSet && s.state.Perf != nil {
+	if !s.firstTokenSet && s.state.Perf != nil && hasMeaningfulStreamOutput(event) {
 		s.state.Perf.MarkFirstToken()
 		s.firstTokenSet = true
 	}
@@ -249,6 +254,35 @@ func (s *recordPerformanceStream) Current() *llm.Response {
 	return event
 }
 
+// hasMeaningfulStreamOutput reports whether a normalized stream event contains
+// model output. Provider lifecycle events may carry usage without output.
+func hasMeaningfulStreamOutput(event *llm.Response) bool {
+	if event == nil {
+		return false
+	}
+
+	for _, choice := range event.Choices {
+		delta := choice.Delta
+		if delta == nil {
+			continue
+		}
+
+		if delta.Content.Content != nil && *delta.Content.Content != "" ||
+			len(delta.Content.MultipleContent) > 0 ||
+			len(delta.ToolCalls) > 0 ||
+			delta.ReasoningContent != nil && *delta.ReasoningContent != "" ||
+			delta.Reasoning != nil && *delta.Reasoning != "" ||
+			len(delta.ReasoningItems) > 0 ||
+			len(delta.InlineToolResults) > 0 ||
+			delta.Audio != nil ||
+			delta.Refusal != "" {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (s *recordPerformanceStream) Next() bool {
 	hasNext := s.stream.Next()
 	if hasNext || s.recorded || s.state.Perf == nil {
@@ -267,7 +301,26 @@ func (s *recordPerformanceStream) Next() bool {
 }
 
 func (s *recordPerformanceStream) Close() error {
+	if s.closed {
+		return nil
+	}
+
+	s.closed = true
+	if s.onClose != nil && !s.recorded && s.state != nil && s.state.Perf != nil && s.state.Perf.Success {
+		s.onClose()
+	}
+
 	return s.stream.Close()
+}
+
+// enqueueCompletedPerformance submits a completed stream only after its normalized
+// events have been consumed, so final usage is visible to the metrics worker.
+func enqueueCompletedPerformance(ctx context.Context, state *PersistenceState) {
+	if state == nil || state.Perf == nil || !state.Perf.RequestCompleted || !state.Perf.Success || state.ChannelService == nil {
+		return
+	}
+
+	state.ChannelService.AsyncRecordPerformance(ctx, state.Perf)
 }
 
 func (s *recordPerformanceStream) Err() error {

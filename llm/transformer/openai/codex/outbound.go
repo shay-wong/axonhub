@@ -543,7 +543,7 @@ type codexExecutor struct {
 }
 
 func (e *codexExecutor) Do(ctx context.Context, request *httpclient.Request) (*httpclient.Response, error) {
-	normalizeCodexSessionHeaders(request)
+	request = e.requestForTransport(request)
 
 	// Compact and alpha search are non-streaming endpoints; proxy them
 	// through the real HTTP client instead of the SSE stream path.
@@ -695,9 +695,32 @@ func decodeSSEChunks(ctx context.Context, body []byte) ([]*httpclient.StreamEven
 }
 
 func (e *codexExecutor) DoStream(ctx context.Context, request *httpclient.Request) (streams.Stream[*httpclient.StreamEvent], error) {
-	normalizeCodexSessionHeaders(request)
+	return e.executor(ctx).DoStream(ctx, e.requestForTransport(request))
+}
 
-	return e.inner.DoStream(ctx, request)
+func (e *codexExecutor) executor(_ context.Context) pipeline.Executor {
+	if e == nil {
+		return nil
+	}
+	return e.inner
+}
+
+func (e *codexExecutor) requestForTransport(request *httpclient.Request) *httpclient.Request {
+	if e == nil || e.transformer == nil {
+		normalizeCodexSessionHeaders(request)
+		return request
+	}
+
+	return e.transformer.FinalizeTransportRequest(request)
+}
+
+func (t *OutboundTransformer) FinalizeTransportRequest(request *httpclient.Request) *httpclient.Request {
+	normalizeCodexSessionHeaders(request)
+	if t == nil || t.transport == responses.TransportWebSocket {
+		return request
+	}
+
+	return responses.PrepareHTTPTransportRequest(request, true)
 }
 
 func normalizeCodexSessionHeaders(request *httpclient.Request) {

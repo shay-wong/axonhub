@@ -1397,6 +1397,29 @@ func TestValidateRetryPolicy_TemporaryRequiresDurationWithout429RetryAfter(t *te
 	}
 }
 
+func TestSystemService_InjectUsageCostEnabled(t *testing.T) {
+	service, client := setupTestSystemService(t, xcache.Config{Mode: xcache.ModeMemory}) //nolint:exhaustruct_v5
+	defer client.Close()
+
+	ctx := context.Background()
+	ctx = ent.NewContext(ctx, client)
+	ctx = authz.WithTestBypass(ctx)
+
+	got, err := service.InjectUsageCostEnabled(ctx)
+	require.NoError(t, err)
+	require.False(t, got)
+
+	require.NoError(t, service.SetInjectUsageCostEnabled(ctx, true))
+	got, err = service.InjectUsageCostEnabled(ctx)
+	require.NoError(t, err)
+	require.True(t, got)
+
+	require.NoError(t, service.SetInjectUsageCostEnabled(ctx, false))
+	got, err = service.InjectUsageCostEnabled(ctx)
+	require.NoError(t, err)
+	require.False(t, got)
+}
+
 func TestNormalizeRetryPolicy_LoadBalancerStrategy(t *testing.T) {
 	t.Run("invalid strategy falls back to default", func(t *testing.T) {
 		policy := &RetryPolicy{LoadBalancerStrategy: "unknown"}
