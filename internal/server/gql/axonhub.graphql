@@ -134,6 +134,18 @@ input RetryableErrorPatternInput {
   regex: Boolean
 }
 
+type ModelProtocol {
+  model: String!
+  apiFormats: [String!]!
+  enabled: Boolean
+}
+
+input ModelProtocolInput {
+  model: String!
+  apiFormats: [String!]!
+  enabled: Boolean
+}
+
 type ChannelSettings {
   extraModelPrefix: String
   modelMappings: [ModelMapping!]
@@ -151,6 +163,7 @@ type ChannelSettings {
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPattern!]
   apiKeySelectionStrategy: String
+  modelProtocols: [ModelProtocol!]
 }
 
 enum CapabilityPolicy {
@@ -218,6 +231,7 @@ input ChannelSettingsInput {
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPatternInput!]
   apiKeySelectionStrategy: String
+  modelProtocols: [ModelProtocolInput!]
 }
 
 input ChannelRateLimitInput {

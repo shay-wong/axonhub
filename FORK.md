@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`cb891b85e12295a240ac51ec202e82f6be0e2edd`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`67203f8373aef33d3bd043f4f31d2cfcaf6cf49a`
-- 本次 merge base：`f1d2c8c068daca099596b9e69df85809238323dc`
-- 审计范围：`git diff 67203f83..HEAD`
+- 本次 upstream merge 的 fork parent：`86becc4ddeb7e9dbb2cf26e27a22ad4fe808fd98`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`dfbe22593ea33d62d1bc04d47a8e5d6c8b25d2bf`
+- 本次 merge base：`67203f8373aef33d3bd043f4f31d2cfcaf6cf49a`
+- 审计范围：`git diff dfbe2259..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -46,11 +46,11 @@ git show --remerge-diff <merge-commit>
 
 ## Fork 发布版本
 
-- Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta7`。
-- 本次合入源码中的 `internal/build/VERSION` 为开发版本标记 `v1.0.0-beta8`，不是 fork release tag 的 upstream 发布基线。
+- Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta8`。
+- 本次合入源码中的 `internal/build/VERSION` 为 `v1.0.0-beta8`，与 upstream 发布基线一致。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta7-fork.9`；upstream 发布基线仍为 `v1.0.0-beta7`，因此下一个规范化 fork 版本递增为 `v1.0.0-beta7-fork.10`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta7-fork.9`；upstream 发布基线已变为 `v1.0.0-beta8`，且当前没有对应 fork tag，因此下一个规范化 fork 版本为 `v1.0.0-beta8-fork.1`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -72,7 +72,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：优先读取 `apiKeyConfigs`，兼容旧 `apiKey`/`apiKeys`；Key 去重且非正权重归一为 `100`；支持 `trace_sticky`、`weighted_sticky` 和 `failover`；API-key quota 预检与 checker 使用同一归一化 Key 集合；日志和 UI 只显示别名及安全后缀；失败重试优先排除当前 Key 并轮换同一 channel 的其他可用 Key。
 - 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel_apikey_identity.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_apikey_provider.go`、`internal/server/biz/provider_quota.go`、`internal/server/biz/provider_quota_url_test.go`、`internal/server/orchestrator/retry.go`、`frontend/src/features/channels/data/api-key-display.ts`、`frontend/src/features/channels/data/channel-input.ts`、`frontend/src/features/channels/components/channels-action-dialog.tsx`、`frontend/src/features/channels/components/channels-api-key-management-dialog.tsx`。
 - 提交锚点：`d6e092ba`、`2909ddaa`、`88980c6e`、`1a69f0c4`、`31b3ad18`、`d53787b1`。
-- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
+- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；`dfbe2259` 增加 `modelProtocols` 和增量 channel settings 更新时，必须让 `apiKeySelectionStrategy` 与协议配置并存并进入 settings patch；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
 - 吸收/删除条件：只有 fork 明确放弃多 Key 权重策略，或 upstream 提供等价的稳定身份、路由算法、兼容迁移和脱敏展示时才能删除。
 - 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'APIKey|ProviderQuota|Weighted|Failover|Retry'`；`cd frontend && node --test src/features/channels/data/api-key-display.test.mjs src/features/channels/data/channel-input.test.mjs`。
 
@@ -84,7 +84,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel.go`、`internal/server/biz/channel_test.go`、`internal/server/orchestrator/transform_options.go`、`llm/transformer/openai/codex/outbound.go`、`frontend/src/features/channels/components/channels-transform-options-dialog.tsx`、`frontend/src/features/channels/data/config_channels.ts`、`frontend/src/features/channels/data/channel-config.test.mjs`、`frontend/src/features/channels/data/schema.ts`。
 - 用户文档：`docs/en/guides/channel-management.md`、`docs/zh/guides/channel-management.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：`f5cdeb74`；相关 merge resolution：`543e25b7`、`cf45f92e`；本次 Fenno 支持可用 `git log -S'supportsCodexStyleResponses' -- frontend/src/features/channels/data/config_channels.ts` 定位。
-- 合并审核：upstream `9dfd6ac0`、`fc1d27da`、`c0233704` 和 `6f9bfc5f` 已补充 Claude Code cache compatibility、Responses 限制、Codex headers 与缺失 reasoning context 的默认值，`f2f80a9f` 又让 multipart 图像请求跳过 JSON body override 并保留实际图像格式，但都没有提供按 channel 显式启用的完整默认值开关。仍须逐项比较配置粒度、默认字段、显式值优先级、session ID 和图像请求例外。
+- 合并审核：upstream `9dfd6ac0`、`fc1d27da`、`c0233704` 和 `6f9bfc5f` 已补充 Claude Code cache compatibility、Responses 限制、Codex headers 与缺失 reasoning context 的默认值，`f2f80a9f` 又让 multipart 图像请求跳过 JSON body override 并保留实际图像格式，`dfbe2259` 将 reasoning effort 映射统一到跨客户端和跨协议的 outbound 前处理，但都没有提供按 channel 显式启用的完整 Codex 默认值开关。仍须逐项比较配置粒度、默认字段、显式值优先级、session ID 和图像请求例外。
 - 吸收/删除条件：只有 upstream 提供相同配置粒度和请求语义时，才可用 upstream 实现替换；能力本身长期保留。
 - 验证：`go test ./internal/server/biz -run 'TestChannelService_(Create|Update)ChannelNormalizesCodexStyleResponsesByType'`；`go test ./internal/server/orchestrator -run 'TestApplyTransformOptions_CodexStyleResponses|TestOverrideBodySkipsNonJSONBody'`；`cd llm && go test ./transformer/openai/codex -run CodexStyleResponses`；`cd frontend && node --test src/features/channels/data/channel-config.test.mjs`。
 
