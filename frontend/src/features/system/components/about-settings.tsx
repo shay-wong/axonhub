@@ -22,8 +22,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { useSystemVersion, useCheckForUpdate } from '../data/system';
 
@@ -45,18 +45,20 @@ const waitForRestart = async () => {
   }
 };
 
-export function AboutSettings() {
+interface AboutSettingsProps {
+  includeBeta: boolean;
+  onIncludeBetaChange: (includeBeta: boolean) => void;
+}
+
+export function AboutSettings({ includeBeta, onIncludeBetaChange }: AboutSettingsProps) {
   const { t } = useTranslation();
   const { hasSystemScope } = usePermissions();
-  const [includeBeta, setIncludeBeta] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [needRestart, setNeedRestart] = useState(false);
   const [installedAction, setInstalledAction] = useState<'update' | 'rollback' | null>(null);
-  const [rollbackVersions, setRollbackVersions] = useState<
-    { version: string; publishedAt: string; releaseUrl: string }[]
-  >([]);
+  const [rollbackVersions, setRollbackVersions] = useState<{ version: string; publishedAt: string; releaseUrl: string }[]>([]);
   const [selectedRollbackVersion, setSelectedRollbackVersion] = useState('');
   const [rollbackVersionsLoading, setRollbackVersionsLoading] = useState(false);
   const { data: version, isLoading: versionLoading } = useSystemVersion();
@@ -188,7 +190,7 @@ export function AboutSettings() {
                 <h4 className='text-sm font-medium'>{t('system.about.updateCheck.title')}</h4>
                 <p className='text-muted-foreground text-sm'>{t('system.about.updateCheck.description')}</p>
                 <div className='flex items-center gap-2'>
-                  <Switch id='include-beta-releases' checked={includeBeta} onCheckedChange={setIncludeBeta} />
+                  <Switch id='include-beta-releases' checked={includeBeta} onCheckedChange={onIncludeBetaChange} />
                   <Label htmlFor='include-beta-releases' className='text-muted-foreground text-sm font-normal'>
                     {t('system.about.updateCheck.includeBeta')}
                   </Label>

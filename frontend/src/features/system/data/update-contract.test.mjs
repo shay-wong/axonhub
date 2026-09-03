@@ -22,6 +22,15 @@ test('about settings exposes permission-gated update, rollback, and restart acti
   assert.match(source, /window\.location\.reload\(\)/);
 });
 
+test('beta release preference survives switching system tabs', () => {
+  const aboutSource = read('../components/about-settings.tsx');
+  const tabsSource = read('../components/tabs.tsx');
+
+  assert.match(tabsSource, /const \[includeBeta, setIncludeBeta\] = useState\(false\)/);
+  assert.match(tabsSource, /<AboutSettings includeBeta=\{includeBeta\} onIncludeBetaChange=\{setIncludeBeta\} \/>/);
+  assert.doesNotMatch(aboutSource, /const \[includeBeta, setIncludeBeta\] = useState\(false\)/);
+});
+
 test('update actions have English and Chinese translations', () => {
   for (const locale of ['en', 'zh-CN']) {
     const messages = JSON.parse(read(`../../../locales/${locale}/system.json`));

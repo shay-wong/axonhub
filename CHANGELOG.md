@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Kept the **Include Beta versions** update-check option enabled while switching between System Settings tabs.
 - Preserved usage and cost records when clients disconnect after a streaming response has already completed, without leaving a stale cancellation error on the completed execution.
 - Allowed Codex scheduled automations to start when the app sends an `automation_update` output without a `call_id`.
 

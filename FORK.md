@@ -282,13 +282,14 @@ git show --remerge-diff <merge-commit>
 ### U15 前端交互和权限回归修复
 
 - 生命周期：`等待上游吸收`
-- 原始意图：小型前端回归不应重置用户输入、暴露无权限操作或拒绝后端合法 ID。
-- 必须保持：data storage 表格数据引用稳定，编辑输入不因 render 重置；禁用 Key 提示有可读对比度；thread/trace/detail 状态动作要求 `write_requests` 并携带当前 project header；brand settings 可公开读取，但受保护 system settings 仍要求 `read_settings`。
-- 代码锚点：`frontend/src/features/data-storages/index.tsx`、`frontend/src/features/channels/components/channels-columns.tsx`、`frontend/src/features/request-status-management.test.mjs`、`frontend/src/features/threads/components/thread-detail-page.tsx`、`frontend/src/features/traces/components/trace-detail-page.tsx`、`frontend/src/features/prompts/data/schema.test.mjs`、`frontend/src/features/system/data/system-permissions.test.mjs`。
-- 提交锚点：`b5d19692`、`151e1d4e`、`374cbd81`；相关 merge resolution：`3356f5bd`、`864c15a3`。
-- 合并审核：upstream `7cd1aee9` 已吸收部分 project role UI/effective scope 行为，`d232d343` 已等价吸收 prompt GUID 实现，`800bb72f` 已吸收 auto-refresh 控件；本地仍保留 prompt regression test，data storage、状态动作 permission/project header 和 system settings 边界仍需独立验证。以行为测试逐项判断，不要因为 upstream 重构组件就删除测试覆盖。
+- 原始意图：小型前端回归不应在切换视图时重置用户输入、暴露无权限操作或拒绝后端合法 ID。
+- 必须保持：data storage 表格数据引用稳定，编辑输入不因 render 重置；更新检查的 **包含 Beta 版本**在系统设置标签切换期间保持、页面刷新后重置；禁用 Key 提示有可读对比度；thread/trace/detail 状态动作要求 `write_requests` 并携带当前 project header；brand settings 可公开读取，但受保护 system settings 仍要求 `read_settings`。
+- 代码锚点：`frontend/src/features/data-storages/index.tsx`、`frontend/src/features/channels/components/channels-columns.tsx`、`frontend/src/features/request-status-management.test.mjs`、`frontend/src/features/threads/components/thread-detail-page.tsx`、`frontend/src/features/traces/components/trace-detail-page.tsx`、`frontend/src/features/prompts/data/schema.test.mjs`、`frontend/src/features/system/components/about-settings.tsx`、`frontend/src/features/system/components/tabs.tsx`、`frontend/src/features/system/data/system-permissions.test.mjs`、`frontend/src/features/system/data/update-contract.test.mjs`。
+- 用户文档：`docs/en/deployment/docker.md`、`docs/zh/deployment/docker.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
+- 提交锚点：`b5d19692`、`151e1d4e`、`374cbd81`；相关 merge resolution：`3356f5bd`、`864c15a3`；本次 Beta 选择状态修复可用 `git log -S'onIncludeBetaChange' -- frontend/src/features/system/components/about-settings.tsx frontend/src/features/system/components/tabs.tsx` 定位。
+- 合并审核：upstream `7cd1aee9` 已吸收部分 project role UI/effective scope 行为，`d232d343` 已等价吸收 prompt GUID 实现，`800bb72f` 已吸收 auto-refresh 控件；`131dc03d` 引入的 Beta 选择仍位于会随标签卸载的 About 子组件。本地仍保留 prompt regression test，data storage、Beta 选择的父级状态、状态动作 permission/project header 和 system settings 边界仍需独立验证。以行为测试逐项判断，不要因为 upstream 重构组件就删除测试覆盖，也不要用 `forceMount` 让所有设置页常驻。
 - 上游吸收条件：对应 UI 行为和 permission test 已在 upstream 等价存在；允许逐项删除已吸收的小修复。
-- 验证：`cd frontend && node --test src/features/request-status-management.test.mjs src/features/prompts/data/schema.test.mjs src/features/system/data/system-permissions.test.mjs`；data storage 输入需做组件交互检查。
+- 验证：`cd frontend && node --test src/features/request-status-management.test.mjs src/features/prompts/data/schema.test.mjs src/features/system/data/system-permissions.test.mjs src/features/system/data/update-contract.test.mjs`；data storage 输入需做组件交互检查。
 
 ### U16 多项目权限和邀请生命周期安全
 

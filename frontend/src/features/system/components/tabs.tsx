@@ -2,22 +2,33 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useHorizontalScroll } from '@/hooks/use-horizontal-scroll';
+import { usePermissions } from '@/hooks/usePermissions';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { AboutSettings } from './about-settings';
+import { BackupSettings } from './backup-settings';
 import { BrandSettings } from './brand-settings';
 import { DiagnosticsSettings } from './diagnostics-settings';
 import { GeneralSettings } from './general-settings';
+import { ProxyPresetsSettings } from './proxy-presets-settings';
 import { QuotaSettings } from './quota-settings';
 import { RetrySettings } from './retry-settings';
 import { SecuritySettings } from './security-settings';
 import { StorageSettings } from './storage-settings';
-import { BackupSettings } from './backup-settings';
-import { ProxyPresetsSettings } from './proxy-presets-settings';
 import { WebhookSettings } from './webhook-settings';
-import { usePermissions } from '@/hooks/usePermissions';
 
-type SystemTabKey = 'general' | 'security' | 'brand' | 'storage' | 'retry' | 'webhook' | 'proxy' | 'quota' | 'backup' | 'diagnostics' | 'about';
+type SystemTabKey =
+  | 'general'
+  | 'security'
+  | 'brand'
+  | 'storage'
+  | 'retry'
+  | 'webhook'
+  | 'proxy'
+  | 'quota'
+  | 'backup'
+  | 'diagnostics'
+  | 'about';
 
 const systemTabKeys = new Set<SystemTabKey>([
   'general',
@@ -45,6 +56,7 @@ export function SystemSettingsTabs({ initialTab }: SystemSettingsTabsProps) {
   const { t } = useTranslation();
   const { isOwner } = usePermissions();
   const [activeTab, setActiveTab] = useState<SystemTabKey>('general');
+  const [includeBeta, setIncludeBeta] = useState(false);
   const tabListRef = useRef<HTMLDivElement>(null);
   const horizontalScrollRef = useHorizontalScroll<HTMLDivElement>();
   const setTabListRef = useCallback(
@@ -60,10 +72,7 @@ export function SystemSettingsTabs({ initialTab }: SystemSettingsTabsProps) {
       return;
     }
 
-    if (
-      !isSystemTabKey(initialTab) ||
-      (!isOwner && (initialTab === 'backup' || initialTab === 'diagnostics'))
-    ) {
+    if (!isSystemTabKey(initialTab) || (!isOwner && (initialTab === 'backup' || initialTab === 'diagnostics'))) {
       setActiveTab('general');
       return;
     }
@@ -181,7 +190,7 @@ export function SystemSettingsTabs({ initialTab }: SystemSettingsTabsProps) {
           </TabsContent>
         )}
         <TabsContent value='about' className='mt-0 p-0'>
-          <AboutSettings />
+          <AboutSettings includeBeta={includeBeta} onIncludeBetaChange={setIncludeBeta} />
         </TabsContent>
       </div>
     </Tabs>
