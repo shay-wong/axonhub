@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`dd6a1794c20fcf952fb1a06baa427180545f75fa`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`0d85ba601d8523576aeb246b24337fb4f46d6953`
-- 本次 merge base：`68cb1b02c496ee7b59868f6af201026a40d7a9c2`
-- 审计范围：`git diff 0d85ba60..HEAD`
+- 本次 upstream merge 的 fork parent：`ce941ced638450e74d0c2d887398024156ab12df`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`fd4158ef8e1a559ae7d597d7e421ae52f9ad5976`
+- 本次 merge base：`0d85ba601d8523576aeb246b24337fb4f46d6953`
+- 审计范围：`git diff fd4158ef..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -356,7 +356,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`llm/transformer/openai/responses/inbound.go`、`llm/transformer/openai/responses/integration_test.go`。
 - 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：本次修复可用 `git log -S'Codex cron bootstraps' -- llm/transformer/openai/responses/inbound.go` 定位。
-- 合并审核：当前 upstream 基线 `0d85ba60`（含 `a0850956`）仍把该项转换为缺少 `call_id` 的 tool message；`a0850956` 新增的 raw request preservation 和跨格式转换也没有识别该启动项。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
+- 合并审核：当前 upstream 基线 `fd4158ef`（含 `a0850956`）仍把该项转换为缺少 `call_id` 的 tool message；`a0850956` 新增的 raw request preservation 和跨格式转换也没有识别该启动项。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
 - 上游吸收条件：upstream 能识别 Codex 定时任务启动项，并有真实请求形状的 inbound-to-outbound 回归测试。
 - 验证：`cd llm && go test ./transformer/openai/responses -run '^TestTransformRequest_NormalizesCodexAutomationBootstrap$' -count=1`。
 
