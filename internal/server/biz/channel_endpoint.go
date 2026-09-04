@@ -58,8 +58,8 @@ func ValidateEndpoints(endpoints []objects.ChannelEndpoint) error {
 			return fmt.Errorf("endpoint[%d]: unsupported transport %q", i, ep.Transport)
 		}
 
-		if ep.Transport == objects.ChannelEndpointTransportWebSocket && !supportsWebSocketTransport(ep.APIFormat) {
-			return fmt.Errorf("endpoint[%d]: websocket transport only supports api_format %q or %q", i, llm.APIFormatOpenAIResponse.String(), llm.APIFormatOpenAIResponseCompact.String())
+		if endpointTransport(ep) == objects.ChannelEndpointTransportWebSocket && !supportsWebSocketTransport(ep.APIFormat) {
+			return fmt.Errorf("endpoint[%d]: websocket transport only supports api_format %q", i, llm.APIFormatOpenAIResponse.String())
 		}
 
 		if ep.Path != "" {
@@ -77,7 +77,7 @@ func ValidateEndpoints(endpoints []objects.ChannelEndpoint) error {
 }
 
 func supportsWebSocketTransport(apiFormat string) bool {
-	return apiFormat == llm.APIFormatOpenAIResponse.String() || apiFormat == llm.APIFormatOpenAIResponseCompact.String()
+	return apiFormat == llm.APIFormatOpenAIResponse.String()
 }
 
 // ValidateModelProtocols validates the channel settings' per-model protocol overrides.
@@ -221,7 +221,9 @@ var openAIChatOnlyDefaultEndpoints = []objects.ChannelEndpoint{
 // and are not modeled here.
 var defaultEndpointsForChannelType = map[channel.Type][]objects.ChannelEndpoint{
 	channel.TypeOpenai:          openAIFullDefaultEndpoints,
+	channel.TypeZenmux:          openAIFullDefaultEndpoints,
 	channel.TypeOpenaiResponses: {{APIFormat: llm.APIFormatOpenAIResponse.String()}},
+	channel.TypeZenmuxResponses: {{APIFormat: llm.APIFormatOpenAIResponse.String()}},
 	channel.TypeAtlascloud:      openAICompatibleDefaultEndpoints,
 	channel.TypeQiniu:           {{APIFormat: llm.APIFormatOpenAIChatCompletion.String()}},
 	channel.TypeQiniuAnthropic:  {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
@@ -235,12 +237,17 @@ var defaultEndpointsForChannelType = map[channel.Type][]objects.ChannelEndpoint{
 	channel.TypeFenno: {
 		{APIFormat: llm.APIFormatOpenAIResponse.String()},
 	},
-	channel.TypeVercel:       openAICompatibleDefaultEndpoints,
-	channel.TypeAnthropic:    {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
-	channel.TypeAnthropicAWS: {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
-	channel.TypeAnthropicGcp: {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
-	channel.TypeGeminiOpenai: {{APIFormat: llm.APIFormatOpenAIChatCompletion.String()}},
+	channel.TypeVercel:          openAICompatibleDefaultEndpoints,
+	channel.TypeAnthropic:       {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
+	channel.TypeZenmuxAnthropic: {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
+	channel.TypeAnthropicAWS:    {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
+	channel.TypeAnthropicGcp:    {{APIFormat: llm.APIFormatAnthropicMessage.String()}},
+	channel.TypeGeminiOpenai:    {{APIFormat: llm.APIFormatOpenAIChatCompletion.String()}},
 	channel.TypeGemini: {
+		{APIFormat: llm.APIFormatGeminiContents.String()},
+		{APIFormat: llm.APIFormatGeminiEmbedding.String()},
+	},
+	channel.TypeZenmuxGemini: {
 		{APIFormat: llm.APIFormatGeminiContents.String()},
 		{APIFormat: llm.APIFormatGeminiEmbedding.String()},
 	},

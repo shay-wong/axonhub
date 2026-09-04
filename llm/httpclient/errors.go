@@ -96,6 +96,10 @@ func (e *Error) Error() string {
 }
 
 func (e *Error) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+
 	return e.Err
 }
 

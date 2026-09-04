@@ -320,6 +320,11 @@ type ChannelCredentials struct {
 	// APIKeyConfigs is a structured API key list with per-key routing weight.
 	APIKeyConfigs []ChannelAPIKeyConfig `json:"apiKeyConfigs,omitempty"`
 
+	// ManagementAPIKey is an optional provider management/console API key used only
+	// for server-side quota checks (e.g. ZenMux). It is never attached to inference
+	// requests and never exposed to clients beyond credential write APIs.
+	ManagementAPIKey string `json:"managementApiKey,omitempty"`
+
 	// Azure configuration for the channel.
 	Azure *AzureCredential `json:"azure,omitempty"`
 

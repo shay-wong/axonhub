@@ -70,8 +70,9 @@ server:
     trace_header: "AH-Trace-Id" # Trace ID header name
     extra_trace_headers: []     # Extra trace headers
     response_trace_headers: []  # Response headers that receive the resolved trace ID; empty disables it
-    claude_code_trace_enabled: false # Enable Claude Code trace extraction
-    codex_trace_enabled: false # Enable Codex trace extraction
+    claude_code_trace_enabled: true # Enable Claude Code trace extraction
+    codex_trace_enabled: true # Enable Codex trace extraction
+    opencode_trace_enabled: true # Enable OpenCode trace extraction
   debug: false                  # Enable debug mode
   disable_ssl_verify: false     # Disable SSL certificate verification for upstream requests (self-signed certificates)
   trusted_proxies: []            # Trusted reverse proxy IPs/CIDRs for forwarded client IP headers
@@ -93,6 +94,7 @@ server:
 - `AXONHUB_SERVER_TRACE_RESPONSE_TRACE_HEADERS`
 - `AXONHUB_SERVER_TRACE_CLAUDE_CODE_TRACE_ENABLED`
 - `AXONHUB_SERVER_TRACE_CODEX_TRACE_ENABLED`
+- `AXONHUB_SERVER_TRACE_OPENCODE_TRACE_ENABLED`
 - `AXONHUB_SERVER_DEBUG`
 - `AXONHUB_SERVER_DISABLE_SSL_VERIFY`
 - `AXONHUB_SERVER_TRUSTED_PROXIES`

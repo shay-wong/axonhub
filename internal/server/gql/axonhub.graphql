@@ -295,6 +295,7 @@ input ChannelCredentialsInput {
   apiKeyConfigs: [ChannelAPIKeyConfigInput!]
   gcp: GCPCredentialInput
   oauth: OAuthCredentialsInput
+  managementApiKey: String
 }
 
 input ChannelAPIKeyConfigInput {

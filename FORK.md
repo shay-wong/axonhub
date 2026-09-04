@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`86becc4ddeb7e9dbb2cf26e27a22ad4fe808fd98`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`dfbe22593ea33d62d1bc04d47a8e5d6c8b25d2bf`
-- 本次 merge base：`67203f8373aef33d3bd043f4f31d2cfcaf6cf49a`
-- 审计范围：`git diff dfbe2259..HEAD`
+- 本次 upstream merge 的 fork parent：`f9bc3b13151fb6d3be469ebb70643e890feed398`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`a0850956b071b9b48cac3b202cdeda53d0ac623d`
+- 本次 merge base：`dfbe22593ea33d62d1bc04d47a8e5d6c8b25d2bf`
+- 审计范围：`git diff a0850956..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -46,11 +46,11 @@ git show --remerge-diff <merge-commit>
 
 ## Fork 发布版本
 
-- Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta8`。
-- 本次合入源码中的 `internal/build/VERSION` 为 `v1.0.0-beta8`，与 upstream 发布基线一致。
+- Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta9`。
+- 本次 upstream parent 包含 tag `v1.0.0-beta9`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta8`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta7-fork.9`；upstream 发布基线已变为 `v1.0.0-beta8`，且当前没有对应 fork tag，因此下一个规范化 fork 版本为 `v1.0.0-beta8-fork.1`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta8-fork.1`；upstream 发布基线已变为 `v1.0.0-beta9`，且当前没有对应 fork tag，因此下一个规范化 fork 版本为 `v1.0.0-beta9-fork.1`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -72,7 +72,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：优先读取 `apiKeyConfigs`，兼容旧 `apiKey`/`apiKeys`；Key 去重且非正权重归一为 `100`；支持 `trace_sticky`、`weighted_sticky` 和 `failover`；API-key quota 预检与 checker 使用同一归一化 Key 集合；日志和 UI 只显示别名及安全后缀；失败重试优先排除当前 Key 并轮换同一 channel 的其他可用 Key。
 - 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel_apikey_identity.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_apikey_provider.go`、`internal/server/biz/provider_quota.go`、`internal/server/biz/provider_quota_url_test.go`、`internal/server/orchestrator/retry.go`、`frontend/src/features/channels/data/api-key-display.ts`、`frontend/src/features/channels/data/channel-input.ts`、`frontend/src/features/channels/components/channels-action-dialog.tsx`、`frontend/src/features/channels/components/channels-api-key-management-dialog.tsx`。
 - 提交锚点：`d6e092ba`、`2909ddaa`、`88980c6e`、`1a69f0c4`、`31b3ad18`、`d53787b1`。
-- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；`dfbe2259` 增加 `modelProtocols` 和增量 channel settings 更新时，必须让 `apiKeySelectionStrategy` 与协议配置并存并进入 settings patch；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
+- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；`dfbe2259` 增加 `modelProtocols` 和增量 channel settings 更新时，必须让 `apiKeySelectionStrategy` 与协议配置并存并进入 settings patch；`6742293a` 新增的 ZenMux `managementApiKey` 只用于服务端配额查询，必须与结构化 inference Key 并存且不能代替或清空别名、权重和选择策略；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
 - 吸收/删除条件：只有 fork 明确放弃多 Key 权重策略，或 upstream 提供等价的稳定身份、路由算法、兼容迁移和脱敏展示时才能删除。
 - 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'APIKey|ProviderQuota|Weighted|Failover|Retry'`；`cd frontend && node --test src/features/channels/data/api-key-display.test.mjs src/features/channels/data/channel-input.test.mjs`。
 
@@ -96,7 +96,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`llm/service_tier.go`、`internal/server/orchestrator/service_tier.go`、`internal/server/orchestrator/request.go`、`internal/server/orchestrator/outbound.go`、`internal/server/orchestrator/orchestrator_streaming_test.go`、`internal/objects/price.go`、`internal/ent/schema/request_execution.go`、`internal/ent/schema/usage_log.go`、`internal/server/biz/cost_calc.go`、`internal/server/biz/cost_calc_test.go`、`internal/server/biz/usage_log.go`、`frontend/src/features/channels/data/model-price-form.ts`、`frontend/src/features/channels/components/channels-model-price-dialog.tsx`、`frontend/src/features/requests/utils/service-tier.ts`、`frontend/src/features/requests/utils/column-visibility.ts`、`frontend/src/features/requests/components/requests-columns.tsx`、`frontend/src/features/requests/components/requests-table.tsx`、`frontend/src/features/requests-mobile-columns.test.mjs`、`frontend/src/locales/en/requests.json`、`frontend/src/locales/zh-CN/requests.json`。
 - 用户文档：`docs/en/guides/cost-tracking.md`、`docs/zh/guides/cost-tracking.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：`d4793bf7`、`7c45f58e`、`251b8770`、`f155d3d8`、`822da75c`、`8c64997f`；相关 merge resolution：`864c15a3`、`ee209fd8`；本次 Ultrafast 支持可用 `git log -S'ServiceTierUltrafast' -- llm/service_tier.go` 定位；本次 v6 列偏好迁移可用 `git log -S'REQUEST_COLUMN_VISIBILITY_STORAGE_VERSION = 6' -- frontend/src/features/requests/utils/column-visibility.ts` 定位；本次完整流取消后的 usage 持久化修复可用 `git log -S'CanceledAfterResponsesCompletionPersistsUsage' -- internal/server/orchestrator/orchestrator_streaming_test.go` 定位；upstream 价格导入/导出与 service-tier 映射的整合可用 `git log -S'mapSaveInputsToFormData' -- frontend/src/features/channels/data/model-price-form.ts` 定位。
-- 合并审核：schema、Ent、GraphQL、backup、billing 和 UI 必须作为一个行为链审核；禁止让 request-side Fast 意图覆盖 provider 明确返回的其他 tier，也不能让完整终态响应后的客户端取消撤销 usage eligibility；生成文件冲突应修改 schema 后重新生成。Upstream `5ac75028` 新增跨 API 格式的 `usage.cost` 注入；必须复用落库时相同的 requested/applied/override/policy 决策，不能退回无 tier 的基础价格。Upstream `359cf840` 已重构请求表布局，`d6ed9c62` 已虚拟化价格卡片，`d1140628` 和 `24145b38` 又加入 cache rate 与列排序，`48e8b714` 新增价格 JSON 导入/导出；合并后仍须保留 Fast 列、拆分 cache 列与旧列偏好迁移，并让虚拟化卡片及导入/导出完整承载 service-tier、prompt-cache 和 schedule。
+- 合并审核：schema、Ent、GraphQL、backup、billing 和 UI 必须作为一个行为链审核；禁止让 request-side Fast 意图覆盖 provider 明确返回的其他 tier，也不能让完整终态响应后的客户端取消撤销 usage eligibility；生成文件冲突应修改 schema 后重新生成。Upstream `5ac75028` 新增跨 API 格式的 `usage.cost` 注入，`0210b151` 又允许 object-shaped cost；两者都必须复用落库时相同的 requested/applied/override/policy 决策，不能退回无 tier 的基础价格。Upstream `359cf840` 已重构请求表布局，`d6ed9c62` 已虚拟化价格卡片，`d1140628` 和 `24145b38` 又加入 cache rate 与列排序，`48e8b714` 新增价格 JSON 导入/导出；合并后仍须保留 Fast 列、拆分 cache 列与旧列偏好迁移，并让虚拟化卡片及导入/导出完整承载 service-tier、prompt-cache 和 schedule。
 - 吸收/删除条件：只有 upstream 的字段、价格键、计费优先级、备份兼容和 UI 含义全部等价时才能替换本地实现。
 - 验证：`cd llm && go test ./transformer/openai ./transformer/openai/responses ./transformer/anthropic`；`go test ./internal/server/biz -run 'TestComputeUsageCostForServiceTier'`；`go test ./internal/server/orchestrator -run 'TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPersistsUsage'`；`go test ./internal/server/orchestrator ./internal/server/biz ./internal/server/backup ./internal/server/gql`；`cd frontend && node --test src/features/channels/data/model-price-catalog.test.mjs src/features/channels/data/model-price-form.test.mjs src/features/requests/utils/service-tier.test.mjs src/features/requests-mobile-columns.test.mjs`。
 
@@ -131,7 +131,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：Key-scoped provider 错误只累计和禁用对应 Key；transport/credential-agnostic failure 不禁用 Key；API Key policy 已处理的错误不再触发 channel 级禁用；临时禁用到期可恢复；状态图标只暴露当前状态允许且当前用户有权限的动作；倒计时、原因和安全身份显示一致。
 - 代码锚点：`internal/server/biz/channel_auto_disable.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_metrics.go`、`internal/server/orchestrator/performance.go`、`frontend/src/features/channels/data/channel-status-policy.ts`、`frontend/src/features/channels/data/disabled-api-key-status.ts`、`frontend/src/features/channels/components/channels-columns.tsx`、`frontend/src/features/channels/components/channels-availability-dialog.tsx`。
 - 提交锚点：`2909ddaa`、`fe7809e8`、`c9f85a35`、`fda1159c`；相关 merge resolution：`94d4f989`。
-- 合并审核：upstream `783611df` 已吸收按凭据禁用、OAuth 固定身份、cron 恢复、保留凭据的永久禁用和 availability UI；fork 仍额外保留 transport/credential-agnostic 错误分类、API Key policy 计数所有权、测试流量隔离、多 Key 别名/权重身份、channel 临时禁用状态和 permission gating。逐一验证这些额外语义，不要把完整 Key 暴露给只读用户。
+- 合并审核：upstream `783611df` 已吸收按凭据禁用、OAuth 固定身份、cron 恢复、保留凭据的永久禁用和 availability UI；`657db7f6` 仅抑制有稳定数据时的轮询报错，`7e706c0d` 仅让空字符串 error 仍可恢复，`6742293a` 仅增加 ZenMux 配额账户。这些变更不替代 fork 的 transport/credential-agnostic 错误分类、API Key policy 计数所有权、测试流量隔离、多 Key 别名/权重身份、channel 临时禁用状态和 permission gating。逐一验证这些额外语义，并让空 error 进入同一状态策略；不要把完整 Key 暴露给只读用户。
 - 上游吸收条件：upstream 具备相同状态机、错误分类、权限和前端回归测试。
 - 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'DisableAPIKey|AutoDisable|CredentialAgnostic|TransportFailure'`；`cd frontend && node --test src/features/channels/data/channel-status-policy.test.mjs src/features/channels/data/disabled-api-key-status.test.mjs src/features/channels/data/disabled-api-key-dialog-contract.test.mjs`。
 
@@ -142,7 +142,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：Lite header 与 `reasoning.context=all_turns` 成对保留；`parallel_tool_calls` 约束不丢失；provider-private 数据保存在现有 `ProviderExtensions` sidecar，不污染通用 `llm.Request`；clone 和 retry 后仍存在。
 - 代码锚点：`llm/model.go`、`llm/provider_extensions.go`、`llm/transformer/openai/responses/request_extensions.go`、`llm/transformer/openai/responses/model.go`、`llm/transformer/openai/responses/inbound.go`、`llm/transformer/openai/responses/outbound_convert.go`、`llm/transformer/openai/codex/outbound_executor_test.go`。
 - 提交锚点：`f60fb767`、`753b2f26`。
-- 合并审核：upstream `a6bfffa8` 已吸收 polymorphic `reasoning_content` 和 Responses body pass-through 时的 Codex metadata header allowlist，`c0233704` 补充 Codex identity headers，`6f9bfc5f` 又补齐缺失的 Lite reasoning context 并覆盖真实 inbound-to-Codex-outbound 路径；`49ade6f2` 支持兼容 relay 返回 completed JSON，但会删除 relay 上调用方明确发送的 Lite header。保留 JSON fallback，同时确保显式 Lite 在官方和兼容 relay 都不丢失、缺失 context 补为 `all_turns`；仍需覆盖 `parallel_tool_calls`、clone/retry 和最终 session canonicalization。必须同时比较 headers 和 JSON body；只保留 Lite header 而丢失 context 会形成 upstream 拒绝的非法组合。
+- 合并审核：upstream `a6bfffa8` 已吸收 polymorphic `reasoning_content` 和 Responses body pass-through 时的 Codex metadata header allowlist，`c0233704` 补充 Codex identity headers，`6f9bfc5f` 又补齐缺失的 Lite reasoning context 并覆盖真实 inbound-to-Codex-outbound 路径；`49ade6f2` 支持兼容 relay 返回 completed JSON，但会删除 relay 上调用方明确发送的 Lite header；`e2b726eb` 扩展 raw request fields、HTTP/WebSocket continuation 和 pass-through 契约，但仍未覆盖 Lite header/context 对、`parallel_tool_calls` 与 clone/retry。保留 JSON fallback，同时确保显式 Lite 在官方和兼容 relay 都不丢失、缺失 context 补为 `all_turns`。必须同时比较 headers 和 JSON body；只保留 Lite header 而丢失 context 会形成 upstream 拒绝的非法组合。
 - 上游吸收条件：upstream 有真实 inbound-to-Codex-outbound 测试，覆盖 context、parallel tool calls、clone 和 retry。
 - 验证：`cd llm && go test ./transformer/openai/codex ./transformer/openai/responses -run 'ResponsesLiteRequirements|ConvertReasoning'`。
 
@@ -153,7 +153,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：Tool Search 定义、调用和 output 可往返；`tool_search_output` 回放满足 upstream 必填字段；流式空参数不会生成错误调用；Responses 并行调用转 Chat 时正确聚合；Anthropic bridge 保留 deferred tools；仅在 done 事件出现的函数参数仍被保存；不同 namespace tool 不混淆。
 - 代码锚点：`llm/tools.go`、`llm/metadata.go`、`llm/transformer/anthropic/`、`llm/transformer/openai/responses/`。
 - 提交锚点：`e1d68898`、`8bf41241`、`5c201803`、`62edb839`、`41ba05ab`、`8a2a02c6`；相关 merge resolution：`24d949cd`。
-- 合并审核：按 tool definition、call、delta、done、output 和 replay 六个阶段检查；不能只验证非流式 happy path。Upstream `2c6efdb1` 已吸收 done-only 参数、等价 JSON 和迟到 identity 处理，但 Tool Search、跨协议 round-trip、terminal/refusal 行为和大整数精度仍须独立保留并验证。
+- 合并审核：按 tool definition、call、delta、done、output 和 replay 六个阶段检查；不能只验证非流式 happy path。Upstream `2c6efdb1` 已吸收 done-only 参数、等价 JSON 和迟到 identity 处理，`a0850956` 补齐普通文件输入和更多跨格式字段，但仍没有 Tool Search 的结构化 definition/call/output、跨协议 round-trip、terminal/refusal 行为和大整数精度；这些本地语义必须独立保留并验证。
 - 上游吸收条件：upstream 在 OpenAI Responses、Anthropic 和 Chat 三条转换链提供等价 round-trip 测试。
 - 验证：`cd llm && go test ./transformer/openai/responses ./transformer/anthropic -run 'ToolSearch|tool_search|FunctionCall|NamespaceTool|Deferred'`。
 
@@ -164,7 +164,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：Responses 混合流式内容保持分段和顺序；Cline 空 `choices` 遥测不向客户端透出但最终 usage 保留；interleaved reasoning 按 item 顺序输出；空或不可解析的 upstream error 回退到 status/raw status/通用消息，不返回空字符串；`response.completed`、`response.failed`、`response.incomplete`、`response.cancelled` 和 `response.canceled` 在 SSE metadata 或 JSON data 中都被识别为终态；direct stream 和 aggregation 语义一致。
 - 代码锚点：`internal/server/orchestrator/inbound.go`、`llm/transformer/openai/responses/inbound_stream.go`、`llm/transformer/openai/responses/outbound.go`、`llm/transformer/openai/responses/aggregator.go`、`llm/transformer/anthropic/inbound_stream.go`、`llm/transformer/cline/outbound.go`。
 - 提交锚点：`9909a8cc`、`a686efc3`、`042d41ec`；相关 merge resolution：`94d4f989`；本次终态识别变更可用 `git log -S'response.canceled' -- internal/server/orchestrator/inbound.go` 定位。
-- 合并审核：upstream `4495aa3c` 已吸收 Chat `finish_reason` 与 Responses abnormal terminal status 的双向映射；`889bc8ee`、`35133b6e`、`3b7e8618` 又吸收 clean EOF 检测、pre-content retry、单次 `[DONE]`、资源上限和客户端 incomplete 报告，`a0b37424` 将上游连接中断分类为稳定的 502 错误并保留失败 execution 延迟。fork 仍使用精确的 `response.incomplete`、`response.failed`、`response.cancelled` 终态事件，并保留混合分段、reasoning 顺序、空 error、Cline usage 及 direct/aggregate 一致性。终态事件后若仍出现非取消 transport error，必须按失败记录，不能因过早标记成功而吞掉健康计数。分别检查 direct stream、aggregate、normal completion、incomplete、provider error 和 transport error；不要把 empty-success retry 与 HTTP error formatting 混为一谈。
+- 合并审核：upstream `4495aa3c` 已吸收 Chat `finish_reason` 与 Responses abnormal terminal status 的双向映射；`889bc8ee`、`35133b6e`、`3b7e8618` 又吸收 clean EOF 检测、pre-content retry、单次 `[DONE]`、资源上限和客户端 incomplete 报告，`a0b37424` 将上游连接中断分类为稳定的 502 错误并保留失败 execution 延迟。本轮 `c2cf9818` 验证 Anthropic clean EOF 的 tool arguments，`1908ca28` 保留转换后的 Responses session events，`e47fed9d` 给 SSE 写入增加 deadline，`a0850956` 识别 WebSocket error 的嵌套 detail/status；这些都应保留，但仍未替代 fork 的精确 `response.incomplete`、`response.failed`、`response.cancelled` 终态事件、read-only HTTP status metadata、混合分段、reasoning 顺序、空 error、request ID、Cline usage 及 direct/aggregate 一致性。终态事件后若仍出现非取消 transport error，必须按失败记录，不能因过早标记成功而吞掉健康计数。分别检查 direct stream、aggregate、normal completion、incomplete、provider error 和 transport error；不要把 empty-success retry 与 HTTP error formatting 混为一谈。
 - 上游吸收条件：upstream 覆盖混合分段、reasoning 顺序、最终 usage、空 error 和 direct/aggregate 一致性。
 - 验证：`go test ./internal/server/orchestrator -run 'TestIsTerminalStreamEvent_ResponsesTerminalEvents'`；`cd llm && go test ./transformer/openai/responses ./transformer/anthropic ./transformer/cline`。
 
@@ -241,7 +241,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：最多保留 1 MiB；读取 `limit+1` 才能可靠判断截断；`Truncated` 从 `httpclient.Error` 贯穿 pipeline、transformer、非流式和流式 API error；只有实际截断时输出 `truncated: true`。
 - 代码锚点：`llm/httpclient/client.go`、`llm/httpclient/errors.go`、`llm/pipeline/error.go`、`internal/server/api/chat.go`、`internal/server/api/upstream_error_policy.go`。
 - 提交锚点：`fe27b4db`。
-- 合并审核：upstream `2d7d7c86` 重构 SSE writer 并加入默认关闭的 keep-alive；`3b7e8618` 加入 32 MiB SSE 单事件上限，`7a5a2927` 改进 secret-safe logging，但两者都没有吸收 HTTP error body 的可靠截断证据。合并时可复用这些上游边界，不能丢掉 `limit+1` 检测和 `truncated` 传播。检查 JSON error、plain text、无 heartbeat/有 heartbeat streaming 和 policy-masked error。
+- 合并审核：upstream `2d7d7c86` 重构 SSE writer 并加入默认关闭的 keep-alive；`3b7e8618` 加入 32 MiB SSE 单事件上限，`7a5a2927` 改进 secret-safe logging，`e47fed9d` 增加 SSE 写 deadline，`a0850956` 保留 WebSocket error status/detail，但都没有吸收 HTTP error body 的可靠截断证据。合并时可复用这些上游边界，不能丢掉 `limit+1` 检测以及 `Truncated` 到 Responses 非流式错误的传播。检查 JSON error、plain text、无 heartbeat/有 heartbeat streaming 和 policy-masked error。
 - 上游吸收条件：upstream 同时具备上限、可靠检测和全链路传播测试。
 - 验证：`cd llm && go test ./httpclient ./pipeline -run 'LimitsErrorResponseBody|Truncat'`；`go test ./internal/server/api -run Truncat`。
 
@@ -252,7 +252,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：resolved session ID 写入 transformer metadata；真正发送前统一写入 `Session_id` 并删除 `session_id`；普通、流式、non-stream aggregation 和 WebSocket 复用使用同一 canonical identity；header merge 不修改源 map。
 - 代码锚点：`llm/transformer/openai/codex/outbound.go`、`llm/transformer/openai/codex/outbound_executor_test.go`、`llm/httpclient/utils.go`、`llm/transformer/openai/responses/websocket_executor.go`。
 - 提交锚点：`5f3eeb83`；相关 merge resolution：`cf45f92e`。
-- 合并审核：upstream `c0233704` 补充了 Codex identity headers，`16f08fed` 新增 Responses WebSocket 与 HTTP transport finalization；本地 canonical session 规范化必须在 HTTP transport 删除 WebSocket-only 字段之前执行，WebSocket 路径也必须使用同一身份。追踪最终 executor 收到的 header，不要只看 `TransformRequest` 的中间结果；同时测试两种 header spelling、HTTP 字段清理和 connection reuse。
+- 合并审核：upstream `c0233704` 补充了 Codex identity headers，`16f08fed` 新增 Responses WebSocket 与 HTTP transport finalization，`e2b726eb` 调整了 continuation 与跨 transport 请求保真；本地 canonical session 规范化必须在 HTTP transport 删除 WebSocket-only 字段之前执行，WebSocket 路径也必须使用同一身份。追踪最终 executor 收到的 header，不要只看 `TransformRequest` 的中间结果；同时测试两种 header spelling、HTTP 字段清理、continuation 和 connection reuse。
 - 上游吸收条件：upstream 在普通、流式和 WebSocket 路径都有 canonical session 测试。
 - 验证：`cd llm && go test ./transformer/openai/codex ./transformer/openai/responses ./httpclient -run 'Session|Header|WebSocketExecutorReusesConnection'`。
 
@@ -356,7 +356,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`llm/transformer/openai/responses/inbound.go`、`llm/transformer/openai/responses/integration_test.go`。
 - 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：本次修复可用 `git log -S'Codex cron bootstraps' -- llm/transformer/openai/responses/inbound.go` 定位。
-- 合并审核：当前 upstream 基线 `b62d3bcd`（包含 `c9ea3207`）仍把该项转换为缺少 `call_id` 的 tool message。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
+- 合并审核：当前 upstream 基线 `a0850956` 仍把该项转换为缺少 `call_id` 的 tool message；本轮新增的 raw request preservation 和跨格式转换也没有识别该启动项。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
 - 上游吸收条件：upstream 能识别 Codex 定时任务启动项，并有真实请求形状的 inbound-to-outbound 回归测试。
 - 验证：`cd llm && go test ./transformer/openai/responses -run '^TestTransformRequest_NormalizesCodexAutomationBootstrap$' -count=1`。
 

@@ -1033,14 +1033,28 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		}
 
 	case StreamEventTypeError:
-		upstreamError := streamEvent.Error
-		if upstreamError == nil {
-			upstreamError = &Error{
-				Type:      string(streamEvent.Type),
-				Code:      streamEvent.Code,
-				Message:   streamEvent.Message,
-				Param:     streamEvent.Param,
-				RequestID: streamEvent.RequestID,
+		upstreamError := &Error{
+			Type:      string(streamEvent.Type),
+			Code:      streamEvent.Code,
+			Message:   streamEvent.Message,
+			Param:     streamEvent.Param,
+			RequestID: streamEvent.RequestID,
+		}
+		if streamEvent.Error != nil {
+			if streamEvent.Error.Type != "" {
+				upstreamError.Type = streamEvent.Error.Type
+			}
+			if streamEvent.Error.Code != "" {
+				upstreamError.Code = streamEvent.Error.Code
+			}
+			if streamEvent.Error.Message != "" {
+				upstreamError.Message = streamEvent.Error.Message
+			}
+			if streamEvent.Error.Param != nil {
+				upstreamError.Param = streamEvent.Error.Param
+			}
+			if streamEvent.Error.RequestID != "" {
+				upstreamError.RequestID = streamEvent.Error.RequestID
 			}
 		}
 		return newStreamResponseError(streamEvent.StatusCode, upstreamError)
