@@ -415,7 +415,9 @@ function filterProviders(data, allowedIds) {
 					: id;
 				const isTencentModel =
 					normalizedId === "hy3" ||
+					normalizedId === "hy4" ||
 					normalizedId.startsWith("hy3-") ||
+					normalizedId.startsWith("hy4-") ||
 					normalizedId.startsWith("hunyuan-");
 
 				if (!isTencentModel || mergedModels.has(normalizedId)) continue;
@@ -432,7 +434,7 @@ function filterProviders(data, allowedIds) {
 				models: Array.from(mergedModels.values()),
 			};
 			console.log(
-				`Merged ${mergedModels.size} Hy3/Hunyuan models into Tencent developer`,
+				`Merged ${mergedModels.size} Hy3/Hy4/Hunyuan models into Tencent developer`,
 			);
 		}
 	}

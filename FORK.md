@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`17c5419fcc2d5ab7fa56feebafd91e7ac4c433e1`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`68cb1b02c496ee7b59868f6af201026a40d7a9c2`
-- 本次 merge base：`a0850956b071b9b48cac3b202cdeda53d0ac623d`
-- 审计范围：`git diff 68cb1b02..HEAD`
+- 本次 upstream merge 的 fork parent：`dd6a1794c20fcf952fb1a06baa427180545f75fa`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`0d85ba601d8523576aeb246b24337fb4f46d6953`
+- 本次 merge base：`68cb1b02c496ee7b59868f6af201026a40d7a9c2`
+- 审计范围：`git diff 0d85ba60..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -332,7 +332,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`internal/server/biz/catalog.go`、`internal/server/biz/catalog_filter.go`、`internal/server/biz/catalog_filter_test.go`、`internal/server/biz/catalogdata/providers.json`、`frontend/src/features/models/data/providers.schema.ts`、`frontend/src/features/models/data/providers.schema.test.mjs`、`frontend/src/features/models/data/providers-schema.test.mjs`、`scripts/sync/sync-model-developers.js`。
 - 用户文档：维护者内部数据兼容修复，不新增配置或 API，无独立用户文档和 changelog 条目。
 - 提交锚点：本次修复可用 `git log -S'normalizeCatalogExperimental' -- internal/server/biz/catalog_filter.go` 定位。
-- 合并审核：upstream `4483c2e4` 已把目录拉取迁移到后端，`6f729f7c` 则用布尔/对象联合类型接受 `deepseek-v4-flash-vision-exp` 的 `experimental: true`；`dbeed3e6` 新增完整内置目录的 schema 解析测试，可以保留，但不能替代 fork 对布尔 `experimental` 的拒绝断言和扩展价格结构覆盖。必须在后端信任边界清洗无效值，并保持前端结构化 schema，避免价格目录调用方增加布尔分支。
+- 合并审核：upstream `4483c2e4` 已把目录拉取迁移到后端，`6f729f7c` 则用布尔/对象联合类型接受 `deepseek-v4-flash-vision-exp` 的 `experimental: true`；`dbeed3e6` 新增完整内置目录的 schema 解析测试，`0d85ba60` 补齐腾讯 HY 4 系列模型筛选，这些变更可以保留，但不能替代 fork 对布尔 `experimental` 的拒绝断言和扩展价格结构覆盖。必须在后端信任边界清洗无效值，并保持前端结构化 schema，避免价格目录调用方增加布尔分支。
 - 上游吸收条件：upstream 删除或迁移该无效布尔值，并保留覆盖完整内置目录的 schema 解析测试。
 - 验证：`go test ./internal/server/biz -run 'TestNormalizeCatalogExperimental|TestCatalogService'`；`cd frontend && node --test src/features/models/data/providers.schema.test.mjs src/features/models/data/providers-schema.test.mjs`。
 
@@ -356,7 +356,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`llm/transformer/openai/responses/inbound.go`、`llm/transformer/openai/responses/integration_test.go`。
 - 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：本次修复可用 `git log -S'Codex cron bootstraps' -- llm/transformer/openai/responses/inbound.go` 定位。
-- 合并审核：当前 upstream 基线 `68cb1b02`（含 `a0850956`）仍把该项转换为缺少 `call_id` 的 tool message；`a0850956` 新增的 raw request preservation 和跨格式转换也没有识别该启动项。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
+- 合并审核：当前 upstream 基线 `0d85ba60`（含 `a0850956`）仍把该项转换为缺少 `call_id` 的 tool message；`a0850956` 新增的 raw request preservation 和跨格式转换也没有识别该启动项。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
 - 上游吸收条件：upstream 能识别 Codex 定时任务启动项，并有真实请求形状的 inbound-to-outbound 回归测试。
 - 验证：`cd llm && go test ./transformer/openai/responses -run '^TestTransformRequest_NormalizesCodexAutomationBootstrap$' -count=1`。
 
