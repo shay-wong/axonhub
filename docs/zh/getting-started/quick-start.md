@@ -2,57 +2,13 @@
 
 ## 概述
 
-本指南将帮助您快速开始使用 AxonHub。只需几分钟，您就可以运行 AxonHub 并发出第一个 API 调用。
+本指南介绍如何在一个已经运行并完成初始化的 AxonHub 实例中配置渠道、创建 API 密钥并发出第一个请求。
 
-## 先决条件
+准备一个有效的 AI 提供商 API 密钥（例如 OpenAI 或 Anthropic）。
 
-- Docker 和 Docker Compose（推荐）
-- 或者 Go 1.26+ 和 Node.js 18+ 用于开发环境设置
-- 来自 AI 提供商的有效 API 密钥（OpenAI、Anthropic 等）
+Release 构建可由拥有 `write_settings` 权限的用户在**系统设置 > 关于**中安装更新，或回滚到最近 3 个兼容的旧版本之一；前提是进程由 systemd 等 supervisor 托管，且运行用户能够写入可执行文件所在目录。前台直接运行的进程不会自动重启；Windows 构建仍需手工替换。**包含 Beta 版本**会在切换系统设置标签时保留，刷新页面后重置。
 
-## 快速设置方法
-
-### 方法 1：Docker Compose（推荐）
-
-1. **克隆仓库**
-   ```bash
-   git clone https://github.com/looplj/axonhub.git
-   cd axonhub
-   ```
-
-2. **配置环境变量**
-   ```bash
-   cp config.example.yml config.yml
-   # 使用您喜欢的编辑器编辑 config.yml
-   ```
-
-3. **启动服务**
-   ```bash
-   docker-compose up -d
-   ```
-
-4. **访问应用程序**
-   - Web 界面：http://localhost:8090
-   - 默认凭据：admin@example.com / admin123
-
-### 方法 2：二进制下载
-
-1. **下载最新版本**
-   - 访问 [GitHub Releases](https://github.com/looplj/axonhub/releases)
-   - 下载适合您操作系统的二进制文件
-
-2. **解压并运行**
-   ```bash
-   unzip axonhub_*.zip
-   cd axonhub_*
-   chmod +x axonhub
-   ./axonhub
-   ```
-
-3. **访问应用程序**
-   - Web 界面：http://localhost:8090
-
-Release 构建可由拥有 `write_settings` 权限的用户在**系统设置 > 关于**中安装更新，或回滚到最近 3 个兼容的旧版本之一；前提是进程由 systemd 等 supervisor 托管，且运行用户能够写入可执行文件所在目录。前台直接运行的进程不会自动重启；Windows 构建仍需手工替换。
+AxonHub 部署在反向代理后时，必须先将代理 IP 或 CIDR 配置到 `server.trusted_proxies`，再依赖转发的客户端 IP 执行访问控制。该配置默认是空列表，此时忽略 `X-Forwarded-For` 和 `X-Real-IP`；配置文件和环境变量语法见 `config.example.yml`。
 
 ## 第一步
 
@@ -314,45 +270,6 @@ settings:
    - 为不同的安全要求使用单独的渠道
    - 定期审查和更新覆盖配置
 
-## 配置示例
-
-### 基本配置
-
-```yaml
-# config.yml
-server:
-  port: 8090
-  name: "AxonHub"
-
-db:
-  dialect: "sqlite3"
-  dsn: "file:axonhub.db?cache=shared&_fk=1&_pragma=journal_mode(WAL)"
-
-log:
-  level: "info"
-  encoding: "json"
-```
-
-### 生产配置
-
-```yaml
-server:
-  port: 8090
-  name: "AxonHub Production"
-  debug: false
-
-db:
-  dialect: "postgres"
-  dsn: "postgres://user:pass@localhost/axonhub?sslmode=disable"
-
-log:
-  level: "warn"
-  encoding: "json"
-  output: "file"
-  file:
-    path: "/var/log/axonhub/axonhub.log"
-```
-
 ## 下一步
 
 ### 理解请求流程
@@ -369,25 +286,15 @@ log:
 - [OpenAI API](../api-reference/openai-api.md)
 - [Anthropic API](../api-reference/anthropic-api.md)
 - [Gemini API](../api-reference/gemini-api.md)
-- [部署指南](../deployment/configuration.md)
 
 ## 故障排除
 
 ### 常见问题
 
-**无法连接到 AxonHub**
-- 检查服务是否正在运行：`docker-compose ps`
-- 验证端口 8090 是否可用
-- 检查防火墙设置
-
 **API 密钥身份验证失败**
 - 验证 API 密钥是否正确配置
 - 检查渠道是否已启用
 - 确保提供商 API 密钥有效
-
-**请求超时**
-- 在配置中增加 `server.llm_request_timeout`
-- 检查与 AI 提供商的网络连通性
 
 ### 获取帮助
 
@@ -403,4 +310,3 @@ log:
 - 配置模型映射以优化成本
 - 实施请求追踪以进行调试
 - 设置使用配额和速率限制
-- 与现有的 CI/CD 流水线集成

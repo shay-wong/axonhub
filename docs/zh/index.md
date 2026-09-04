@@ -8,7 +8,7 @@
 
 | 文档 | 描述 |
 |------|------|
-| [快速入门指南](getting-started/quick-start.md) | 安装、运行、更新和回滚 AxonHub |
+| [快速入门指南](getting-started/quick-start.md) | 配置 AxonHub，并了解 fork 更新与代理边界 |
 | [请求处理流程](getting-started/request-processing.md) | 了解 AxonHub 如何处理 API 请求 |
 
 ### 📖 使用指南
@@ -44,13 +44,6 @@
 | [图像生成 API](api-reference/image-generation.md) | 图像生成接口文档 |
 | [嵌入 API](api-reference/embedding-api.md) | 向量嵌入接口文档 |
 | [重排序 API](api-reference/rerank-api.md) | 重排序接口文档 |
-
-### 🚀 部署指南
-
-| 文档 | 描述 |
-|------|------|
-| [Docker 部署](deployment/docker.md) | 使用 Docker 和 Docker Compose 部署 |
-| [配置详解](deployment/configuration.md) | 详细的配置选项说明 |
 
 ### 🛠️ 开发文档
 

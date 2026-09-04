@@ -8,7 +8,7 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 
 | Document | Description |
 |----------|-------------|
-| [Quick Start Guide](getting-started/quick-start.md) | Install, run, update, and roll back AxonHub |
+| [Quick Start Guide](getting-started/quick-start.md) | Configure AxonHub and understand fork update and proxy boundaries |
 | [Request Processing](getting-started/request-processing.md) | Understand how AxonHub processes API requests |
 
 ### 📖 User Guides
@@ -45,13 +45,6 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 | [Image Generation API](api-reference/image-generation.md) | Image generation interface documentation |
 | [Embedding API](api-reference/embedding-api.md) | Vector embedding interface documentation |
 | [Rerank API](api-reference/rerank-api.md) | Reranking interface documentation |
-
-### 🚀 Deployment Guides
-
-| Document | Description |
-|----------|-------------|
-| [Docker Deployment](deployment/docker.md) | Deploy using Docker and Docker Compose |
-| [Configuration](deployment/configuration.md) | Detailed configuration options |
 
 ### 🛠️ Development
 

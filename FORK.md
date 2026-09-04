@@ -13,16 +13,16 @@
 5. `等待上游吸收` 表示这是通用修复或时效性数据；upstream 具备等价行为和回归测试后，删除本地实现和本文条目。
 6. 提交锚点只用于追溯原始思路。最终审核必须检查当前代码，因为后续 merge resolution 可能扩展或移动实现。
 7. 本文中的命令是验证索引。执行时仍须遵守 `AGENTS.md`，尤其是未经用户明确要求不得运行 lint 或 build。
-8. 面向用户的 fork 能力以 `docs/en` 和 `docs/zh` 为完整维护语言，并同步各自索引、英文/中文 README 与 `CHANGELOG.md`；`README.ja-JP.md` 当前是链接到英文文档的入口，不视为完整日文文档树。纯 upstream 能力进入基线时不重复登记为 fork changelog。
+8. 面向用户的 fork 能力应同步到仍由 upstream 维护的 `docs/en`、`docs/zh` 入口及各自索引、英文/中文 README 与 `CHANGELOG.md`；不要为了少量 fork 差异恢复 upstream 已迁出的整套部署文档。`README.ja-JP.md` 当前是链接到英文文档的入口，不视为完整日文文档树。纯 upstream 能力进入基线时不重复登记为 fork changelog。
 
 ## Upstream 基线
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`f9bc3b13151fb6d3be469ebb70643e890feed398`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`a0850956b071b9b48cac3b202cdeda53d0ac623d`
-- 本次 merge base：`dfbe22593ea33d62d1bc04d47a8e5d6c8b25d2bf`
-- 审计范围：`git diff a0850956..HEAD`
+- 本次 upstream merge 的 fork parent：`17c5419fcc2d5ab7fa56feebafd91e7ac4c433e1`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`68cb1b02c496ee7b59868f6af201026a40d7a9c2`
+- 本次 merge base：`a0850956b071b9b48cac3b202cdeda53d0ac623d`
+- 审计范围：`git diff 68cb1b02..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -228,7 +228,7 @@ git show --remerge-diff <merge-commit>
 - 生命周期：`等待上游吸收`
 - 原始意图：客户端不能通过伪造 forwarded headers 绕过 IP blocklist/rate limit 或污染访问日志。
 - 必须保持：`trusted_proxies` 默认为空；只有显式代理 IP/CIDR 可提供 `X-Forwarded-For`/`X-Real-IP`；中间件统一使用 Gin 验证后的 `ClientIP()`；非法 proxy 配置启动即失败。
-- 代码锚点：`internal/server/config.go`、`internal/server/server.go`、`internal/server/middleware/ip_blocklist.go`、`config.example.yml`、`docs/en/deployment/configuration.md`、`docs/zh/deployment/configuration.md`。
+- 代码锚点：`internal/server/config.go`、`internal/server/server.go`、`internal/server/middleware/ip_blocklist.go`、`config.example.yml`、`docs/en/getting-started/quick-start.md`、`docs/zh/getting-started/quick-start.md`。
 - 提交锚点：`fe27b4db`。
 - 合并审核：检查默认值，不能为了反向代理开箱即用而恢复“信任所有代理”；IP 控制、限流和 access log 必须使用同一解析结果。
 - 上游吸收条件：upstream 提供安全默认值、CIDR 配置和伪造 forwarded header 回归测试。
@@ -285,7 +285,7 @@ git show --remerge-diff <merge-commit>
 - 原始意图：小型前端回归不应在切换视图时重置用户输入、暴露无权限操作或拒绝后端合法 ID。
 - 必须保持：data storage 表格数据引用稳定，编辑输入不因 render 重置；更新检查的 **包含 Beta 版本**在系统设置标签切换期间保持、页面刷新后重置；禁用 Key 提示有可读对比度；thread/trace/detail 状态动作要求 `write_requests` 并携带当前 project header；brand settings 可公开读取，但受保护 system settings 仍要求 `read_settings`。
 - 代码锚点：`frontend/src/features/data-storages/index.tsx`、`frontend/src/features/channels/components/channels-columns.tsx`、`frontend/src/features/request-status-management.test.mjs`、`frontend/src/features/threads/components/thread-detail-page.tsx`、`frontend/src/features/traces/components/trace-detail-page.tsx`、`frontend/src/features/prompts/data/schema.test.mjs`、`frontend/src/features/system/components/about-settings.tsx`、`frontend/src/features/system/components/tabs.tsx`、`frontend/src/features/system/data/system-permissions.test.mjs`、`frontend/src/features/system/data/update-contract.test.mjs`。
-- 用户文档：`docs/en/deployment/docker.md`、`docs/zh/deployment/docker.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
+- 用户文档：`docs/en/getting-started/quick-start.md`、`docs/zh/getting-started/quick-start.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：`b5d19692`、`151e1d4e`、`374cbd81`；相关 merge resolution：`3356f5bd`、`864c15a3`；本次 Beta 选择状态修复可用 `git log -S'onIncludeBetaChange' -- frontend/src/features/system/components/about-settings.tsx frontend/src/features/system/components/tabs.tsx` 定位。
 - 合并审核：upstream `7cd1aee9` 已吸收部分 project role UI/effective scope 行为，`d232d343` 已等价吸收 prompt GUID 实现，`800bb72f` 已吸收 auto-refresh 控件；`131dc03d` 引入的 Beta 选择仍位于会随标签卸载的 About 子组件。本地仍保留 prompt regression test，data storage、Beta 选择的父级状态、状态动作 permission/project header 和 system settings 边界仍需独立验证。以行为测试逐项判断，不要因为 upstream 重构组件就删除测试覆盖，也不要用 `forceMount` 让所有设置页常驻。
 - 上游吸收条件：对应 UI 行为和 permission test 已在 upstream 等价存在；允许逐项删除已吸收的小修复。
@@ -342,7 +342,7 @@ git show --remerge-diff <merge-commit>
 - 原始意图：Docker 和“可执行文件目录由运行用户拥有”的进程管理器托管 Release 部署，应能直接从管理界面完成版本升级和历史版本回滚，不再要求操作者手工进入服务器替换二进制。
 - 必须保持：复用现有 stable/beta 版本选择；只在受支持的非 Windows Release 构建显示安装入口；只接受 AxonHub 版本标签；历史列表最多展示严格早于当前版本的最近 3 个 Release，并保持 stable/beta 和 fork 类型一致；回滚目标必须重新通过服务端历史列表校验，不能信任前端传入任意 tag；升级与回滚均按当前平台下载 GoReleaser ZIP，必须校验同一 Release 的 `checksums.txt`；限制下载和解压大小；在可执行文件同目录保留 `.backup` 并原子替换；只有 `write_settings` 系统权限可查询历史、安装、回滚或重启；重启只退出进程并依赖 Docker/systemd 等 supervisor 拉起；fork 自动发布同时产生 Docker 镜像、ZIP 和 checksum，且 fork 发布不写 upstream Homebrew tap。
 - 代码锚点：`internal/server/biz/update.go`、`internal/server/api/system.go`、`internal/server/routes.go`、`frontend/src/features/system/components/about-settings.tsx`、`.github/workflows/release.yml`、`.github/workflows/stable-fork-release.yml`、`Dockerfile`、`docker-compose.yml`。
-- 用户文档：`docs/en/deployment/docker.md`、`docs/zh/deployment/docker.md`、`docs/en/getting-started/quick-start.md`、`docs/zh/getting-started/quick-start.md`、`docs/en/index.md`、`docs/zh/index.md`、`README.md`；发布说明：`CHANGELOG.md`。
+- 用户文档：`docs/en/getting-started/quick-start.md`、`docs/zh/getting-started/quick-start.md`、`docs/en/index.md`、`docs/zh/index.md`、`README.md`；发布说明：`CHANGELOG.md`。
 - 提交锚点：本次变更可用 `git log -S'InstallVersion' -- internal/server/biz/update.go` 定位。
 - 合并审核：不能把“检测到 tag”等同于“可安装”；fork tag 必须有公开 Release 资产。历史回滚也不能接受任意用户输入的 tag，必须保持同渠道、同 fork 类型、严格旧于当前版本并重新校验服务端白名单。保留 SHA-256 校验、可信 GitHub 下载域、大小限制、同文件系统替换、权限检查和 supervisor 重启边界。Docker 必须让非 root 运行用户能写可执行文件目录；不要引入 Docker socket。
 - 上游吸收条件：产品能力长期保留；仅在 fork 不再维护自有 Release，或 upstream 提供等价的二进制安装、发布资产和回归测试时重新评估。
@@ -356,7 +356,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`llm/transformer/openai/responses/inbound.go`、`llm/transformer/openai/responses/integration_test.go`。
 - 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：本次修复可用 `git log -S'Codex cron bootstraps' -- llm/transformer/openai/responses/inbound.go` 定位。
-- 合并审核：当前 upstream 基线 `a0850956` 仍把该项转换为缺少 `call_id` 的 tool message；本轮新增的 raw request preservation 和跨格式转换也没有识别该启动项。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
+- 合并审核：当前 upstream 基线 `68cb1b02`（含 `a0850956`）仍把该项转换为缺少 `call_id` 的 tool message；`a0850956` 新增的 raw request preservation 和跨格式转换也没有识别该启动项。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
 - 上游吸收条件：upstream 能识别 Codex 定时任务启动项，并有真实请求形状的 inbound-to-outbound 回归测试。
 - 验证：`cd llm && go test ./transformer/openai/responses -run '^TestTransformRequest_NormalizesCodexAutomationBootstrap$' -count=1`。
 

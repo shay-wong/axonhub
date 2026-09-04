@@ -2,57 +2,13 @@
 
 ## Overview
 
-This guide will help you get started with AxonHub quickly. In just a few minutes, you'll have AxonHub running and be able to make your first API call.
+This guide explains how to configure a channel, create an API key, and make a first request in an AxonHub instance that is already running and initialized.
 
-## Prerequisites
+Prepare a valid API key from an AI provider such as OpenAI or Anthropic.
 
-- Docker and Docker Compose (recommended)
-- Or Go 1.26+ and Node.js 18+ for development setup
-- A valid API key from an AI provider (OpenAI, Anthropic, etc.)
+Release builds can install updates or roll back to one of the three most recent compatible older releases from **System Settings > About** when the account has `write_settings`, the process is managed by a supervisor such as systemd, and the runtime user can write the executable's directory. Foreground processes are not restarted automatically; Windows builds require manual replacement. **Include Beta versions** persists while switching between System Settings tabs and resets when the page reloads.
 
-## Quick Setup Methods
-
-### Method 1: Docker Compose (Recommended)
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/looplj/axonhub.git
-   cd axonhub
-   ```
-
-2. **Configure environment variables**
-   ```bash
-   cp config.example.yml config.yml
-   # Edit config.yml with your preferred settings
-   ```
-
-3. **Start services**
-   ```bash
-   docker-compose up -d
-   ```
-
-4. **Access the application**
-   - Web interface: http://localhost:8090
-   - Default credentials: admin@example.com / admin123
-
-### Method 2: Binary Download
-
-1. **Download the latest release**
-   - Visit [GitHub Releases](https://github.com/looplj/axonhub/releases)
-   - Download the appropriate binary for your OS
-
-2. **Extract and run**
-   ```bash
-   unzip axonhub_*.zip
-   cd axonhub_*
-   chmod +x axonhub
-   ./axonhub
-   ```
-
-3. **Access the application**
-   - Web interface: http://localhost:8090
-
-Release builds can install updates or roll back to one of the three most recent compatible older releases from **System Settings > About** when the account has `write_settings`, the process is managed by a supervisor such as systemd, and the runtime user can write the executable's directory. Foreground processes are not restarted automatically; Windows builds require manual replacement.
+When AxonHub runs behind a reverse proxy, configure `server.trusted_proxies` with the proxy IPs or CIDRs before relying on forwarded client IPs for access controls. It defaults to an empty list, which ignores `X-Forwarded-For` and `X-Real-IP`; see `config.example.yml` for the configuration and environment variable syntax.
 
 ## First Steps
 
@@ -314,45 +270,6 @@ settings:
    - Use separate channels for different security requirements
    - Regularly review and update override configurations
 
-## Configuration Examples
-
-### Basic Configuration
-
-```yaml
-# config.yml
-server:
-  port: 8090
-  name: "AxonHub"
-
-db:
-  dialect: "sqlite3"
-  dsn: "file:axonhub.db?cache=shared&_fk=1&_pragma=journal_mode(WAL)"
-
-log:
-  level: "info"
-  encoding: "json"
-```
-
-### Production Configuration
-
-```yaml
-server:
-  port: 8090
-  name: "AxonHub Production"
-  debug: false
-
-db:
-  dialect: "postgres"
-  dsn: "postgres://user:pass@localhost/axonhub?sslmode=disable"
-
-log:
-  level: "warn"
-  encoding: "json"
-  output: "file"
-  file:
-    path: "/var/log/axonhub/axonhub.log"
-```
-
 ## Next Steps
 
 ### Understand the Request Flow
@@ -369,25 +286,15 @@ log:
 - [OpenAI API](../api-reference/openai-api.md)
 - [Anthropic API](../api-reference/anthropic-api.md)
 - [Gemini API](../api-reference/gemini-api.md)
-- [Deployment Guide](../deployment/configuration.md)
 
 ## Troubleshooting
 
 ### Common Issues
 
-**Cannot connect to AxonHub**
-- Check if the service is running: `docker-compose ps`
-- Verify port 8090 is available
-- Check firewall settings
-
 **API key authentication fails**
 - Verify the API key is correctly configured
 - Check if the channel is enabled
 - Ensure the provider API key is valid
-
-**Request timeouts**
-- Increase `server.llm_request_timeout` in config
-- Check network connectivity to AI providers
 
 ### Getting Help
 
@@ -403,4 +310,3 @@ Now that you have AxonHub running, explore these advanced features:
 - Configure model mappings for cost optimization
 - Implement request tracing for debugging
 - Set up usage quotas and rate limits
-- Integrate with your existing CI/CD pipeline
