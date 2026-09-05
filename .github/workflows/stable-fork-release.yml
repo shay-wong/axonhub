@@ -136,15 +136,51 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           RELEASE_NAME: ${{ needs.create-fork-tag.outputs.release_name }}
+          DOCKERHUB_IMAGE: ${{ needs.publish-docker.outputs.image }}
+          GHCR_IMAGE: ghcr.io/${{ github.repository }}
         run: |
           set -euo pipefail
 
+          html_escape() {
+            printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
+          }
+
+          release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_NAME}"
+          workflow_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          dockerhub_url="https://hub.docker.com/r/${DOCKERHUB_IMAGE}"
+          packages_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pkgs/container/axonhub"
+          if [[ -z "$DOCKERHUB_IMAGE" ]]; then
+            echo "Docker Hub image output is required for the release notification." >&2
+            exit 1
+          fi
+          dockerhub_image="${DOCKERHUB_IMAGE}:${RELEASE_NAME}"
+          ghcr_image="${GHCR_IMAGE}:${RELEASE_NAME}"
+          tag_hashtag=$(printf '%s' "$RELEASE_NAME" | sed 's/[^[:alnum:]_]/_/g')
+          release_name_html=$(html_escape "$RELEASE_NAME")
+          branch_html=$(html_escape "$GITHUB_REF_NAME")
+          dockerhub_image_html=$(html_escape "$dockerhub_image")
+          ghcr_image_html=$(html_escape "$ghcr_image")
+
           message=$(cat <<EOF
-          AxonHub 新版本已发布
-          版本：${RELEASE_NAME}
-          通道：${GITHUB_REF_NAME}
-          发布页面：https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_NAME}
-          构建记录：https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          🚀 <b>AxonHub Fork 新版本发布！</b>
+
+          📦 版本号：<code>${release_name_html}</code>
+          🌿 分支：<code>${branch_html}</code>
+          🔖 提交：<code>${GITHUB_SHA::7}</code>
+
+          🐳 <b>Docker 部署：</b>
+          <pre><code class="language-bash"># GitHub Container Registry
+          docker pull ${ghcr_image_html}
+          # Docker Hub
+          docker pull ${dockerhub_image_html}</code></pre>
+
+          🔗 <b>相关链接：</b>
+          • <a href="${release_url}">GitHub Release</a>
+          • <a href="${dockerhub_url}">Docker Hub</a>
+          • <a href="${packages_url}">GitHub Packages</a>
+          • <a href="${workflow_url}">构建记录</a>
+
+          #AxonHub #Release #${tag_hashtag}
           EOF
           )
 
@@ -153,4 +189,5 @@ jobs:
             --url "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${message}" \
+            --data-urlencode "parse_mode=HTML" \
             --data-urlencode "disable_web_page_preview=true"
