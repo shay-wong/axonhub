@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`018053eaa254da4c2e9d2af3f2153f84e0236dd5`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`834eea2b9ea54eb86a4428939ca0801fef155b4d`
-- 本次 merge base：`fd4158ef8e1a559ae7d597d7e421ae52f9ad5976`
-- 审计范围：`git diff 834eea2b..HEAD`
+- 本次 upstream merge 的 fork parent：`889db99f1bb37389016173cd3edd9656f46ec6ab`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`96714b42588206c2f6bc6ced5972fd24f15d6899`
+- 本次 merge base：`834eea2b9ea54eb86a4428939ca0801fef155b4d`
+- 审计范围：`git diff 96714b42..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -183,10 +183,10 @@ git show --remerge-diff <merge-commit>
 
 - 生命周期：`等待上游吸收`
 - 原始意图：让 GPT-5.6、GPT-6 Astra 和 Claude Opus 5 不仅出现在 developer catalog，还能被相关渠道和 transformer 作为默认可用模型。
-- 必须保持：OpenAI Chat Completions、OpenAI Responses 和 Codex 渠道的快速添加模型包含 `gpt-6-astra`；Codex transformer default models 包含 `gpt-5.6` 和 `gpt-6-astra`，缺省 `Version` 使用首个包含 Astra catalog 的 `0.153.1`；Anthropic 和 Claude Code 渠道默认模型包含 `claude-opus-5`；Claude Code transformer default models 同样包含 `claude-opus-5`。
+- 必须保持：OpenAI Chat Completions、OpenAI Responses 和 Codex 渠道的快速添加模型包含 `gpt-6-astra`；Codex transformer default models 包含 `gpt-5.6` 和 `gpt-6-astra`，缺省 `Version` 使用包含 Astra catalog 的当前上游版本 `0.153.4`；Anthropic 和 Claude Code 渠道默认模型包含 `claude-opus-5`；Claude Code transformer default models 同样包含 `claude-opus-5`。
 - 代码锚点：`frontend/src/features/channels/data/config_channels.ts`、`llm/transformer/openai/codex/constants.go`、`llm/transformer/anthropic/claudecode/constants.go`。
 - 提交锚点：`ab752d4b`、`0e91096d`、`44463a10`、`4eadf589`。
-- 合并审核：upstream `ac70e652` 已吸收 GPT-5.6 等 developer catalog 数据，`067fff2f` 又同步了 GPT-6 Astra 的模型、价格和能力；后续仍须核对渠道快速添加模型、Codex transformer 默认模型与客户端版本，不能因展示数据存在就删除本条目。
+- 合并审核：upstream `ac70e652` 已吸收 GPT-5.6 等 developer catalog 数据，`067fff2f` 又同步了 GPT-6 Astra 的模型、价格和能力，`96714b42` 已让 Codex 渠道和 transformer 默认支持 Astra 并将客户端版本更新到 `0.153.4`；但 OpenAI Chat Completions/OpenAI Responses 渠道的 Astra 快速添加与 Codex transformer 的通用 `gpt-5.6` 别名仍是 fork 增量，不能删除本条目。
 - 上游吸收条件：upstream 的 Codex、Anthropic channel 和 Claude Code 默认模型全部等价后删除。
 - 验证：`cd llm && go test ./transformer/openai/codex ./transformer/anthropic/claudecode`；`cd frontend && node --test src/features/channels/data/channel-config.test.mjs`。
 
