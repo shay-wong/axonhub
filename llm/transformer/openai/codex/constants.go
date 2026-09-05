@@ -6,6 +6,7 @@ package codex
 // CLIProxyAPI keeps a local registry; we mirror that approach to power AxonHub "Fetch Models".
 func DefaultModels() []string {
 	return []string{
+		"gpt-6-astra",
 		"gpt-5",
 		"gpt-5-codex",
 		"gpt-5-codex-mini",
@@ -38,7 +39,7 @@ const (
 	RedirectURI = "http://localhost:1455/auth/callback"
 	Scopes      = "openid profile email offline_access"
 
-	codexDefaultVersion = "0.144.1"
+	codexDefaultVersion = "0.153.1"
 
 	// fabricatedBetaFeatures mirrors the X-Codex-Beta-Features value the current
 	// Codex CLI sends, used when a non-Codex inbound client omits the header.

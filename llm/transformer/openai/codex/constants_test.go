@@ -15,6 +15,10 @@ func TestDefaultModelsIncludesGPT56Family(t *testing.T) {
 	})
 }
 
+func TestDefaultModelsIncludesGPT6Astra(t *testing.T) {
+	require.Contains(t, DefaultModels(), "gpt-6-astra")
+}
+
 func TestCodexDefaultVersion(t *testing.T) {
-	require.Equal(t, "0.144.1", codexDefaultVersion)
+	require.Equal(t, "0.153.1", codexDefaultVersion)
 }

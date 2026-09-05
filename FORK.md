@@ -179,14 +179,14 @@ git show --remerge-diff <merge-commit>
 - 上游吸收条件：upstream 覆盖普通 `httpclient.Error.Body` 和流式终态的完整持久化矩阵，并保持 active body 隐藏。
 - 验证：`go test ./internal/server/orchestrator ./internal/server/biz -run 'Terminal|ResponseBody|RequestExecution|Failed'`。
 
-### U06 GPT-5.6 和 Claude Opus 5 默认模型
+### U06 GPT-5.6、GPT-6 Astra 和 Claude Opus 5 默认模型
 
 - 生命周期：`等待上游吸收`
-- 原始意图：让 GPT-5.6 和 Claude Opus 5 不仅出现在 developer catalog，还能被相关渠道和 transformer 作为默认可用模型。
-- 必须保持：Codex default models 包含 `gpt-5.6`；Anthropic 和 Claude Code 渠道默认模型包含 `claude-opus-5`；Claude Code transformer default models 同样包含 `claude-opus-5`。
+- 原始意图：让 GPT-5.6、GPT-6 Astra 和 Claude Opus 5 不仅出现在 developer catalog，还能被相关渠道和 transformer 作为默认可用模型。
+- 必须保持：OpenAI Chat Completions、OpenAI Responses 和 Codex 渠道的快速添加模型包含 `gpt-6-astra`；Codex transformer default models 包含 `gpt-5.6` 和 `gpt-6-astra`，缺省 `Version` 使用首个包含 Astra catalog 的 `0.153.1`；Anthropic 和 Claude Code 渠道默认模型包含 `claude-opus-5`；Claude Code transformer default models 同样包含 `claude-opus-5`。
 - 代码锚点：`frontend/src/features/channels/data/config_channels.ts`、`llm/transformer/openai/codex/constants.go`、`llm/transformer/anthropic/claudecode/constants.go`。
 - 提交锚点：`ab752d4b`、`0e91096d`、`44463a10`、`4eadf589`。
-- 合并审核：upstream `ac70e652` 已吸收 developer catalog 中的模型、价格和别名；后续只需核对渠道和 transformer 的默认模型，不能因展示数据存在就删除本条目。
+- 合并审核：upstream `ac70e652` 已吸收 GPT-5.6 等 developer catalog 数据，`067fff2f` 又同步了 GPT-6 Astra 的模型、价格和能力；后续仍须核对渠道快速添加模型、Codex transformer 默认模型与客户端版本，不能因展示数据存在就删除本条目。
 - 上游吸收条件：upstream 的 Codex、Anthropic channel 和 Claude Code 默认模型全部等价后删除。
 - 验证：`cd llm && go test ./transformer/openai/codex ./transformer/anthropic/claudecode`；`cd frontend && node --test src/features/channels/data/channel-config.test.mjs`。
 
