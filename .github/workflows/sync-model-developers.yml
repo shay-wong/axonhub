@@ -16,7 +16,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          ref: unstable
+          ref: beta
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
 
@@ -51,7 +51,7 @@ jobs:
             Source: https://raw.githubusercontent.com/ThinkInAIXYZ/PublicProviderConf/refs/heads/dev/dist/all.json
             
             This PR was automatically created by the weekly sync workflow.
-          base: unstable
+          base: beta
           branch: sync-model-developers
           delete-branch: true
           labels: automated, dependencies
