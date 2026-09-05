@@ -120,19 +120,25 @@ func (svc *ChannelService) ApplyAPIKeyDisableAction(
 	if len(enabledKeys) == 0 && (key == objects.OAuthCredentialRef || allDisabledAPIKeysPermanent(allKeys, newDisabledKeys, now)) {
 		channelDisabled = true
 	}
+	var (
+		autoDisabledAt     time.Time
+		autoDisabledReason string
+	)
 	if channelDisabled {
-		update.SetStatus(channel.StatusDisabled)
+		autoDisabledAt = time.Now()
 		messagePrefix := allAPIKeysPermanentlyDisabledMessagePrefix
 		if key == objects.OAuthCredentialRef && action == DisableActionTemporary {
 			messagePrefix = allKeysDisabledErrorPrefix
 		}
-		update.SetErrorMessage(fmt.Sprintf("%s (last error: %d)", messagePrefix, errorCode))
-		update.SetAutoDisabledAt(now)
+		autoDisabledReason = fmt.Sprintf("%s (last error: %d)", messagePrefix, errorCode)
+		update.SetStatus(channel.StatusDisabled)
+		update.SetErrorMessage(autoDisabledReason)
+		update.SetAutoDisabledAt(autoDisabledAt)
 		fields := []log.Field{
 			log.Int("channel_id", channelID),
 			log.String("channel_name", ch.Name),
 		}
-		log.Warn(ctx, "Channel disabled because all API keys are permanently disabled", append(fields, apiKeyIdentityLogFields(identity)...)...)
+		log.Warn(ctx, "Channel disabled because all API keys are disabled", append(fields, apiKeyIdentityLogFields(identity)...)...)
 	}
 
 	if _, err := update.Save(ctx); err != nil {
@@ -145,6 +151,19 @@ func (svc *ChannelService) ApplyAPIKeyDisableAction(
 		log.String("action", action),
 	}
 	log.Info(ctx, "API key disabled", append(fields, apiKeyIdentityLogFields(identity)...)...)
+
+	if channelDisabled {
+		svc.asyncNotifyChannelAutoDisabled(ctx, ChannelAutoDisabledEvent{
+			ChannelID:       ch.ID,
+			ChannelName:     ch.Name,
+			ChannelProvider: ch.Type.String(),
+			ChannelBaseURL:  ch.BaseURL,
+			ChannelStatus:   channel.StatusDisabled.String(),
+			StatusCode:      errorCode,
+			Reason:          autoDisabledReason,
+			OccurredAt:      autoDisabledAt,
+		})
+	}
 
 	reloadCtx, cancel := xcontext.DetachWithTimeout(ctx, 10*time.Second)
 	defer cancel()

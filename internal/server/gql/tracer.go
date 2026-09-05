@@ -70,6 +70,10 @@ func (t *loggingTracer) InterceptResponse(ctx context.Context, next graphql.Resp
 		ctx = tracing.WithOperationName(ctx, opCtx.OperationName)
 
 		if log.DebugEnabled(ctx) {
+			// The raw query text is intentionally not logged: GraphQL clients
+			// may inline sensitive literals (e.g. a channel quota cookie)
+			// instead of passing them as variables, so only the operation name
+			// and redacted variables are recorded.
 			log.Debug(ctx, "received graphql request",
 				zap.String("operation_name", opCtx.OperationName),
 				zap.Any("variables", redactGraphQLVariablesForLog(opCtx.Variables)),

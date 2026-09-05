@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`ce941ced638450e74d0c2d887398024156ab12df`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`fd4158ef8e1a559ae7d597d7e421ae52f9ad5976`
-- 本次 merge base：`0d85ba601d8523576aeb246b24337fb4f46d6953`
-- 审计范围：`git diff fd4158ef..HEAD`
+- 本次 upstream merge 的 fork parent：`018053eaa254da4c2e9d2af3f2153f84e0236dd5`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`834eea2b9ea54eb86a4428939ca0801fef155b4d`
+- 本次 merge base：`fd4158ef8e1a559ae7d597d7e421ae52f9ad5976`
+- 审计范围：`git diff 834eea2b..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -47,10 +47,10 @@ git show --remerge-diff <merge-commit>
 ## Fork 发布版本
 
 - Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta9`。
-- 本次 upstream parent 包含 tag `v1.0.0-beta9`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta8`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
+- 本次 upstream parent 包含 tag `v1.0.0-beta9`，源码中的 `internal/build/VERSION` 也已更新为 `v1.0.0-beta9`；fork 发布版本仍必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta8-fork.1`；upstream 发布基线已变为 `v1.0.0-beta9`，且当前没有对应 fork tag，因此下一个规范化 fork 版本为 `v1.0.0-beta9-fork.1`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta9-fork.2`；upstream 发布基线仍为 `v1.0.0-beta9`，因此下一个规范化 fork 版本为 `v1.0.0-beta9-fork.3`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -72,7 +72,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：优先读取 `apiKeyConfigs`，兼容旧 `apiKey`/`apiKeys`；Key 去重且非正权重归一为 `100`；支持 `trace_sticky`、`weighted_sticky` 和 `failover`；API-key quota 预检与 checker 使用同一归一化 Key 集合；日志和 UI 只显示别名及安全后缀；失败重试优先排除当前 Key 并轮换同一 channel 的其他可用 Key。
 - 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel_apikey_identity.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_apikey_provider.go`、`internal/server/biz/provider_quota.go`、`internal/server/biz/provider_quota_url_test.go`、`internal/server/orchestrator/retry.go`、`frontend/src/features/channels/data/api-key-display.ts`、`frontend/src/features/channels/data/channel-input.ts`、`frontend/src/features/channels/components/channels-action-dialog.tsx`、`frontend/src/features/channels/components/channels-api-key-management-dialog.tsx`。
 - 提交锚点：`d6e092ba`、`2909ddaa`、`88980c6e`、`1a69f0c4`、`31b3ad18`、`d53787b1`。
-- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；`dfbe2259` 增加 `modelProtocols` 和增量 channel settings 更新时，必须让 `apiKeySelectionStrategy` 与协议配置并存并进入 settings patch；`6742293a` 新增的 ZenMux `managementApiKey` 只用于服务端配额查询，必须与结构化 inference Key 并存且不能代替或清空别名、权重和选择策略；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
+- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；`dfbe2259` 增加 `modelProtocols` 和增量 channel settings 更新时，必须让 `apiKeySelectionStrategy` 与协议配置并存并进入 settings patch；`6742293a` 新增的 ZenMux `managementApiKey` 只用于服务端配额查询，必须与结构化 inference Key 并存且不能代替或清空别名、权重和选择策略；`d3132241` 新增 Command Code 的 `providerQuota` 设置时，必须让该字段与 `apiKeySelectionStrategy` 共用同一增量 settings patch，不能互相覆盖；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
 - 吸收/删除条件：只有 fork 明确放弃多 Key 权重策略，或 upstream 提供等价的稳定身份、路由算法、兼容迁移和脱敏展示时才能删除。
 - 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'APIKey|ProviderQuota|Weighted|Failover|Retry'`；`cd frontend && node --test src/features/channels/data/api-key-display.test.mjs src/features/channels/data/channel-input.test.mjs`。
 
@@ -131,7 +131,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：Key-scoped provider 错误只累计和禁用对应 Key；transport/credential-agnostic failure 不禁用 Key；API Key policy 已处理的错误不再触发 channel 级禁用；临时禁用到期可恢复；状态图标只暴露当前状态允许且当前用户有权限的动作；倒计时、原因和安全身份显示一致。
 - 代码锚点：`internal/server/biz/channel_auto_disable.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_metrics.go`、`internal/server/orchestrator/performance.go`、`frontend/src/features/channels/data/channel-status-policy.ts`、`frontend/src/features/channels/data/disabled-api-key-status.ts`、`frontend/src/features/channels/components/channels-columns.tsx`、`frontend/src/features/channels/components/channels-availability-dialog.tsx`。
 - 提交锚点：`2909ddaa`、`fe7809e8`、`c9f85a35`、`fda1159c`；相关 merge resolution：`94d4f989`。
-- 合并审核：upstream `783611df` 已吸收按凭据禁用、OAuth 固定身份、cron 恢复、保留凭据的永久禁用和 availability UI；`657db7f6` 仅抑制有稳定数据时的轮询报错，`7e706c0d` 仅让空字符串 error 仍可恢复，`6742293a` 仅增加 ZenMux 配额账户。这些变更不替代 fork 的 transport/credential-agnostic 错误分类、API Key policy 计数所有权、测试流量隔离、多 Key 别名/权重身份、channel 临时禁用状态和 permission gating。逐一验证这些额外语义，并让空 error 进入同一状态策略；不要把完整 Key 暴露给只读用户。
+- 合并审核：upstream `783611df` 已吸收按凭据禁用、OAuth 固定身份、cron 恢复、保留凭据的永久禁用和 availability UI；`657db7f6` 仅抑制有稳定数据时的轮询报错，`7e706c0d` 仅让空字符串 error 仍可恢复，`6742293a` 仅增加 ZenMux 配额账户，`3f4f37b2` 仅增加渠道/API Key 自动禁用 webhook。这些变更不替代 fork 的 transport/credential-agnostic 错误分类、API Key policy 计数所有权、测试流量隔离、多 Key 别名/权重身份、channel 临时禁用状态和 permission gating；接入 webhook 时仍只在本地状态机实际禁用整条 channel 后通知。逐一验证这些额外语义，并让空 error 进入同一状态策略；不要把完整 Key 暴露给只读用户。
 - 上游吸收条件：upstream 具备相同状态机、错误分类、权限和前端回归测试。
 - 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'DisableAPIKey|AutoDisable|CredentialAgnostic|TransportFailure'`；`cd frontend && node --test src/features/channels/data/channel-status-policy.test.mjs src/features/channels/data/disabled-api-key-status.test.mjs src/features/channels/data/disabled-api-key-dialog-contract.test.mjs`。
 
@@ -217,9 +217,9 @@ git show --remerge-diff <merge-commit>
 - 生命周期：`等待上游吸收`
 - 原始意图：系统级查询、GraphQL schema、日志和 quota cache 都不能泄露个人 Key 或 provider secret，也不能在凭据变化后继续展示旧配额。
 - 必须保持：个人 API Key 始终只对创建者可见，系统 scope 不能绕过；API Key、disabled Key 和 provider quota identity 在事务提交后使缓存失效；quota checker 必须识别 `APIKeyConfigs` 等结构化凭据且不能记录或返回完整 secret；内部 quota routing 可最小化 bypass，但 GraphQL 配置读取要求 `read_settings`。
-- 代码锚点：`internal/scopes/rule_personal_apikey.go`、`internal/server/gql/dashboard.resolvers.go`、`internal/server/gql/axonhub.graphql`、`internal/server/biz/channel_provider_quota_hook.go`、`internal/server/biz/provider_quota.go`、`frontend/src/features/channels/data/channel-input.ts`。
+- 代码锚点：`internal/scopes/rule_personal_apikey.go`、`internal/server/gql/dashboard.resolvers.go`、`internal/server/gql/axonhub.graphql`、`internal/server/gql/tracer.go`、`internal/server/gql/tracer_test.go`、`internal/server/biz/channel_provider_quota_hook.go`、`internal/server/biz/provider_quota.go`、`frontend/src/features/channels/data/channel-input.ts`。
 - 提交锚点：`b5bc14d2`、`e8656e4b`、`ccb025f8`；相关 merge resolution：`32d0699e`；本次结构化 quota 凭据预检可用 `git log -S'TestHasCredentialsForProvider_OpenCodeGoAPIKeyConfigs' -- internal/server/biz/provider_quota_url_test.go` 定位。
-- 合并审核：upstream `6027d959` 已用官方 API Key usage endpoint 替代 OpenCode Go cookie scraper，并通过 beta9 migration 清除旧 cookie 配置；接受删除旧 `authCookie` schema 和 UI。其余路径仍须分别检查 secret read/log、duplicate channel、结构化 Key、cache cold/hot path 和事务 rollback；不能用前端隐藏代替服务端权限。
+- 合并审核：upstream `6027d959` 已用官方 API Key usage endpoint 替代 OpenCode Go cookie scraper，并通过 beta9 migration 清除旧 cookie 配置；接受删除旧 `authCookie` schema 和 UI。`d3132241` 为 Command Code 新增 quota cookie 和基础 GraphQL 变量脱敏；合并时必须保留 fork 对嵌套 secret descriptor/path、key 名和 payload 的更完整脱敏，并让 type/base URL/credentials 变化继续触发 provider quota cache 失效。其余路径仍须分别检查 secret read/log、duplicate channel、结构化 Key、cache cold/hot path 和事务 rollback；不能用前端隐藏代替服务端权限。
 - 上游吸收条件：upstream 有个人 Key ownership、结构化 quota credential、quota identity invalidation 和 `read_settings` 测试。
 - 验证：`go test ./internal/scopes ./internal/server/biz ./internal/server/gql -run 'Personal|APIKeyConfigs|ProviderQuota|ReadSettings'`；`cd frontend && node --test src/features/channels/data/channel-input.test.mjs`。
 
