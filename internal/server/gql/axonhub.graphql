@@ -598,6 +598,7 @@ input FetchModelsInput {
   channelType: String!
   baseURL: String!
   apiKey: String
+  apiKeys: [String!]
   channelID: ID
 }
 

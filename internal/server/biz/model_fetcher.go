@@ -17,6 +17,7 @@ import (
 
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/channel"
+	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/transformer/anthropic/claudecode"
 	"github.com/looplj/axonhub/llm/transformer/antigravity"
@@ -162,7 +163,9 @@ type FetchModelsInput struct {
 	ChannelType string
 	BaseURL     string
 	//nolint:gosec // G117: Field name contains "APIKey" but this is input data, not a hardcoded secret
-	APIKey    *string
+	APIKey *string
+	//nolint:gosec // G117: Field name contains "APIKeys" but this is input data, not hardcoded secrets
+	APIKeys   []string
 	ChannelID *int
 }
 
@@ -390,12 +393,14 @@ func (f *ModelFetcher) FetchModels(ctx context.Context, input FetchModelsInput) 
 	}
 
 	var (
-		apiKey      string
+		apiKeys     []string
 		proxyConfig *httpclient.ProxyConfig
 	)
 
 	if input.APIKey != nil && *input.APIKey != "" {
-		apiKey = *input.APIKey
+		apiKeys = []string{*input.APIKey}
+	} else if len(input.APIKeys) > 0 {
+		apiKeys = (&objects.ChannelCredentials{APIKeys: input.APIKeys}).GetAllAPIKeys()
 	}
 
 	if input.ChannelID != nil {
@@ -413,7 +418,7 @@ func (f *ModelFetcher) FetchModels(ctx context.Context, input FetchModelsInput) 
 			}
 		}
 
-		if apiKey == "" {
+		if len(apiKeys) == 0 {
 			if !fetchModelsInputMatchesChannel(input, ch) {
 				return &FetchModelsResult{
 					Models: []ModelIdentify{},
@@ -421,12 +426,11 @@ func (f *ModelFetcher) FetchModels(ctx context.Context, input FetchModelsInput) 
 				}, nil
 			}
 
-			apiKey = ch.Credentials.APIKey
-			if apiKey == "" && len(ch.Credentials.APIKeys) > 0 {
-				apiKey = ch.Credentials.APIKeys[0]
-			}
+			apiKeys = ch.Credentials.GetEnabledAPIKeys(ch.DisabledAPIKeys)
 			input.ChannelType = ch.Type.String()
 			input.BaseURL = ch.BaseURL
+		} else if input.APIKey == nil {
+			apiKeys = (&objects.ChannelCredentials{APIKeys: apiKeys}).GetEnabledAPIKeys(ch.DisabledAPIKeys)
 		}
 
 		if ch.Settings != nil {
@@ -436,7 +440,7 @@ func (f *ModelFetcher) FetchModels(ctx context.Context, input FetchModelsInput) 
 
 	channelType := channel.Type(input.ChannelType)
 
-	if apiKey == "" {
+	if len(apiKeys) == 0 {
 		if isQiniuChannelType(channelType) {
 			return &FetchModelsResult{
 				Models: qiniuFallbackModels,
@@ -452,6 +456,30 @@ func (f *ModelFetcher) FetchModels(ctx context.Context, input FetchModelsInput) 
 			Error:  lo.ToPtr("API key is required"),
 		}, nil
 	}
+	if len(apiKeys) > 1 {
+		var lastError string
+		for _, apiKey := range apiKeys {
+			singleKeyInput := input
+			singleKeyInput.APIKey = lo.ToPtr(apiKey)
+			singleKeyInput.APIKeys = nil
+
+			result, err := f.FetchModels(ctx, singleKeyInput)
+			if err != nil {
+				return nil, err
+			}
+			if result.Error == nil {
+				return result, nil
+			}
+			lastError = *result.Error
+		}
+
+		return &FetchModelsResult{
+			Models: []ModelIdentify{},
+			Error:  lo.ToPtr(fmt.Sprintf("failed to fetch models with %d API keys; last error: %s", len(apiKeys), lastError)),
+		}, nil
+	}
+
+	apiKey := apiKeys[0]
 
 	if isOAuthJSON(apiKey) {
 		// OAuth credentials indicate an official channel; return default models directly.

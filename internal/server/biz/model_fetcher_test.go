@@ -563,6 +563,85 @@ func TestFetchModelsGeminiPagination(t *testing.T) {
 	}
 }
 
+func TestFetchModelsTriesAPIKeysInOrderUntilSuccess(t *testing.T) {
+	var requestedKeys []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		requestedKeys = append(requestedKeys, key)
+
+		if key == "good-key" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"id":"available-model"}]}`))
+			return
+		}
+
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	fetcher := NewModelFetcher(httpclient.NewHttpClientWithClient(server.Client()), nil)
+	result, err := fetcher.FetchModels(context.Background(), FetchModelsInput{
+		ChannelType: channel.TypeOpenai.String(),
+		BaseURL:     server.URL,
+		APIKeys:     []string{"bad-key", "good-key", "unused-key"},
+	})
+	require.NoError(t, err)
+	require.Nil(t, result.Error)
+	require.Equal(t, []string{"bad-key", "good-key"}, requestedKeys)
+	require.Equal(t, []ModelIdentify{{ID: "available-model"}}, result.Models)
+}
+
+func TestFetchModelsWithChannelIDSkipsDisabledStructuredKeys(t *testing.T) {
+	var requestedKeys []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		requestedKeys = append(requestedKeys, key)
+
+		if key == "good-key" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"id":"synced-model"}]}`))
+			return
+		}
+
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	client := enttest.NewEntClient(t, "sqlite3", "file:fetch_models_enabled_structured_keys?mode=memory&_fk=0")
+	defer client.Close()
+
+	ctx := authz.WithSystemBypass(context.Background(), "test")
+	ch, err := client.Channel.Create().
+		SetName("structured-keys").
+		SetType(channel.TypeOpenai).
+		SetBaseURL(server.URL).
+		SetCredentials(objects.ChannelCredentials{APIKeyConfigs: []objects.ChannelAPIKeyConfig{
+			{Key: "disabled-key", Name: "disabled", Weight: 100},
+			{Key: "bad-key", Name: "fallback", Weight: 100},
+			{Key: "good-key", Name: "working", Weight: 100},
+			{Key: "unused-key", Name: "unused", Weight: 100},
+		}}).
+		SetDisabledAPIKeys([]objects.DisabledAPIKey{{Key: "disabled-key"}}).
+		SetSupportedModels([]string{"old-model"}).
+		SetDefaultTestModel("old-model").
+		Save(ctx)
+	require.NoError(t, err)
+
+	fetcher := NewModelFetcher(
+		httpclient.NewHttpClientWithClient(server.Client()),
+		&ChannelService{AbstractService: &AbstractService{db: client}},
+	)
+	result, err := fetcher.FetchModels(ctx, FetchModelsInput{
+		ChannelType: channel.TypeOpenai.String(),
+		BaseURL:     server.URL,
+		ChannelID:   &ch.ID,
+	})
+	require.NoError(t, err)
+	require.Nil(t, result.Error)
+	require.Equal(t, []string{"bad-key", "good-key"}, requestedKeys)
+	require.Equal(t, []ModelIdentify{{ID: "synced-model"}}, result.Models)
+}
+
 func TestFetchModelsWithChannelIDUsesStoredCredentialsOnlyForStoredEndpoint(t *testing.T) {
 	var gotAuth string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -2146,7 +2146,7 @@ export function useFetchModels() {
   const { handleError } = useErrorHandler();
 
   return useMutation({
-    mutationFn: async (input: { channelType: string; baseURL: string; apiKey?: string; channelID?: string }) => {
+    mutationFn: async (input: { channelType: string; baseURL: string; apiKey?: string; apiKeys?: string[]; channelID?: string }) => {
       try {
         const data = await graphqlRequest<{
           fetchModels: {

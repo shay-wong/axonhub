@@ -396,6 +396,7 @@
   "channels.dialogs.fields.supportedModels.description": "模型 ID",
   "channels.dialogs.fields.supportedModels.required": "请至少添加一个支持的模型",
   "channels.dialogs.fields.supportedModels.defaultModelsLabel": "快速添加模型",
+  "channels.dialogs.fields.supportedModels.fetchAPIKey": "用于获取模型的 API Key",
   "channels.dialogs.fields.supportedModels.fetchedModelsLabel": "已获取的模型",
   "channels.dialogs.fields.supportedModels.showMore": "+{{count}} 个更多",
   "channels.dialogs.fields.supportedModels.searchPlaceholder": "搜索模型...",

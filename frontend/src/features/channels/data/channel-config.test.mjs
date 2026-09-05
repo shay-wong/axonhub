@@ -295,3 +295,29 @@ test('Command Code has localized channel, provider, cookie field, and quota labe
     assert.ok(system['system.quota.collection.providers.commandcode']);
   }
 });
+
+test('model discovery prefers the selected API key and safely falls back through enabled keys', () => {
+  const dialog = read('features/channels/components/channels-action-dialog.tsx');
+  const channelsData = read('features/channels/data/channels.ts');
+  const fetchSection = dialog.slice(dialog.indexOf('const handleFetchModels'), dialog.indexOf('const handleSyncNow'));
+
+  assert.match(channelsData, /apiKeys\?:\s*string\[\]/, 'the model discovery mutation should accept an ordered key list');
+  assert.match(fetchSection, /const orderedAPIKeys\s*=\s*modelFetchAPIKey/);
+  assert.match(fetchSection, /apiKeys:\s*oauthToken\s*\?\s*undefined\s*:\s*orderedAPIKeys/);
+  assert.doesNotMatch(fetchSection, /apiKeys\.find\(/, 'model discovery must not discard fallback keys');
+  assert.match(dialog, /<SelectItem key=\{key\} value=\{key\}>[\s\S]*?formatAPIKeyIdentity\(key,/);
+
+  assert.equal(parseLocale('en')['channels.dialogs.fields.supportedModels.fetchAPIKey'], 'API key for model discovery');
+  assert.equal(parseLocale('zh-CN')['channels.dialogs.fields.supportedModels.fetchAPIKey'], '用于获取模型的 API Key');
+});
+
+test('API key aliases survive temporary removal while reordering the multiline key list', () => {
+  const dialog = read('features/channels/components/channels-action-dialog.tsx');
+  const configSyncSection = dialog.slice(
+    dialog.indexOf('setApiKeyConfigs((prev) => {'),
+    dialog.indexOf('// Keys that exist in the backend')
+  );
+
+  assert.match(configSyncSection, /const activeConfigs = reconcileAPIKeyConfigs\(apiKeys, prev\)/);
+  assert.match(configSyncSection, /prev\.filter\(\(config\) => !activeKeys\.has\(config\.key\)\)/);
+});

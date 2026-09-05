@@ -445,6 +445,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const [confirmRemoveKey, setConfirmRemoveKey] = useState<string | null>(null);
   const [apiKeyConfigs, setApiKeyConfigs] = useState<ChannelAPIKeyConfig[]>(() => getInitialAPIKeyConfigs(initialRow));
   const [apiKeyConfigsDirty, setApiKeyConfigsDirty] = useState(false);
+  const [modelFetchAPIKey, setModelFetchAPIKey] = useState(() => getInitialAPIKeys(initialRow)[0] || '');
   const [apiKeySelectionStrategy, setApiKeySelectionStrategy] = useState<APIKeySelectionStrategy>(() =>
     normalizeAPIKeySelectionStrategy(initialRow?.settings?.apiKeySelectionStrategy)
   );
@@ -848,23 +849,39 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const hasStructuredAPIKeyConfigs = (initialRow?.credentials?.apiKeyConfigs?.length || 0) > 0;
 
   const { data: disabledKeys = [], isFetching: isFetchingDisabledKeys } = useChannelDisabledAPIKeys(currentRow?.id || '', {
-    enabled: isEdit && !!currentRow?.id && showApiKeysPanel,
+    enabled: isEdit && !!currentRow?.id && open && (showApiKeysPanel || apiKeysCount > 1),
   });
   const disabledKeySet = useMemo(() => new Set(disabledKeys.map((dk) => dk.key)), [disabledKeys]);
   const apiKeyConfigByKey = useMemo(() => new Map(apiKeyConfigs.map((config) => [config.key, config])), [apiKeyConfigs]);
+  const availableModelFetchAPIKeys = useMemo(
+    () => normalizeAPIKeyList(apiKeys).filter((key) => !disabledKeySet.has(key)),
+    [apiKeys, disabledKeySet]
+  );
 
   useEffect(() => {
     if (!open) return;
     const nextConfigs = getInitialAPIKeyConfigs(initialRow);
     setApiKeyConfigs(nextConfigs);
+    setModelFetchAPIKey(getInitialAPIKeys(initialRow)[0] || '');
     setApiKeySelectionStrategy(normalizeAPIKeySelectionStrategy(initialRow?.settings?.apiKeySelectionStrategy));
     setApiKeyConfigsDirty(false);
   }, [open, initialRow]);
 
   useEffect(() => {
     if (!open) return;
-    setApiKeyConfigs((prev) => reconcileAPIKeyConfigs(apiKeys, prev));
+    setApiKeyConfigs((prev) => {
+      const activeConfigs = reconcileAPIKeyConfigs(apiKeys, prev);
+      const activeKeys = new Set(activeConfigs.map((config) => config.key));
+      return [...activeConfigs, ...prev.filter((config) => !activeKeys.has(config.key))];
+    });
   }, [apiKeys, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    setModelFetchAPIKey((current) =>
+      availableModelFetchAPIKeys.includes(current) ? current : availableModelFetchAPIKeys[0] || ''
+    );
+  }, [availableModelFetchAPIKeys, open]);
 
   // Keys that exist in the backend (used to hide disable/enable controls for unsaved new keys).
   // apiKeyConfigs can be the persisted representation when the legacy apiKeys array is empty.
@@ -1633,29 +1650,31 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     }
 
     try {
-      // For OAuth-based providers (like Copilot), prefer oauthApiKey first
-      let firstApiKey = '';
+      // OAuth credentials remain a single opaque value. Regular API keys are
+      // ordered with the selected discovery key first so the server only falls
+      // back when that key fails.
+      let oauthToken = '';
       if (oauthApiKey) {
         // If it's OAuth JSON, send full JSON so backend detects isOAuthJSON
         if (oauthApiKey.trimStart().startsWith('{')) {
-          firstApiKey = oauthApiKey;
+          oauthToken = oauthApiKey;
         } else {
           const parsed = parseOauthToken(oauthApiKey || '');
           if (parsed) {
-            firstApiKey = parsed;
+            oauthToken = parsed;
           }
         }
       }
 
-      // Fall back to apiKeys array if no OAuth token
-      if (!firstApiKey && apiKeys?.length) {
-        firstApiKey = apiKeys.find((key) => key.trim().length > 0) || '';
-      }
+      const orderedAPIKeys = modelFetchAPIKey
+        ? [modelFetchAPIKey, ...availableModelFetchAPIKeys.filter((key) => key !== modelFetchAPIKey)]
+        : availableModelFetchAPIKeys;
 
       const result = await fetchModels.mutateAsync({
         channelType,
         baseURL,
-        apiKey: firstApiKey || undefined,
+        apiKey: oauthToken || undefined,
+        apiKeys: oauthToken ? undefined : orderedAPIKeys,
         channelID: isEdit ? currentRow?.id : undefined,
       });
 
@@ -1679,7 +1698,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     } catch (_error) {
       // Error is already handled by the mutation
     }
-  }, [fetchModels, form, isEdit, currentRow]);
+  }, [availableModelFetchAPIKeys, fetchModels, form, isEdit, currentRow, modelFetchAPIKey]);
 
   const handleSyncNow = useCallback(async () => {
     if (!currentRow) return [];
@@ -2930,6 +2949,23 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                             <div className='mb-2 flex items-center justify-between'>
                               <span className='text-sm font-medium'>{t('channels.dialogs.fields.supportedModels.defaultModelsLabel')}</span>
                               <div className='flex items-center gap-2'>
+                                {showRegularAPIKeyFields && !isClineType && availableModelFetchAPIKeys.length > 1 && (
+                                  <Select value={modelFetchAPIKey} onValueChange={setModelFetchAPIKey}>
+                                    <SelectTrigger
+                                      className='h-8 w-44'
+                                      aria-label={t('channels.dialogs.fields.supportedModels.fetchAPIKey')}
+                                    >
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {availableModelFetchAPIKeys.map((key) => (
+                                        <SelectItem key={key} value={key}>
+                                          {formatAPIKeyIdentity(key, apiKeyConfigByKey.get(key)?.name)}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                )}
                                 <Button
                                   type='button'
                                   onClick={handleFetchModels}

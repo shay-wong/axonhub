@@ -74659,7 +74659,7 @@ func (ec *executionContext) unmarshalInputFetchModelsInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"channelType", "baseURL", "apiKey", "channelID"}
+	fieldsInOrder := [...]string{"channelType", "baseURL", "apiKey", "apiKeys", "channelID"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -74687,6 +74687,13 @@ func (ec *executionContext) unmarshalInputFetchModelsInput(ctx context.Context, 
 				return it, err
 			}
 			it.APIKey = data
+		case "apiKeys":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("apiKeys"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.APIKeys = data
 		case "channelID":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelID"))
 			data, err := ec.unmarshalOID2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐGUID(ctx, v)

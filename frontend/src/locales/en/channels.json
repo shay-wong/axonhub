@@ -399,6 +399,7 @@
   "channels.dialogs.fields.supportedModels.description": "Model ID",
   "channels.dialogs.fields.supportedModels.required": "Please add at least one supported model",
   "channels.dialogs.fields.supportedModels.defaultModelsLabel": "Quick Add Models",
+  "channels.dialogs.fields.supportedModels.fetchAPIKey": "API key for model discovery",
   "channels.dialogs.fields.supportedModels.fetchedModelsLabel": "Fetched Models",
   "channels.dialogs.fields.supportedModels.showMore": "+{{count}} more",
   "channels.dialogs.fields.supportedModels.searchPlaceholder": "Search models...",
