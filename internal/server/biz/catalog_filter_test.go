@@ -15,13 +15,15 @@ func TestNormalizeCatalogExperimental(t *testing.T) {
 		"test": {Models: []map[string]any{
 			{"id": "boolean", "experimental": true},
 			{"id": "structured", "experimental": map[string]any{"modes": map[string]any{"fast": map[string]any{}}}},
+			{"id": "invalid", "experimental": "yes"},
 		}},
 	}}
 
 	normalizeCatalogExperimental(&data)
 
-	require.NotContains(t, data.Providers["test"].Models[0], "experimental")
+	require.Equal(t, true, data.Providers["test"].Models[0]["experimental"])
 	require.Contains(t, data.Providers["test"].Models[1], "experimental")
+	require.NotContains(t, data.Providers["test"].Models[2], "experimental")
 }
 
 func TestFilterCatalogProviders(t *testing.T) {

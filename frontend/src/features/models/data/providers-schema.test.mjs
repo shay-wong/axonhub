@@ -20,12 +20,12 @@ test('parses the bundled provider catalog', () => {
   assert.doesNotThrow(() => providersDataSchema.parse(bundledProvidersData));
 });
 
-test('rejects boolean experimental flags', () => {
-  assert.throws(() =>
-    providersDataSchema.parse({
-      providers: { test: { models: [{ id: 'preview', experimental: true }] } },
-    })
-  );
+test('preserves boolean experimental flags', () => {
+  const data = providersDataSchema.parse({
+    providers: { test: { models: [{ id: 'preview', experimental: true }] } },
+  });
+
+  assert.equal(data.providers.test.models[0].experimental, true);
 });
 
 test('preserves extended GPT-5.6 capabilities and tiered pricing', () => {

@@ -73,8 +73,9 @@ function serviceTierFromProvider(provider: Record<string, unknown> | undefined):
 
 export function buildProviderModelPrice(model: ProviderModel, multiplier: number = 1): CatalogModelPrice {
   const serviceTierPrices = new Map<string, CatalogModelPriceItem[]>();
+  const modes = typeof model.experimental === 'object' ? model.experimental.modes : undefined;
 
-  for (const mode of Object.values(model.experimental?.modes ?? {})) {
+  for (const mode of Object.values(modes ?? {})) {
     const serviceTier = serviceTierFromProvider(mode.provider);
     if (!serviceTier) continue;
 

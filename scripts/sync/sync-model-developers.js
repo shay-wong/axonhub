@@ -281,7 +281,11 @@ function filterProviders(data, allowedIds) {
 
 	for (const [key, value] of Object.entries(data.providers)) {
 		for (const model of value.models || []) {
-			if (!isObject(model.experimental)) {
+			if (
+				model.experimental !== undefined &&
+				typeof model.experimental !== "boolean" &&
+				!isObject(model.experimental)
+			) {
 				delete model.experimental;
 			}
 		}

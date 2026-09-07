@@ -89,7 +89,9 @@ func normalizeCatalogExperimental(data *catalogFile) {
 	}
 	for _, provider := range data.Providers {
 		for _, model := range provider.Models {
-			if _, ok := model["experimental"].(map[string]any); !ok {
+			switch model["experimental"].(type) {
+			case nil, bool, map[string]any:
+			default:
 				delete(model, "experimental")
 			}
 		}

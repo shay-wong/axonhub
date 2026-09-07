@@ -83,6 +83,16 @@ test('maps Anthropic fast mode to the priority provider tier price', () => {
   ]);
 });
 
+test('ignores boolean experimental flags when building prices', () => {
+  const price = buildProviderModelPrice({
+    id: 'preview-model',
+    cost: { input: 5, output: 25 },
+    experimental: true,
+  });
+
+  assert.deepEqual(price.serviceTierPrices, []);
+});
+
 test('leaves missing service-tier cost fields to inherit from the base price', () => {
   const price = buildProviderModelPrice(
     {

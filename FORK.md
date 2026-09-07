@@ -317,13 +317,13 @@ git show --remerge-diff <merge-commit>
 
 - 生命周期：`等待上游吸收`
 - 原始意图：内置模型目录必须始终符合自身解析 schema，不能因单条上游模型数据格式错误而让整个目录加载失败。
-- 必须保持：`experimental` 继续表示结构化实验模式及其价格，不接受同名布尔值；后端在远程目录和内嵌快照的输入边界丢弃非对象值，前端 schema 仍只接受结构化对象；预览状态使用现有 `status` 和 `metadata.lifecycle` 字段；同步目录后必须通过后端归一化和前端整表解析测试。
+- 必须保持：兼容上游 `experimental` 的布尔实验标记和结构化模式配置；Fast 等模式及价格只从对象形态读取，布尔形态不能参与价格计算；后端和同步脚本仅丢弃既非布尔也非对象的异常值；同步目录后必须通过后端归一化、前端整表解析和布尔标记价格隔离测试。
 - 代码锚点：`internal/server/biz/catalog.go`、`internal/server/biz/catalog_filter.go`、`internal/server/biz/catalog_filter_test.go`、`internal/server/biz/catalogdata/providers.json`、`frontend/src/features/models/data/providers.schema.ts`、`frontend/src/features/models/data/providers.schema.test.mjs`、`frontend/src/features/models/data/providers-schema.test.mjs`、`scripts/sync/sync-model-developers.js`。
 - 用户文档：维护者内部数据兼容修复，不新增配置或 API，无独立用户文档和 changelog 条目。
 - 提交锚点：本次修复可用 `git log -S'normalizeCatalogExperimental' -- internal/server/biz/catalog_filter.go` 定位。
-- 合并审核：upstream `4483c2e4` 已把目录拉取迁移到后端，`6f729f7c` 则用布尔/对象联合类型接受 `deepseek-v4-flash-vision-exp` 的 `experimental: true`；`dbeed3e6` 新增完整内置目录的 schema 解析测试，`0d85ba60` 补齐腾讯 HY 4 系列模型筛选，这些变更可以保留，但不能替代 fork 对布尔 `experimental` 的拒绝断言和扩展价格结构覆盖。必须在后端信任边界清洗无效值，并保持前端结构化 schema，避免价格目录调用方增加布尔分支。
-- 上游吸收条件：upstream 删除或迁移该无效布尔值，并保留覆盖完整内置目录的 schema 解析测试。
-- 验证：`go test ./internal/server/biz -run 'TestNormalizeCatalogExperimental|TestCatalogService'`；`cd frontend && node --test src/features/models/data/providers.schema.test.mjs src/features/models/data/providers-schema.test.mjs`。
+- 合并审核：upstream `4483c2e4` 已把目录拉取迁移到后端，`6f729f7c` 用布尔/对象联合类型接受 `deepseek-v4-flash-vision-exp` 的 `experimental: true`；`dbeed3e6` 新增完整内置目录的 schema 解析测试，`0d85ba60` 补齐腾讯 HY 4 系列模型筛选。合并时必须保留联合类型，并确认结构化扩展价格仍能解析、布尔标记不会进入价格目录调用方。
+- 上游吸收条件：upstream 同时保留布尔/对象联合类型、结构化模式价格和调用方类型收窄测试。
+- 验证：`go test ./internal/server/biz -run 'TestNormalizeCatalogExperimental|TestCatalogService'`；`cd frontend && node --test src/features/models/data/providers.schema.test.mjs src/features/models/data/providers-schema.test.mjs src/features/channels/data/model-price-catalog.test.mjs`。
 
 ### U20 Release 二进制应用内更新
 
