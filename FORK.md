@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`8cdab27b7741d190e05b3850abad5cccfa33f2ca`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`04654c2dc3f844a66e7583d589fcd2e222397e05`
-- 本次 merge base：`96714b42588206c2f6bc6ced5972fd24f15d6899`
-- 审计范围：`git diff 04654c2d..HEAD`
+- 本次 upstream merge 的 fork parent：`edfd788d0f636100f7746730fe7b174b4ca760a4`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`644859d04f1c46fd81f3392f4cd988cc77ad2786`
+- 本次 merge base：`04654c2dc3f844a66e7583d589fcd2e222397e05`
+- 审计范围：`git diff 644859d0..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含 tag `v1.0.0-beta10`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta9-fork.5`；upstream 发布基线已变为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.1`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.1`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.2`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -72,7 +72,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：优先读取 `apiKeyConfigs`，兼容旧 `apiKey`/`apiKeys`；Key 去重且非正权重归一为 `100`；编辑、导入、删除或重排 Key 时按 Key 身份保留对应别名和权重；支持 `trace_sticky`、`weighted_sticky` 和 `failover`；API-key quota 预检与 checker 使用同一归一化 Key 集合；日志和 UI 只显示别名及安全后缀；失败重试优先排除当前 Key 并轮换同一 channel 的其他可用 Key；模型发现允许选择一个可用 Key，并仅在该 Key 失败时按顺序尝试其他 Key，首个成功后立即停止，自动同步同样跳过已禁用 Key 且不遍历成功后的 Key。
 - 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel_apikey_identity.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_apikey_provider.go`、`internal/server/biz/model_fetcher.go`、`internal/server/biz/model_fetcher_test.go`、`internal/server/biz/provider_quota.go`、`internal/server/biz/provider_quota_url_test.go`、`internal/server/orchestrator/retry.go`、`frontend/src/features/channels/data/api-key-display.ts`、`frontend/src/features/channels/data/channel-input.ts`、`frontend/src/features/channels/data/channel-config.test.mjs`、`frontend/src/features/channels/components/channels-action-dialog.tsx`、`frontend/src/features/channels/components/channels-api-key-management-dialog.tsx`。
 - 提交锚点：`d6e092ba`、`2909ddaa`、`88980c6e`、`1a69f0c4`、`31b3ad18`、`d53787b1`。
-- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；`dfbe2259` 增加 `modelProtocols` 和增量 channel settings 更新时，必须让 `apiKeySelectionStrategy` 与协议配置并存并进入 settings patch；`939b2bc0` 将 Key 规范化从输入失焦移到提交/删除边界以保持焦点，合并时必须同时保留按 Key 身份恢复别名与权重的 `apiKeyConfigs` 状态；`6742293a` 新增的 ZenMux `managementApiKey` 只用于服务端配额查询，必须与结构化 inference Key 并存且不能代替或清空别名、权重和选择策略；`d3132241` 新增 Command Code 的 `providerQuota` 设置时，必须让该字段与 `apiKeySelectionStrategy` 共用同一增量 settings patch，不能互相覆盖；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
+- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；`dfbe2259` 增加 `modelProtocols` 和增量 channel settings 更新时，必须让 `apiKeySelectionStrategy` 与协议配置并存并进入 settings patch；`939b2bc0` 将 Key 规范化从输入失焦移到提交/删除边界以保持焦点，合并时必须同时保留按 Key 身份恢复别名与权重的 `apiKeyConfigs` 状态；`6742293a` 新增的 ZenMux `managementApiKey` 只用于服务端配额查询，必须与结构化 inference Key 并存且不能代替或清空别名、权重和选择策略；`d3132241` 和 `644859d0` 分别新增 Command Code、Ollama 的 `providerQuota` 设置时，必须让这些字段与 `apiKeySelectionStrategy` 共用同一增量 settings patch，不能互相覆盖；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
 - 吸收/删除条件：只有 fork 明确放弃多 Key 权重策略，或 upstream 提供等价的稳定身份、路由算法、兼容迁移和脱敏展示时才能删除。
 - 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'APIKey|ProviderQuota|Weighted|Failover|Retry'`；`cd frontend && node --test src/features/channels/data/api-key-display.test.mjs src/features/channels/data/channel-input.test.mjs`。
 
@@ -153,7 +153,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：Tool Search 定义、调用和 output 可往返；`tool_search_output` 回放满足 upstream 必填字段；流式空参数不会生成错误调用；Responses 并行调用转 Chat 时正确聚合；Anthropic bridge 保留 deferred tools；仅在 done 事件出现的函数参数仍被保存；不同 namespace tool 不混淆。
 - 代码锚点：`llm/tools.go`、`llm/metadata.go`、`llm/transformer/anthropic/`、`llm/transformer/openai/responses/`。
 - 提交锚点：`e1d68898`、`8bf41241`、`5c201803`、`62edb839`、`41ba05ab`、`8a2a02c6`；相关 merge resolution：`24d949cd`。
-- 合并审核：按 tool definition、call、delta、done、output 和 replay 六个阶段检查；不能只验证非流式 happy path。Upstream `2c6efdb1` 已吸收 done-only 参数、等价 JSON 和迟到 identity 处理，`a0850956` 补齐普通文件输入和更多跨格式字段，但仍没有 Tool Search 的结构化 definition/call/output、跨协议 round-trip、terminal/refusal 行为和大整数精度；这些本地语义必须独立保留并验证。
+- 合并审核：按 tool definition、call、delta、done、output 和 replay 六个阶段检查；不能只验证非流式 happy path。Upstream `2c6efdb1` 已吸收 done-only 参数、等价 JSON 和迟到 identity 处理，`a0850956` 补齐普通文件输入和更多跨格式字段，`9f310561` 保留 DeepSeek Anthropic 渠道的原生 web search，但仍没有 Tool Search 的结构化 definition/call/output、跨协议 round-trip、terminal/refusal 行为和大整数精度；这些本地语义必须独立保留并验证。
 - 上游吸收条件：upstream 在 OpenAI Responses、Anthropic 和 Chat 三条转换链提供等价 round-trip 测试。
 - 验证：`cd llm && go test ./transformer/openai/responses ./transformer/anthropic -run 'ToolSearch|tool_search|FunctionCall|NamespaceTool|Deferred'`。
 
@@ -219,20 +219,9 @@ git show --remerge-diff <merge-commit>
 - 必须保持：个人 API Key 始终只对创建者可见，系统 scope 不能绕过；API Key、disabled Key 和 provider quota identity 在事务提交后使缓存失效；quota checker 必须识别 `APIKeyConfigs` 等结构化凭据且不能记录或返回完整 secret；内部 quota routing 可最小化 bypass，但 GraphQL 配置读取要求 `read_settings`。
 - 代码锚点：`internal/scopes/rule_personal_apikey.go`、`internal/server/gql/dashboard.resolvers.go`、`internal/server/gql/axonhub.graphql`、`internal/server/gql/tracer.go`、`internal/server/gql/tracer_test.go`、`internal/server/biz/channel_provider_quota_hook.go`、`internal/server/biz/provider_quota.go`、`frontend/src/features/channels/data/channel-input.ts`。
 - 提交锚点：`b5bc14d2`、`e8656e4b`、`ccb025f8`；相关 merge resolution：`32d0699e`；本次结构化 quota 凭据预检可用 `git log -S'TestHasCredentialsForProvider_OpenCodeGoAPIKeyConfigs' -- internal/server/biz/provider_quota_url_test.go` 定位。
-- 合并审核：upstream `6027d959` 已用官方 API Key usage endpoint 替代 OpenCode Go cookie scraper，并通过 beta9 migration 清除旧 cookie 配置；接受删除旧 `authCookie` schema 和 UI。`d3132241` 为 Command Code 新增 quota cookie 和基础 GraphQL 变量脱敏；合并时必须保留 fork 对嵌套 secret descriptor/path、key 名和 payload 的更完整脱敏，并让 type/base URL/credentials 变化继续触发 provider quota cache 失效。其余路径仍须分别检查 secret read/log、duplicate channel、结构化 Key、cache cold/hot path 和事务 rollback；不能用前端隐藏代替服务端权限。
+- 合并审核：upstream `6027d959` 已用官方 API Key usage endpoint 替代 OpenCode Go cookie scraper，并通过 beta9 migration 清除旧 cookie 配置；接受删除旧 `authCookie` schema 和 UI。`d3132241` 与 `644859d0` 为 Command Code、Ollama 新增 quota cookie 和基础 GraphQL 变量脱敏；合并时必须保留 fork 对嵌套 secret descriptor/path、key 名和 payload 的更完整脱敏，并让 type/base URL/credentials 变化继续触发 provider quota cache 失效。其余路径仍须分别检查 secret read/log、duplicate channel、结构化 Key、cache cold/hot path 和事务 rollback；不能用前端隐藏代替服务端权限。
 - 上游吸收条件：upstream 有个人 Key ownership、结构化 quota credential、quota identity invalidation 和 `read_settings` 测试。
 - 验证：`go test ./internal/scopes ./internal/server/biz ./internal/server/gql -run 'Personal|APIKeyConfigs|ProviderQuota|ReadSettings'`；`cd frontend && node --test src/features/channels/data/channel-input.test.mjs`。
-
-### U10 反向代理来源 IP 信任边界
-
-- 生命周期：`等待上游吸收`
-- 原始意图：客户端不能通过伪造 forwarded headers 绕过 IP blocklist/rate limit 或污染访问日志。
-- 必须保持：`trusted_proxies` 默认为空；只有显式代理 IP/CIDR 可提供 `X-Forwarded-For`/`X-Real-IP`；中间件统一使用 Gin 验证后的 `ClientIP()`；非法 proxy 配置启动即失败。
-- 代码锚点：`internal/server/config.go`、`internal/server/server.go`、`internal/server/middleware/ip_blocklist.go`、`config.example.yml`、`docs/en/getting-started/quick-start.md`、`docs/zh/getting-started/quick-start.md`。
-- 提交锚点：`fe27b4db`。
-- 合并审核：检查默认值，不能为了反向代理开箱即用而恢复“信任所有代理”；IP 控制、限流和 access log 必须使用同一解析结果。
-- 上游吸收条件：upstream 提供安全默认值、CIDR 配置和伪造 forwarded header 回归测试。
-- 验证：`go test ./internal/server ./internal/server/middleware -run 'TrustedProxies|IPBlocklist|IPRateLimit'`。
 
 ### U11 Upstream 错误体截断证据
 

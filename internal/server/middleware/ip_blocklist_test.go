@@ -118,6 +118,24 @@ func TestClientIPCandidatesUsesConfiguredTrustedProxy(t *testing.T) {
 	require.Equal(t, []string{"203.0.113.10"}, got)
 }
 
+func TestClientIPCandidatesUsesForwardedIPForTrustedProxy(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	ctx, engine := gin.CreateTestContext(recorder)
+	if err := engine.SetTrustedProxies([]string{"10.0.0.0/8"}); err != nil {
+		t.Fatalf("failed to set trusted proxies: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "10.0.0.1:12345"
+	req.Header.Set("X-Forwarded-For", "203.0.113.10, 198.51.100.20")
+	ctx.Request = req
+
+	got := clientIPCandidates(ctx)
+	require.Equal(t, []string{"198.51.100.20"}, got)
+}
+
 func TestIsAnyAllowedIP(t *testing.T) {
 	tests := []struct {
 		name       string
