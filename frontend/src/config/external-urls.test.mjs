@@ -13,6 +13,7 @@ const { outputText } = ts.transpileModule(source, {
 const moduleURL = `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`;
 const { resolveExternalURLs } = await import(moduleURL);
 const dockerPublishWorkflow = await readFile(new URL('../../../.github/workflows/docker-publish.yml', import.meta.url), 'utf8');
+const unstableDockerWorkflow = await readFile(new URL('../../../.github/workflows/docker-unstable.yml', import.meta.url), 'utf8');
 const releaseWorkflow = await readFile(new URL('../../../.github/workflows/release.yml', import.meta.url), 'utf8');
 
 test('defaults repository-owned URLs to the fork', () => {
@@ -37,4 +38,13 @@ test('release builds use the artifact repository and exact release tag', () => {
   assert.equal(dockerPublishWorkflow.includes('looplj/axonhub'), false);
   assert.ok(releaseWorkflow.includes('AXONHUB_RELEASE_REPOSITORY: ${{ github.repository }}'));
   assert.ok(releaseWorkflow.includes('AXONHUB_UPDATE_REPOSITORY: ${{ vars.UPDATE_REPOSITORY || github.repository }}'));
+});
+
+test('unstable Docker builds use the fork beta branch and artifact owner', () => {
+  assert.ok(unstableDockerWorkflow.includes('ref: beta'));
+  assert.ok(unstableDockerWorkflow.includes('AXONHUB_UPDATE_REPOSITORY=${{ vars.UPDATE_REPOSITORY || github.repository }}'));
+  assert.ok(unstableDockerWorkflow.includes('AXONHUB_UPDATE_CHANNEL=beta'));
+  assert.ok(unstableDockerWorkflow.includes('${{ needs.prepare.outputs.dockerhub_image }}:unstable'));
+  assert.equal(unstableDockerWorkflow.includes('ref: unstable'), false);
+  assert.equal(unstableDockerWorkflow.includes('looplj/axonhub'), false);
 });

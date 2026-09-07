@@ -15,17 +15,23 @@ jobs:
       commit_sha: ${{ steps.pin.outputs.commit_sha }}
       build_date: ${{ steps.pin.outputs.build_date }}
       base_version: ${{ steps.pin.outputs.base_version }}
+      dockerhub_image: ${{ steps.pin.outputs.dockerhub_image }}
     steps:
-      - name: Check out unstable
+      - name: Check out beta
         uses: actions/checkout@v7
         with:
-          ref: unstable
+          ref: beta
           fetch-depth: 1
           persist-credentials: false
 
       - name: Pin commit SHA & date
         id: pin
+        env:
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || vars.DOCKERHUB_NAME || vars.DOCKERHUB_NAMESPACE }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
+          DEFAULT_DOCKERHUB_NAMESPACE: ${{ github.repository_owner }}
         run: |
+          set -euo pipefail
           git fetch --tags --force --depth=1
           BASE_VERSION=$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n1)
           if [ -z "$BASE_VERSION" ]; then
@@ -38,9 +44,21 @@ jobs:
             echo "Invalid base version: $BASE_VERSION" >&2
             exit 1
           fi
+          image="${DOCKERHUB_IMAGE:-${DOCKERHUB_USERNAME:-$DEFAULT_DOCKERHUB_NAMESPACE}/axonhub}"
+          image="${image#docker.io/}"
+          image="${image%/}"
+          if [[ "$image" != */* ]]; then
+            image="${image}/axonhub"
+          fi
+          if [[ "$image" == *:* ]] || [[ "$image" =~ [[:space:]] ]]; then
+            echo "DOCKERHUB_IMAGE/DOCKERHUB_NAME must be a Docker Hub namespace or repository path without tag." >&2
+            exit 1
+          fi
+          image="$(echo "$image" | tr '[:upper:]' '[:lower:]')"
           printf 'commit_sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           printf 'build_date=%s\n' "$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
           printf 'base_version=%s\n' "$BASE_VERSION" >> "$GITHUB_OUTPUT"
+          printf 'dockerhub_image=%s\n' "$image" >> "$GITHUB_OUTPUT"
 
   build_single_arch:
     name: Build & push (${{ matrix.arch }}) [native]
@@ -89,7 +107,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: |
-            looplj/axonhub
+            ${{ needs.prepare.outputs.dockerhub_image }}
 
       - name: Build & push single-arch
         uses: docker/build-push-action@v7
@@ -97,9 +115,13 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           push: true
+          build-args: |
+            AXONHUB_UPDATE_REPOSITORY=${{ vars.UPDATE_REPOSITORY || github.repository }}
+            AXONHUB_UPDATE_CHANNEL=beta
+            VITE_GITHUB_REPOSITORY=${{ github.repository }}
           tags: |
-            looplj/axonhub:unstable-${{ matrix.arch }}
-            looplj/axonhub:unstable-${{ needs.prepare.outputs.build_date }}-${{ matrix.arch }}
+            ${{ needs.prepare.outputs.dockerhub_image }}:unstable-${{ matrix.arch }}
+            ${{ needs.prepare.outputs.dockerhub_image }}:unstable-${{ needs.prepare.outputs.build_date }}-${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -118,13 +140,15 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Create & push manifest (Docker Hub - unstable)
+        env:
+          IMAGE: ${{ needs.prepare.outputs.dockerhub_image }}
         run: |
           DATE=${{ needs.prepare.outputs.build_date }}
           docker buildx imagetools create \
-            -t looplj/axonhub:unstable \
-            looplj/axonhub:unstable-amd64 \
-            looplj/axonhub:unstable-arm64
+            -t "${IMAGE}:unstable" \
+            "${IMAGE}:unstable-amd64" \
+            "${IMAGE}:unstable-arm64"
           docker buildx imagetools create \
-            -t looplj/axonhub:unstable-${DATE} \
-            looplj/axonhub:unstable-${DATE}-amd64 \
-            looplj/axonhub:unstable-${DATE}-arm64
+            -t "${IMAGE}:unstable-${DATE}" \
+            "${IMAGE}:unstable-${DATE}-amd64" \
+            "${IMAGE}:unstable-${DATE}-arm64"
