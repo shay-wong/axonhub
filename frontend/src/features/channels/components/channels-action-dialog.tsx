@@ -60,6 +60,7 @@ import {
   getApiFormatsForProvider,
   getChannelTypeForApiFormat,
 } from '../data/config_providers';
+import { getInitialApiFormatForChannel, getModelProtocolsForApiFormat } from '../data/protocol-options';
 import {
   Channel,
   ChannelType,
@@ -561,9 +562,13 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   });
   const [selectedApiFormat, setSelectedApiFormat] = useState<ApiFormat>(() => {
     if (initialRow) {
-      return CHANNEL_CONFIGS[initialRow.type as ChannelType]?.apiFormat || 'openai/chat_completions';
+      return getInitialApiFormatForChannel(
+        initialRow.type,
+        CHANNEL_CONFIGS[initialRow.type as ChannelType]?.apiFormat || OPENAI_CHAT_COMPLETIONS,
+        initialRow.settings?.modelProtocols
+      );
     }
-    return 'openai/chat_completions';
+    return OPENAI_CHAT_COMPLETIONS;
   });
   const [responsesTransport, setResponsesTransport] = useState<ResponsesTransport>(() => getResponsesTransportFromChannel(initialRow));
   const [useGeminiVertex, setUseGeminiVertex] = useState(() => {
@@ -590,7 +595,11 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
 
     const provider = getProviderFromChannelType(initialRow.type) || 'openai';
     setSelectedProvider(provider);
-    const apiFormat = CHANNEL_CONFIGS[initialRow.type as ChannelType]?.apiFormat || OPENAI_CHAT_COMPLETIONS;
+    const apiFormat = getInitialApiFormatForChannel(
+      initialRow.type,
+      CHANNEL_CONFIGS[initialRow.type as ChannelType]?.apiFormat || OPENAI_CHAT_COMPLETIONS,
+      initialRow.settings?.modelProtocols
+    );
     setSelectedApiFormat(apiFormat);
     setResponsesTransport(getResponsesTransportFromChannel(initialRow));
     setUseGeminiVertex(initialRow.type === 'gemini_vertex');
@@ -1374,7 +1383,9 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
 
     try {
       if (values.credentials?.apiKeys) {
-        values.credentials.apiKeys = [...new Set(values.credentials.apiKeys.filter((k) => k.trim().length > 0))];
+        values.credentials.apiKeys = [
+          ...new Set(values.credentials.apiKeys.map((key) => key.trim()).filter((key) => key.length > 0)),
+        ];
       }
       const normalizedAPIKeyConfigs = reconcileAPIKeyConfigs(values.credentials?.apiKeys, apiKeyConfigs);
       const shouldSubmitAPIKeyConfigs = showRegularAPIKeyFields && (hasStructuredAPIKeyConfigs || apiKeyConfigsDirty);
@@ -1453,6 +1464,10 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       }
 
       if (isEdit && currentRow) {
+        const existingModelProtocols = currentRow.settings?.modelProtocols;
+        const shouldUpdateModelProtocols =
+          selectedApiFormat === 'zenmux/video' ||
+          existingModelProtocols?.some((protocol) => protocol.apiFormats.includes('zenmux/video')) === true;
         const settingsPatch: Partial<ChannelSettings> = {
           ...channelSettingsPatch,
           retryableErrorPatterns,
@@ -1460,6 +1475,9 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
           // the settings patch; mergeChannelSettingsForUpdate preserves the
           // field when the patch omits it and carries the null clear through.
           providerQuota: settingsForSubmit?.providerQuota,
+          ...(shouldUpdateModelProtocols
+            ? { modelProtocols: getModelProtocolsForApiFormat(selectedApiFormat, supportedModels, existingModelProtocols) }
+            : {}),
         };
 
         const updateInput = {
@@ -1516,6 +1534,16 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
           proxy: proxyConfig,
           ...channelSettingsPatch,
           retryableErrorPatterns,
+          ...(selectedApiFormat === 'zenmux/video' ||
+          settingsForSubmit?.modelProtocols?.some((protocol) => protocol.apiFormats.includes('zenmux/video'))
+            ? {
+                modelProtocols: getModelProtocolsForApiFormat(
+                  selectedApiFormat,
+                  supportedModels,
+                  settingsForSubmit?.modelProtocols
+                ),
+              }
+            : {}),
         });
 
         const createInput = {
@@ -1642,7 +1670,6 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const handleFetchModels = useCallback(async () => {
     const channelType = form.getValues('type');
     const baseURL = form.getValues('baseURL');
-    const apiKeys = form.getValues('credentials.apiKeys');
     const oauthApiKey = form.getValues('credentials.apiKey');
 
     if (!channelType || !baseURL) {
@@ -1838,16 +1865,18 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const removeApiKeys = useCallback(
     (keysToRemove: string[]) => {
       const currentKeys = form.getValues('credentials.apiKeys') || [];
-      const nextKeys = currentKeys.filter((k) => !keysToRemove.includes(k));
-      const validNextKeys = nextKeys.filter((k) => k.trim().length > 0);
+      const keysToRemoveSet = new Set(keysToRemove.map((key) => key.trim()));
+      const validNextKeys = currentKeys
+        .map((key) => key.trim())
+        .filter((key) => key.length > 0 && !keysToRemoveSet.has(key));
       if (validNextKeys.length === 0) {
         toast.error(t('channels.dialogs.fields.apiKey.mustKeepOne'));
         setConfirmRemoveSelectedOpen(false);
         setConfirmRemoveKey(null);
         return;
       }
-      form.setValue('credentials.apiKeys', nextKeys, { shouldDirty: true, shouldTouch: true });
-      setApiKeyConfigs((prev) => prev.filter((config) => !keysToRemove.includes(config.key)));
+      form.setValue('credentials.apiKeys', validNextKeys, { shouldDirty: true, shouldTouch: true });
+      setApiKeyConfigs((prev) => prev.filter((config) => !keysToRemoveSet.has(config.key.trim())));
       setApiKeyConfigsDirty(true);
       setSelectedKeysToRemove(new Set());
       setConfirmRemoveSelectedOpen(false);
@@ -1983,7 +2012,13 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             // Reset provider and API format state
             if (initialRow) {
               setSelectedProvider(getProviderFromChannelType(initialRow.type) || 'openai');
-              setSelectedApiFormat(CHANNEL_CONFIGS[initialRow.type as ChannelType]?.apiFormat || OPENAI_CHAT_COMPLETIONS);
+              setSelectedApiFormat(
+                getInitialApiFormatForChannel(
+                  initialRow.type,
+                  CHANNEL_CONFIGS[initialRow.type as ChannelType]?.apiFormat || OPENAI_CHAT_COMPLETIONS,
+                  initialRow.settings?.modelProtocols
+                )
+              );
               setResponsesTransport(getResponsesTransportFromChannel(initialRow));
               setUseGeminiVertex(initialRow.type === 'gemini_vertex');
               setUseAnthropicAws(initialRow.type === 'anthropic_aws');
@@ -2526,17 +2561,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                             const keys = e.target.value.split('\n');
                                             field.onChange(keys);
                                           }}
-                                          onBlur={(e) => {
+                                          onBlur={() => {
                                             if (!showApiKey) return;
-                                            const keys = [
-                                              ...new Set(
-                                                e.target.value
-                                                  .split('\n')
-                                                  .map((k) => k.trim())
-                                                  .filter((k) => k.length > 0)
-                                              ),
-                                            ];
-                                            field.onChange(keys);
                                             field.onBlur();
                                           }}
                                           readOnly={!showApiKey}
@@ -2609,18 +2635,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                         const keys = e.target.value.split('\n');
                                         field.onChange(keys);
                                       }}
-                                      onBlur={(e) => {
-                                        const keys = [
-                                          ...new Set(
-                                            e.target.value
-                                              .split('\n')
-                                              .map((k) => k.trim())
-                                              .filter((k) => k.length > 0)
-                                          ),
-                                        ];
-                                        field.onChange(keys);
-                                        field.onBlur();
-                                      }}
+                                      onBlur={() => field.onBlur()}
                                       placeholder={t('channels.dialogs.fields.apiKey.placeholder')}
                                       className='min-h-[80px] resize-y font-mono text-sm md:col-span-6'
                                       autoComplete='new-password'
@@ -3337,7 +3352,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                 <ScrollArea className='min-h-0 flex-1' type='always'>
                   <div className='space-y-1 pr-3'>
                     {(() => {
-                      const validKeys = (apiKeys || []).map((k) => k.trim()).filter((k) => k.length > 0);
+                      const validKeys = [...new Set((apiKeys || []).map((key) => key.trim()).filter((key) => key.length > 0))];
                       const isLastKey = validKeys.length <= 1;
                       const enabledKeysCount = validKeys.filter((k) => savedAPIKeySet.has(k) && !disabledKeySet.has(k)).length;
                       return validKeys

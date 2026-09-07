@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`889db99f1bb37389016173cd3edd9656f46ec6ab`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`96714b42588206c2f6bc6ced5972fd24f15d6899`
-- 本次 merge base：`834eea2b9ea54eb86a4428939ca0801fef155b4d`
-- 审计范围：`git diff 96714b42..HEAD`
+- 本次 upstream merge 的 fork parent：`8cdab27b7741d190e05b3850abad5cccfa33f2ca`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`04654c2dc3f844a66e7583d589fcd2e222397e05`
+- 本次 merge base：`96714b42588206c2f6bc6ced5972fd24f15d6899`
+- 审计范围：`git diff 04654c2d..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -46,11 +46,11 @@ git show --remerge-diff <merge-commit>
 
 ## Fork 发布版本
 
-- Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta9`。
-- 本次 upstream parent 包含 tag `v1.0.0-beta9`，源码中的 `internal/build/VERSION` 也已更新为 `v1.0.0-beta9`；fork 发布版本仍必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
+- Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta10`。
+- 本次 upstream parent 包含 tag `v1.0.0-beta10`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta9-fork.4`；upstream 发布基线仍为 `v1.0.0-beta9`，因此下一个规范化 fork 版本为 `v1.0.0-beta9-fork.5`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta9-fork.5`；upstream 发布基线已变为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.1`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -72,7 +72,7 @@ git show --remerge-diff <merge-commit>
 - 必须保持：优先读取 `apiKeyConfigs`，兼容旧 `apiKey`/`apiKeys`；Key 去重且非正权重归一为 `100`；编辑、导入、删除或重排 Key 时按 Key 身份保留对应别名和权重；支持 `trace_sticky`、`weighted_sticky` 和 `failover`；API-key quota 预检与 checker 使用同一归一化 Key 集合；日志和 UI 只显示别名及安全后缀；失败重试优先排除当前 Key 并轮换同一 channel 的其他可用 Key；模型发现允许选择一个可用 Key，并仅在该 Key 失败时按顺序尝试其他 Key，首个成功后立即停止，自动同步同样跳过已禁用 Key 且不遍历成功后的 Key。
 - 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel_apikey_identity.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_apikey_provider.go`、`internal/server/biz/model_fetcher.go`、`internal/server/biz/model_fetcher_test.go`、`internal/server/biz/provider_quota.go`、`internal/server/biz/provider_quota_url_test.go`、`internal/server/orchestrator/retry.go`、`frontend/src/features/channels/data/api-key-display.ts`、`frontend/src/features/channels/data/channel-input.ts`、`frontend/src/features/channels/data/channel-config.test.mjs`、`frontend/src/features/channels/components/channels-action-dialog.tsx`、`frontend/src/features/channels/components/channels-api-key-management-dialog.tsx`。
 - 提交锚点：`d6e092ba`、`2909ddaa`、`88980c6e`、`1a69f0c4`、`31b3ad18`、`d53787b1`。
-- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；`dfbe2259` 增加 `modelProtocols` 和增量 channel settings 更新时，必须让 `apiKeySelectionStrategy` 与协议配置并存并进入 settings patch；`6742293a` 新增的 ZenMux `managementApiKey` 只用于服务端配额查询，必须与结构化 inference Key 并存且不能代替或清空别名、权重和选择策略；`d3132241` 新增 Command Code 的 `providerQuota` 设置时，必须让该字段与 `apiKeySelectionStrategy` 共用同一增量 settings patch，不能互相覆盖；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
+- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；`dfbe2259` 增加 `modelProtocols` 和增量 channel settings 更新时，必须让 `apiKeySelectionStrategy` 与协议配置并存并进入 settings patch；`939b2bc0` 将 Key 规范化从输入失焦移到提交/删除边界以保持焦点，合并时必须同时保留按 Key 身份恢复别名与权重的 `apiKeyConfigs` 状态；`6742293a` 新增的 ZenMux `managementApiKey` 只用于服务端配额查询，必须与结构化 inference Key 并存且不能代替或清空别名、权重和选择策略；`d3132241` 新增 Command Code 的 `providerQuota` 设置时，必须让该字段与 `apiKeySelectionStrategy` 共用同一增量 settings patch，不能互相覆盖；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
 - 吸收/删除条件：只有 fork 明确放弃多 Key 权重策略，或 upstream 提供等价的稳定身份、路由算法、兼容迁移和脱敏展示时才能删除。
 - 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'APIKey|ProviderQuota|Weighted|Failover|Retry'`；`cd frontend && node --test src/features/channels/data/api-key-display.test.mjs src/features/channels/data/channel-input.test.mjs`。
 

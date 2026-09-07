@@ -10933,6 +10933,7 @@
           },
           "type": "chat",
           "knowledge": "2025-05",
+          "experimental": true,
           "vision": true
         },
         {
@@ -11696,6 +11697,11 @@
             }
           },
           "display_name": "GPT-6 Astra",
+          "extra_capabilities": {
+            "reasoning": {
+              "supported": true
+            }
+          },
           "type": "chat"
         },
         {
@@ -18540,7 +18546,7 @@
       "name": "ByteDance",
       "display_name": "ByteDance",
       "doc": "https://www.volcengine.com/docs/82379/1330310?lang=zh",
-      "updated_at": "2026-09-02T13:31:18Z",
+      "updated_at": "2026-09-05T11:12:52Z",
       "metadata": {
         "source": "volcengine-docs",
         "doc_detail_url": "https://www.volcengine.com/api/doc/getDocDetail?LibraryID=82379&DocumentID=1330310&lang=zh"
@@ -18556,7 +18562,7 @@
             "supported": false
           },
           "tool_call": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": false,
           "modalities": {
             "input": [
@@ -18574,7 +18580,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-1-5-lite-32k",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-1-5-lite-32k",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-1-5-lite-32k",
             "section_titles": [
               "上下文缓存能力",
               "工具调用能力",
@@ -18603,7 +18609,7 @@
             "supported": false
           },
           "tool_call": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": false,
           "modalities": {
             "input": [
@@ -18621,7 +18627,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-1-5-pro-32k",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-1-5-pro-32k",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-1-5-pro-32k",
             "section_titles": [
               "上下文缓存能力",
               "工具调用能力",
@@ -18650,7 +18656,7 @@
             "supported": false
           },
           "tool_call": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": false,
           "modalities": {
             "input": [
@@ -18668,7 +18674,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-1-5-pro-32k",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-1-5-pro-32k",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-1-5-pro-32k",
             "section_titles": [
               "上下文缓存能力",
               "工具调用能力",
@@ -18696,7 +18702,7 @@
             "supported": false
           },
           "tool_call": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -18715,7 +18721,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-1-5-vision-pro-32k",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-1-5-vision-pro-32k",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-1-5-vision-pro-32k",
             "section_titles": [
               "工具调用能力",
               "视觉理解能力"
@@ -18739,7 +18745,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -18758,7 +18764,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-embedding-vision",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-embedding-vision",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-embedding-vision",
             "section_titles": [
               "向量化能力"
             ],
@@ -18780,7 +18786,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -18799,7 +18805,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-embedding-vision",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-embedding-vision",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-embedding-vision",
             "section_titles": [
               "向量化能力"
             ],
@@ -18823,7 +18829,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -18844,13 +18850,11 @@
             "max_thinking_tokens": 32000,
             "max_input_tokens": 224000,
             "canonical_id": "doubao-seed-1-6",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-1-6",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-1-6",
             "section_titles": [
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -18882,7 +18886,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -18903,13 +18907,11 @@
             "max_thinking_tokens": 32000,
             "max_input_tokens": 224000,
             "canonical_id": "doubao-seed-1-6",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-1-6",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-1-6",
             "section_titles": [
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -18941,7 +18943,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -18962,16 +18964,15 @@
             "max_thinking_tokens": 32000,
             "max_input_tokens": 224000,
             "canonical_id": "doubao-seed-1-6-flash",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-1-6-flash",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-1-6-flash",
             "section_titles": [
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
+              "多模态理解",
               "工具调用",
               "文本生成",
               "深度思考",
@@ -18999,7 +19000,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19020,16 +19021,15 @@
             "max_thinking_tokens": 32000,
             "max_input_tokens": 224000,
             "canonical_id": "doubao-seed-1-6-flash",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-1-6-flash",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-1-6-flash",
             "section_titles": [
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
+              "多模态理解",
               "工具调用",
               "文本生成",
               "深度思考",
@@ -19057,7 +19057,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19078,14 +19078,12 @@
             "max_thinking_tokens": 32000,
             "max_input_tokens": 224000,
             "canonical_id": "doubao-seed-1-6-vision",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-1-6-vision",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-1-6-vision",
             "section_titles": [
               "GUI 任务处理能力",
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -19117,7 +19115,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19138,13 +19136,11 @@
             "max_thinking_tokens": 32000,
             "max_input_tokens": 224000,
             "canonical_id": "doubao-seed-1-8",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-1-8",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-1-8",
             "section_titles": [
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -19175,7 +19171,7 @@
             "default": true
           },
           "tool_call": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19196,12 +19192,11 @@
             "max_thinking_tokens": 128000,
             "max_input_tokens": 224000,
             "canonical_id": "doubao-seed-2-0-code",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-2-0-code",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-2-0-code",
             "section_titles": [
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -19232,7 +19227,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19253,13 +19248,12 @@
             "max_thinking_tokens": 128000,
             "max_input_tokens": 224000,
             "canonical_id": "doubao-seed-2-0-lite",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-2-0-lite",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-2-0-lite",
             "section_titles": [
+              "GUI 任务处理能力",
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -19291,7 +19285,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19312,13 +19306,12 @@
             "max_thinking_tokens": 128000,
             "max_input_tokens": 224000,
             "canonical_id": "doubao-seed-2-0-lite",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-2-0-lite",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-2-0-lite",
             "section_titles": [
+              "GUI 任务处理能力",
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -19349,7 +19342,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19370,13 +19363,12 @@
             "max_thinking_tokens": 128000,
             "max_input_tokens": 224000,
             "canonical_id": "doubao-seed-2-0-mini",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-2-0-mini",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-2-0-mini",
             "section_titles": [
+              "GUI 任务处理能力",
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -19408,7 +19400,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19429,13 +19421,12 @@
             "max_thinking_tokens": 128000,
             "max_input_tokens": 224000,
             "canonical_id": "doubao-seed-2-0-mini",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-2-0-mini",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-2-0-mini",
             "section_titles": [
+              "GUI 任务处理能力",
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -19466,7 +19457,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19487,13 +19478,12 @@
             "max_thinking_tokens": 128000,
             "max_input_tokens": 224000,
             "canonical_id": "doubao-seed-2-0-pro",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-2-0-pro",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-2-0-pro",
             "section_titles": [
+              "GUI 任务处理能力",
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -19525,7 +19515,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19546,13 +19536,12 @@
             "max_thinking_tokens": 256000,
             "max_input_tokens": 256000,
             "canonical_id": "doubao-seed-2-1-pro",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-2-1-pro",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-2-1-pro",
             "section_titles": [
+              "GUI 任务处理能力",
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -19583,7 +19572,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19604,13 +19593,12 @@
             "max_thinking_tokens": 256000,
             "max_input_tokens": 256000,
             "canonical_id": "doubao-seed-2-1-turbo",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-2-1-turbo",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-2-1-turbo",
             "section_titles": [
+              "GUI 任务处理能力",
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -19639,7 +19627,7 @@
             "supported": false
           },
           "tool_call": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": false,
           "modalities": {
             "input": [
@@ -19658,7 +19646,7 @@
             "source": "volcengine-docs",
             "max_input_tokens": 96000,
             "canonical_id": "doubao-seed-character",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-character",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-character",
             "section_titles": [
               "上下文缓存能力",
               "工具调用能力",
@@ -19669,7 +19657,7 @@
               "文本生成"
             ],
             "raw_limits": [
-              "上下文窗口: 128k 最大输入: 96k 最大回答(默认 4k): 32k",
+              "上下文窗口: 128k 最大输��: 96k 最大回答(默认 4k): 32k",
               "最大 RPM: 30000 最大 TPM: 5000000"
             ],
             "features": [
@@ -19689,7 +19677,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19710,13 +19698,11 @@
             "max_thinking_tokens": 128000,
             "max_input_tokens": 96000,
             "canonical_id": "doubao-seed-character",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-character&_vtm_=a106466.b106468.0_0.0_0.0.1961_7630866813484467762&projectName=default",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-character&_vtm_=a106466.b106468.0_0.0_0.0.1961_7630866813484467762&projectName=default",
             "section_titles": [
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -19746,7 +19732,7 @@
             "default": true
           },
           "tool_call": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19767,12 +19753,11 @@
             "max_thinking_tokens": 32000,
             "max_input_tokens": 224000,
             "canonical_id": "doubao-seed-code",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-code",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-code",
             "section_titles": [
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -19803,7 +19788,7 @@
           },
           "tool_call": true,
           "structured_output": true,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -19824,13 +19809,12 @@
             "max_thinking_tokens": 256000,
             "max_input_tokens": 1024000,
             "canonical_id": "doubao-seed-evolving",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-evolving",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-evolving",
             "section_titles": [
+              "GUI 任务处理能力",
               "上下文缓存能力",
               "工具调用能力",
               "文本生成能力",
-              "深度思考能力",
-              "结构化输出能力(beta)",
               "视觉理解能力"
             ],
             "capabilities": [
@@ -19859,7 +19843,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": false,
           "modalities": {
             "input": [
@@ -19878,7 +19862,7 @@
             "source": "volcengine-docs",
             "max_input_tokens": 1000,
             "canonical_id": "doubao-seed-translation",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seed-translation",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seed-translation",
             "section_titles": [
               "文本生成能力"
             ],
@@ -19901,7 +19885,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": false,
           "modalities": {
             "input": [
@@ -19918,7 +19902,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-seedance-1-0-pro",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seedance-1-0-pro&projectName=default",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seedance-1-0-pro&projectName=default",
             "section_titles": [
               "视频生成能力"
             ],
@@ -19941,7 +19925,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": false,
           "modalities": {
             "input": [
@@ -19958,7 +19942,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-seedance-1-0-pro-fast",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seedance-1-0-pro-fast&projectName=default",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seedance-1-0-pro-fast&projectName=default",
             "section_titles": [
               "视频生成能力"
             ],
@@ -19981,7 +19965,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": false,
           "modalities": {
             "input": [
@@ -19998,7 +19982,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-seedance-1-5-pro",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seedance-1-5-pro",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seedance-1-5-pro",
             "section_titles": [
               "视频生成能力"
             ],
@@ -20021,7 +20005,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -20035,7 +20019,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-seedance-2-0",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seedance-2-0&projectName=default",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seedance-2-0&projectName=default",
             "section_titles": [
               "视频生成能力"
             ],
@@ -20058,7 +20042,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -20072,7 +20056,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-seedance-2-0-fast",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seedance-2-0-fast",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seedance-2-0-fast",
             "section_titles": [
               "视频生成能力"
             ],
@@ -20095,7 +20079,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -20109,7 +20093,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-seedance-2-0-mini",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seedance-2-0-mini",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seedance-2-0-mini",
             "section_titles": [
               "视频生成能力"
             ],
@@ -20132,7 +20116,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -20146,7 +20130,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-seedance-2-5",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seedance-2-5",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seedance-2-5",
             "section_titles": [
               "视频生成能力"
             ],
@@ -20169,7 +20153,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -20186,7 +20170,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-seedream-4-0",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seedream-4-0",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seedream-4-0",
             "section_titles": [
               "图片生成能力"
             ],
@@ -20206,7 +20190,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -20223,7 +20207,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-seedream-4-5",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seedream-4-5",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seedream-4-5",
             "section_titles": [
               "图片生成能力"
             ],
@@ -20243,7 +20227,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -20260,7 +20244,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-seedream-5-0",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seedream-5-0",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seedream-5-0",
             "section_titles": [
               "图片生成能力"
             ],
@@ -20280,7 +20264,7 @@
             "supported": false
           },
           "tool_call": false,
-          "last_updated": "2026-09-02T13:31:18Z",
+          "last_updated": "2026-09-05T11:12:52Z",
           "vision": true,
           "modalities": {
             "input": [
@@ -20297,7 +20281,7 @@
           "metadata": {
             "source": "volcengine-docs",
             "canonical_id": "doubao-seedream-5-0-pro",
-            "detail_url": "https://console.volcengine.com/ark/region:cn-beijing/model/detail?Id=doubao-seedream-5-0-pro",
+            "detail_url": "https://ark.volcengine.com/region:cn-beijing/model/detail?Id=doubao-seedream-5-0-pro",
             "section_titles": [
               "图片生成能力"
             ],
