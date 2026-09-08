@@ -1260,7 +1260,7 @@ func supportsCodexStyleResponses(channelType channel.Type) bool {
 
 func isZenmuxChannelType(channelType channel.Type) bool {
 	switch channelType {
-	case channel.TypeZenmux, channel.TypeZenmuxResponses, channel.TypeZenmuxAnthropic, channel.TypeZenmuxGemini:
+	case channel.TypeZenmux, channel.TypeZenmuxResponses, channel.TypeZenmuxAnthropic, channel.TypeZenmuxGemini, channel.TypeZenmuxVideo:
 		return true
 	default:
 		return false

@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`7711ba31b0a4275c2b687b21b9842cb1bde573ca`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`d7a237bc86f9c4be8129c0329e6818dbe62ce309`
-- 本次 merge base：`644859d04f1c46fd81f3392f4cd988cc77ad2786`
-- 审计范围：`git diff d7a237bc..HEAD`
+- 本次 upstream merge 的 fork parent：`419c7e0d3c3e9cb024ad7d7865deb17ec86a3294`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`216c278d94ad01e53815ae2149834f1a8fb4b0e0`
+- 本次 merge base：`d7a237bc86f9c4be8129c0329e6818dbe62ce309`
+- 审计范围：`git diff 216c278d..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含 tag `v1.0.0-beta10`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.3`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.4`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.4`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.5`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -63,6 +63,7 @@ git show --remerge-diff <merge-commit>
 - 提交锚点：`fc687607`、`de2aa90a`、`6b147cbb`、`cee45b4b`、`b77f8e5f`、`47ffb508`、`ce626e28`、`923482f8`、`a94eb373`。
 - 合并审核：重点检查 workflow 中 repository owner、tag、`latest`/`unstable` manifest、Chart image、Telegram 通知依赖与 Secrets 名称、定时 Docker 和模型目录同步的 checkout/base 分支、`AXONHUB_UPDATE_CHANNEL`、前端外链和后端内嵌模型增量；不要接受重新硬编码 upstream 仓库、把 fork workflow 的源码分支改回 `unstable`，或丢失 fork `catalogdata/models.json` 的变更。
 - 吸收/删除条件：只有在 upstream 提供完全仓库无关的发布、更新和目录来源机制，且本 fork 不再需要本地默认值时才能删除。
+- 本次上游整合：`4910da2c` 的数字 prerelease 比较替代旧正则规范化；更新、回滚和迁移器的 `CompareVersions` 必须共用 fork-aware 排序，保留同一基础版本下 fork 修订递增及 beta 通道包含 rc 的既有规则。
 - 验证：`go test ./internal/server/biz -run 'TestSelectLatestGitHubRelease|Test.*Version'`；`cd frontend && node --test src/config/external-urls.test.mjs`；静态检查 workflow、模型目录同步的 checkout/base 分支、Telegram 通知依赖/Secrets 和 Helm 默认镜像。
 
 ### F02 API Key 稳定身份、别名、权重和路由
@@ -270,6 +271,7 @@ git show --remerge-diff <merge-commit>
 
 ### U15 前端交互和权限回归修复
 
+- 本次上游整合：`be347865` 强制隐藏仅用于筛选的 `model` 虚拟列，避免固定表格布局中空列占宽；这是 upstream 修复，不登记为独立 fork 能力。`216c278d` 保留拉取模型后手动添加模型的入口，同时仍须保留本地按可用 Key 发现模型的行为。
 - 生命周期：`等待上游吸收`
 - 原始意图：小型前端回归不应在切换视图时重置用户输入、暴露无权限操作或拒绝后端合法 ID。
 - 必须保持：data storage 表格数据引用稳定，编辑输入不因 render 重置；更新检查的 **包含 Beta 版本**在系统设置标签切换期间保持、页面刷新后重置；禁用 Key 提示有可读对比度；thread/trace/detail 状态动作要求 `write_requests` 并携带当前 project header；brand settings 可公开读取，但受保护 system settings 仍要求 `read_settings`。
@@ -282,6 +284,7 @@ git show --remerge-diff <merge-commit>
 
 ### U16 多项目权限和邀请生命周期安全
 
+- 本次上游整合：`8c5f0ab1` 清理账号切换遗留的项目选择并约束项目成员的用户查询；仍保留本地 `getAuthenticatedLanding` 对可访问项目和落地页权限的检查。
 - 生命周期：`等待上游吸收`
 - 原始意图：system scope、project membership 和 project role 不能跨项目拼接；公开邀请入口不能成为权限绕过、竞争条件或 token 泄露点。
 - 必须保持：effective project scopes 只在所属项目内计算；登录后只跳转到用户真实可访问的 dashboard/playground/profile；邀请绑定 active project，正确处理过期、max uses、并发注册/删除项目和 deleted row；token 使用 32-byte randomness；公开 get/register endpoint 分别限流；access log 使用 route template，不能记录真实 invitation token；错误使用结构化 4xx code。
