@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`edfd788d0f636100f7746730fe7b174b4ca760a4`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`644859d04f1c46fd81f3392f4cd988cc77ad2786`
-- 本次 merge base：`04654c2dc3f844a66e7583d589fcd2e222397e05`
-- 审计范围：`git diff 644859d0..HEAD`
+- 本次 upstream merge 的 fork parent：`7711ba31b0a4275c2b687b21b9842cb1bde573ca`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`d7a237bc86f9c4be8129c0329e6818dbe62ce309`
+- 本次 merge base：`644859d04f1c46fd81f3392f4cd988cc77ad2786`
+- 审计范围：`git diff d7a237bc..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含 tag `v1.0.0-beta10`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.1`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.2`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.3`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.4`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -253,7 +253,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`internal/server/biz/provider_quota/cline_checker.go`、`internal/server/biz/provider_quota/cline_checker_test.go`、`internal/server/orchestrator/candidates_quota.go`、`internal/server/orchestrator/candidates_quota_test.go`。
 - 用户提示：`frontend/src/locales/en/system.json`、`frontend/src/locales/zh-CN/system.json`；这是已发布行为的维护记录补漏，不新增当前 changelog 条目。
 - 提交锚点：upstream 引入 `ad1176c19`；本地人工 merge resolution `42f7bd7a`。
-- 合并审核：upstream `8915be26` 仍把混合渠道的 ClinePass 耗尽降级为 `warning` 并保持可路由；冲突处理必须同时核对 channel status、`Ready`、limit status、候选过滤和中英文提示，不能只看配额窗口计算是否更新。
+- 合并审核：upstream `8915be26` 仍把混合渠道的 ClinePass 耗尽降级为 `warning` 并保持可路由；`d7a237bc` 的统一 limits、周期计算和通用配额展示可以保留，但未替代本地整渠道耗尽策略。冲突处理必须同时核对 channel status、`Ready`、limit status、候选过滤和中英文提示，不能只看配额窗口计算是否更新；保留 mixed-scope 整渠道耗尽回归断言，并使用有效的未来重置时间。
 - 上游吸收条件：upstream 提供等价的整渠道 fail-closed 行为，或实现按模型/配额池过滤并确保 `cline-pass/*` 请求不会命中已耗尽池，同时具备回归测试。
 - 验证：`go test ./internal/server/biz/provider_quota -run 'TestCline_CheckQuota_(MixedScopeExhaustsWholeChannelFromPassPool|DirectOnlyUsesBalanceInformationally)$'`；`go test ./internal/server/orchestrator -run 'TestProviderQuotaSelector_(ExhaustedOnlyMode|ChannelExhaustedOverridesPerLimitAvailable)$'`。
 
