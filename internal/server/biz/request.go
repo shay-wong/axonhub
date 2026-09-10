@@ -530,10 +530,11 @@ type LatencyMetrics struct {
 	ReasoningDurationMs *int64
 }
 
-// UpdateRequestCompleted updates request status to completed with response body.
-func (s *RequestService) UpdateRequestCompleted(
+// UpdateRequestFinalized persists a terminal response and its final request status.
+func (s *RequestService) UpdateRequestFinalized(
 	ctx context.Context,
 	requestID int,
+	status request.Status,
 	externalId string,
 	responseBody any,
 	metrics *LatencyMetrics,
@@ -565,7 +566,7 @@ func (s *RequestService) UpdateRequestCompleted(
 	}
 
 	upd := client.Request.UpdateOneID(requestID).
-		SetStatus(request.StatusCompleted).
+		SetStatus(status).
 		SetExternalID(externalId)
 
 	// Set latency metrics if provided
@@ -818,10 +819,12 @@ func (s *RequestService) UpdateRequestStatusExternalIDAndResponseBody(
 	return nil
 }
 
-// UpdateRequestExecutionCompleted updates request execution status to completed with response body.
-func (s *RequestService) UpdateRequestExecutionCompleted(
+// UpdateRequestExecutionFinalized persists a terminal response and its final execution status.
+func (s *RequestService) UpdateRequestExecutionFinalized(
 	ctx context.Context,
 	executionID int,
+	status requestexecution.Status,
+	errorMessage string,
 	externalId string,
 	responseBody any,
 	metrics *LatencyMetrics,
@@ -829,8 +832,8 @@ func (s *RequestService) UpdateRequestExecutionCompleted(
 	return s.updateRequestExecutionResponse(
 		ctx,
 		executionID,
-		requestexecution.StatusCompleted,
-		"",
+		status,
+		errorMessage,
 		externalId,
 		responseBody,
 		metrics,
@@ -956,7 +959,7 @@ func (s *RequestService) updateRequestExecutionResponse(
 	_, err = upd.Save(ctx)
 	if err != nil {
 		s.rollbackExternalPayload(ctx, dataStorage, savedExternalKey)
-		log.Error(ctx, "Failed to update request execution response", log.Cause(err))
+		log.Error(ctx, "Failed to update finalized request execution", log.Cause(err), log.Any("status", status))
 		return err
 	}
 

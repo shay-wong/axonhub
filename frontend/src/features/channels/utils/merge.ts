@@ -129,6 +129,7 @@ export function mergeChannelSettingsForUpdate(
     apiKeySelectionStrategy: pick('apiKeySelectionStrategy', existing?.apiKeySelectionStrategy ?? null),
     modelProtocols: pick('modelProtocols', existing?.modelProtocols ?? []),
     providerQuota: pick('providerQuota', existing?.providerQuota ?? null),
+    quotaRoutingMode: pick('quotaRoutingMode', existing?.quotaRoutingMode ?? undefined),
   };
 }
 

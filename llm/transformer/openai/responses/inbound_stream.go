@@ -140,12 +140,16 @@ func (s *responsesInboundStream) Next() bool {
 
 	// Try to get the next chunk from source
 	if !s.source.Next() {
+		// Keep the source error available for persistence without emitting a
+		// second terminal event after the client already received the outcome.
+		if s.responseCompleted {
+			return false
+		}
 		if s.err == nil && !s.errorEventEmitted && s.source.Err() == nil && s.hasFinished && !s.responseCompleted {
 			if err := s.enqueueTerminalResponse(); err != nil {
 				s.err = fmt.Errorf("failed to enqueue terminal response event: %w", err)
 				return false
 			}
-
 			return s.Next()
 		}
 
@@ -368,7 +372,7 @@ func (s *responsesInboundStream) Next() bool {
 		}
 	}
 
-	// Handle final usage chunk and complete response
+	// Usage follows the finish_reason; emit the final outcome once both arrive.
 	if chunk.Usage != nil && s.hasFinished && !s.responseCompleted {
 		s.usage = chunk.Usage
 		if err := s.enqueueTerminalResponse(); err != nil {
@@ -418,12 +422,34 @@ func (s *responsesInboundStream) enqueueTerminalResponse() error {
 		response.Output = append(append([]Item(nil), calls...), response.Output...)
 	}
 
+	if raw, ok := s.transformerMetadata[responsesTerminalDetailsTransformerMetadataKey]; ok {
+		// Metadata may have crossed a JSON serialization boundary.
+		data, err := json.Marshal(raw)
+		if err != nil {
+			return fmt.Errorf("failed to encode terminal details: %w", err)
+		}
+		var details responsesTerminalDetails
+		if err := json.Unmarshal(data, &details); err != nil {
+			return fmt.Errorf("failed to decode terminal details: %w", err)
+		}
+		if details.Error != nil {
+			response.Error = details.Error
+		}
+		if details.IncompleteDetails != nil {
+			response.IncompleteDetails = details.IncompleteDetails
+		}
+	}
+
 	return s.enqueueEvent(&StreamEvent{Type: eventType, Response: response})
 }
 
 func (s *responsesInboundStream) mergeTransformerMetadata(metadata map[string]any) {
 	if len(metadata) == 0 {
 		return
+	}
+
+	if details, ok := metadata[responsesTerminalDetailsTransformerMetadataKey]; ok {
+		s.transformerMetadata[responsesTerminalDetailsTransformerMetadataKey] = details
 	}
 
 	if calls := getResponseWebSearchCallsFromMetadata(metadata); len(calls) > 0 {
@@ -1439,7 +1465,7 @@ func classifyStreamError(err error) (code, message string) {
 	code = "stream_error"
 	message = err.Error()
 
-	if errors.Is(err, io.EOF) {
+	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
 		code = "upstream_eof"
 		message = "upstream connection closed unexpectedly"
 		return code, message

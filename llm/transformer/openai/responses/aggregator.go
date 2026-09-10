@@ -658,7 +658,9 @@ func (a *streamAggregator) processEvent(ev *StreamEvent) {
 
 	case StreamEventTypeResponseCompleted:
 		a.applyResponseSnapshot(ev.Response)
-		if ev.Response == nil || ev.Response.Status == nil {
+		// The terminal event wins over a missing or stale in-progress status,
+		// while explicit failed, incomplete, and canceled outcomes are preserved.
+		if ev.Response == nil || ev.Response.Status == nil || a.status == "" || a.status == "in_progress" {
 			a.status = "completed"
 		}
 

@@ -1,6 +1,9 @@
 package biz
 
-import "github.com/samber/lo"
+import (
+	"github.com/looplj/axonhub/internal/objects"
+	"github.com/samber/lo"
+)
 
 const (
 	defaultAutoDisableFallbackDurationMinutes = 5
@@ -144,9 +147,8 @@ var defaultVideoStorageSettings = VideoStorageSettings{
 	ScanLimit:           50,
 }
 
-var defaultQuotaEnforcementSettings = QuotaEnforcementSettings{
-	Enabled: false,
-	Mode:    QuotaEnforcementModeExhaustedOnly,
+var defaultQuotaRoutingSettings = QuotaRoutingSettings{
+	DefaultMode: objects.QuotaRoutingModeRemoveOnExhausted,
 }
 
 var defaultSecuritySettings = SecuritySettings{

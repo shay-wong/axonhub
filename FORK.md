@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`419c7e0d3c3e9cb024ad7d7865deb17ec86a3294`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`216c278d94ad01e53815ae2149834f1a8fb4b0e0`
-- 本次 merge base：`d7a237bc86f9c4be8129c0329e6818dbe62ce309`
-- 审计范围：`git diff 216c278d..HEAD`
+- 本次 upstream merge 的 fork parent：`25011d54feeb3416bad47850d9631fafef57e39f`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`3786f2c5c8def8a3341a0ed1dd67bfb91e37ff30`
+- 本次 merge base：`216c278d94ad01e53815ae2149834f1a8fb4b0e0`
+- 审计范围：`git diff 3786f2c5..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含 tag `v1.0.0-beta10`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.4`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.5`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.5`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.6`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -68,6 +68,7 @@ git show --remerge-diff <merge-commit>
 
 ### F02 API Key 稳定身份、别名、权重和路由
 
+- 本次上游整合：`65c65807` 在模型同步落库前重读渠道，保留拉取期间新保存的手动模型；此前按可用 Key 顺序发现、首个成功即停止的本地逻辑继续保留。
 - 生命周期：`长期保留`
 - 原始意图：一个 channel 可以管理多个 upstream API Key，并在不泄露完整 secret 的前提下识别、测试和按权重路由每个 Key。
 - 必须保持：优先读取 `apiKeyConfigs`，兼容旧 `apiKey`/`apiKeys`；Key 去重且非正权重归一为 `100`；编辑、导入、删除或重排 Key 时按 Key 身份保留对应别名和权重；支持 `trace_sticky`、`weighted_sticky` 和 `failover`；API-key quota 预检与 checker 使用同一归一化 Key 集合；日志和 UI 只显示别名及安全后缀；失败重试优先排除当前 Key 并轮换同一 channel 的其他可用 Key；模型发现允许选择一个可用 Key，并仅在该 Key 失败时按顺序尝试其他 Key，首个成功后立即停止，自动同步同样跳过已禁用 Key 且不遍历成功后的 Key。
@@ -103,6 +104,7 @@ git show --remerge-diff <merge-commit>
 
 ### F05 历史 fork 备份恢复兼容和事务安全
 
+- 本次上游整合：`7ca221d8` 将旧配额执行设置迁移到全局/渠道配额路由设置；新旧备份恢复继续在同一事务中校验配置并重映射渠道 ID，非法旧 JSON、旧 mode 或新 mode 必须回滚，不能因新增迁移路径绕过本地校验。
 - 生命周期：`长期保留`
 - 原始意图：旧 fork 版本导出的备份必须能在当前版本安全恢复，失败时不能留下半套配置，也不能破坏未包含在恢复载荷中的现有关系。
 - 必须保持：旧模型价格 code/variant 可归一化但非法 tier、重复 code 和非递增区间必须拒绝；channel ID 在 model settings、API Key profiles 等引用中正确重映射；未恢复 channel 的关联保留；无效 system config/proxy preset 导致整体回滚；storage policy 优先于旧 `storeChunks`；proxy preset 保存和删除前统一归一化。
@@ -160,6 +162,7 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- 本次上游整合：`3786f2c5` 引入统一终态元数据及断连后终态保留。保留本地精确取消事件和非取消 transport error 的失败语义；不能以已看到终态为由忽略所有后续错误。完整成功后的客户端取消仍按 F04 保留费用。
 - 生命周期：`等待上游吸收`
 - 原始意图：转换器不能丢失混合内容、usage、reasoning 顺序或 upstream 错误，也不能让遥测空 chunk 污染客户端流。
 - 必须保持：Responses 混合流式内容保持分段和顺序；Cline 空 `choices` 遥测不向客户端透出但最终 usage 保留；interleaved reasoning 按 item 顺序输出；空或不可解析的 upstream error 回退到 status/raw status/通用消息，不返回空字符串；`response.completed`、`response.failed`、`response.incomplete`、`response.cancelled` 和 `response.canceled` 在 SSE metadata 或 JSON data 中都被识别为终态；direct stream 和 aggregation 语义一致。
@@ -248,15 +251,16 @@ git show --remerge-diff <merge-commit>
 
 ### U13 Cline 混合渠道的 ClinePass 耗尽阻断
 
+- 本次上游整合：`7ca221d8` 以 `QuotaRoutingGate` 替换旧 selector，旧配置自动映射到新模式；`EvaluateQuotaRouting` 的整体耗尽优先级必须保留，粘性渠道与背压兜底均不能绕过整体耗尽。
 - 生命周期：`等待上游吸收`
 - 原始意图：provider quota 当前按 channel/token limit 执行；混合渠道的 ClinePass 已耗尽时，不能降级为 `warning` 后继续把 `cline-pass/*` 请求路由到该渠道。
-- 必须保持：混合渠道任一有效 ClinePass 窗口耗尽时，渠道状态为 `exhausted`、`Ready=false`，token limit 同样保留耗尽状态，并在 `exhausted_only` 模式下过滤整条渠道；仅包含 Cline usage-billing 模型的渠道，其 credits 余额仍只作展示，不参与路由阻断。
+- 必须保持：混合渠道任一有效 ClinePass 窗口耗尽时，渠道状态为 `exhausted`、`Ready=false`，token limit 同样保留耗尽状态，并在 `remove_on_exhausted`（旧 `exhausted_only`）和 `backpressure` 模式下过滤整条渠道；显式 `ignore_quota` 仍遵循上游跳过配额路由的设置。仅包含 Cline usage-billing 模型的渠道，其 credits 余额仍只作展示，不参与路由阻断。
 - 代码锚点：`internal/server/biz/provider_quota/cline_checker.go`、`internal/server/biz/provider_quota/cline_checker_test.go`、`internal/server/orchestrator/candidates_quota.go`、`internal/server/orchestrator/candidates_quota_test.go`。
 - 用户提示：`frontend/src/locales/en/system.json`、`frontend/src/locales/zh-CN/system.json`；这是已发布行为的维护记录补漏，不新增当前 changelog 条目。
 - 提交锚点：upstream 引入 `ad1176c19`；本地人工 merge resolution `42f7bd7a`。
 - 合并审核：upstream `8915be26` 仍把混合渠道的 ClinePass 耗尽降级为 `warning` 并保持可路由；`d7a237bc` 的统一 limits、周期计算和通用配额展示可以保留，但未替代本地整渠道耗尽策略。冲突处理必须同时核对 channel status、`Ready`、limit status、候选过滤和中英文提示，不能只看配额窗口计算是否更新；保留 mixed-scope 整渠道耗尽回归断言，并使用有效的未来重置时间。
 - 上游吸收条件：upstream 提供等价的整渠道 fail-closed 行为，或实现按模型/配额池过滤并确保 `cline-pass/*` 请求不会命中已耗尽池，同时具备回归测试。
-- 验证：`go test ./internal/server/biz/provider_quota -run 'TestCline_CheckQuota_(MixedScopeExhaustsWholeChannelFromPassPool|DirectOnlyUsesBalanceInformationally)$'`；`go test ./internal/server/orchestrator -run 'TestProviderQuotaSelector_(ExhaustedOnlyMode|ChannelExhaustedOverridesPerLimitAvailable)$'`。
+- 验证：`go test ./internal/server/biz/provider_quota -run 'TestCline_CheckQuota_(MixedScopeExhaustsWholeChannelFromPassPool|DirectOnlyUsesBalanceInformationally)$'`；`go test ./internal/server/orchestrator -run 'TestQuotaRoutingGate|TestSelectCandidates_empty_loadBalancers_still_gates_exhausted_candidate'`。
 
 ### U14 测试流量与生产渠道健康状态隔离
 
@@ -284,7 +288,7 @@ git show --remerge-diff <merge-commit>
 
 ### U16 多项目权限和邀请生命周期安全
 
-- 本次上游整合：`8c5f0ab1` 清理账号切换遗留的项目选择并约束项目成员的用户查询；仍保留本地 `getAuthenticatedLanding` 对可访问项目和落地页权限的检查。
+- 本次上游整合：`dfb17549` 将 `8c5f0ab1` 的登录/退出时清空项目改为按账号隔离 membership 查询缓存，并在选中项目验证完成前阻止项目查询；仍保留本地 `getAuthenticatedLanding` 对可访问项目和落地页权限的检查。
 - 生命周期：`等待上游吸收`
 - 原始意图：system scope、project membership 和 project role 不能跨项目拼接；公开邀请入口不能成为权限绕过、竞争条件或 token 泄露点。
 - 必须保持：effective project scopes 只在所属项目内计算；登录后只跳转到用户真实可访问的 dashboard/playground/profile；邀请绑定 active project，正确处理过期、max uses、并发注册/删除项目和 deleted row；token 使用 32-byte randomness；公开 get/register endpoint 分别限流；access log 使用 route template，不能记录真实 invitation token；错误使用结构化 4xx code。
@@ -296,6 +300,7 @@ git show --remerge-diff <merge-commit>
 
 ### U17 Analytics 查询正确性和权限隔离
 
+- 本次上游整合：`dfb17549` 的项目就绪保护保留；Analytics 用户/API Key 筛选仍按本地 system scope 与联合权限条件启用，不能改回仅检查 `read_users`。
 - 生命周期：`等待上游吸收`
 - 原始意图：analytics 结果必须可复现、受权限约束，并明确展示失败或截断，不能把测试流量或越权 identity 维度混入统计。
 - 必须保持：只统计 production usage；日期范围有上限并按配置 timezone 正确跨越 DST；project/channel/API Key/user/model 维度分别校验 system scope，project membership scope 不能冒充 system scope；保留 deleted channel attribution；用户维度和 personal Key 过滤正确；前端只请求和展示获授权维度，错误与 truncation 明示。

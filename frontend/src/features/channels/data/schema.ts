@@ -348,9 +348,11 @@ export const channelSettingsSchema = z.object({
   apiKeySelectionStrategy: z.string().optional().nullable(),
   modelProtocols: z.array(modelProtocolSchema).optional().nullable(),
   providerQuota: channelProviderQuotaSettingsSchema.optional().nullable(),
+  quotaRoutingMode: z.enum(['INHERIT', 'IGNORE_QUOTA', 'REMOVE_ON_EXHAUSTED', 'BACKPRESSURE']).optional(),
 });
 
 export type ChannelSettings = z.infer<typeof channelSettingsSchema>;
+export type ChannelQuotaRoutingMode = NonNullable<ChannelSettings['quotaRoutingMode']>;
 
 // Channel Model Entry
 export const channelModelEntrySchema = z.object({

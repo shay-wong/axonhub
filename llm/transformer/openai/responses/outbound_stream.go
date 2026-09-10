@@ -899,11 +899,8 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 			s.state.transformerMetadataEmitted = true
 		}
 
-		// The Responses API signals abnormal completion via response.completed
-		// with a status other than "completed" (incomplete/failed/cancelled) - it
-		// does not emit separate events for those cases. Map the status onto the
-		// Chat Completions finish_reason; fall back to the tool_calls/stop
-		// inference only when the status is absent or plain "completed".
+		// Some compatible providers report abnormal outcomes in response.completed
+		// instead of a separate terminal event. Preserve those statuses too.
 		finishReason := ""
 		if streamEvent.Response != nil && streamEvent.Response.Status != nil {
 			switch *streamEvent.Response.Status {
@@ -941,26 +938,6 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 				Delta:        &llm.Message{},
 				FinishReason: &finishReason,
 			},
-		}
-
-		// Second event: usage (if available)
-		if streamEvent.Response != nil && streamEvent.Response.Usage != nil {
-			s.state.usage = streamEvent.Response.Usage.ToUsage()
-			usageResp := &llm.Response{
-				Object:             "chat.completion.chunk",
-				ID:                 s.state.responseID,
-				Model:              s.state.responseModel,
-				Created:            s.state.created,
-				PreviousResponseID: s.state.previousResponseID,
-				ServiceTier:        s.state.serviceTier,
-				Choices:            []llm.Choice{},
-				Usage:              s.state.usage,
-			}
-
-			s.enqueue(resp)
-			s.enqueue(usageResp)
-
-			return nil
 		}
 
 	case StreamEventTypeResponseFailed:
@@ -1097,7 +1074,33 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		return nil // Intentionally skip this event
 	}
 
+	if s.responseCompleted && streamEvent.Response != nil &&
+		(streamEvent.Response.Error != nil || streamEvent.Response.IncompleteDetails != nil) {
+		if resp.TransformerMetadata == nil {
+			resp.TransformerMetadata = make(map[string]any)
+		}
+		resp.TransformerMetadata[responsesTerminalDetailsTransformerMetadataKey] = responsesTerminalDetails{
+			Error:             streamEvent.Response.Error,
+			IncompleteDetails: streamEvent.Response.IncompleteDetails,
+		}
+	}
+
 	s.enqueue(resp)
+
+	// Preserve usage on every terminal outcome, after its finish_reason chunk.
+	if s.responseCompleted && streamEvent.Response != nil && streamEvent.Response.Usage != nil {
+		s.state.usage = streamEvent.Response.Usage.ToUsage()
+		s.enqueue(&llm.Response{
+			Object:             "chat.completion.chunk",
+			ID:                 s.state.responseID,
+			Model:              s.state.responseModel,
+			Created:            s.state.created,
+			PreviousResponseID: s.state.previousResponseID,
+			ServiceTier:        s.state.serviceTier,
+			Choices:            []llm.Choice{},
+			Usage:              s.state.usage,
+		})
+	}
 
 	return nil
 }

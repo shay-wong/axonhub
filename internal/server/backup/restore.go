@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent/dialect/sql"
 	"github.com/samber/lo"
 
 	"github.com/looplj/axonhub/internal/contexts"
@@ -26,6 +27,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/ent/schema/schematype"
+	"github.com/looplj/axonhub/internal/ent/system"
 	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
@@ -142,6 +144,9 @@ func (svc *BackupService) restore(ctx context.Context, db *ent.Client, backupDat
 
 	if opts.IncludeSystemConfigs {
 		if err := svc.restoreSystemConfigs(ctx, db, backupData.SystemConfigs, channelIDMap, dropUnmappedChannelIDs, opts.IncludeAPIKeys); err != nil {
+			return err
+		}
+		if err := svc.restoreLegacyQuotaRouting(ctx, db, backupData.SystemConfigs, channelIDMap, opts.IncludeChannels); err != nil {
 			return err
 		}
 	}
@@ -291,11 +296,21 @@ func restoreSystemConfig(ctx context.Context, svc *biz.SystemService, key, value
 		}
 		return svc.SetPassThrough(ctx, enabled)
 	case biz.SystemKeyQuotaEnforcementSettings:
-		settings, err := decodeSystemConfig[biz.QuotaEnforcementSettings](value)
+		if _, err := decodeLegacyQuotaEnforcementSettings([]*BackupSystemConfig{{Key: key, Value: value}}); err != nil {
+			return err
+		}
+		return ent.FromContext(ctx).System.Create().
+			SetKey(key).
+			SetValue(value).
+			OnConflict(sql.ConflictColumns(system.FieldKey)).
+			UpdateNewValues().
+			Exec(ctx)
+	case biz.SystemKeyQuotaRoutingSettings:
+		settings, err := decodeSystemConfig[biz.QuotaRoutingSettings](value)
 		if err != nil {
 			return err
 		}
-		return svc.SetQuotaEnforcementSettings(ctx, settings)
+		return svc.SetQuotaRoutingSettings(ctx, settings)
 	case biz.SystemKeyProviderQuotaCollectionSettings:
 		settings, err := decodeSystemConfig[biz.ProviderQuotaCollectionSettings](value)
 		if err != nil {
@@ -335,6 +350,106 @@ func decodeSystemConfig[T any](value string) (T, error) {
 		return config, fmt.Errorf("invalid JSON value: %w", err)
 	}
 	return config, nil
+}
+
+func (svc *BackupService) restoreLegacyQuotaRouting(ctx context.Context, db *ent.Client, configs []*BackupSystemConfig, channelIDMap map[int]int, includeChannels bool) error {
+	legacySettings, err := decodeLegacyQuotaEnforcementSettings(configs)
+	if err != nil {
+		return err
+	}
+	if legacySettings == nil {
+		return nil
+	}
+
+	if includeChannels && !hasSystemConfig(configs, biz.SystemKeyQuotaRoutingSettings) {
+		for _, oldID := range legacySettings.AllowedChannelIDs {
+			newID, ok := channelIDMap[oldID]
+			if !ok {
+				log.Warn(ctx, "restored legacy quota enforcement skipped missing channel",
+					log.Int("channel_id", oldID))
+				continue
+			}
+			ch, err := db.Channel.Query().Where(channel.IDEQ(newID)).Only(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to load restored channel %d: %w", newID, err)
+			}
+			settings := objects.ChannelSettings{}
+			if ch.Settings != nil {
+				settings = *ch.Settings
+			}
+			settings.QuotaRoutingMode = objects.QuotaRoutingModeIgnoreQuota
+			if _, err := db.Channel.UpdateOneID(newID).SetSettings(&settings).Save(ctx); err != nil {
+				return fmt.Errorf("failed to restore quota routing for channel %d: %w", newID, err)
+			}
+		}
+	}
+
+	if !hasSystemConfig(configs, biz.SystemKeyQuotaRoutingSettings) {
+		mode := biz.QuotaRoutingModeFromLegacy(
+			legacySettings.Enabled,
+			legacySettings.ExhaustedOnly,
+			legacySettings.DePrioritize,
+			legacySettings.Mode,
+		)
+		value, err := json.Marshal(biz.QuotaRoutingSettings{DefaultMode: mode})
+		if err != nil {
+			return fmt.Errorf("failed to encode restored quota routing settings: %w", err)
+		}
+		if err := db.System.Create().
+			SetKey(biz.SystemKeyQuotaRoutingSettings).
+			SetValue(string(value)).
+			OnConflict(sql.ConflictColumns(system.FieldKey)).
+			UpdateNewValues().
+			Exec(ctx); err != nil {
+			return fmt.Errorf("failed to restore quota routing settings: %w", err)
+		}
+	}
+
+	if err := db.System.Create().
+		SetKey(biz.SystemKeyQuotaRoutingMigrationDone).
+		SetValue("true").
+		OnConflict(sql.ConflictColumns(system.FieldKey)).
+		UpdateNewValues().
+		Exec(ctx); err != nil {
+		return fmt.Errorf("failed to mark quota routing migration complete: %w", err)
+	}
+	return nil
+}
+
+func hasSystemConfig(configs []*BackupSystemConfig, key string) bool {
+	for _, config := range configs {
+		if config != nil && config.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+type legacyQuotaEnforcementSettings struct {
+	Enabled           bool   `json:"enabled"`
+	ExhaustedOnly     bool   `json:"exhaustedOnly"`
+	DePrioritize      bool   `json:"dePrioritize"`
+	Mode              string `json:"mode"`
+	AllowedChannelIDs []int  `json:"allowedChannelIDs"`
+}
+
+func decodeLegacyQuotaEnforcementSettings(configs []*BackupSystemConfig) (*legacyQuotaEnforcementSettings, error) {
+	for _, config := range configs {
+		if config == nil || config.Key != biz.SystemKeyQuotaEnforcementSettings {
+			continue
+		}
+		var settings legacyQuotaEnforcementSettings
+		if err := json.Unmarshal([]byte(config.Value), &settings); err != nil {
+			return nil, fmt.Errorf("invalid legacy quota enforcement settings: %w", err)
+		}
+		switch settings.Mode {
+		case "", "EXHAUSTED_ONLY", "exhausted_only", "DE_PRIORITIZE", "de_prioritize":
+		default:
+			return nil, fmt.Errorf("invalid quota enforcement mode: %q", settings.Mode)
+		}
+		return &settings, nil
+	}
+	return nil, nil
 }
 
 func (svc *BackupService) buildChannelIDMap(ctx context.Context, db *ent.Client, channels []*BackupChannel) (map[int]int, error) {
