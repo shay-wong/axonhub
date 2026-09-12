@@ -925,6 +925,9 @@ type Mutation {
   bulkRecoverChannels(ids: [ID!]!): Boolean!
   clearChannelTemporaryDisable(channelID: ID!): Channel!
   bulkDeleteChannels(ids: [ID!]!): Boolean!
+  bulkAddChannelTags(ids: [ID!]!, tags: [String!]!): Boolean!
+  bulkRemoveChannelTags(ids: [ID!]!, tags: [String!]!): Boolean!
+  bulkManageChannelTags(ids: [ID!]!, addTags: [String!]!, removeTags: [String!]!): Boolean!
   testChannel(input: TestChannelInput!): TestChannelPayload!
   testChannelAPIKeys(channelID: ID!, modelID: String): TestChannelAPIKeysPayload!
   testChannelAPIKey(channelID: ID!, key: String!, modelID: String): TestAPIKeyResult!

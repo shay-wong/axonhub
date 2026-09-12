@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`25011d54feeb3416bad47850d9631fafef57e39f`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`3786f2c5c8def8a3341a0ed1dd67bfb91e37ff30`
-- 本次 merge base：`216c278d94ad01e53815ae2149834f1a8fb4b0e0`
-- 审计范围：`git diff 3786f2c5..HEAD`
+- 本次 upstream merge 的 fork parent：`a76e430d33104c7033a02389520decd546ccff08`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`4352a73fab0da8cdfe228c2e5be8d357eb6675bf`
+- 本次 merge base：`3786f2c5c8def8a3341a0ed1dd67bfb91e37ff30`
+- 审计范围：`git diff 4352a73f..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含 tag `v1.0.0-beta10`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.5`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.6`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.6`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.7`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -151,6 +151,7 @@ git show --remerge-diff <merge-commit>
 
 ### U03 Tool Search 和跨协议工具调用语义
 
+- 本次上游整合：`411734a7` 引入 namespace 分组、跨协议函数名还原、pipeline metadata 回传和 allowed_tools 保真；保留 fork 的 Tool Search、DeferLoading、并行工具消息聚合与 done-only 参数处理，不能把 namespace 支持当作整条能力已吸收。
 - 生命周期：`等待上游吸收`
 - 原始意图：OpenAI Responses、Anthropic 和 Chat 转换之间必须完整传递 Tool Search、deferred tools 和工具调用参数。
 - 必须保持：Tool Search 定义、调用和 output 可往返；`tool_search_output` 回放满足 upstream 必填字段；流式空参数不会生成错误调用；Responses 并行调用转 Chat 时正确聚合；Anthropic bridge 保留 deferred tools；仅在 done 事件出现的函数参数仍被保存；不同 namespace tool 不混淆。
@@ -275,6 +276,7 @@ git show --remerge-diff <merge-commit>
 
 ### U15 前端交互和权限回归修复
 
+- 本次上游整合：`4352a73f` 将渠道名左对齐并放在状态图标前；保留 fork 状态图标的操作权限和 tooltip。`177edbfc` 的批量标签管理与 `46687ed6` 的完成后实时预览保留属于 upstream 能力。
 - 本次上游整合：`be347865` 强制隐藏仅用于筛选的 `model` 虚拟列，避免固定表格布局中空列占宽；这是 upstream 修复，不登记为独立 fork 能力。`216c278d` 保留拉取模型后手动添加模型的入口，同时仍须保留本地按可用 Key 发现模型的行为。
 - 生命周期：`等待上游吸收`
 - 原始意图：小型前端回归不应在切换视图时重置用户输入、暴露无权限操作或拒绝后端合法 ID。
@@ -312,6 +314,7 @@ git show --remerge-diff <merge-commit>
 
 ### U18 渠道候选去重和重试预算语义
 
+- 本次上游整合：`40636bbd` 取消 sticky channel 一次失败即跳过的特殊规则，使其遵循普通同渠道重试设置；保留 fork `CanRetryContext` 的多 Key 轮换、本地 admission/transport 错误过滤和不同 channel 预算去重。
 - 生命周期：`等待上游吸收`
 - 原始意图：`MaxChannelRetries` 表示可尝试的不同 channel 数量，不能被同一 channel 的多条模型关联消耗完。
 - 必须保持：每个 priority group 先按 channel ID 去重；同一 channel 的 model fallback 可在选中后合并；跨 priority 仍只占一个 channel budget；不同 `APIFormat` 的候选绝不合并；selection tracking 每个实际候选 channel 只记一次。
@@ -365,7 +368,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`internal/server/api/openai.go`、`internal/server/api/codex_models.go`、`internal/server/api/codex_models_test.go`；官方资产、许可证和更新说明在 `internal/server/api/codexmodels/`。
 - 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`，各语言索引及 README；用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：本次修复可用 `git log -S'listCodexModels' -- internal/server/api/openai.go` 定位。
-- 合并审核：截至待合并 upstream `40636bbd16a8f62c119627e6a1a631d1ef766c32` 仍只有 OpenAI 目录格式，该提交不是本文已合入基线。通用模型目录同步或增加 Astra ID 不等价于 Codex 目录协议支持；更新官方快照时同时检查客户端必填字段、模板、工具和 metadata 替换规则，并保留 Apache LICENSE/NOTICE。服务端适配不改变客户端是否发起刷新；纯 API Key 自定义 provider 的刷新限制需在用户文档保留。
+- 合并审核：当前 upstream 基线 `4352a73f` 仍只有 OpenAI 目录格式。通用模型目录同步或增加 Astra ID 不等价于 Codex 目录协议支持；更新官方快照时同时检查客户端必填字段、模板、工具和 metadata 替换规则，并保留 Apache LICENSE/NOTICE。服务端适配不改变客户端是否发起刷新；纯 API Key 自定义 provider 的刷新限制需在用户文档保留。
 - 上游吸收条件：上游具备等价的目录格式协商、权限过滤、完整模型元数据及回归覆盖。
 - 验证：`go test ./internal/server/api -run 'TestOpenAIHandlers_(ListModels|RetrieveModel)|TestCodexCatalog' -count=1`。
 

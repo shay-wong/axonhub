@@ -602,7 +602,7 @@ func TestOutboundTransformer_TransformStream_UsesDoneArgumentsWithoutDeltas(t *t
 
 	require.Len(t, toolCallChunks, 2)
 	require.Equal(t, "call_done_only_123", toolCallChunks[0].ID)
-	require.Equal(t, "spawn_agent", toolCallChunks[0].Function.Name)
+	require.Equal(t, "collaboration__spawn_agent", toolCallChunks[0].Function.Name)
 	require.Equal(t, "collaboration", toolCallChunks[0].Function.Namespace)
 	require.Equal(t, 0, toolCallChunks[1].Index)
 	require.JSONEq(t, `{"agent_type":"explore","message":"inspect pricing"}`, toolCallChunks[1].Function.Arguments)

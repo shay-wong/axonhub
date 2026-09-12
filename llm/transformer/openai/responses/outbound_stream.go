@@ -32,7 +32,9 @@ func (t *OutboundTransformer) TransformStream(
 	req *httpclient.Request,
 	stream streams.Stream[*httpclient.StreamEvent],
 ) (streams.Stream[*llm.Response], error) {
-	return streams.NoNil(newResponsesOutboundStream(stream, req)), nil
+	return streams.MapErr(streams.NoNil(newResponsesOutboundStream(stream, req)), func(resp *llm.Response) (*llm.Response, error) {
+		return mapResponseFunctionNames(resp, true), nil
+	}), nil
 }
 
 // responsesOutboundStream wraps a stream and maintains state during processing.

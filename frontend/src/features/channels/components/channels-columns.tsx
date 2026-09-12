@@ -637,8 +637,9 @@ const NameCell = memo(({ row, canWrite, globalDefaultMode }: ChannelCellProps & 
   );
 
   const content = (
-    <div className='flex justify-center'>
-      <div className='flex max-w-56 items-center gap-2'>
+    <div className='flex min-w-0 justify-start'>
+      <div className='flex min-w-0 max-w-56 items-center gap-2'>
+        {nameElement}
         {statusIcons.length > 0 && (
           <span className='flex shrink-0 items-center gap-1'>
             {statusIcons.map((icon) => (
@@ -668,7 +669,6 @@ const NameCell = memo(({ row, canWrite, globalDefaultMode }: ChannelCellProps & 
             <TooltipContent>{t('quota.status.backpressure')}</TooltipContent>
           </Tooltip>
         )}
-        {nameElement}
       </div>
     </div>
   );
@@ -1049,10 +1049,10 @@ export const createColumns = (
       : []),
     {
       accessorKey: 'name',
-      header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.columns.name')} className='justify-center' />,
+      header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.columns.name')} />,
       cell: ({ row }) => <NameCell row={row} canWrite={canWrite} globalDefaultMode={globalDefaultMode} />,
       meta: {
-         className: 'w-[13%] min-w-0 text-center',
+        className: 'w-[13%] min-w-0 text-left',
       },
       enableHiding: false,
       enableSorting: true,
