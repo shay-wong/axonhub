@@ -23,7 +23,7 @@ AxonHub 可以作为 OpenAI 接口的直接替代方案，使 Codex 能够通过
    model_provider = "axonhub-responses"
 
    [model_providers.axonhub-responses]
-   name = "AxonHub using Chat Completions"
+   name = "AxonHub using Responses"
    base_url = "http://127.0.0.1:8090/v1"
    env_key = "AXONHUB_API_KEY"
    wire_api = "responses"
@@ -34,6 +34,25 @@ AxonHub 可以作为 OpenAI 接口的直接替代方案，使 Codex 能够通过
    export AXONHUB_API_KEY="<your-axonhub-api-key>"
    ```
 3. 重启 Codex 以加载配置。
+
+#### 模型目录刷新
+
+Codex 使用 `GET /v1/models?client_version=0.153.4` 发现模型。AxonHub 将非空的 `client_version` 查询参数视为请求 Codex 的 `{"models":[{"slug":"…",…}]}` 目录格式，无需额外开启 AxonHub 设置。普通 `/v1/models` 请求仍返回 OpenAI 的 `data/id` 格式；单独使用 `include=all` 不会切换到 Codex 格式。
+
+目录只包含当前 API Key 可见的模型，沿用普通列表的项目、配置文件权限和模型列表设置。已启用的模型会显示在 Codex 选择器中，包括上游内置目录原本隐藏的条目。该接口不会把你的 Key 转发给 OpenAI，也不会在每次请求时拉取远端目录。
+
+已知模型使用内置的 Codex **0.153.4** 完整描述，保留提示词、推理选项、工具和服务档位；带日期后缀或单级 provider 前缀的名称沿用客户端的最长前缀匹配规则。例如 Astra 的默认 `context_window` 保持 **272000**，`max_context_window` 保持 **872000**，不会把最大容量当作默认容量。此版本化快照与 AxonHub 通用模型/价格目录同步相互独立。
+
+无法识别的模型使用该版 Codex 的通用回退提示词和元数据。若已配置模型卡片且上下文限制为正数，则使用该限制；否则采用客户端的 **272000** 默认值，这不代表已验证上游的实际容量。自定义模型请配置真实限制，不会借用其他模型的推理档位或服务档位。
+
+可使用现有 Key 检查响应：
+
+```bash
+curl -fsS 'http://127.0.0.1:8090/v1/models?client_version=0.153.4' \
+  -H "Authorization: Bearer $AXONHUB_API_KEY"
+```
+
+此适配修复的是 Codex 发起目录请求后的响应格式，不会强制客户端刷新。Codex 0.153.4 仅在 Codex backend 或 command-auth 配置下尝试远端刷新，普通纯 API Key 自定义 provider 不会自动刷新；手动指定模型后聊天仍是独立路径。目录契约不同的旧版或新版客户端可能需要更新对应快照。
 
 #### 按对话聚合 Trace（重要）
 开启内置 Codex 追踪提取后，AxonHub 会将 `Session_id` header 作为 trace ID 使用：
@@ -56,7 +75,7 @@ server:
 **提示**：开启此功能后，AxonHub 会将同一个 Trace 的请求优先转发到同一个上游渠道，从而大幅提高提供商端的缓存命中率（例如 Anthropic 的 Prompt Caching）。
 
 #### 验证
-- 发送测试 Prompt，AxonHub 日志中应出现 `/v1/chat/completions` 调用。
+- 按以上配置发送测试 Prompt，AxonHub 日志中应出现 `/v1/responses` 调用。
 - 启用 AxonHub 的追踪功能可查看提示词、回复及延迟信息。
 
 ### 使用模型配置文件

@@ -23,7 +23,7 @@ AxonHub can act as a drop-in replacement for OpenAI endpoints, letting Codex con
    model_provider = "axonhub-responses"
 
    [model_providers.axonhub-responses]
-   name = "AxonHub using Chat Completions"
+   name = "AxonHub using Responses"
    base_url = "http://127.0.0.1:8090/v1"
    env_key = "AXONHUB_API_KEY"
    wire_api = "responses"
@@ -34,6 +34,25 @@ AxonHub can act as a drop-in replacement for OpenAI endpoints, letting Codex con
    export AXONHUB_API_KEY="<your-axonhub-api-key>"
    ```
 3. Restart Codex to apply the configuration.
+
+#### Model catalog refresh
+
+Codex discovery requests `GET /v1/models?client_version=0.153.4`. AxonHub treats a non-empty `client_version` query parameter as a request for the Codex `{"models":[{"slug":"…",…}]}` catalog. No extra AxonHub setting is required. Ordinary `/v1/models` requests still return the OpenAI `data/id` format; `include=all` alone does not select Codex format.
+
+The catalog contains only models visible to the current API key, using the same project/profile and model-list settings as ordinary discovery. Enabled models are shown in the Codex picker, including entries hidden by the bundled upstream catalog. The endpoint does not forward your key to OpenAI or fetch a remote catalog per request.
+
+Known models use the complete bundled Codex **0.153.4** descriptors, preserving instructions, reasoning options, tools, and service tiers. The client's longest-prefix and single provider-namespace lookup also applies to dated or prefixed names. For example, Astra retains a default `context_window` of **272000** and a `max_context_window` of **872000**; the maximum is not the default. This versioned snapshot is separate from AxonHub's general model/pricing catalog sync.
+
+Unrecognized models use that Codex version's generic fallback instructions and metadata. An explicitly configured model card's positive context limit replaces the generic **272000** fallback; otherwise this is a client default, not a verified provider capacity. Configure the actual limit for custom models. Reasoning levels and service tiers are not guessed from other models.
+
+To inspect the response with your existing key:
+
+```bash
+curl -fsS 'http://127.0.0.1:8090/v1/models?client_version=0.153.4' \
+  -H "Authorization: Bearer $AXONHUB_API_KEY"
+```
+
+This fixes the response format when Codex makes a discovery request; it does not force the client to refresh. Codex 0.153.4 only attempts remote refresh for Codex-backend or command-auth configurations, not ordinary custom providers using only an API key. Explicitly selecting a model and sending chat requests remains a separate path. Older or newer clients with different catalog contracts may need a matching snapshot update.
 
 #### Trace aggregation by conversation (important)
 Enable the built-in Codex trace extraction to reuse the `Session_id` header as the trace ID:
@@ -56,7 +75,7 @@ server:
 **Note**: Enabling this also ensures that requests from the same trace are prioritized to be sent to the same upstream channel, significantly improving provider-side cache hit rates (e.g., Anthropic Prompt Caching).
 
 #### Testing
-- Send a sample prompt; AxonHub's request logs should show a `/v1/chat/completions` call.
+- Send a sample prompt; with the configuration above, AxonHub's request logs should show a `/v1/responses` call.
 - Enable tracing in AxonHub to inspect prompts, responses, and latency.
 
 ### Working with Model Profiles

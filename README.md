@@ -313,6 +313,8 @@ print(response.choices[0].message.content)
 
 Fork Release 构建可在**系统设置 > 关于**中安装更新或回滚到最近的兼容版本；需要运行用户能写入可执行文件目录，并由 Docker、systemd 等 supervisor 在进程退出后拉起。
 
+Codex 模型发现支持完整目录格式，同时保留普通 OpenAI 接口兼容性；刷新条件与上下文默认值见 [Codex 集成指南](docs/zh/guides/codex-integration.md#模型目录刷新)。
+
 更多配置和 API 示例请查看[完整文档索引](docs/zh/index.md)。
 
 ---

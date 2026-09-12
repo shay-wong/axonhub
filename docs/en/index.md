@@ -32,7 +32,7 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 | Document | Description |
 |----------|-------------|
 | [Claude Code Integration](guides/claude-code-integration.md) | Configure Claude Code to use AxonHub |
-| [Codex Integration](guides/codex-integration.md) | Configure Codex to use AxonHub |
+| [Codex Integration](guides/codex-integration.md) | Configure Codex, model catalog refresh, and context metadata |
 | [OpenCode Integration](guides/opencode-integration.md) | Configure OpenCode to use AxonHub |
 
 ### 🔌 API Reference

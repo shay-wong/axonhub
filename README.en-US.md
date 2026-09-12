@@ -309,6 +309,8 @@ print(response.choices[0].message.content)
 
 Fork release builds can install updates or roll back to a recent compatible release from **System Settings > About** when the runtime user can write the executable directory and a supervisor such as Docker or systemd restarts the exited process.
 
+Codex model discovery supports its complete catalog format while preserving OpenAI compatibility; see the [Codex integration guide](docs/en/guides/codex-integration.md#model-catalog-refresh) for refresh conditions and context defaults.
+
 See the [documentation index](docs/en/index.md) for configuration details and more API examples.
 
 ---

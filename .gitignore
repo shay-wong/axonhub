@@ -10,6 +10,7 @@
 !LICENSE
 !Dockerfile
 !VERSION
+!internal/server/api/codexmodels/NOTICE
 
 
 # Unignore all dirs

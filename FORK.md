@@ -357,6 +357,18 @@ git show --remerge-diff <merge-commit>
 - 上游吸收条件：upstream 能识别 Codex 定时任务启动项，并有真实请求形状的 inbound-to-outbound 回归测试。
 - 验证：`cd llm && go test ./transformer/openai/responses -run '^TestTransformRequest_NormalizesCodexAutomationBootstrap$' -count=1`。
 
+### U22 Codex 模型目录协议适配
+
+- 生命周期：`等待上游吸收`
+- 原始意图：Codex 目录刷新不能因普通 OpenAI `data/id` 格式而解析失败，也不能因不完整元数据覆盖而丢失模型指令、上下文和工具能力。
+- 必须保持：`/v1/models` 的非空 `client_version` 参数选择 `models/slug` 格式；普通请求及单独 `include=all` 保持原格式。先执行既有 `ListEnabledModels` 权限过滤，零可见模型返回 `models: []`；响应不得泄露其他 Key/项目的模型。已知模型使用 Codex `rust-v0.153.4` 原版快照，保留完整 instructions、工具、推理档位及默认/最大上下文含义；按客户端最长前缀与单级 namespace 规则匹配，输出 slug 保持用户可见名称，visibility 按网关可见模型设为 list，不能修改共享快照。未知模型用同版通用回退指令，显式模型卡片上下文优先；不得借用其他模型能力。目录无需逐请求联网或转发调用方凭据。
+- 代码锚点：`internal/server/api/openai.go`、`internal/server/api/codex_models.go`、`internal/server/api/codex_models_test.go`；官方资产、许可证和更新说明在 `internal/server/api/codexmodels/`。
+- 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`，各语言索引及 README；用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
+- 提交锚点：本次修复可用 `git log -S'listCodexModels' -- internal/server/api/openai.go` 定位。
+- 合并审核：截至待合并 upstream `40636bbd16a8f62c119627e6a1a631d1ef766c32` 仍只有 OpenAI 目录格式，该提交不是本文已合入基线。通用模型目录同步或增加 Astra ID 不等价于 Codex 目录协议支持；更新官方快照时同时检查客户端必填字段、模板、工具和 metadata 替换规则，并保留 Apache LICENSE/NOTICE。服务端适配不改变客户端是否发起刷新；纯 API Key 自定义 provider 的刷新限制需在用户文档保留。
+- 上游吸收条件：上游具备等价的目录格式协商、权限过滤、完整模型元数据及回归覆盖。
+- 验证：`go test ./internal/server/api -run 'TestOpenAIHandlers_(ListModels|RetrieveModel)|TestCodexCatalog' -count=1`。
+
 ## Upstream Merge 审核清单
 
 1. 确认 worktree、当前分支、upstream 默认分支和将要合入的精确 SHA。

@@ -843,6 +843,13 @@ func (handlers *OpenAIHandlers) ListModels(c *gin.Context) {
 		return
 	}
 
+	// Codex negotiates its richer ModelInfo catalog with client_version.
+	// Ordinary OpenAI discovery keeps the data/id envelope, including include=all.
+	if c.Query("client_version") != "" {
+		handlers.listCodexModels(c, visibleModels)
+		return
+	}
+
 	if len(visibleModels) == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"object": "list",
