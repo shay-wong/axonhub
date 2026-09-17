@@ -219,6 +219,12 @@ enum APIKeyAutoDisableAction {
   permanent_disable_delete
 }
 
+enum APIKeyAutoDisableMode {
+  inherit
+  custom
+  off
+}
+
 type APIKeyAutoDisableRule {
   statusCodes: [Int!]
   keywordPatterns: [String!]
@@ -241,11 +247,13 @@ input APIKeyAutoDisableRuleInput {
 
 type ChannelPolicies {
   stream: CapabilityPolicy
+  apiKeyAutoDisableMode: APIKeyAutoDisableMode
   apiKeyAutoDisableRules: [APIKeyAutoDisableRule!]
 }
 
 input ChannelPoliciesInput {
   stream: CapabilityPolicy
+  apiKeyAutoDisableMode: APIKeyAutoDisableMode
   apiKeyAutoDisableRules: [APIKeyAutoDisableRuleInput!]
 }
 
@@ -446,6 +454,24 @@ input BulkUpdateChannelOrderingInput {
 }
 
 type BulkUpdateChannelOrderingResult {
+  success: Boolean!
+  updated: Int!
+  channels: [Channel!]!
+}
+
+enum BulkAutoDisableAction {
+  write_rules
+  inherit
+  off
+}
+
+input BulkUpdateChannelAutoDisableInput {
+  channelIDs: [ID!]!
+  action: BulkAutoDisableAction!
+  rules: [APIKeyAutoDisableRuleInput!]
+}
+
+type BulkUpdateChannelAutoDisablePayload {
   success: Boolean!
   updated: Int!
   channels: [Channel!]!
@@ -935,6 +961,9 @@ type Mutation {
   bulkUpdateChannelOrdering(
     input: BulkUpdateChannelOrderingInput!
   ): BulkUpdateChannelOrderingResult!
+  bulkUpdateChannelAutoDisable(
+    input: BulkUpdateChannelAutoDisableInput!
+  ): BulkUpdateChannelAutoDisablePayload!
 
   # Channel API Key Management
   disableChannelAPIKey(channelID: ID!, key: String!): Boolean!

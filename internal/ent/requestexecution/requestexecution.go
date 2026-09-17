@@ -172,6 +172,8 @@ var (
 	ExternalIDValidator func(string) error
 	// DefaultFormat holds the default value on creation for the "format" field.
 	DefaultFormat string
+	// ChannelAPIKeySuffixValidator is a validator for the "channel_api_key_suffix" field. It is called by the builders before save.
+	ChannelAPIKeySuffixValidator func(string) error
 	// DefaultStream holds the default value on creation for the "stream" field.
 	DefaultStream bool
 	// DefaultPassThroughApplied holds the default value on creation for the "pass_through_applied" field.

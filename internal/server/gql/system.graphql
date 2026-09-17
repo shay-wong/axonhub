@@ -68,6 +68,7 @@ type AutoDisableChannelStatus {
 
 type AutoDisableChannel {
   enabled: Boolean!
+  rules: [APIKeyAutoDisableRule!]!
   statuses: [AutoDisableChannelStatus!]!
 }
 
@@ -160,6 +161,7 @@ input AutoDisableChannelStatusInput {
 
 input AutoDisableChannelInput {
   enabled: Boolean
+  rules: [APIKeyAutoDisableRuleInput!]
   statuses: [AutoDisableChannelStatusInput!]
 }
 

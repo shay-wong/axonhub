@@ -11,10 +11,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { ApiKeyAutoDisableRulesEditor } from '@/features/channels/components/api-key-auto-disable-rules-editor';
+import {
+  type ApiKeyAutoDisableRuleFormValue,
+  RECOMMENDED_GLOBAL_AUTO_DISABLE_RULES,
+  serializeApiKeyAutoDisableRules,
+  toApiKeyAutoDisableRuleFormValues,
+} from '@/features/channels/data/auto-disable';
 import {
   useRetryPolicy,
   useUpdateRetryPolicy,
-  type AutoDisableChannelInput,
+  type AutoDisableStatusPolicyInput,
   type AutoDisableChannelStatusInput,
   type RetryPolicyInput,
 } from '../data/system';
@@ -40,7 +47,7 @@ function cloneStatusRules(rules?: AutoDisableChannelStatusInput[] | null): AutoD
   }));
 }
 
-function normalizePolicyForForm(policy?: AutoDisableChannelInput | null): AutoDisableChannelInput {
+function normalizePolicyForForm(policy?: AutoDisableStatusPolicyInput | null): AutoDisableStatusPolicyInput {
   return {
     enabled: policy?.enabled || false,
     statuses: cloneStatusRules(policy?.statuses),
@@ -70,7 +77,7 @@ export function RetrySettings() {
     },
     autoDisableChannel: {
       enabled: false,
-      statuses: [],
+      rules: [],
     },
     channelAutoDisable: {
       enabled: false,
@@ -98,9 +105,12 @@ export function RetrySettings() {
           mode: retryPolicy.upstreamErrorPolicy?.mode || 'passthrough',
           customMessage: retryPolicy.upstreamErrorPolicy?.customMessage || '',
         },
-        autoDisableChannel: normalizePolicyForForm(retryPolicy.autoDisableChannel),
         channelAutoDisable: normalizePolicyForForm(retryPolicy.channelAutoDisable),
         apiKeyAutoDisable: normalizePolicyForForm(retryPolicy.apiKeyAutoDisable),
+        autoDisableChannel: {
+          enabled: retryPolicy.autoDisableChannel?.enabled || false,
+          rules: toApiKeyAutoDisableRuleFormValues(retryPolicy.autoDisableChannel?.rules),
+        },
       });
     }
   }, [retryPolicy]);
@@ -123,7 +133,7 @@ export function RetrySettings() {
   }, []);
 
   const updateAutoDisablePolicy = useCallback(
-    (policyKey: AutoDisablePolicyKey, updater: (policy: AutoDisableChannelInput) => AutoDisableChannelInput) => {
+    (policyKey: AutoDisablePolicyKey, updater: (policy: AutoDisableStatusPolicyInput) => AutoDisableStatusPolicyInput) => {
       setFormData((prev) => {
         const nextPolicy = updater(normalizePolicyForForm(prev[policyKey]));
         return {
@@ -208,16 +218,49 @@ export function RetrySettings() {
     },
     [updateAutoDisablePolicy]
   );
+  const handleAutoDisableChannelChange = useCallback((enabled: boolean) => {
+    setFormData((prev) => ({
+      ...prev,
+      autoDisableChannel: { ...prev.autoDisableChannel, enabled },
+    }));
+  }, []);
+
+  const handleAutoDisableRulesChange = useCallback((rules: ApiKeyAutoDisableRuleFormValue[]) => {
+    setFormData((prev) => {
+      if (JSON.stringify(prev.autoDisableChannel?.rules) === JSON.stringify(rules)) {
+        return prev;
+      }
+      return {
+        ...prev,
+        autoDisableChannel: {
+          ...prev.autoDisableChannel,
+          rules,
+        },
+      };
+    });
+  }, []);
+
+  const insertRecommendedAutoDisableRules = useCallback(() => {
+    setFormData((prev) => ({
+      ...prev,
+      autoDisableChannel: {
+        ...prev.autoDisableChannel,
+        rules: toApiKeyAutoDisableRuleFormValues(RECOMMENDED_GLOBAL_AUTO_DISABLE_RULES),
+      },
+    }));
+  }, []);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      const channelAutoDisable = normalizePolicyForForm(formData.channelAutoDisable);
       await updateRetryPolicy.mutateAsync({
         ...formData,
-        channelAutoDisable,
+        channelAutoDisable: normalizePolicyForForm(formData.channelAutoDisable),
         apiKeyAutoDisable: normalizePolicyForForm(formData.apiKeyAutoDisable),
-        autoDisableChannel: channelAutoDisable,
+        autoDisableChannel: {
+          enabled: formData.autoDisableChannel?.enabled || false,
+          rules: serializeApiKeyAutoDisableRules(toApiKeyAutoDisableRuleFormValues(formData.autoDisableChannel?.rules)),
+        },
       });
     },
     [updateRetryPolicy, formData]
@@ -458,7 +501,9 @@ export function RetrySettings() {
                         <SelectValue placeholder={t('system.retry.traceStickyMode.placeholder')} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value='PREFER_PREVIOUS_CHANNEL'>{t('system.retry.traceStickyMode.options.preferPreviousChannel')}</SelectItem>
+                        <SelectItem value='PREFER_PREVIOUS_CHANNEL'>
+                          {t('system.retry.traceStickyMode.options.preferPreviousChannel')}
+                        </SelectItem>
                         <SelectItem value='DISABLED'>{t('system.retry.traceStickyMode.options.disabled')}</SelectItem>
                       </SelectContent>
                     </Select>
@@ -585,6 +630,37 @@ export function RetrySettings() {
                 </div>
                 {renderAutoDisablePolicy('channelAutoDisable')}
                 {renderAutoDisablePolicy('apiKeyAutoDisable')}
+              </div>
+
+              {/* Auto Disable Channel */}
+              <div id='auto-disable-channel' className='space-y-4'>
+                <div className='flex items-center justify-between'>
+                  <div className='space-y-0.5'>
+                    <Label htmlFor='auto-disable-channel-enabled' className='text-base'>
+                      {t('system.retry.autoDisableChannel.label')}
+                    </Label>
+                    <div className='text-muted-foreground text-sm'>{t('system.retry.autoDisableChannel.description')}</div>
+                  </div>
+                  <Switch
+                    id='auto-disable-channel-enabled'
+                    checked={formData.autoDisableChannel?.enabled || false}
+                    onCheckedChange={handleAutoDisableChannelChange}
+                  />
+                </div>
+
+                <p className='text-muted-foreground text-sm'>{t('system.retry.autoDisableChannel.noDeleteCredential')}</p>
+
+                {(formData.autoDisableChannel?.rules?.length ?? 0) === 0 && (
+                  <Button type='button' variant='outline' size='sm' onClick={insertRecommendedAutoDisableRules}>
+                    {t('system.retry.autoDisableChannel.recommendedRules')}
+                  </Button>
+                )}
+
+                <ApiKeyAutoDisableRulesEditor
+                  rules={(formData.autoDisableChannel?.rules ?? []) as ApiKeyAutoDisableRuleFormValue[]}
+                  onChange={handleAutoDisableRulesChange}
+                  allowDelete={false}
+                />
               </div>
             </div>
           )}

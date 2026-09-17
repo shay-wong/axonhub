@@ -1,6 +1,9 @@
 package schema
 
 import (
+	"errors"
+	"unicode/utf8"
+
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent"
 	"entgo.io/ent/schema"
@@ -68,6 +71,12 @@ func (RequestExecution) Fields() []ent.Field {
 		field.String("channel_api_key_suffix").
 			Optional().
 			Immutable().
+			Validate(func(s string) error {
+				if utf8.RuneCountInString(s) > 4 {
+					return errors.New("channel_api_key_suffix must be at most 4 characters")
+				}
+				return nil
+			}).
 			Comment("Non-sensitive suffix of the upstream channel API key used for this execution").
 			Annotations(
 				entgql.Skip(entgql.SkipWhereInput),

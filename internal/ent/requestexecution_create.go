@@ -495,6 +495,11 @@ func (_c *RequestExecutionCreate) check() error {
 	if _, ok := _c.mutation.Format(); !ok {
 		return &ValidationError{Name: "format", err: errors.New(`ent: missing required field "RequestExecution.format"`)}
 	}
+	if v, ok := _c.mutation.ChannelAPIKeySuffix(); ok {
+		if err := requestexecution.ChannelAPIKeySuffixValidator(v); err != nil {
+			return &ValidationError{Name: "channel_api_key_suffix", err: fmt.Errorf(`ent: validator failed for field "RequestExecution.channel_api_key_suffix": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.RequestBody(); !ok {
 		return &ValidationError{Name: "request_body", err: errors.New(`ent: missing required field "RequestExecution.request_body"`)}
 	}

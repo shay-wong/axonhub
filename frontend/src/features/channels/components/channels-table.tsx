@@ -13,7 +13,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { IconArchive, IconBan, IconCheck, IconFlask, IconTag, IconTrash, IconTemplate, IconX, IconEraser } from '@tabler/icons-react';
+import { IconArchive, IconBan, IconCheck, IconFlask, IconTag, IconTrash, IconTemplate, IconX, IconEraser, IconShieldOff } from '@tabler/icons-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -21,9 +21,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { ServerSidePagination } from '@/components/server-side-pagination';
 import { useChannels } from '../context/channels-context';
+import type { ChannelListColumnVisibility } from '../data/channels';
 import { Channel, ChannelConnection } from '../data/schema';
 import { ChannelExpandedRow } from './channel-expanded-row';
-import type { ChannelListColumnVisibility } from '../data/channels';
 import { DataTableToolbar } from './data-table-toolbar';
 
 const MotionTableRow = motion.create(TableRow);
@@ -273,7 +273,10 @@ export function ChannelsTable({
         onExitErrorOnlyMode={onExitErrorOnlyMode}
       />
       <div className='shadow-soft relative mt-4 min-w-0 flex-1 overflow-auto overflow-x-hidden rounded-2xl border border-[var(--table-border)]'>
-        <Table data-testid='channels-table' className='w-full table-fixed border-separate border-spacing-0 rounded-2xl bg-[var(--table-background)]'>
+        <Table
+          data-testid='channels-table'
+          className='w-full table-fixed border-separate border-spacing-0 rounded-2xl bg-[var(--table-background)]'
+        >
           <TableHeader className='sticky top-0 z-20 bg-[var(--table-header)] shadow-sm'>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className='group/row border-0'>
@@ -326,7 +329,7 @@ export function ChannelsTable({
                           exit={{ opacity: 0 }}
                           className='border-0'
                         >
-                          <TableCell colSpan={columns.length} className='whitespace-normal p-0 border-0'>
+                          <TableCell colSpan={columns.length} className='border-0 p-0 whitespace-normal'>
                             <motion.div
                               initial={{ height: 0, opacity: 0 }}
                               animate={{ height: 'auto', opacity: 1 }}
@@ -398,6 +401,15 @@ export function ChannelsTable({
               title={t('channels.templates.bulk.applyButton')}
             >
               <IconTemplate className='h-4 w-4' />
+            </Button>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='h-8 w-8 text-violet-600 hover:bg-violet-100 hover:text-violet-700'
+              onClick={() => setOpen('bulkAutoDisable')}
+              title={t('channels.bulkAutoDisable.button')}
+            >
+              <IconShieldOff className='h-4 w-4' />
             </Button>
             <Button
               variant='ghost'

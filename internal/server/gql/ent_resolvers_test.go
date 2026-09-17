@@ -7,12 +7,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/looplj/axonhub/internal/authz"
+	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/enttest"
 	"github.com/looplj/axonhub/internal/ent/providerquotastatus"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/pkg/xcache"
+	"github.com/looplj/axonhub/internal/scopes"
 	"github.com/looplj/axonhub/internal/server/biz"
 )
 
@@ -160,4 +162,50 @@ func TestChannelResolver_ProviderQuotaStatus_ReturnsNilWhenStatusDoesNotExist(t 
 
 	require.NoError(t, err)
 	require.Nil(t, status)
+}
+
+func TestRequestExecutionResolver_ChannelAPIKeySuffix(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent_req_exec?mode=memory&_fk=1")
+	defer client.Close()
+
+	ctx := authz.WithTestBypass(ent.NewContext(t.Context(), client))
+
+	channelEntity, err := client.Channel.Create().
+		SetName("OpenAI Channel").
+		SetType(channel.TypeOpenai).
+		SetStatus(channel.StatusEnabled).
+		SetCredentials(objects.ChannelCredentials{APIKey: "test-key"}).
+		SetSupportedModels([]string{"test-model"}).
+		SetDefaultTestModel("test-model").
+		Save(ctx)
+	require.NoError(t, err)
+
+	suffix := "ZxWL"
+	exec := &ent.RequestExecution{
+		ChannelID:           channelEntity.ID,
+		ChannelAPIKeySuffix: suffix,
+	}
+
+	resolver := &requestExecutionResolver{&Resolver{client: client}}
+
+	// 1. Channel administrators can read suffix.
+	writeChannelsCtx := contexts.WithUser(ctx, &ent.User{Scopes: []string{string(scopes.ScopeWriteChannels)}})
+	got, err := resolver.ChannelAPIKeySuffix(writeChannelsCtx, exec)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, "ZxWL", *got)
+
+	// 2. An empty persisted suffix returns nil.
+	execNoSuffix := &ent.RequestExecution{
+		ChannelID: channelEntity.ID,
+	}
+	got, err = resolver.ChannelAPIKeySuffix(writeChannelsCtx, execNoSuffix)
+	require.NoError(t, err)
+	require.Nil(t, got)
+
+	// 3. Channel read permission alone must not expose key identities.
+	unauthorizedCtx := contexts.WithUser(ent.NewContext(t.Context(), client), &ent.User{Scopes: []string{string(scopes.ScopeReadChannels)}})
+	got, err = resolver.ChannelAPIKeySuffix(unauthorizedCtx, exec)
+	require.NoError(t, err)
+	require.Nil(t, got)
 }

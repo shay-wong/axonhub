@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/pkg/xcache"
+	"github.com/looplj/axonhub/internal/pkg/xerrors"
 	"github.com/looplj/axonhub/internal/pkg/xregexp"
 	"github.com/looplj/axonhub/internal/pkg/xtime"
 	"github.com/looplj/axonhub/llm/httpclient"
@@ -410,6 +412,8 @@ type AutoDisablePolicy struct {
 
 	// Statuses defines the status codes and thresholds to trigger the configured action.
 	Statuses []AutoDisableStatusRule `json:"statuses"`
+	// Rules are the global auto-disable rules, sharing the channel rule shape.
+	Rules []objects.APIKeyAutoDisableRule `json:"rules"`
 }
 
 type AutoDisableStatusRule struct {
@@ -1084,7 +1088,12 @@ func (s *SystemService) RetryPolicy(ctx context.Context) (*RetryPolicy, error) {
 }
 
 func (s *SystemService) RetryPolicyOrDefault(ctx context.Context) *RetryPolicy {
-	policy, err := s.RetryPolicy(ctx)
+	// Internal callers (stream processing, error handling, channel auto-disable,
+	// load balancing) run with API-key or background contexts that carry no user
+	// principal, which the Ent privacy layer rejects with "no user in context".
+	// Reading the global retry policy is a system-scoped operation, so apply a
+	// scoped system bypass instead of silently falling back to the default.
+	policy, err := s.RetryPolicy(authz.WithSystemBypass(ctx, "retry-policy-or-default"))
 	if err != nil {
 		if ent.IsNotFound(err) {
 			policy := defaultRetryPolicy
@@ -1116,6 +1125,12 @@ func (s *SystemService) SetRetryPolicy(ctx context.Context, policy *RetryPolicy)
 	if err := validateRetryPolicy(policy); err != nil {
 		return err
 	}
+
+	rules, err := normalizeAutoDisableRules(policy.AutoDisableChannel.Rules, false)
+	if err != nil {
+		return xerrors.ValidationError(err.Error())
+	}
+	policy.AutoDisableChannel.Rules = rules
 
 	jsonBytes, err := json.Marshal(policy)
 	if err != nil {
@@ -1169,7 +1184,7 @@ func normalizeRetryPolicy(policy *RetryPolicy) {
 	}
 
 	normalizeAutoDisablePolicy(&policy.AutoDisableChannel)
-	legacyHasRules := policy.AutoDisableChannel.Enabled || len(policy.AutoDisableChannel.Statuses) > 0
+	legacyHasRules := len(policy.AutoDisableChannel.Statuses) > 0
 	if legacyHasRules {
 		if !policy.ChannelAutoDisable.Enabled && len(policy.ChannelAutoDisable.Statuses) == 0 {
 			policy.ChannelAutoDisable = cloneAutoDisablePolicy(policy.AutoDisableChannel)
@@ -1177,6 +1192,12 @@ func normalizeRetryPolicy(policy *RetryPolicy) {
 		if !policy.APIKeyAutoDisable.Enabled && len(policy.APIKeyAutoDisable.Statuses) == 0 {
 			policy.APIKeyAutoDisable = cloneAutoDisablePolicy(policy.AutoDisableChannel)
 		}
+	}
+	// Keep temporary durations and Retry-After semantics in the separate policies.
+	// Clear the legacy source so later reads cannot re-enable a disabled policy.
+	policy.AutoDisableChannel.Statuses = []AutoDisableStatusRule{}
+	if policy.AutoDisableChannel.Rules == nil {
+		policy.AutoDisableChannel.Rules = []objects.APIKeyAutoDisableRule{}
 	}
 
 	normalizeAutoDisablePolicy(&policy.ChannelAutoDisable)
@@ -1195,6 +1216,9 @@ func normalizeRetryPolicy(policy *RetryPolicy) {
 }
 
 func normalizeAutoDisablePolicy(policy *AutoDisablePolicy) {
+	if policy.Rules == nil {
+		policy.Rules = []objects.APIKeyAutoDisableRule{}
+	}
 	if policy.Statuses == nil {
 		policy.Statuses = []AutoDisableStatusRule{}
 	}
@@ -1207,11 +1231,9 @@ func normalizeAutoDisablePolicy(policy *AutoDisablePolicy) {
 }
 
 func cloneAutoDisablePolicy(policy AutoDisablePolicy) AutoDisablePolicy {
-	cloned := AutoDisablePolicy{
-		Enabled:  policy.Enabled,
-		Statuses: make([]AutoDisableStatusRule, len(policy.Statuses)),
-	}
-	copy(cloned.Statuses, policy.Statuses)
+	cloned := policy
+	cloned.Statuses = slices.Clone(policy.Statuses)
+	cloned.Rules = slices.Clone(policy.Rules)
 
 	return cloned
 }

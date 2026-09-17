@@ -399,9 +399,6 @@ func (s *RequestService) CreateRequestExecution(
 		if apiKeyIdentity.Name != "" {
 			mut.SetChannelAPIKeyName(apiKeyIdentity.Name)
 		}
-		if apiKeyIdentity.Suffix != "" {
-			mut.SetChannelAPIKeySuffix(apiKeyIdentity.Suffix)
-		}
 	}
 
 	if requestedServiceTier != "" {
@@ -413,6 +410,13 @@ func (s *RequestService) CreateRequestExecution(
 
 	if reasoningEffort := extractOutboundReasoningEffort(channelRequest, format); reasoningEffort != nil {
 		mut = mut.SetReasoningEffort(*reasoningEffort)
+	}
+
+	if apiKey, ok := contexts.GetChannelAPIKey(ctx); ok {
+		runes := []rune(apiKey)
+		if len(runes) > 4 {
+			mut = mut.SetChannelAPIKeySuffix(string(runes[len(runes)-4:]))
+		}
 	}
 
 	if channelRequest.URL != "" {

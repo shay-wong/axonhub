@@ -18,6 +18,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/hook"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/pkg/xcache"
+	"github.com/looplj/axonhub/internal/pkg/xerrors"
 	"github.com/looplj/axonhub/internal/pkg/xredis"
 )
 
@@ -1445,4 +1446,40 @@ func TestNormalizeRetryPolicy_LoadBalancerStrategy(t *testing.T) {
 			require.Equal(t, strategy, policy.LoadBalancerStrategy)
 		}
 	})
+}
+
+func TestNormalizeRetryPolicy_MigratesLegacyStatuses(t *testing.T) {
+	raw := `{"auto_disable_channel":{"enabled":true,"statuses":[{"status":401,"times":3}]}}`
+	var policy RetryPolicy
+	require.NoError(t, json.Unmarshal([]byte(raw), &policy))
+	normalizeRetryPolicy(&policy)
+
+	require.True(t, policy.AutoDisableChannel.Enabled)
+	require.Empty(t, policy.AutoDisableChannel.Rules)
+	require.Empty(t, policy.AutoDisableChannel.Statuses)
+	require.True(t, policy.ChannelAutoDisable.Enabled)
+	require.Equal(t, []AutoDisableStatusRule{{Status: 401, Times: 3, Action: DisableActionPermanent}}, policy.ChannelAutoDisable.Statuses)
+	require.Equal(t, policy.ChannelAutoDisable, policy.APIKeyAutoDisable)
+}
+
+func TestSetRetryPolicy_RejectsPermanentDelete(t *testing.T) {
+	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=1")
+	defer client.Close()
+
+	service := NewSystemService(SystemServiceParams{Ent: client, CacheConfig: xcache.Config{Mode: xcache.ModeMemory}})
+	ctx := authz.WithTestBypass(ent.NewContext(context.Background(), client))
+
+	err := service.SetRetryPolicy(ctx, &RetryPolicy{
+		AutoDisableChannel: AutoDisableChannel{
+			Enabled: true,
+			Rules: []objects.APIKeyAutoDisableRule{{
+				StatusCodes: []int{401},
+				Times:       1,
+				Action:      objects.APIKeyAutoDisableActionPermanentDelete,
+			}},
+		},
+	})
+	require.Error(t, err)
+	var coded *xerrors.CodedError
+	require.ErrorAs(t, err, &coded)
 }

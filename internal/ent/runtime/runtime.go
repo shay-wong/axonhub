@@ -203,7 +203,7 @@ func init() {
 	// channel.DefaultOrderingWeight holds the default value on creation for the ordering_weight field.
 	channel.DefaultOrderingWeight = channelDescOrderingWeight.Default.(int)
 	// channelDescEndpoints is the schema descriptor for endpoints field.
-	channelDescEndpoints := channelFields[21].Descriptor()
+	channelDescEndpoints := channelFields[22].Descriptor()
 	// channel.DefaultEndpoints holds the default value on creation for the endpoints field.
 	channel.DefaultEndpoints = channelDescEndpoints.Default.([]objects.ChannelEndpoint)
 	channelmodelpriceMixin := schema.ChannelModelPrice{}.Mixin()
@@ -705,6 +705,10 @@ func init() {
 	requestexecutionDescFormat := requestexecutionFields[7].Descriptor()
 	// requestexecution.DefaultFormat holds the default value on creation for the format field.
 	requestexecution.DefaultFormat = requestexecutionDescFormat.Default.(string)
+	// requestexecutionDescChannelAPIKeySuffix is the schema descriptor for channel_api_key_suffix field.
+	requestexecutionDescChannelAPIKeySuffix := requestexecutionFields[11].Descriptor()
+	// requestexecution.ChannelAPIKeySuffixValidator is a validator for the "channel_api_key_suffix" field. It is called by the builders before save.
+	requestexecution.ChannelAPIKeySuffixValidator = requestexecutionDescChannelAPIKeySuffix.Validators[0].(func(string) error)
 	// requestexecutionDescStream is the schema descriptor for stream field.
 	requestexecutionDescStream := requestexecutionFields[20].Descriptor()
 	// requestexecution.DefaultStream holds the default value on creation for the stream field.

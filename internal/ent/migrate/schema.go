@@ -119,6 +119,7 @@ var (
 		{Name: "temporary_disabled_error_code", Type: field.TypeInt, Nullable: true},
 		{Name: "temporary_disabled_reason", Type: field.TypeString, Nullable: true},
 		{Name: "auto_disabled_at", Type: field.TypeTime, Nullable: true},
+		{Name: "auto_disable_expires_at", Type: field.TypeTime, Nullable: true},
 		{Name: "remark", Type: field.TypeString, Nullable: true},
 		{Name: "endpoints", Type: field.TypeJSON, Nullable: true},
 	}

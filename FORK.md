@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`a76e430d33104c7033a02389520decd546ccff08`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`4352a73fab0da8cdfe228c2e5be8d357eb6675bf`
-- 本次 merge base：`3786f2c5c8def8a3341a0ed1dd67bfb91e37ff30`
-- 审计范围：`git diff 4352a73f..HEAD`
+- 本次 upstream merge 的 fork parent：`090436ecf8473d141c9f574cfd622352b3bfde78`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`bd7144ecfcafe661710322287e673b1e86129224`
+- 本次 merge base：`4352a73fab0da8cdfe228c2e5be8d357eb6675bf`
+- 审计范围：`git diff bd7144ec..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含 tag `v1.0.0-beta10`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.6`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.7`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.7`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.8`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -67,6 +67,8 @@ git show --remerge-diff <merge-commit>
 - 验证：`go test ./internal/server/biz -run 'TestSelectLatestGitHubRelease|Test.*Version'`；`cd frontend && node --test src/config/external-urls.test.mjs`；静态检查 workflow、模型目录同步的 checkout/base 分支、Telegram 通知依赖/Secrets 和 Helm 默认镜像。
 
 ### F02 API Key 稳定身份、别名、权重和路由
+
+- 本次上游整合：`6115ae80` 的模型发现 header overrides、`a416de23` 的 Zhipu/ZAI raw URL 与 `/v1` relay 修复保留；仍按可用 Key 顺序尝试并在首次成功后停止，不恢复全量 Key 探测。
 
 - 本次上游整合：`65c65807` 在模型同步落库前重读渠道，保留拉取期间新保存的手动模型；此前按可用 Key 顺序发现、首个成功即停止的本地逻辑继续保留。
 - 生命周期：`长期保留`
@@ -128,6 +130,10 @@ git show --remerge-diff <merge-commit>
 ## 等待 Upstream 吸收
 
 ### U01 API Key/渠道禁用、恢复和状态操作
+
+- 已确认采用上游规则计数语义：同一渠道内按 Key 和规则独立累计，其他规则命中或未匹配失败不清零；该 Key 成功时清零自己的规则计数，其他 Key 成功不影响它。保留 `ChannelAPIKeyRuleKeepsIndependentCounters`、`CustomAndGlobalCountersAreIndependent` 回归。
+
+- 本次上游整合：`ad5b5eec` 新增全局规则、批量应用和无 Key 渠道到期恢复；保留 fork 的独立渠道/Key 状态码策略及临时恢复字段。旧 `auto_disable_channel.statuses` 迁移到尚未配置的独立策略后清空，保留 duration/Retry-After，不能转成永久禁用规则，。显式渠道规则、全局规则匹配后拥有本次失败计数，未匹配才回退独立策略；`off` 跳过全部自动禁用。网络失败仍只能交由旧渠道策略处理，不能禁用 Key。`48b7314a` 的系统 bypass 修复用于内部 retry policy 读取。兼容验证：`GlobalRulesPreserveLegacyPolicyOwnership`。
 
 - 生命周期：`等待上游吸收`
 - 原始意图：单个坏 Key 不应误伤整个 channel，自动禁用和人工恢复必须有可解释、可授权且稳定的状态转换。
@@ -218,6 +224,8 @@ git show --remerge-diff <merge-commit>
 - 验证：`cd llm && go test ./transformer/ollama`；`go test ./internal/server/biz -run 'Trace.*Precision|LargeInteger'`。
 
 ### U09 凭据可见性、敏感字段和 provider quota 边界
+
+- 本次上游整合：`1d3d2831` 已提供请求 execution 的 Key 后缀持久化；合并为唯一字段并保留最多 4 rune 校验，但 fork 的别名/header 快照及 `write_channels` 读取边界仍保留。`d4a34586` 改用 Command Code 账户 API Key 查询配额，不替代结构化 inference Key 身份与 quota cache 失效约束。
 
 - 生命周期：`等待上游吸收`
 - 原始意图：系统级查询、GraphQL schema、日志和 quota cache 都不能泄露个人 Key 或 provider secret，也不能在凭据变化后继续展示旧配额。
