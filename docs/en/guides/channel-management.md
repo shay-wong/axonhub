@@ -69,6 +69,14 @@ sk-key-3
 - Different requests randomly select from available Keys
 - If one Key fails, the system automatically switches to another
 
+## Auto-disable policy compatibility
+
+Global rules and the fork's separate channel/API key status-code policies are configured independently in retry settings. Custom channel rules run first, followed by global rules; a matching rule owns the failure even before its threshold is reached. Unmatched failures fall back to the separate status-code policies, with API key rules taking precedence over channel rules. Channel mode **Off** skips all automatic disabling.
+
+Upgrading preserves existing temporary durations and the 429 **Retry-After** option. Network failures do not disable individual keys; the separate channel policy can still handle them. Legacy policy migration does not re-enable an explicitly disabled policy.
+
+Custom and global rules count failures independently for each key. Other errors do not reset a rule's count; a successful request on that key clears its counts. Success on another key in the same channel does not affect them.
+
 ## Codex-style Responses
 
 `codex` and `fenno` channels can opt into **Use Codex-style Responses** under **Settings → Transform Options**. The option is disabled by default.

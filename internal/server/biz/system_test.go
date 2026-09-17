@@ -1462,6 +1462,24 @@ func TestNormalizeRetryPolicy_MigratesLegacyStatuses(t *testing.T) {
 	require.Equal(t, policy.ChannelAutoDisable, policy.APIKeyAutoDisable)
 }
 
+func TestNormalizeRetryPolicy_PreservesTemporaryLegacyPolicy(t *testing.T) {
+	var policy RetryPolicy
+	require.NoError(t, json.Unmarshal([]byte(`{"auto_disable_channel":{"enabled":true,"statuses":[{"status":429,"times":3,"action":"temporary","durationMinutes":10,"useRetryAfter":true}]},"channel_auto_disable":{"enabled":false,"statuses":[]}}`), &policy))
+	normalizeRetryPolicy(&policy)
+	require.False(t, policy.ChannelAutoDisable.Enabled)
+	require.Empty(t, policy.ChannelAutoDisable.Statuses)
+	require.True(t, policy.APIKeyAutoDisable.Enabled)
+	require.Equal(t, DisableActionTemporary, policy.APIKeyAutoDisable.Statuses[0].Action)
+	require.Equal(t, 10, *policy.APIKeyAutoDisable.Statuses[0].DurationMinutes)
+	require.True(t, *policy.APIKeyAutoDisable.Statuses[0].UseRetryAfter)
+	require.Empty(t, policy.AutoDisableChannel.Rules)
+
+	policy.APIKeyAutoDisable = AutoDisablePolicy{}
+	normalizeRetryPolicy(&policy)
+	require.False(t, policy.APIKeyAutoDisable.Enabled)
+	require.Empty(t, policy.APIKeyAutoDisable.Statuses)
+}
+
 func TestSetRetryPolicy_RejectsPermanentDelete(t *testing.T) {
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=1")
 	defer client.Close()

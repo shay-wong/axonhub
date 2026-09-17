@@ -15,7 +15,7 @@
 
 | 文档 | 描述 |
 |------|------|
-| [渠道管理](guides/channel-management.md) | 配置和管理 AI 提供商渠道 |
+| [渠道管理](guides/channel-management.md) | 配置渠道与兼容的自动禁用策略 |
 | [模型管理](guides/model-management.md) | 模型映射、关联和优先级配置 |
 | [API Key 配置文件](guides/api-key-profiles.md) | 创建和管理 API Key 配置文件 |
 | [权限管理](guides/permissions.md) | 企业级 RBAC 访问控制配置 |

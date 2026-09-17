@@ -15,7 +15,7 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 
 | Document | Description |
 |----------|-------------|
-| [Channel Management](guides/channel-management.md) | Configure and manage AI provider channels |
+| [Channel Management](guides/channel-management.md) | Configure providers and compatible auto-disable policies |
 | [Model Management](guides/model-management.md) | Model mapping, associations, and priority configuration |
 | [API Key Profiles](guides/api-key-profiles.md) | Create and manage API key profiles |
 | [Permissions](guides/permissions.md) | Enterprise RBAC access control configuration |

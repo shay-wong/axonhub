@@ -132,8 +132,9 @@ git show --remerge-diff <merge-commit>
 ### U01 API Key/渠道禁用、恢复和状态操作
 
 - 已确认采用上游规则计数语义：同一渠道内按 Key 和规则独立累计，其他规则命中或未匹配失败不清零；该 Key 成功时清零自己的规则计数，其他 Key 成功不影响它。保留 `ChannelAPIKeyRuleKeepsIndependentCounters`、`CustomAndGlobalCountersAreIndependent` 回归。
+- 配置迁移兼容修复独立于 merge：以 `statuses == nil` 区分未配置策略与显式关闭且空列表的策略，防止后者被旧配置重新开启。提交可用 `git log -S'TestNormalizeRetryPolicy_PreservesTemporaryLegacyPolicy' -- internal/server/biz/system_test.go` 定位。
 
-- 本次上游整合：`ad5b5eec` 新增全局规则、批量应用和无 Key 渠道到期恢复；保留 fork 的独立渠道/Key 状态码策略及临时恢复字段。旧 `auto_disable_channel.statuses` 迁移到尚未配置的独立策略后清空，保留 duration/Retry-After，不能转成永久禁用规则，。显式渠道规则、全局规则匹配后拥有本次失败计数，未匹配才回退独立策略；`off` 跳过全部自动禁用。网络失败仍只能交由旧渠道策略处理，不能禁用 Key。`48b7314a` 的系统 bypass 修复用于内部 retry policy 读取。兼容验证：`GlobalRulesPreserveLegacyPolicyOwnership`。
+- 本次上游整合：`ad5b5eec` 新增全局规则、批量应用和无 Key 渠道到期恢复；保留 fork 的独立渠道/Key 状态码策略及临时恢复字段。旧 `auto_disable_channel.statuses` 迁移到尚未配置的独立策略后清空，保留 duration/Retry-After，不能转成永久禁用规则，也不能覆盖显式关闭的策略。显式渠道规则、全局规则匹配后拥有本次失败计数，未匹配才回退独立策略；`off` 跳过全部自动禁用。网络失败仍只能交由旧渠道策略处理，不能禁用 Key。`48b7314a` 的系统 bypass 修复用于内部 retry policy 读取。兼容验证：`TestNormalizeRetryPolicy_PreservesTemporaryLegacyPolicy`、`GlobalRulesPreserveLegacyPolicyOwnership`。
 
 - 生命周期：`等待上游吸收`
 - 原始意图：单个坏 Key 不应误伤整个 channel，自动禁用和人工恢复必须有可解释、可授权且稳定的状态转换。

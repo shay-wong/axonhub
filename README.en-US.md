@@ -311,6 +311,8 @@ Fork release builds can install updates or roll back to a recent compatible rele
 
 Codex model discovery supports its complete catalog format while preserving OpenAI compatibility; see the [Codex integration guide](docs/en/guides/codex-integration.md#model-catalog-refresh) for refresh conditions and context defaults.
 
+Auto-disable keeps separate channel/key policies and Retry-After alongside global rules; see [policy precedence](docs/en/guides/channel-management.md#auto-disable-policy-compatibility).
+
 See the [documentation index](docs/en/index.md) for configuration details and more API examples.
 
 ---

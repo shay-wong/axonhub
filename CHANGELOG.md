@@ -9,6 +9,8 @@
 
 ### Fixed
 
+- Preserved separate channel/key disable policies, temporary durations, Retry-After, and explicit disabled settings when integrating global auto-disable rules.
+
 - Returned complete, API-key-scoped Codex model catalogs for `/v1/models?client_version=…`, preserving model instructions and context metadata while keeping ordinary OpenAI discovery unchanged.
 - Kept the **Include Beta versions** update-check option enabled while switching between System Settings tabs.
 - Preserved usage and cost records when clients disconnect after a streaming response has already completed, without leaving a stale cancellation error on the completed execution.

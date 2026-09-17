@@ -1186,10 +1186,10 @@ func normalizeRetryPolicy(policy *RetryPolicy) {
 	normalizeAutoDisablePolicy(&policy.AutoDisableChannel)
 	legacyHasRules := len(policy.AutoDisableChannel.Statuses) > 0
 	if legacyHasRules {
-		if !policy.ChannelAutoDisable.Enabled && len(policy.ChannelAutoDisable.Statuses) == 0 {
+		if !policy.ChannelAutoDisable.Enabled && policy.ChannelAutoDisable.Statuses == nil {
 			policy.ChannelAutoDisable = cloneAutoDisablePolicy(policy.AutoDisableChannel)
 		}
-		if !policy.APIKeyAutoDisable.Enabled && len(policy.APIKeyAutoDisable.Statuses) == 0 {
+		if !policy.APIKeyAutoDisable.Enabled && policy.APIKeyAutoDisable.Statuses == nil {
 			policy.APIKeyAutoDisable = cloneAutoDisablePolicy(policy.AutoDisableChannel)
 		}
 	}
