@@ -883,6 +883,7 @@ const MODEL_SETTINGS_QUERY = `
       autoReasoningEffort
       modelBlacklistRegex
       hideUnroutableModelsInList
+      codexImageMainModel
       developerSettings {
         developer
         associations {
@@ -1033,6 +1034,7 @@ export interface ModelSettings {
   autoReasoningEffort: boolean;
   modelBlacklistRegex: string;
   hideUnroutableModelsInList: boolean;
+  codexImageMainModel: string;
   developerSettings: DeveloperModelSettings[];
 }
 
@@ -1043,6 +1045,7 @@ export interface UpdateModelSettingsInput {
   autoReasoningEffort?: boolean;
   modelBlacklistRegex?: string;
   hideUnroutableModelsInList?: boolean;
+  codexImageMainModel?: string;
   developerSettings?: DeveloperModelSettings[];
 }
 

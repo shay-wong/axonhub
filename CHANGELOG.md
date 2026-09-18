@@ -9,7 +9,7 @@
 
 ### Fixed
 
-- Made the Codex image generation/editing main model configurable in the channel form, defaulting to `gpt-6-astra` instead of `gpt-5.4-mini` while preserving the requested image tool model.
+- Added global Codex image main model selection in Models → Settings, defaulting to `gpt-6-astra` while preserving the requested image tool model. This replaces per-channel overrides; users with a previous custom value must select it again globally. Saved changes apply to new requests without a restart.
 
 - Preserved separate channel/key disable policies, temporary durations, Retry-After, and explicit disabled settings when integrating global auto-disable rules.
 

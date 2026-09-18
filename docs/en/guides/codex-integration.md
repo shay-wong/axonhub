@@ -161,9 +161,11 @@ You can manually trigger a quota refresh by clicking the refresh icon in the quo
 
 ### Default image main model
 
-In **Channels → Edit**, Codex channels have a **Default image main model** field. It defaults to `gpt-6-astra` and accepts another model supported by your upstream account. Empty values and existing channels without a saved value also use `gpt-6-astra`.
+In **Models → Settings**, select the **Codex default image main model** shared by all Codex channels. The default is `gpt-6-astra`. The dropdown lists actual model IDs from enabled Codex channels rather than local mapping aliases; it always retains the default and current selection.
 
-This sets the outer Responses model for image generation and editing. The image tool keeps the requested image model, such as `gpt-image-2`; ordinary Responses/chat requests keep their explicitly selected model. Both the main model and image generation must be supported by the upstream account. The setting is available as `settings.codexImageMainModel` in the channel API. Deploy this version for the new default to take effect; existing disabled keys and upstream cooldowns are not cleared.
+This sets the outer Responses model for image generation and editing. The image tool keeps the requested image model, such as `gpt-image-2`; ordinary Responses/chat requests keep their explicitly selected model. Both the main model and image generation must be supported by the upstream account; appearing in the list does not guarantee support on every channel or key. The global API field is `systemModelSettings.codexImageMainModel`. Saving it through `updateSystemModelSettings` applies to new requests without a restart.
+
+After upgrading, channel-level `settings.codexImageMainModel` is retained only for API compatibility and has no effect. No individual channel value is automatically promoted to the global setting. If no global value is configured, `gpt-6-astra` is used; users who previously configured another main model must select it again in the global settings. Existing disabled keys and upstream cooldowns are not cleared.
 
 ### Related Documentation
 - [Tracing Guide](tracing.md)

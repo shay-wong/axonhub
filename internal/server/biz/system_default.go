@@ -101,6 +101,7 @@ var defaultAutoDisableStatusRules = []AutoDisableStatusRule{
 }
 
 var defaultModelSettings = SystemModelSettings{
+	CodexImageMainModel:               "gpt-6-astra",
 	FallbackToChannelsOnModelNotFound: true,
 	QueryAllChannelModels:             true,
 	DefaultModelAPIIncludeAll:         false,

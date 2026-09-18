@@ -319,7 +319,7 @@ Codex 模型发现支持完整目录格式，同时保留普通 OpenAI 接口兼
 
 更多配置和 API 示例请查看[完整文档索引](docs/zh/index.md)。
 
-Codex 渠道支持在编辑页配置[默认生图主模型](docs/zh/guides/codex-integration.md#默认生图主模型)，默认 `gpt-6-astra`。
+在“模型 → 设置”中从列表选择全局 [Codex 默认生图主模型](docs/zh/guides/codex-integration.md#默认生图主模型)，默认 `gpt-6-astra`，所有 Codex 渠道统一使用。
 
 ---
 

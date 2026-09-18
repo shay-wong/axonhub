@@ -244,6 +244,7 @@ input UpdateSecuritySettingsInput {
 }
 
 type SystemModelSettings {
+  codexImageMainModel: String!
   fallbackToChannelsOnModelNotFound: Boolean!
   queryAllChannelModels: Boolean!
   defaultModelAPIIncludeAll: Boolean!
@@ -254,6 +255,7 @@ type SystemModelSettings {
 }
 
 input UpdateSystemModelSettingsInput {
+  codexImageMainModel: String
   fallbackToChannelsOnModelNotFound: Boolean
   queryAllChannelModels: Boolean
   defaultModelAPIIncludeAll: Boolean

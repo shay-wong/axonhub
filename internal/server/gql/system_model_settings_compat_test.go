@@ -36,6 +36,7 @@ func TestUpdateSystemModelSettings_PreservesDeveloperSettingsWhenOmitted(t *test
 	defer client.Close()
 
 	err := mutationResolver.systemService.SetModelSettings(ctx, biz.SystemModelSettings{
+		CodexImageMainModel:               "gpt-custom",
 		FallbackToChannelsOnModelNotFound: true,
 		QueryAllChannelModels:             true,
 		DeveloperSettings: []*biz.DeveloperModelSettings{
@@ -62,6 +63,7 @@ func TestUpdateSystemModelSettings_PreservesDeveloperSettingsWhenOmitted(t *test
 	settings, err := mutationResolver.systemService.ModelSettings(ctx)
 	require.NoError(t, err)
 	require.Len(t, settings.DeveloperSettings, 1)
+	require.Equal(t, "gpt-custom", settings.CodexImageMainModel)
 	require.Equal(t, "openai", settings.DeveloperSettings[0].Developer)
 	require.False(t, settings.FallbackToChannelsOnModelNotFound)
 	require.False(t, settings.QueryAllChannelModels)
@@ -96,4 +98,23 @@ func TestUpdateSystemModelSettings_AllowsExplicitDeveloperSettingsClear(t *testi
 	settings, err := mutationResolver.systemService.ModelSettings(ctx)
 	require.NoError(t, err)
 	require.Empty(t, settings.DeveloperSettings)
+}
+
+func TestUpdateSystemModelSettings_ImageMainModelRoundTrip(t *testing.T) {
+	resolver, ctx, client := setupTestSystemModelSettingsResolver(t)
+	defer client.Close()
+	settings, err := resolver.systemService.ModelSettings(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "gpt-6-astra", settings.CodexImageMainModel)
+
+	input, err := (&executionContext{}).unmarshalInputUpdateSystemModelSettingsInput(ctx, map[string]any{
+		"codexImageMainModel": " gpt-custom ",
+	})
+	require.NoError(t, err)
+	ok, err := resolver.UpdateSystemModelSettings(ctx, input)
+	require.NoError(t, err)
+	require.True(t, ok)
+	settings, err = (&queryResolver{resolver.Resolver}).SystemModelSettings(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "gpt-custom", settings.CodexImageMainModel)
 }

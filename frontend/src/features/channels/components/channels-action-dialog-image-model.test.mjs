@@ -23,21 +23,19 @@ const mergeSource = readFileSync(new URL('../utils/merge.ts', import.meta.url), 
 const { outputText } = ts.transpileModule(mergeSource, { compilerOptions: { module: ts.ModuleKind.ESNext } });
 const { mergeChannelSettingsForUpdate } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 
-test('Codex create/edit/copy preserve image model settings and apply the blank default', () => {
-  for (const codexImageMainModel of [undefined, null, '', '  ']) {
-    const settings = mergeChannelSettingsForUpdate(undefined, patch('codex', { settings: { codexImageMainModel } }));
-    assert.equal(settings.codexImageMainModel, 'gpt-6-astra');
+test('channel create/edit no longer write a per-channel image model override', () => {
+  for (const codexImageMainModel of [undefined, null, '', '  ', 'gpt-custom']) {
+    assert.equal(Object.hasOwn(patch('codex', { settings: { codexImageMainModel } }), 'codexImageMainModel'), false);
   }
   const existing = { codexImageMainModel: 'gpt-custom', extraModelPrefix: 'prefix-', proxy: { type: 'environment' } };
   const copied = mergeChannelSettingsForUpdate(existing, patch('codex', { settings: existing }));
   assert.equal(copied.codexImageMainModel, 'gpt-custom');
   const edited = mergeChannelSettingsForUpdate(existing, patch('codex', { settings: { codexImageMainModel: ' new-model ' } }));
-  assert.equal(edited.codexImageMainModel, 'new-model');
+  assert.equal(edited.codexImageMainModel, 'gpt-custom');
   assert.equal(edited.extraModelPrefix, existing.extraModelPrefix);
   assert.deepEqual(edited.proxy, existing.proxy);
   assert.equal(mergeChannelSettingsForUpdate(existing, {}).codexImageMainModel, 'gpt-custom');
   assert.equal(Object.hasOwn(patch('openai', {}), 'codexImageMainModel'), false);
-  assert.match(source, /name='settings.codexImageMainModel'/);
-  assert.match(source, /value=\{field.value \?\? 'gpt-6-astra'\}/);
+  assert.doesNotMatch(source, /name='settings.codexImageMainModel'/);
   assert.equal(source.split('...channelSettingsPatch').length - 1, 2);
 });

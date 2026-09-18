@@ -3,11 +3,13 @@
 import React, { useCallback } from 'react';
 import { Loader2, Settings2, RefreshCcw, Layers, ListTree, BrainCircuit, Ban, EyeOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { AutoCompleteSelect } from '@/components/auto-complete-select';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { useAllChannelSummarys } from '@/features/channels/data/channels';
 import { useModelSettings, useUpdateModelSettings, type UpdateModelSettingsInput } from '@/features/system/data/system';
 import { useModels } from '../context/models-context';
 
@@ -18,6 +20,8 @@ export function ModelSettingsDialog() {
   const updateModelSettings = useUpdateModelSettings();
 
   const isOpen = open === 'settings';
+  const dialogContentRef = React.useRef<HTMLDivElement>(null);
+  const { data: channels, isLoading: isModelsLoading } = useAllChannelSummarys(undefined, { enabled: isOpen });
 
   const [fallbackEnabled, setFallbackEnabled] = React.useState(false);
   const [queryAllChannelModels, setQueryAllChannelModels] = React.useState(false);
@@ -25,6 +29,15 @@ export function ModelSettingsDialog() {
   const [autoReasoningEffort, setAutoReasoningEffort] = React.useState(false);
   const [modelBlacklistRegex, setModelBlacklistRegex] = React.useState('');
   const [hideUnroutableModelsInList, setHideUnroutableModelsInList] = React.useState(false);
+  const [codexImageMainModel, setCodexImageMainModel] = React.useState('gpt-6-astra');
+  const imageMainModelOptions = React.useMemo(() => {
+    const models = channels?.edges
+      .filter(({ node }) => node.type === 'codex' && node.status === 'enabled')
+      .flatMap(({ node }) => node.allModelEntries.map((entry) => entry.actualModel)) ?? [];
+    return [...new Set(['gpt-6-astra', codexImageMainModel, ...models])]
+      .filter(Boolean)
+      .map((model) => ({ value: model, label: model }));
+  }, [channels, codexImageMainModel]);
 
   React.useEffect(() => {
     if (settings) {
@@ -34,6 +47,7 @@ export function ModelSettingsDialog() {
       setAutoReasoningEffort(settings.autoReasoningEffort);
       setModelBlacklistRegex(settings.modelBlacklistRegex ?? '');
       setHideUnroutableModelsInList(settings.hideUnroutableModelsInList);
+      setCodexImageMainModel(settings.codexImageMainModel || 'gpt-6-astra');
     }
   }, [settings]);
 
@@ -45,11 +59,12 @@ export function ModelSettingsDialog() {
       autoReasoningEffort: autoReasoningEffort,
       modelBlacklistRegex: modelBlacklistRegex,
       hideUnroutableModelsInList: hideUnroutableModelsInList,
+      codexImageMainModel,
       developerSettings: settings?.developerSettings || [],
     };
     await updateModelSettings.mutateAsync(input);
     setOpen(null);
-  }, [updateModelSettings, fallbackEnabled, queryAllChannelModels, defaultModelAPIIncludeAll, autoReasoningEffort, modelBlacklistRegex, hideUnroutableModelsInList, settings?.developerSettings, setOpen]);
+  }, [updateModelSettings, fallbackEnabled, queryAllChannelModels, defaultModelAPIIncludeAll, autoReasoningEffort, modelBlacklistRegex, hideUnroutableModelsInList, codexImageMainModel, settings?.developerSettings, setOpen]);
 
   const handleClose = useCallback(() => {
     setOpen(null);
@@ -57,7 +72,7 @@ export function ModelSettingsDialog() {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className='flex max-h-[90vh] w-full max-w-full flex-col overflow-hidden sm:max-w-[720px]'>
+      <DialogContent ref={dialogContentRef} className='flex max-h-[90vh] w-full max-w-full flex-col overflow-hidden sm:max-w-[720px]'>
         <DialogHeader className='shrink-0'>
           <DialogTitle className='flex items-center gap-2 text-lg sm:text-xl'>
             <Settings2 className='h-5 w-5' />
@@ -72,6 +87,24 @@ export function ModelSettingsDialog() {
           </div>
         ) : (
           <div className='min-h-0 flex-1 space-y-4 overflow-y-auto pr-1'>
+            <Card>
+              <CardHeader className='pb-0'>
+                <CardTitle className='text-sm sm:text-base'>{t('models.dialogs.settings.codexImageMainModel.label')}</CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-2 pt-1'>
+                <p className='text-muted-foreground text-sm'>{t('models.dialogs.settings.codexImageMainModel.description')}</p>
+                <AutoCompleteSelect
+                  selectedValue={codexImageMainModel}
+                  onSelectedValueChange={setCodexImageMainModel}
+                  items={imageMainModelOptions}
+                  isLoading={isModelsLoading}
+                  placeholder={t('models.dialogs.settings.codexImageMainModel.label')}
+                  emptyMessage={t('models.dialogs.settings.codexImageMainModel.empty')}
+                  portalContainer={dialogContentRef.current}
+                />
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader className='pb-0'>
                 <CardTitle className='flex items-center gap-2 text-sm sm:text-base'>

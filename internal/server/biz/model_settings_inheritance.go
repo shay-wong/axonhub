@@ -13,6 +13,10 @@ func normalizeSystemModelSettings(settings *SystemModelSettings) {
 	if settings == nil {
 		return
 	}
+	settings.CodexImageMainModel = strings.TrimSpace(settings.CodexImageMainModel)
+	if settings.CodexImageMainModel == "" {
+		settings.CodexImageMainModel = defaultModelSettings.CodexImageMainModel
+	}
 
 	if settings.DeveloperSettings == nil {
 		settings.DeveloperSettings = []*DeveloperModelSettings{}

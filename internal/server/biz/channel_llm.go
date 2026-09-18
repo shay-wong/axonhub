@@ -313,20 +313,19 @@ func (svc *ChannelService) buildCodexOutbound(
 	alphaSearchPath string,
 	httpClient *httpclient.HttpClient,
 ) (transformer.Outbound, error) {
-	imageMainModel := ""
-	if c.Settings != nil {
-		imageMainModel = c.Settings.CodexImageMainModel
+	imageMainModel := func(ctx context.Context) string {
+		return svc.SystemService.ModelSettingsOrDefault(ctx).CodexImageMainModel
 	}
 	if c.Credentials.IsOAuth() {
 		if ch != nil {
 			if existing, ok := ch.Outbound.(*codex.OutboundTransformer); ok {
 				if tokens := existing.TokenProvider(); tokens != nil {
 					return codex.NewOutboundTransformer(codex.Params{
-						TokenProvider:   tokens,
-						BaseURL:         baseURL,
-						Transport:       transport,
-						AlphaSearchPath: alphaSearchPath,
-						ImageMainModel:  imageMainModel,
+						TokenProvider:          tokens,
+						BaseURL:                baseURL,
+						Transport:              transport,
+						AlphaSearchPath:        alphaSearchPath,
+						ImageMainModelProvider: imageMainModel,
 					})
 				}
 			}
@@ -367,11 +366,11 @@ func (svc *ChannelService) buildCodexOutbound(
 		}
 
 		return codex.NewOutboundTransformer(codex.Params{
-			TokenProvider:   p,
-			BaseURL:         baseURL,
-			Transport:       transport,
-			AlphaSearchPath: alphaSearchPath,
-			ImageMainModel:  imageMainModel,
+			TokenProvider:          p,
+			BaseURL:                baseURL,
+			Transport:              transport,
+			AlphaSearchPath:        alphaSearchPath,
+			ImageMainModelProvider: imageMainModel,
 		})
 	}
 
@@ -379,11 +378,11 @@ func (svc *ChannelService) buildCodexOutbound(
 	tokens := oauth.NewAPIKeyTokenProvider(apiKeyProvider.Get)
 
 	return codex.NewOutboundTransformer(codex.Params{
-		TokenProvider:   tokens,
-		BaseURL:         baseURL,
-		Transport:       transport,
-		AlphaSearchPath: alphaSearchPath,
-		ImageMainModel:  imageMainModel,
+		TokenProvider:          tokens,
+		BaseURL:                baseURL,
+		Transport:              transport,
+		AlphaSearchPath:        alphaSearchPath,
+		ImageMainModelProvider: imageMainModel,
 	})
 }
 

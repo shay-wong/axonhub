@@ -433,8 +433,6 @@
   "channels.dialogs.fields.autoSyncModelPattern.description": "Only sync models matching this regex pattern. Prefix with (?i) to ignore case. Leave empty to sync all models.",
   "channels.dialogs.fields.autoSyncModelPattern.invalid": "Invalid regex pattern",
   "channels.dialogs.fields.defaultTestModel.label": "Test Model",
-  "channels.dialogs.fields.codexImageMainModel.label": "Default Image Main Model",
-  "channels.dialogs.fields.codexImageMainModel.description": "Main model for image generation and editing; the requested image model is unchanged. Does not override the model in ordinary Responses requests. Leave blank to use gpt-6-astra.",
   "channels.dialogs.fields.defaultTestModel.description": "Default model for testing connections",
   "channels.dialogs.fields.tags.label": "Tags",
   "channels.dialogs.fields.tags.placeholder": "Add tags...",

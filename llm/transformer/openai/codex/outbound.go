@@ -41,11 +41,12 @@ const (
 //
 //nolint:containedctx // It is used as a transformer.
 type OutboundTransformer struct {
-	tokens          oauth.TokenGetter
-	transport       string
-	baseURL         string
-	alphaSearchPath string
-	imageMainModel  string
+	tokens                 oauth.TokenGetter
+	transport              string
+	baseURL                string
+	alphaSearchPath        string
+	imageMainModel         string
+	imageMainModelProvider func(context.Context) string
 
 	// official reports whether the configured upstream is the official Codex
 	// backend (chatgpt.com). Official endpoints always stream SSE, so they keep
@@ -77,6 +78,8 @@ type Params struct {
 	Transport       string
 	AlphaSearchPath string
 	ImageMainModel  string
+	// ImageMainModelProvider resolves live settings when transforming an image request.
+	ImageMainModelProvider func(context.Context) string
 }
 
 // isOfficialCodexBaseURL reports whether baseURL points at the official Codex
@@ -122,13 +125,14 @@ func NewOutboundTransformer(params Params) (*OutboundTransformer, error) {
 	}
 
 	return &OutboundTransformer{
-		tokens:            params.TokenProvider,
-		transport:         params.Transport,
-		baseURL:           strings.TrimSuffix(baseURL, "##"),
-		alphaSearchPath:   alphaSearchPath,
-		imageMainModel:    imageMainModel,
-		official:          isOfficialCodexBaseURL(baseURL),
-		responsesOutbound: ro,
+		tokens:                 params.TokenProvider,
+		transport:              params.Transport,
+		baseURL:                strings.TrimSuffix(baseURL, "##"),
+		alphaSearchPath:        alphaSearchPath,
+		imageMainModel:         imageMainModel,
+		imageMainModelProvider: params.ImageMainModelProvider,
+		official:               isOfficialCodexBaseURL(baseURL),
+		responsesOutbound:      ro,
 	}, nil
 }
 
@@ -231,6 +235,11 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 
 	if isImageRequest {
 		reqCopy.Model = t.imageMainModel
+		if t.imageMainModelProvider != nil {
+			if model := strings.TrimSpace(t.imageMainModelProvider(ctx)); model != "" {
+				reqCopy.Model = model
+			}
+		}
 		reqCopy.TransformerMetadata[responses.ImageGenerationToolModelMetadataKey] = llmReq.Model
 	}
 

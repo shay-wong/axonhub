@@ -430,8 +430,6 @@
   "channels.dialogs.fields.autoSyncModelPattern.description": "仅同步匹配此正则表达式的模型。使用 (?i) 前缀可忽略大小写。留空则同步所有模型。",
   "channels.dialogs.fields.autoSyncModelPattern.invalid": "无效的正则表达式",
   "channels.dialogs.fields.defaultTestModel.label": "默认测试模型",
-  "channels.dialogs.fields.codexImageMainModel.label": "默认生图主模型",
-  "channels.dialogs.fields.codexImageMainModel.description": "图片生成和编辑使用的主模型，图片模型保持不变。不覆盖普通 Responses 请求传入的模型。留空使用 gpt-6-astra。",
   "channels.dialogs.fields.defaultTestModel.description": "用于测试连接的默认模型",
   "channels.dialogs.fields.tags.label": "标签",
   "channels.dialogs.fields.tags.placeholder": "添加标签...",
