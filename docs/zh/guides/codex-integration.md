@@ -105,6 +105,12 @@ AxonHub 的模型配置文件支持将请求模型映射到具体提供商模型
 - **模型结果异常**：检查 AxonHub 控制台中当前启用的配置文件映射，必要时禁用或调整规则。
 - **定时任务提示 `function_call_output` 缺少 `call_id`**：升级到包含 Codex 定时任务启动项兼容修复的 AxonHub 版本。
 
+### 默认生图主模型
+
+在 **渠道 → 编辑** 中，Codex 渠道可填写 **默认生图主模型**。默认值为 `gpt-6-astra`，也可手动填写上游账户支持的其他模型。留空或旧渠道尚未保存此设置时，同样使用 `gpt-6-astra`。
+
+该设置用于图片生成和编辑请求的外层 Responses 主模型。生图工具仍保留请求指定的图片模型，例如 `gpt-image-2`；普通 Responses/聊天请求继续使用调用方明确选择的模型。上游账户必须同时支持主模型和生图能力。渠道 API 字段为 `settings.codexImageMainModel`。部署此版本后新默认值才会生效，不会清除已有 Key 禁用或上游冷却状态。
+
 ### 相关文档
 - [追踪指南](tracing.md)
 - [OpenAI API 文档](../api-reference/openai-api.md)

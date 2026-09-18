@@ -597,6 +597,7 @@ type ComplexityRoot struct {
 		APIKeySelectionStrategy  func(childComplexity int) int
 		AutoTrimedModelPrefixes  func(childComplexity int) int
 		BodyOverrideOperations   func(childComplexity int) int
+		CodexImageMainModel      func(childComplexity int) int
 		ExtraModelPrefix         func(childComplexity int) int
 		HeaderOverrideOperations func(childComplexity int) int
 		HideMappedModels         func(childComplexity int) int
@@ -4549,6 +4550,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelSettings.BodyOverrideOperations(childComplexity), true
+	case "ChannelSettings.codexImageMainModel":
+		if e.complexity.ChannelSettings.CodexImageMainModel == nil {
+			break
+		}
+
+		return e.complexity.ChannelSettings.CodexImageMainModel(childComplexity), true
 	case "ChannelSettings.extraModelPrefix":
 		if e.complexity.ChannelSettings.ExtraModelPrefix == nil {
 			break
@@ -21632,6 +21639,8 @@ func (ec *executionContext) fieldContext_Channel_settings(_ context.Context, fie
 				return ec.fieldContext_ChannelSettings_retryableErrorPatterns(ctx, field)
 			case "apiKeySelectionStrategy":
 				return ec.fieldContext_ChannelSettings_apiKeySelectionStrategy(ctx, field)
+			case "codexImageMainModel":
+				return ec.fieldContext_ChannelSettings_codexImageMainModel(ctx, field)
 			case "modelProtocols":
 				return ec.fieldContext_ChannelSettings_modelProtocols(ctx, field)
 			case "providerQuota":
@@ -26678,6 +26687,35 @@ func (ec *executionContext) _ChannelSettings_apiKeySelectionStrategy(ctx context
 }
 
 func (ec *executionContext) fieldContext_ChannelSettings_apiKeySelectionStrategy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelSettings_codexImageMainModel(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelSettings_codexImageMainModel,
+		func(ctx context.Context) (any, error) {
+			return obj.CodexImageMainModel, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelSettings_codexImageMainModel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "ChannelSettings",
 		Field:      field,
@@ -71426,7 +71464,7 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "retryableStatusCodes", "retryableErrorPatterns", "apiKeySelectionStrategy", "modelProtocols", "providerQuota", "quotaRoutingMode"}
+	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "retryableStatusCodes", "retryableErrorPatterns", "apiKeySelectionStrategy", "codexImageMainModel", "modelProtocols", "providerQuota", "quotaRoutingMode"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -71545,6 +71583,13 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 				return it, err
 			}
 			it.APIKeySelectionStrategy = data
+		case "codexImageMainModel":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("codexImageMainModel"))
+			data, err := ec.unmarshalOString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CodexImageMainModel = data
 		case "modelProtocols":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modelProtocols"))
 			data, err := ec.unmarshalOModelProtocolInput2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐModelProtocolᚄ(ctx, v)
@@ -99118,6 +99163,8 @@ func (ec *executionContext) _ChannelSettings(ctx context.Context, sel ast.Select
 			out.Values[i] = ec._ChannelSettings_retryableErrorPatterns(ctx, field, obj)
 		case "apiKeySelectionStrategy":
 			out.Values[i] = ec._ChannelSettings_apiKeySelectionStrategy(ctx, field, obj)
+		case "codexImageMainModel":
+			out.Values[i] = ec._ChannelSettings_codexImageMainModel(ctx, field, obj)
 		case "modelProtocols":
 			out.Values[i] = ec._ChannelSettings_modelProtocols(ctx, field, obj)
 		case "providerQuota":

@@ -9,6 +9,8 @@
 
 ### Fixed
 
+- Made the Codex image generation/editing main model configurable in the channel form, defaulting to `gpt-6-astra` instead of `gpt-5.4-mini` while preserving the requested image tool model.
+
 - Preserved separate channel/key disable policies, temporary durations, Retry-After, and explicit disabled settings when integrating global auto-disable rules.
 
 - Returned complete, API-key-scoped Codex model catalogs for `/v1/models?client_version=…`, preserving model instructions and context metadata while keeping ordinary OpenAI discovery unchanged.

@@ -1462,6 +1462,9 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         passThroughUserAgent,
         passThroughBody,
         retryableStatusCodes,
+        ...(derivedChannelType === 'codex'
+          ? { codexImageMainModel: values.settings?.codexImageMainModel?.trim() || 'gpt-6-astra' }
+          : {}),
         ...(showRegularAPIKeyFields ? { apiKeySelectionStrategy } : {}),
       };
       // The Command Code / Ollama quota cookie is a browser-session credential
@@ -3176,6 +3179,28 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                           </FormItem>
                         )}
                       />
+
+                      {derivedChannelType === 'codex' && (
+                        <FormField
+                          control={form.control}
+                          name='settings.codexImageMainModel'
+                          defaultValue='gpt-6-astra'
+                          render={({ field }) => (
+                            <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
+                              <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
+                                {t('channels.dialogs.fields.codexImageMainModel.label')}
+                              </FormLabel>
+                              <div className='space-y-1 md:col-span-6'>
+                                <FormControl>
+                                  <Input {...field} value={field.value ?? 'gpt-6-astra'} placeholder='gpt-6-astra' />
+                                </FormControl>
+                                <FormDescription>{t('channels.dialogs.fields.codexImageMainModel.description')}</FormDescription>
+                                <FormMessage />
+                              </div>
+                            </FormItem>
+                          )}
+                        />
+                      )}
 
                       <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
                         <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>

@@ -49,3 +49,10 @@ test('every settings selection block in channels.ts requests quotaRoutingMode', 
     `settings selection block(s) missing quotaRoutingMode: ${missing.map((b) => b.name).join(', ')}`
   );
 });
+
+test('every channel settings selection includes the image main model for edit and copy', () => {
+  assert.deepEqual(
+    extractSettingsBlocks().filter(({ body }) => !/\bcodexImageMainModel\b/.test(body)).map(({ name }) => name),
+    []
+  );
+});

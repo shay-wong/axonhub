@@ -199,7 +199,7 @@ func TestCodexOutbound_ImageGenerationRequestUsesResponsesImageTool(t *testing.T
 
 	var payload responses.Request
 	require.NoError(t, json.Unmarshal(req.Body, &payload))
-	require.Equal(t, defaultImageMainModel, payload.Model)
+	require.Equal(t, "gpt-6-astra", payload.Model)
 	require.NotNil(t, payload.Stream)
 	require.True(t, *payload.Stream)
 	require.Len(t, payload.Tools, 1)
@@ -296,7 +296,7 @@ func TestCodexOutbound_ImageEditRequestUsesResponsesImageTool(t *testing.T) {
 
 	var payload responses.Request
 	require.NoError(t, json.Unmarshal(req.Body, &payload))
-	require.Equal(t, defaultImageMainModel, payload.Model)
+	require.Equal(t, "gpt-6-astra", payload.Model)
 	require.Len(t, payload.Tools, 1)
 	require.Equal(t, "gpt-image-2", payload.Tools[0].Model)
 	require.Equal(t, "edit", payload.Tools[0].Action)

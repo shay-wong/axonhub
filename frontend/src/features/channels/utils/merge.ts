@@ -111,6 +111,7 @@ export function mergeChannelSettingsForUpdate(
   };
 
   return {
+    codexImageMainModel: pick('codexImageMainModel', existing?.codexImageMainModel ?? null),
     extraModelPrefix: pick('extraModelPrefix', existing?.extraModelPrefix ?? ''),
     modelMappings: pick('modelMappings', existing?.modelMappings ?? []),
     autoTrimedModelPrefixes: pick('autoTrimedModelPrefixes', existing?.autoTrimedModelPrefixes ?? []),

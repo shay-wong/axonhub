@@ -244,6 +244,9 @@ type ChannelSettings struct {
 	// APIKeySelectionStrategy controls how a channel selects among upstream API keys.
 	APIKeySelectionStrategy string `json:"apiKeySelectionStrategy,omitempty"`
 
+	// CodexImageMainModel is the Responses model used to invoke the image tool.
+	CodexImageMainModel string `json:"codexImageMainModel,omitempty"`
+
 	// ModelProtocols force-specifies the outbound protocols for specific models of
 	// this channel. Each entry's apiFormats must reference api_formats the channel
 	// already has endpoints for. When set for a model, endpoint selection is

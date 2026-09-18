@@ -381,6 +381,18 @@ git show --remerge-diff <merge-commit>
 - 上游吸收条件：上游具备等价的目录格式协商、权限过滤、完整模型元数据及回归覆盖。
 - 验证：`go test ./internal/server/api -run 'TestOpenAIHandlers_(ListModels|RetrieveModel)|TestCodexCatalog' -count=1`。
 
+### U23 Codex 默认生图主模型
+
+- 生命周期：`等待上游吸收`
+- 原始意图：避免 Codex 图片生成/编辑固定依赖账户不支持的 `gpt-5.4-mini`，允许按渠道选择主模型。
+- 必须保持：编辑/创建/复制渠道支持 `settings.codexImageMainModel` 的保存和回显；未设置或空白默认 `gpt-6-astra`；只改变图片生成/编辑的外层 Responses 主模型，图片工具模型仍为调用方图片模型，普通聊天模型不变；API Key、OAuth 及复用 token provider 路径均传递设置。
+- 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel_llm.go`、`internal/server/gql/axonhub.graphql`、`llm/transformer/openai/codex/outbound.go`、`llm/transformer/openai/codex/constants.go`、`frontend/src/features/channels/components/channels-action-dialog.tsx`、`frontend/src/features/channels/data/channels.ts`、`frontend/src/features/channels/data/schema.ts`。
+- 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`；README、索引和 `CHANGELOG.md` 同步。
+- 提交锚点：本次改动，使用 `git log -S'CodexImageMainModel' -- internal/objects/channel.go` 定位。
+- 合并审核/吸收条件：上游支持等价渠道配置、默认值、图片模型保真和普通聊天隔离后吸收；不能恢复硬编码 mini，也不能用图片模型作为外层主模型。
+- 验证：`cd llm && go test ./transformer/openai/codex ./transformer/openai/responses`；`go test ./internal/server/biz ./internal/server/gql -run 'TestChannel(CodexImageMainModel|ImageMainModelSettingsRoundTrip)'`。
+
+
 ## Upstream Merge 审核清单
 
 1. 确认 worktree、当前分支、upstream 默认分支和将要合入的精确 SHA。

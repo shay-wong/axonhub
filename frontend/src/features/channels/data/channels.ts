@@ -128,6 +128,7 @@ const CREATE_CHANNEL_MUTATION = `
         hideMappedModels
         lowercaseModelId
         quotaRoutingMode
+        codexImageMainModel
         proxy {
           type
           url
@@ -239,6 +240,7 @@ const DUPLICATE_CHANNEL_MUTATION = `
         hideMappedModels
         lowercaseModelId
         quotaRoutingMode
+        codexImageMainModel
         proxy {
           type
           url
@@ -350,6 +352,7 @@ const BULK_CREATE_CHANNELS_MUTATION = `
         hideMappedModels
         lowercaseModelId
         quotaRoutingMode
+        codexImageMainModel
         proxy {
           type
           url
@@ -461,6 +464,7 @@ const UPDATE_CHANNEL_MUTATION = `
         hideMappedModels
         lowercaseModelId
         quotaRoutingMode
+        codexImageMainModel
         proxy {
           type
           url
@@ -697,6 +701,7 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
           hideMappedModels
           lowercaseModelId
           quotaRoutingMode
+          codexImageMainModel
           transformOptions {
             forceArrayInstructions
             forceArrayInputs
@@ -1061,6 +1066,7 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
           hideMappedModels
           lowercaseModelId
           quotaRoutingMode
+          codexImageMainModel
           transformOptions {
             forceArrayInstructions
             forceArrayInputs
@@ -1286,6 +1292,7 @@ const CHANNEL_QUERY_FULL_NODE_SELECTION = `
             hideMappedModels
             lowercaseModelId
             quotaRoutingMode
+            codexImageMainModel
             bodyOverrideOperations {
               op
               path
@@ -1422,6 +1429,7 @@ const CHANNEL_QUERY_LIST_NODE_BASE_SELECTION = `
 const CHANNEL_QUERY_ROUTING_STATUS_SELECTION = `
            settings {
              quotaRoutingMode
+             codexImageMainModel
            }
            providerQuotaStatus {
              status
@@ -1442,6 +1450,7 @@ const CHANNEL_QUERY_TAGS_SELECTION = `
 const CHANNEL_QUERY_PROXY_SELECTION = `
           settings {
             quotaRoutingMode
+            codexImageMainModel
             proxy {
               type
               url

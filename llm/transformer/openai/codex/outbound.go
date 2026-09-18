@@ -45,6 +45,7 @@ type OutboundTransformer struct {
 	transport       string
 	baseURL         string
 	alphaSearchPath string
+	imageMainModel  string
 
 	// official reports whether the configured upstream is the official Codex
 	// backend (chatgpt.com). Official endpoints always stream SSE, so they keep
@@ -75,6 +76,7 @@ type Params struct {
 	BaseURL         string
 	Transport       string
 	AlphaSearchPath string
+	ImageMainModel  string
 }
 
 // isOfficialCodexBaseURL reports whether baseURL points at the official Codex
@@ -103,6 +105,10 @@ func NewOutboundTransformer(params Params) (*OutboundTransformer, error) {
 	if alphaSearchPath == "" {
 		alphaSearchPath = "/alpha/search"
 	}
+	imageMainModel := strings.TrimSpace(params.ImageMainModel)
+	if imageMainModel == "" {
+		imageMainModel = defaultImageMainModel
+	}
 
 	// The underlying responses outbound requires baseURL/apiKey. We only need its request body logic.
 	// Use a dummy config and then override URL/auth.
@@ -120,6 +126,7 @@ func NewOutboundTransformer(params Params) (*OutboundTransformer, error) {
 		transport:         params.Transport,
 		baseURL:           strings.TrimSuffix(baseURL, "##"),
 		alphaSearchPath:   alphaSearchPath,
+		imageMainModel:    imageMainModel,
 		official:          isOfficialCodexBaseURL(baseURL),
 		responsesOutbound: ro,
 	}, nil
@@ -223,7 +230,7 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	}
 
 	if isImageRequest {
-		reqCopy.Model = defaultImageMainModel
+		reqCopy.Model = t.imageMainModel
 		reqCopy.TransformerMetadata[responses.ImageGenerationToolModelMetadataKey] = llmReq.Model
 	}
 

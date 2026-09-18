@@ -159,6 +159,12 @@ You can manually trigger a quota refresh by clicking the refresh icon in the quo
    - Plan type (if available)
    - Secondary window usage (if configured)
 
+### Default image main model
+
+In **Channels → Edit**, Codex channels have a **Default image main model** field. It defaults to `gpt-6-astra` and accepts another model supported by your upstream account. Empty values and existing channels without a saved value also use `gpt-6-astra`.
+
+This sets the outer Responses model for image generation and editing. The image tool keeps the requested image model, such as `gpt-image-2`; ordinary Responses/chat requests keep their explicitly selected model. Both the main model and image generation must be supported by the upstream account. The setting is available as `settings.codexImageMainModel` in the channel API. Deploy this version for the new default to take effect; existing disabled keys and upstream cooldowns are not cleared.
+
 ### Related Documentation
 - [Tracing Guide](tracing.md)
 - [OpenAI API](../api-reference/openai-api.md)
