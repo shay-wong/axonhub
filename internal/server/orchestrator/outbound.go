@@ -18,6 +18,7 @@ import (
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
+	"github.com/looplj/axonhub/llm/modelname"
 	"github.com/looplj/axonhub/llm/pipeline"
 	"github.com/looplj/axonhub/llm/streams"
 	"github.com/looplj/axonhub/llm/transformer"
@@ -39,6 +40,7 @@ type OutboundPersistentStream struct {
 	requestExec *ent.RequestExecution
 
 	transformer                  transformer.Outbound
+	apiFormat                    llm.APIFormat
 	perf                         *biz.PerformanceRecord
 	responseChunks               []*httpclient.StreamEvent
 	terminalState                streamTerminalState
@@ -48,6 +50,8 @@ type OutboundPersistentStream struct {
 	requestedServiceTier         string
 	requestPricingOverride       string
 	requestPricingOverridePolicy biz.RequestPricingOverridePolicy
+	// First reported model only. Intra-stream changes are not tracked.
+	upstreamModelID string
 }
 
 var _ streams.Stream[*httpclient.StreamEvent] = (*OutboundPersistentStream)(nil)
@@ -63,6 +67,10 @@ func NewOutboundPersistentStream(
 	perf *biz.PerformanceRecord,
 	state *PersistenceState,
 ) *OutboundPersistentStream {
+	format := outboundTransformer.APIFormat()
+	if requestExec != nil && requestExec.Format != "" {
+		format = llm.APIFormat(requestExec.Format)
+	}
 	s := &OutboundPersistentStream{
 		ctx:                          ctx,
 		stream:                       stream,
@@ -71,6 +79,7 @@ func NewOutboundPersistentStream(
 		RequestService:               requestService,
 		UsageLogService:              usageLogService,
 		transformer:                  outboundTransformer,
+		apiFormat:                    format,
 		perf:                         perf,
 		responseChunks:               make([]*httpclient.StreamEvent, 0),
 		closed:                       false,
@@ -90,6 +99,9 @@ func (ts *OutboundPersistentStream) Next() bool {
 func (ts *OutboundPersistentStream) Current() *httpclient.StreamEvent {
 	event := ts.stream.Current()
 	if event != nil {
+		if ts.upstreamModelID == "" {
+			ts.upstreamModelID = modelname.FromEvent(event, ts.apiFormat)
+		}
 		// For raw binary audio chunks (TTS stream_format=audio), persist only a size
 		// summary to avoid buffering the full audio payload in memory.
 		ts.responseChunks = append(ts.responseChunks, httpclient.SummarizeBinaryChunk(event))
@@ -294,7 +306,7 @@ func (ts *OutboundPersistentStream) persistResponseChunks(ctx context.Context) {
 			// without trusting any partial response or usage returned with the error.
 			status := ts.terminalState.executionStatus()
 			if updateErr := ts.RequestService.UpdateRequestExecutionStatusWithMetrics(
-				persistCtx, ts.requestExec.ID, status, ts.terminalError, nil, ts.failureLatencyMetrics(),
+				persistCtx, ts.requestExec.ID, status, ts.terminalError, nil, ts.failureLatencyMetrics(), ts.upstreamModelID,
 			); updateErr != nil {
 				log.Warn(persistCtx, "Failed to update terminal execution after aggregation failure",
 					log.Cause(updateErr), log.Any("status", status))
@@ -325,6 +337,7 @@ func (ts *OutboundPersistentStream) persistTerminalResponse(ctx context.Context,
 			meta.ID,
 			responseBody,
 			latencyMetrics(ts.perf),
+			ts.upstreamModelID,
 		); err != nil {
 			log.Warn(persistCtx, "Failed to persist terminal request execution response", log.Cause(err))
 		}
@@ -338,6 +351,7 @@ func (ts *OutboundPersistentStream) persistTerminalResponse(ctx context.Context,
 				terminalResponseID(responseBody),
 				responseBody,
 				latencyMetrics(ts.perf),
+				ts.upstreamModelID,
 			); err != nil {
 				log.Warn(persistCtx, "Failed to persist raw terminal request execution response", log.Cause(err))
 			}
@@ -396,7 +410,7 @@ func (ts *OutboundPersistentStream) persistExecutionFailure(ctx context.Context,
 		return
 	}
 
-	err := persistRequestExecutionFailure(ctx, ts.RequestService, ts.requestExec.ID, rawErr, ts.failureLatencyMetrics())
+	err := persistRequestExecutionFailure(ctx, ts.RequestService, ts.requestExec.ID, rawErr, ts.failureLatencyMetrics(), ts.upstreamModelID)
 	if err != nil {
 		log.Warn(ctx, "Failed to update request execution status from error", log.Cause(err))
 	}
@@ -418,6 +432,7 @@ func (ts *OutboundPersistentStream) persistAggregatedResponse(ctx context.Contex
 		meta.ID,
 		responseBody,
 		latencyMetrics(ts.perf),
+		ts.upstreamModelID,
 	)
 	if err != nil {
 		log.Warn(
@@ -712,6 +727,17 @@ func (p *PersistentOutboundTransformer) GetCurrentChannel() *biz.Channel {
 	return p.state.CurrentCandidate.Channel
 }
 
+// trackCurrentChannelSelection records an actual retry attempt. Initial
+// attempts are tracked by LoadBalancedSelector after it assembles the final
+// priority-ordered candidate list.
+func (p *PersistentOutboundTransformer) trackCurrentChannelSelection() {
+	if p == nil || p.state == nil || p.state.ChannelService == nil || p.state.CurrentCandidate == nil || p.state.CurrentCandidate.Channel == nil {
+		return
+	}
+
+	p.state.ChannelService.IncrementChannelSelection(p.state.CurrentCandidate.Channel.ID)
+}
+
 // GetCurrentModelID returns the current model ID for logging purposes.
 func (p *PersistentOutboundTransformer) GetCurrentModelID() string {
 	if p.state.CurrentCandidate == nil || len(p.state.CurrentCandidate.Models) == 0 {
@@ -796,6 +822,7 @@ func (p *PersistentOutboundTransformer) NextChannel(ctx context.Context) error {
 
 	candidate := p.state.ChannelModelsCandidates[p.state.CurrentCandidateIndex]
 	p.state.CurrentCandidate = candidate
+	p.trackCurrentChannelSelection()
 	p.refreshCandidateAPIFormat(ctx, candidate, p.state.CurrentModelIndex, p.state.LlmRequest)
 	p.wrapped = selectOutboundForCandidate(candidate)
 
@@ -969,6 +996,7 @@ func (p *PersistentOutboundTransformer) PrepareForRetry(ctx context.Context) err
 		p.state.CurrentModelIndex++
 		p.refreshCandidateAPIFormat(ctx, candidate, p.state.CurrentModelIndex, p.state.LlmRequest)
 		p.wrapped = selectOutboundForCandidate(candidate)
+		p.trackCurrentChannelSelection()
 
 		if log.DebugEnabled(ctx) {
 			model := candidate.Models[p.state.CurrentModelIndex].ActualModel
@@ -983,6 +1011,8 @@ func (p *PersistentOutboundTransformer) PrepareForRetry(ctx context.Context) err
 
 		return nil
 	}
+
+	p.trackCurrentChannelSelection()
 
 	// Otherwise, we're retrying the current (last) model.
 	// It handle the models count less than retry policy.

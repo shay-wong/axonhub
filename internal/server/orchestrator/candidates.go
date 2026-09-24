@@ -936,6 +936,9 @@ func (s *LoadBalancedSelector) sortCandidates(
 	}
 
 	if len(candidates) <= 1 {
+		if trackSelection && loadBalancer != nil && len(candidates) == 1 {
+			loadBalancer.TrackSelection(candidates[0])
+		}
 		return candidates
 	}
 
@@ -1021,6 +1024,9 @@ func (s *LoadBalancedSelector) sortCandidates(
 		}
 	}
 
+	// Priority groups are sorted independently, but only the first candidate in
+	// the final result is selected for the initial attempt. Track it once after
+	// assembling the result so fallback groups are not counted prematurely.
 	if trackSelection && loadBalancer != nil && len(result) > 0 && !shouldSkipHealthStateTracking(ctx) {
 		loadBalancer.TrackSelection(result[0])
 	}

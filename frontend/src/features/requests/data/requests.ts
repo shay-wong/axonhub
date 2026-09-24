@@ -65,6 +65,7 @@ function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChann
             stream
             status
             clientIP
+            userAgent
             metricsLatencyMs
             metricsFirstTokenLatencyMs
             metricsReasoningDurationMs
@@ -74,6 +75,7 @@ function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChann
                   id
                   createdAt
                   modelID
+                  upstreamModelID
                   format
                   status
                   requestedServiceTier
@@ -149,6 +151,7 @@ function buildRequestDetailQuery(permissions: { canViewApiKeys: boolean; canView
           contentSaved
           contentStorageKey
           requestHeaders
+          responseHeaders
           requestBody
           responseBody
           responseChunks
@@ -211,6 +214,7 @@ function buildRequestDetailPollingQuery(permissions: { canViewApiKeys: boolean; 
           dataStorageID
           contentSaved
           contentStorageKey
+          responseHeaders
           status
           format
           metricsReasoningDurationMs
@@ -255,9 +259,11 @@ function buildRequestExecutionsQuery(permissions: { canViewChannels: boolean; ca
                 updatedAt
                 requestID${channelFields}
                 modelID
+                upstreamModelID
                 projectID
                 dataStorageID${channelAPIKeyFields}
                 requestHeaders
+                responseHeaders
                 requestBody
                 responseBody
                 responseChunks

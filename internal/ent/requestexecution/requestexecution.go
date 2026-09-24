@@ -35,6 +35,8 @@ const (
 	FieldSource = "source"
 	// FieldModelID holds the string denoting the model_id field in the database.
 	FieldModelID = "model_id"
+	// FieldUpstreamModelID holds the string denoting the upstream_model_id field in the database.
+	FieldUpstreamModelID = "upstream_model_id"
 	// FieldFormat holds the string denoting the format field in the database.
 	FieldFormat = "format"
 	// FieldRequestedServiceTier holds the string denoting the requested_service_tier field in the database.
@@ -51,6 +53,8 @@ const (
 	FieldReasoningEffort = "reasoning_effort"
 	// FieldRequestBody holds the string denoting the request_body field in the database.
 	FieldRequestBody = "request_body"
+	// FieldResponseHeaders holds the string denoting the response_headers field in the database.
+	FieldResponseHeaders = "response_headers"
 	// FieldResponseBody holds the string denoting the response_body field in the database.
 	FieldResponseBody = "response_body"
 	// FieldResponseChunks holds the string denoting the response_chunks field in the database.
@@ -127,6 +131,7 @@ var Columns = []string{
 	FieldExternalID,
 	FieldSource,
 	FieldModelID,
+	FieldUpstreamModelID,
 	FieldFormat,
 	FieldRequestedServiceTier,
 	FieldSpeedMode,
@@ -135,6 +140,7 @@ var Columns = []string{
 	FieldChannelAPIKeyHeaders,
 	FieldReasoningEffort,
 	FieldRequestBody,
+	FieldResponseHeaders,
 	FieldResponseBody,
 	FieldResponseChunks,
 	FieldErrorMessage,
@@ -284,6 +290,11 @@ func BySource(opts ...sql.OrderTermOption) OrderOption {
 // ByModelID orders the results by the model_id field.
 func ByModelID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldModelID, opts...).ToFunc()
+}
+
+// ByUpstreamModelID orders the results by the upstream_model_id field.
+func ByUpstreamModelID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamModelID, opts...).ToFunc()
 }
 
 // ByFormat orders the results by the format field.

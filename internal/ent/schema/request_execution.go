@@ -55,7 +55,16 @@ func (RequestExecution) Fields() []ent.Field {
 			Default("api").
 			Immutable().
 			Comment("Source of the parent request at execution creation time"),
-		field.String("model_id").Immutable(),
+		field.String("model_id").
+			Immutable().
+			Comment("Channel model ID selected after model mapping, used for routing and pricing. May differ from the final wire model and the upstream-reported model."),
+		// UpstreamModelID is the raw model reported by the provider response, captured
+		// before AxonHub rewrites it back to the client-requested model.
+		// Empty means no supported model metadata was recorded. Intra-stream model
+		// changes are not tracked; only the first reported name is kept.
+		field.String("upstream_model_id").
+			Optional().
+			Comment("Raw model reported by the upstream provider response, before client-model rewrite"),
 		//  The format of the request, e.g: openai/chat_completions, claude/messages, openai/response.
 		field.String("format").Immutable().Default("openai/chat_completions"),
 		field.String("requested_service_tier").Optional().Immutable().Comment("Canonical service tier sent to the provider for this execution"),
@@ -102,6 +111,9 @@ func (RequestExecution) Fields() []ent.Field {
 		),
 		// The final response from the provider.
 		// e.g: the provider response with Claude format, and the user expects the response with OpenAI format, the response_body is the Claude response format.
+		field.JSON("response_headers", objects.JSONRawMessage{}).
+			Optional().
+			Comment("Response headers received from the upstream provider, with sensitive values masked"),
 		field.JSON("response_body", objects.JSONRawMessage{}).Optional().Annotations(
 			entgql.Directives(forceResolver()),
 		),

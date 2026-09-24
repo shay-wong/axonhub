@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`52e8f5d802680247fc1dbd345a7dba3b45a5e006`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`19a3c27d8b947ea794cc3b956ca4c8f86aea1842`
-- 本次 merge base：`bd7144ecfcafe661710322287e673b1e86129224`
-- 审计范围：`git diff 19a3c27d..HEAD`
+- 本次 upstream merge 的 fork parent：`61e2478778c9bb2e88541dcd8bc585304048723c`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`809470775720976864a299f6d7d44cf464ccaa18`
+- 本次 merge base：`19a3c27d8b947ea794cc3b956ca4c8f86aea1842`
+- 审计范围：`git diff 80947077..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含 tag `v1.0.0-beta10`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.8`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.9`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.10`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.11`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -158,6 +158,7 @@ git show --remerge-diff <merge-commit>
 
 ### U03 Tool Search 和跨协议工具调用语义
 
+- 本次上游整合：`f92e69de` 的 Anthropic 并行工具控制与 `d5237439` 的 Chat allowed_tools 转换保留；这些未替代本地 Tool Search 和 deferred tools 往返。
 - 本次上游整合：`411734a7` 引入 namespace 分组、跨协议函数名还原、pipeline metadata 回传和 allowed_tools 保真；保留 fork 的 Tool Search、DeferLoading、并行工具消息聚合与 done-only 参数处理，不能把 namespace 支持当作整条能力已吸收。
 - 生命周期：`等待上游吸收`
 - 原始意图：OpenAI Responses、Anthropic 和 Chat 转换之间必须完整传递 Tool Search、deferred tools 和工具调用参数。
@@ -170,6 +171,7 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- 本次上游整合：`5edcc7fb` 的 turn-state 与 metadata 透传保留，同时继续保留本地精确终态事件、最新响应标识与 transport error 失败语义。
 - 本次上游整合：`3786f2c5` 引入统一终态元数据及断连后终态保留。保留本地精确取消事件和非取消 transport error 的失败语义；不能以已看到终态为由忽略所有后续错误。完整成功后的客户端取消仍按 F04 保留费用。
 - 生命周期：`等待上游吸收`
 - 原始意图：转换器不能丢失混合内容、usage、reasoning 顺序或 upstream 错误，也不能让遥测空 chunk 污染客户端流。
@@ -193,9 +195,10 @@ git show --remerge-diff <merge-commit>
 
 ### U06 GPT-5.6、GPT-6 Astra 和 Claude Opus 5 默认模型
 
+- 本次上游整合：`ca7925ae` 新增 GPT-6 Sol/Luna，Codex 默认客户端版本更新为 `0.156.0`；仍未吸收本条目记录的全部渠道默认模型增量。
 - 生命周期：`等待上游吸收`
 - 原始意图：让 GPT-5.6、GPT-6 Astra 和 Claude Opus 5 不仅出现在 developer catalog，还能被相关渠道和 transformer 作为默认可用模型。
-- 必须保持：OpenAI Chat Completions、OpenAI Responses 和 Codex 渠道的快速添加模型包含 `gpt-6-astra`；Codex transformer default models 包含 `gpt-5.6` 和 `gpt-6-astra`，缺省 `Version` 使用包含 Astra catalog 的当前上游版本 `0.153.4`；Anthropic 和 Claude Code 渠道默认模型包含 `claude-opus-5`；Claude Code transformer default models 同样包含 `claude-opus-5`。
+- 必须保持：OpenAI Chat Completions、OpenAI Responses 和 Codex 渠道的快速添加模型包含 `gpt-6-astra`；Codex transformer default models 包含 `gpt-5.6` 和 `gpt-6-astra`，缺省 `Version` 使用包含 Astra catalog 的当前上游版本 `0.156.0`；Anthropic 和 Claude Code 渠道默认模型包含 `claude-opus-5`；Claude Code transformer default models 同样包含 `claude-opus-5`。
 - 代码锚点：`frontend/src/features/channels/data/config_channels.ts`、`llm/transformer/openai/codex/constants.go`、`llm/transformer/anthropic/claudecode/constants.go`。
 - 提交锚点：`ab752d4b`、`0e91096d`、`44463a10`、`4eadf589`。
 - 合并审核：upstream `ac70e652` 已吸收 GPT-5.6 等 developer catalog 数据，`067fff2f` 又同步了 GPT-6 Astra 的模型、价格和能力，`96714b42` 已让 Codex 渠道和 transformer 默认支持 Astra 并将客户端版本更新到 `0.153.4`；但 OpenAI Chat Completions/OpenAI Responses 渠道的 Astra 快速添加与 Codex transformer 的通用 `gpt-5.6` 别名仍是 fork 增量，不能删除本条目。
@@ -252,7 +255,7 @@ git show --remerge-diff <merge-commit>
 
 - 生命周期：`等待上游吸收`
 - 原始意图：前置转换确定的 Codex session ID 不能在后续 inbound header merge、retry 或 WebSocket executor 中被旧别名覆盖。
-- 必须保持：resolved session ID 写入 transformer metadata；真正发送前统一写入 `Session_id` 并删除 `session_id`；普通、流式、non-stream aggregation 和 WebSocket 复用使用同一 canonical identity；header merge 不修改源 map。
+- 必须保持：resolved session ID 写入 transformer metadata；真正发送前统一写入 `Session-Id` 并删除下划线别名 `Session_id`/`session_id`；普通、流式、non-stream aggregation 和 WebSocket 复用使用同一 canonical identity；header merge 不修改源 map。上游 `5edcc7fb` 新增 turn-state 透传不改变此身份契约。
 - 代码锚点：`llm/transformer/openai/codex/outbound.go`、`llm/transformer/openai/codex/outbound_executor_test.go`、`llm/httpclient/utils.go`、`llm/transformer/openai/responses/websocket_executor.go`。
 - 提交锚点：`5f3eeb83`；相关 merge resolution：`cf45f92e`。
 - 合并审核：upstream `c0233704` 补充了 Codex identity headers，`16f08fed` 新增 Responses WebSocket 与 HTTP transport finalization，`e2b726eb` 调整了 continuation 与跨 transport 请求保真；本地 canonical session 规范化必须在 HTTP transport 删除 WebSocket-only 字段之前执行，WebSocket 路径也必须使用同一身份。追踪最终 executor 收到的 header，不要只看 `TransformRequest` 的中间结果；同时测试两种 header spelling、HTTP 字段清理、continuation 和 connection reuse。
@@ -261,6 +264,7 @@ git show --remerge-diff <merge-commit>
 
 ### U13 Cline 混合渠道的 ClinePass 耗尽阻断
 
+- 本次上游整合：`487c2341` 在 usages ledger 被限流时仍刷新 pass 配额；保留本地混合渠道 pass 池耗尽时阻断整条渠道的策略。
 - 本次上游整合：`7ca221d8` 以 `QuotaRoutingGate` 替换旧 selector，旧配置自动映射到新模式；`EvaluateQuotaRouting` 的整体耗尽优先级必须保留，粘性渠道与背压兜底均不能绕过整体耗尽。
 - 生命周期：`等待上游吸收`
 - 原始意图：provider quota 当前按 channel/token limit 执行；混合渠道的 ClinePass 已耗尽时，不能降级为 `warning` 后继续把 `cline-pass/*` 请求路由到该渠道。
@@ -274,6 +278,7 @@ git show --remerge-diff <merge-commit>
 
 ### U14 测试流量与生产渠道健康状态隔离
 
+- 本次上游整合：`6755e3bd` 的 fastestModels 空目录修复应用到本地 execution 查询：使用 `LEFT JOIN models` 与模型 ID 回退，保留 `se.source`/`ul.source` 过滤及无 requests JOIN 的既有语义。
 - 生命周期：`等待上游吸收`
 - 原始意图：channel test/probe 是诊断行为，不能改变生产路由、自动禁用或成功率统计。
 - 必须保持：test source 不进入 channel/API Key failure counters、EWMA、load balancer、auto-disable、dashboard/channel metrics；测试成功也不能清空生产已累计的失败状态；测试 request/execution 本身仍可保存和查看。

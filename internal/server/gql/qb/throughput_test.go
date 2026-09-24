@@ -232,7 +232,7 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryByModel,
 			limit:                 10,
 			mode:                  ThroughputModeRowNumber,
-			wantContains:          []string{"$1", "JOIN models m ON", "se.model_id", "model_name", "ROW_NUMBER()", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
+			wantContains:          []string{"$1", "LEFT JOIN models m ON", "se.model_id", "model_name", "COALESCE(m.name, se.model_id)", "ROW_NUMBER()", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
 			wantNotContains:       []string{"JOIN requests r ON", "r.source", "r.model_id"},
 		},
 		{
@@ -241,7 +241,7 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryByModel,
 			limit:                 10,
 			mode:                  ThroughputModeRowNumber,
-			wantContains:          []string{"?", "JOIN models m ON", "se.model_id", "model_name", "ROW_NUMBER()", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
+			wantContains:          []string{"?", "LEFT JOIN models m ON", "se.model_id", "model_name", "COALESCE(m.name, se.model_id)", "ROW_NUMBER()", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
 			wantNotContains:       []string{"$1", "JOIN requests r ON", "r.source", "r.model_id"},
 		},
 		{
@@ -250,7 +250,7 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryByModel,
 			limit:                 10,
 			mode:                  ThroughputModeMaxID,
-			wantContains:          []string{"$1", "JOIN models m ON", "se.model_id", "model_name", "MAX(re2.id)", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
+			wantContains:          []string{"$1", "LEFT JOIN models m ON", "se.model_id", "model_name", "COALESCE(m.name, se.model_id)", "MAX(re2.id)", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
 			wantNotContains:       []string{"ROW_NUMBER()", "JOIN requests r ON", "r.source", "r.model_id"},
 		},
 		{
@@ -259,7 +259,7 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryByModel,
 			limit:                 10,
 			mode:                  ThroughputModeMaxID,
-			wantContains:          []string{"?", "JOIN models m ON", "se.model_id", "model_name", "MAX(re2.id)", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
+			wantContains:          []string{"?", "LEFT JOIN models m ON", "se.model_id", "model_name", "COALESCE(m.name, se.model_id)", "MAX(re2.id)", "se.source <> 'test'", "ul.source <> 'test'", "LIMIT 10"},
 			wantNotContains:       []string{"$1", "ROW_NUMBER()", "JOIN requests r ON", "r.source", "r.model_id"},
 		},
 
