@@ -8,7 +8,7 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 
 | Document | Description |
 |----------|-------------|
-| [Quick Start Guide](getting-started/quick-start.md) | Configure AxonHub and understand fork update and proxy boundaries |
+| [Quick Start Guide](getting-started/quick-start.md) | Configure AxonHub, permission-aware login destinations, fork updates, and proxy boundaries |
 | [Request Processing](getting-started/request-processing.md) | Understand how AxonHub processes API requests |
 
 ### 📖 User Guides
@@ -19,7 +19,7 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 | [Model Management](guides/model-management.md) | Model mapping, associations, and priority configuration |
 | [API Key Profiles](guides/api-key-profiles.md) | Create and manage API key profiles |
 | [Permissions](guides/permissions.md) | Enterprise RBAC access control configuration |
-| [Load Balancing](guides/load-balance.md) | Smart routing and failover settings |
+| [Load Balancing](guides/load-balance.md) | Smart routing, failover, diagnostic isolation, and retry counting |
 | [Cost Tracking](guides/cost-tracking.md) | Real-time monitoring and usage analytics |
 | [Request Tracing](guides/tracing.md) | Complete request traceability |
 | [Request Override](guides/request-override.md) | Dynamically modify request parameters |

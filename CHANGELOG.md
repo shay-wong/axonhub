@@ -9,6 +9,9 @@
 
 ### Fixed
 
+- Kept password and OIDC login destinations within the user's project permissions when sidebar entries are hidden.
+- Excluded diagnostic requests from new single-channel and retry load-balancing counters, while counting production API key rotation attempts.
+
 - Added global Codex image main model selection in Models → Settings, defaulting to `gpt-6-astra` while preserving the requested image tool model. This replaces per-channel overrides; users with a previous custom value must select it again globally. Saved changes apply to new requests without a restart.
 
 - Preserved separate channel/key disable policies, temporary durations, Retry-After, and explicit disabled settings when integrating global auto-disable rules.

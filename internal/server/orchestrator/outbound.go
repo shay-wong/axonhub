@@ -730,8 +730,11 @@ func (p *PersistentOutboundTransformer) GetCurrentChannel() *biz.Channel {
 // trackCurrentChannelSelection records an actual retry attempt. Initial
 // attempts are tracked by LoadBalancedSelector after it assembles the final
 // priority-ordered candidate list.
-func (p *PersistentOutboundTransformer) trackCurrentChannelSelection() {
+func (p *PersistentOutboundTransformer) trackCurrentChannelSelection(ctx context.Context) {
 	if p == nil || p.state == nil || p.state.ChannelService == nil || p.state.CurrentCandidate == nil || p.state.CurrentCandidate.Channel == nil {
+		return
+	}
+	if shouldSkipHealthStateTrackingForState(ctx, p.state) {
 		return
 	}
 
@@ -822,7 +825,7 @@ func (p *PersistentOutboundTransformer) NextChannel(ctx context.Context) error {
 
 	candidate := p.state.ChannelModelsCandidates[p.state.CurrentCandidateIndex]
 	p.state.CurrentCandidate = candidate
-	p.trackCurrentChannelSelection()
+	p.trackCurrentChannelSelection(ctx)
 	p.refreshCandidateAPIFormat(ctx, candidate, p.state.CurrentModelIndex, p.state.LlmRequest)
 	p.wrapped = selectOutboundForCandidate(candidate)
 
@@ -977,6 +980,7 @@ func (p *PersistentOutboundTransformer) MaxSameChannelRetries() int {
 // It will try the next model in the same channel if available.
 func (p *PersistentOutboundTransformer) PrepareForRetry(ctx context.Context) error {
 	candidate := p.state.CurrentCandidate
+	p.trackCurrentChannelSelection(ctx)
 
 	// Reset request execution for the same channel.
 	p.state.RequestExec = nil
@@ -996,7 +1000,6 @@ func (p *PersistentOutboundTransformer) PrepareForRetry(ctx context.Context) err
 		p.state.CurrentModelIndex++
 		p.refreshCandidateAPIFormat(ctx, candidate, p.state.CurrentModelIndex, p.state.LlmRequest)
 		p.wrapped = selectOutboundForCandidate(candidate)
-		p.trackCurrentChannelSelection()
 
 		if log.DebugEnabled(ctx) {
 			model := candidate.Models[p.state.CurrentModelIndex].ActualModel
@@ -1011,8 +1014,6 @@ func (p *PersistentOutboundTransformer) PrepareForRetry(ctx context.Context) err
 
 		return nil
 	}
-
-	p.trackCurrentChannelSelection()
 
 	// Otherwise, we're retrying the current (last) model.
 	// It handle the models count less than retry policy.

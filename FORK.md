@@ -278,6 +278,7 @@ git show --remerge-diff <merge-commit>
 
 ### U14 测试流量与生产渠道健康状态隔离
 
+- 本次独立兼容修复：上游 `5653bf0a` 新增单候选和重试选择计数，必须先检查 test source；多 Key 轮换按真实尝试计数，但诊断重试不进入生产计数。代码、测试与文档在 merge 后独立提交，可用 `git log -S'trackCurrentChannelSelection(ctx context.Context)' -- internal/server/orchestrator/outbound.go` 定位。用户文档：`docs/en/guides/load-balance.md`、`docs/zh/guides/load-balance.md`。
 - 本次上游整合：`6755e3bd` 的 fastestModels 空目录修复应用到本地 execution 查询：使用 `LEFT JOIN models` 与模型 ID 回退，保留 `se.source`/`ul.source` 过滤及无 requests JOIN 的既有语义。
 - 生命周期：`等待上游吸收`
 - 原始意图：channel test/probe 是诊断行为，不能改变生产路由、自动禁用或成功率统计。
@@ -304,6 +305,7 @@ git show --remerge-diff <merge-commit>
 
 ### U16 多项目权限和邀请生命周期安全
 
+- 本次独立兼容修复：上游 `3bc6075e` 的隐藏菜单回退必须通过所选项目的权限检查；密码和 OIDC 登录均复用同一落点函数，无可见且有权限的候选时保留原安全落点。代码、测试与文档在 merge 后独立提交，可用 `git log -S'navigation?: { hiddenItems: string[]; candidates: string[] }' -- frontend/src/features/auth/data/auth-redirect.ts` 定位。用户文档：`docs/en/getting-started/quick-start.md`、`docs/zh/getting-started/quick-start.md`。
 - 本次上游整合：`dfb17549` 将 `8c5f0ab1` 的登录/退出时清空项目改为按账号隔离 membership 查询缓存，并在选中项目验证完成前阻止项目查询；仍保留本地 `getAuthenticatedLanding` 对可访问项目和落地页权限的检查。
 - 生命周期：`等待上游吸收`
 - 原始意图：system scope、project membership 和 project role 不能跨项目拼接；公开邀请入口不能成为权限绕过、竞争条件或 token 泄露点。

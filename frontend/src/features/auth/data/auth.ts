@@ -1,16 +1,18 @@
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
+import { NAV_ITEM_URLS, PROJECT_NAV_ITEM_URLS } from '@/config/nav-items';
 import { graphqlRequest } from '@/gql/graphql';
 import { ME_QUERY } from '@/gql/users';
 import { toast } from 'sonner';
 import { useAuthStore, setTokenToStorage, removeTokenFromStorage } from '@/stores/authStore';
-import { useProjectStore } from '@/stores/projectStore';
-import { isProjectSelectionValid } from '@/lib/project-membership';
 import { AuthUser } from '@/stores/authStore';
+import { useProjectStore } from '@/stores/projectStore';
+import { getHiddenNavItems } from '@/stores/sidebarPrefsStore';
 import { authApi } from '@/lib/api-client';
 import i18n from '@/lib/i18n';
 import { getAuthenticatedLanding } from './auth-redirect';
+import { isProjectSelectionValid } from '@/lib/project-membership';
 
 export interface SignInInput {
   email: string;
@@ -95,7 +97,10 @@ export function useSignIn() {
 
       toast.success(i18n.t('common.success.signedIn'));
 
-      const landing = getAuthenticatedLanding(data.user, selectedProjectId);
+      const landing = getAuthenticatedLanding(data.user, selectedProjectId, {
+        hiddenItems: getHiddenNavItems(),
+        candidates: data.user.isOwner ? NAV_ITEM_URLS : PROJECT_NAV_ITEM_URLS,
+      });
       setSelectedProjectId(landing.projectID);
       router.navigate({ to: landing.path });
     },
@@ -191,7 +196,10 @@ export function useOIDCExchange() {
 
       toast.success(i18n.t('common.success.signedIn'));
 
-      const landing = getAuthenticatedLanding(data.user, selectedProjectId);
+      const landing = getAuthenticatedLanding(data.user, selectedProjectId, {
+        hiddenItems: getHiddenNavItems(),
+        candidates: data.user.isOwner ? NAV_ITEM_URLS : PROJECT_NAV_ITEM_URLS,
+      });
       setSelectedProjectId(landing.projectID);
       router.navigate({ to: landing.path });
     },

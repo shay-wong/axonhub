@@ -310,6 +310,8 @@ print(response.choices[0].message.content)
 
 Fork release builds can install updates or roll back to a recent compatible release from **System Settings > About** when the runtime user can write the executable directory and a supervisor such as Docker or systemd restarts the exited process.
 
+Fork safeguards also cover [permission-aware login destinations](docs/en/getting-started/quick-start.md#first-steps) and [diagnostic isolation and retry counting](docs/en/guides/load-balance.md).
+
 Codex model discovery supports its complete catalog format while preserving OpenAI compatibility; see the [Codex integration guide](docs/en/guides/codex-integration.md#model-catalog-refresh) for refresh conditions and context defaults.
 
 Auto-disable keeps separate channel/key policies and Retry-After alongside global rules; see [policy precedence](docs/en/guides/channel-management.md#auto-disable-policy-compatibility).

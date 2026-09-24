@@ -2426,4 +2426,16 @@ func TestPersistentOutboundTransformer_RetrySelectionCounts(t *testing.T) {
 	assertCounts(3, 2)
 	require.Error(t, processor.NextChannel(ctx)) // exhausted candidates are not attempts
 	assertCounts(3, 2)
+
+	// Key rotation is also an actual retry, even though it keeps the model.
+	processor.state.Perf = &biz.PerformanceRecord{APIKey: "failed-key"}
+	keyRetryCtx := contexts.EnsureContainer(ctx)
+	contexts.ExcludeChannelAPIKey(keyRetryCtx, second.Channel.ID, "failed-key")
+	require.NoError(t, processor.PrepareForRetry(keyRetryCtx))
+	assertCounts(3, 3)
+
+	// Diagnostic retries must never enter the production selection counters.
+	processor.state.Request = &ent.Request{Source: request.SourceTest}
+	require.NoError(t, processor.PrepareForRetry(ctx))
+	assertCounts(3, 3)
 }

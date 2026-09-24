@@ -4,6 +4,8 @@ AxonHub provides an intelligent adaptive load balancing system that automaticall
 
 ## 🎯 Core Features
 
+Channel tests and probes are diagnostic traffic: they do not change production selection counts, health statistics, or automatic disable state, including single-channel selection and retries. Production retries, including API key rotation within one channel, count as additional selection attempts.
+
 ### Intelligent Channel Selection
 - **Priority Grouping** - Candidates are first grouped by model association priority (Lower value = Higher priority)
 - **Session Consistency** - Requests from the same conversation are prioritized to route to previously successful channels

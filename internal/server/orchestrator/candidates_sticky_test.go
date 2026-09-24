@@ -9,6 +9,7 @@ import (
 
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
+	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
@@ -67,6 +68,10 @@ func TestLoadBalancedSelector_TracksSingleCandidate(t *testing.T) {
 	result := selector.sortCandidates(context.Background(), lb, []*ChannelModelsCandidate{candidate}, &llm.Request{Model: "gpt-4"}, 1, true)
 	require.Len(t, result, 1)
 	require.Equal(t, 1, tracker.selections[1])
+
+	result = selector.sortCandidates(contexts.WithSource(context.Background(), request.SourceTest), lb, []*ChannelModelsCandidate{candidate}, &llm.Request{Model: "gpt-4"}, 1, true)
+	require.Len(t, result, 1)
+	require.Equal(t, 1, tracker.selections[1], "test requests must not change production selection counts")
 }
 
 func TestLoadBalancedSelector_TraceStickySelection(t *testing.T) {

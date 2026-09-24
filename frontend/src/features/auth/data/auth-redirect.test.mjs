@@ -99,3 +99,37 @@ test('requires channel read at system level', () => {
 test('handles old stored users without scope arrays', () => {
   assert.equal(getAuthenticatedLanding({ isOwner: false }).path, '/settings/profile');
 });
+
+test('hidden landing fallback skips routes without permission in the selected project', () => {
+  const authUser = user({
+    scopes: ['read_channels'],
+    projectScopes: [['write_requests', 'read_requests'], ['read_api_keys']],
+  });
+  assert.deepEqual(getAuthenticatedLanding(authUser, 'project-1', {
+    hiddenItems: ['/project/playground'],
+    candidates: ['/project/api-keys', '/project/usage-stats', '/project/requests'],
+  }), { path: '/project/requests', projectID: 'project-1' });
+});
+
+test('hidden landing fallback keeps a safe landing when no visible route is allowed', () => {
+  const authUser = user({ scopes: ['read_channels'], projectScopes: [['write_requests']] });
+  assert.deepEqual(getAuthenticatedLanding(authUser, null, {
+    hiddenItems: ['/project/playground'],
+    candidates: ['/project/api-keys'],
+  }), { path: '/project/playground', projectID: 'project-1' });
+  assert.deepEqual(getAuthenticatedLanding(user(), null, {
+    hiddenItems: ['/project/playground'],
+    candidates: ['/project/api-keys'],
+  }), { path: '/settings/profile', projectID: null });
+});
+
+test('owner hidden landing respects project membership and menu visibility', () => {
+  assert.deepEqual(getAuthenticatedLanding(user({ isOwner: true }), null, {
+    hiddenItems: ['/'],
+    candidates: ['/project/api-keys', '/channels'],
+  }), { path: '/channels', projectID: null });
+  assert.deepEqual(getAuthenticatedLanding(user({ isOwner: true, projectScopes: [[]] }), 'project-1', {
+    hiddenItems: ['/'],
+    candidates: ['/project/api-keys'],
+  }), { path: '/project/api-keys', projectID: 'project-1' });
+});

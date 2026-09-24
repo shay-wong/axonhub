@@ -936,7 +936,7 @@ func (s *LoadBalancedSelector) sortCandidates(
 	}
 
 	if len(candidates) <= 1 {
-		if trackSelection && loadBalancer != nil && len(candidates) == 1 {
+		if trackSelection && loadBalancer != nil && len(candidates) == 1 && !shouldSkipHealthStateTracking(ctx) {
 			loadBalancer.TrackSelection(candidates[0])
 		}
 		return candidates
