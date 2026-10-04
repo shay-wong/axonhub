@@ -176,7 +176,7 @@ func TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPers
 	for result.ChatCompletionStream.Next() {
 		_ = result.ChatCompletionStream.Current()
 	}
-	require.ErrorIs(t, result.ChatCompletionStream.Err(), context.Canceled)
+	require.NoError(t, result.ChatCompletionStream.Err())
 	require.NoError(t, result.ChatCompletionStream.Close())
 
 	dbRequest, err := client.Request.Query().Only(ctx)
@@ -918,7 +918,7 @@ func TestChatCompletionOrchestrator_Process_StreamingError(t *testing.T) {
 				),
 			},
 			{Data: []byte(`{"id":"chatcmpl-err","object":"chat.completion.chunk","model":"gpt-4","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}`)},
-			{Data: []byte(`{"id":"chatcmpl-err","object":"chat.completion.chunk","model":"gpt-4","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}`)},
+			{Data: []byte(`{"id":"chatcmpl-err","object":"chat.completion.chunk","model":"gpt-4","choices":[{"index":0,"delta":{},"finish_reason":null}],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}`)},
 		},
 		streamErr: midStreamErr,
 	}

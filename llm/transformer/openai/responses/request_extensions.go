@@ -280,7 +280,7 @@ func isStructurallyRepresentedInputItem(itemType string) bool {
 	switch itemType {
 	case "", "message", "input_text", "input_image", "function_call", "function_call_output",
 		"custom_tool_call", "custom_tool_call_output", "reasoning", "compaction", "compaction_summary",
-		"tool_search_call", "tool_search_output":
+		"tool_search_call", "tool_search_output", "additional_tools":
 		return true
 	default:
 		return false

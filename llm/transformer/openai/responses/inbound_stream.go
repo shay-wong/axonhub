@@ -1618,6 +1618,11 @@ func (s *responsesInboundStream) Err() error {
 		return s.err
 	}
 
+	// A source error after a terminal response must not become a second outcome.
+	if s.responseCompleted {
+		return nil
+	}
+
 	return s.source.Err()
 }
 

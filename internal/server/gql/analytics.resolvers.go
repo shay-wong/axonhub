@@ -264,5 +264,17 @@ func (r *queryResolver) AnalyticsDimensionStats(ctx context.Context, filter *Ana
 		return nil, queryErr
 	}
 
+	performanceByID, err := r.queryDimensionPerformanceStats(ctx, filter, dateRange, dimension)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range results {
+		if performance, ok := performanceByID[results[i].ID]; ok {
+			results[i].TokensPerSecond = performance.TokensPerSecond
+			results[i].TtftMs = performance.TtftMs
+		}
+	}
+
 	return dimStatsToDimensionStats(results), nil
 }

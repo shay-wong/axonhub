@@ -21,6 +21,10 @@
 - Preserved usage and cost records when clients disconnect after a streaming response has already completed, without leaving a stale cancellation error on the completed execution.
 - Allowed Codex scheduled automations to start when the app sends an `automation_update` output without a `call_id`.
 
+### Fixed
+
+- Personal API Key names can be reused by different creators in a project; creating or renaming a key rejects collisions with non-personal keys visible to its creator. Duplicate checks run after create authorization.
+
 v0.4.0
 
 - Introduced thread-aware tracing with zero-SDK integration and configurable trace headers

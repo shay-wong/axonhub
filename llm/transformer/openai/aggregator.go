@@ -20,7 +20,14 @@ type choiceAggregator struct {
 	index               int
 	content             strings.Builder
 	reasoningContent    strings.Builder
-	hasReasoningContent bool                  // Tracks whether any delta carried reasoning_content (even an empty string).
+	hasReasoningContent bool             // Tracks whether any delta carried reasoning_content (even an empty string).
+	reasoning           strings.Builder  // Aggregates the reasoning field used by some providers (e.g. Synthetic) instead of reasoning_content.
+	hasReasoning        bool             // Tracks whether any delta carried reasoning (even an empty string).
+	refusal             strings.Builder  // Aggregates refusal text streamed as delta.refusal.
+	audio               *llm.OutputAudio // Reassembles audio output streamed as delta.audio chunks.
+	audioData           strings.Builder
+	audioTranscript     strings.Builder
+	logprobs            []TokenLogprob        // Concatenates per-chunk logprobs content.
 	toolCalls           map[int]*llm.ToolCall // Map to track tool calls by their index within the choice
 	finishReason        *string
 	role                string
@@ -141,24 +148,26 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 			continue
 		}
 
-		var errorEnvelope struct {
-			Detail *llm.ErrorDetail `json:"error"`
-		}
-		if err := json.Unmarshal(chunk.Data, &errorEnvelope); err == nil && errorEnvelope.Detail != nil {
-			statusCode := chunk.StatusCode
-			if statusCode == 0 {
-				statusCode = http.StatusInternalServerError
+		if len(chunk.Data) > 0 {
+			var errorEnvelope struct {
+				Detail *llm.ErrorDetail `json:"error"`
 			}
-			detail := *errorEnvelope.Detail
-			if detail.Message == "" {
-				detail.Message = "upstream request failed"
-			}
-			if detail.Type == "" {
-				detail.Type = "api_error"
-			}
-			return nil, llm.ResponseMeta{}, &llm.ResponseError{
-				StatusCode: statusCode,
-				Detail:     detail,
+			if err := json.Unmarshal(chunk.Data, &errorEnvelope); err == nil && errorEnvelope.Detail != nil {
+				statusCode := chunk.StatusCode
+				if statusCode == 0 {
+					statusCode = http.StatusInternalServerError
+				}
+				detail := *errorEnvelope.Detail
+				if detail.Message == "" {
+					detail.Message = "upstream request failed"
+				}
+				if detail.Type == "" {
+					detail.Type = "api_error"
+				}
+				return nil, llm.ResponseMeta{}, &llm.ResponseError{
+					StatusCode: statusCode,
+					Detail:     detail,
+				}
 			}
 		}
 
@@ -201,6 +210,36 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 				if choice.Delta.ReasoningContent != nil {
 					choiceAgg.hasReasoningContent = true
 					choiceAgg.reasoningContent.WriteString(*choice.Delta.ReasoningContent)
+				}
+
+				// Handle the reasoning field variant (used by providers such as Synthetic).
+				if choice.Delta.Reasoning != nil {
+					choiceAgg.hasReasoning = true
+					choiceAgg.reasoning.WriteString(*choice.Delta.Reasoning)
+				}
+
+				// Handle refusal streamed as delta.refusal chunks.
+				if choice.Delta.Refusal != "" {
+					choiceAgg.refusal.WriteString(choice.Delta.Refusal)
+				}
+
+				// Handle audio output streamed as delta.audio chunks. The audio ID and
+				// expiry arrive on the first chunk; data and transcript are fragmented.
+				if choice.Delta.Audio != nil {
+					if choiceAgg.audio == nil {
+						choiceAgg.audio = &llm.OutputAudio{}
+					}
+
+					if choiceAgg.audio.ID == "" {
+						choiceAgg.audio.ID = choice.Delta.Audio.ID
+					}
+
+					if choiceAgg.audio.ExpiresAt == 0 {
+						choiceAgg.audio.ExpiresAt = choice.Delta.Audio.ExpiresAt
+					}
+
+					choiceAgg.audioData.WriteString(choice.Delta.Audio.Data)
+					choiceAgg.audioTranscript.WriteString(choice.Delta.Audio.Transcript)
 				}
 
 				// Handle tool calls
@@ -247,6 +286,11 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 			// Handle annotations from Delta (streaming) and Message (non-streaming chunks)
 			choiceAgg.addAnnotations(choice.Delta)
 			choiceAgg.addAnnotations(choice.Message)
+
+			// Concatenate per-chunk logprobs instead of dropping them.
+			if choice.Logprobs != nil {
+				choiceAgg.logprobs = append(choiceAgg.logprobs, choice.Logprobs.Content...)
+			}
 
 			// Capture finish reason
 			if choice.FinishReason != nil {
@@ -326,6 +370,24 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 			message.ReasoningContent = &reasoningContent
 		}
 
+		// Set the reasoning field variant if any delta carried it.
+		if choiceAgg.hasReasoning {
+			reasoning := choiceAgg.reasoning.String()
+			message.Reasoning = &reasoning
+		}
+
+		// Set refusal if any delta carried refusal text.
+		if choiceAgg.refusal.Len() > 0 {
+			message.Refusal = choiceAgg.refusal.String()
+		}
+
+		// Set audio output if any delta carried audio chunks.
+		if choiceAgg.audio != nil {
+			message.Audio = choiceAgg.audio
+			message.Audio.Data = choiceAgg.audioData.String()
+			message.Audio.Transcript = choiceAgg.audioTranscript.String()
+		}
+
 		// Set content if available
 		if choiceAgg.content.Len() > 0 {
 			content := choiceAgg.content.String()
@@ -373,6 +435,11 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 			Message:      message,
 			FinishReason: finishReason,
 		}
+
+		// Attach aggregated logprobs if any chunk carried them.
+		if len(choiceAgg.logprobs) > 0 {
+			choices[i].Logprobs = toLLMLogprobs(&Logprobs{Content: choiceAgg.logprobs})
+		}
 	}
 
 	// Build the final response using llm.Response struct
@@ -392,23 +459,18 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 		Usage:             responseUsage,
 	}
 
-	// Add citations to response if any were collected
+	// Collect the deduplicated, sorted citations for the final response.
+	var citations []string
 	if len(citationsMap) > 0 {
-		citations := make([]string, 0, len(citationsMap))
+		citations = make([]string, 0, len(citationsMap))
 		for citation := range citationsMap {
 			citations = append(citations, citation)
 		}
 
 		sort.Strings(citations)
-
-		if response.TransformerMetadata == nil {
-			response.TransformerMetadata = make(map[string]any)
-		}
-
-		response.TransformerMetadata[TransformerMetadataKeyCitations] = citations
 	}
 
-	data, err := json.Marshal(response)
+	data, err := json.Marshal(aggregatedChatResponse{Response: response, Citations: citations})
 	if err != nil {
 		return nil, llm.ResponseMeta{}, err
 	}
@@ -418,4 +480,14 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 		Usage:       responseUsage,
 		ServiceTier: serviceTier,
 	}, nil
+}
+
+// aggregatedChatResponse is the client-facing shape of an aggregated chat
+// completion. Response-level provider extensions that the unified model
+// carries internally in TransformerMetadata (e.g. Perplexity/OpenRouter
+// citations) are projected back to their OpenAI wire position here; the
+// internal metadata envelope is never serialized to clients.
+type aggregatedChatResponse struct {
+	*llm.Response
+	Citations []string `json:"citations,omitempty"`
 }

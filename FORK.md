@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`61e2478778c9bb2e88541dcd8bc585304048723c`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`809470775720976864a299f6d7d44cf464ccaa18`
-- 本次 merge base：`19a3c27d8b947ea794cc3b956ca4c8f86aea1842`
-- 审计范围：`git diff 80947077..HEAD`
+- 本次 upstream merge 的 fork parent：`13ee56a2b4af16e4455da21b14dbd3728e7fb0b9`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`89d36d610dc2ebf6d258e56bd1d051572a8c8449`
+- 本次 merge base：`809470775720976864a299f6d7d44cf464ccaa18`
+- 审计范围：`git diff 89d36d61..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含 tag `v1.0.0-beta10`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.10`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.11`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.11`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.12`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -171,14 +171,14 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
-- 本次上游整合：`5edcc7fb` 的 turn-state 与 metadata 透传保留，同时继续保留本地精确终态事件、最新响应标识与 transport error 失败语义。
-- 本次上游整合：`3786f2c5` 引入统一终态元数据及断连后终态保留。保留本地精确取消事件和非取消 transport error 的失败语义；不能以已看到终态为由忽略所有后续错误。完整成功后的客户端取消仍按 F04 保留费用。
+- 本次上游整合：经维护者确认，采用 `7bb4ed57`、`ac050200` 的完整响应优先策略：明确成功终态或聚合器证明完成后，尾部 transport error 不再覆盖成功状态或重复向客户端发送错误；usage 本身不构成完成证据，未完成流仍失败，明确 failed/incomplete/cancelled 仍保留原终态。此决策替代旧版“终态后 transport error 一律失败”约定。完整成功后的客户端取消仍按 F04 保留费用。
+- `5edcc7fb` 的 turn-state 与 metadata 透传、`3786f2c5` 的统一终态元数据继续保留；本地精确终态事件和最新响应标识仍是独立不变量。
 - 生命周期：`等待上游吸收`
 - 原始意图：转换器不能丢失混合内容、usage、reasoning 顺序或 upstream 错误，也不能让遥测空 chunk 污染客户端流。
 - 必须保持：Responses 混合流式内容保持分段和顺序；Cline 空 `choices` 遥测不向客户端透出但最终 usage 保留；interleaved reasoning 按 item 顺序输出；空或不可解析的 upstream error 回退到 status/raw status/通用消息，不返回空字符串；`response.completed`、`response.failed`、`response.incomplete`、`response.cancelled` 和 `response.canceled` 在 SSE metadata 或 JSON data 中都被识别为终态；direct stream 和 aggregation 语义一致。
 - 代码锚点：`internal/server/orchestrator/inbound.go`、`llm/transformer/openai/responses/inbound_stream.go`、`llm/transformer/openai/responses/outbound.go`、`llm/transformer/openai/responses/aggregator.go`、`llm/transformer/anthropic/inbound_stream.go`、`llm/transformer/cline/outbound.go`。
 - 提交锚点：`9909a8cc`、`a686efc3`、`042d41ec`；相关 merge resolution：`94d4f989`；本次终态识别变更可用 `git log -S'response.canceled' -- internal/server/orchestrator/inbound.go` 定位。
-- 合并审核：upstream `4495aa3c` 已吸收 Chat `finish_reason` 与 Responses abnormal terminal status 的双向映射；`889bc8ee`、`35133b6e`、`3b7e8618` 又吸收 clean EOF 检测、pre-content retry、单次 `[DONE]`、资源上限和客户端 incomplete 报告，`a0b37424` 将上游连接中断分类为稳定的 502 错误并保留失败 execution 延迟。本轮 `c2cf9818` 验证 Anthropic clean EOF 的 tool arguments，`1908ca28` 保留转换后的 Responses session events，`e47fed9d` 给 SSE 写入增加 deadline，`a0850956` 识别 WebSocket error 的嵌套 detail/status；这些都应保留，但仍未替代 fork 的精确 `response.incomplete`、`response.failed`、`response.cancelled` 终态事件、read-only HTTP status metadata、混合分段、reasoning 顺序、空 error、request ID、Cline usage 及 direct/aggregate 一致性。终态事件后若仍出现非取消 transport error，必须按失败记录，不能因过早标记成功而吞掉健康计数。分别检查 direct stream、aggregate、normal completion、incomplete、provider error 和 transport error；不要把 empty-success retry 与 HTTP error formatting 混为一谈。
+- 合并审核：upstream `4495aa3c` 已吸收 Chat `finish_reason` 与 Responses abnormal terminal status 的双向映射；`889bc8ee`、`35133b6e`、`3b7e8618` 又吸收 clean EOF 检测、pre-content retry、单次 `[DONE]`、资源上限和客户端 incomplete 报告，`a0b37424` 将上游连接中断分类为稳定的 502 错误并保留失败 execution 延迟。本轮 `c2cf9818` 验证 Anthropic clean EOF 的 tool arguments，`1908ca28` 保留转换后的 Responses session events，`e47fed9d` 给 SSE 写入增加 deadline，`a0850956` 识别 WebSocket error 的嵌套 detail/status；这些都应保留，但仍未替代 fork 的精确 `response.incomplete`、`response.failed`、`response.cancelled` 终态事件、read-only HTTP status metadata、混合分段、reasoning 顺序、空 error、request ID、Cline usage 及 direct/aggregate 一致性。终态后的 transport error 按本次确认的新策略处理；未完成响应仍计失败，不能仅凭 usage 或部分输出标记成功。分别检查 direct stream、aggregate、normal completion、incomplete、provider error 和 transport error；不要把 empty-success retry 与 HTTP error formatting 混为一谈。
 - 上游吸收条件：upstream 覆盖混合分段、reasoning 顺序、最终 usage、空 error 和 direct/aggregate 一致性。
 - 验证：`go test ./internal/server/orchestrator -run 'TestIsTerminalStreamEvent_ResponsesTerminalEvents'`；`cd llm && go test ./transformer/openai/responses ./transformer/anthropic ./transformer/cline`。
 
@@ -195,10 +195,11 @@ git show --remerge-diff <merge-commit>
 
 ### U06 GPT-5.6、GPT-6 Astra 和 Claude Opus 5 默认模型
 
+- 本次上游整合：`d0384f43` 更新 Codex 客户端为 `0.159.0` 并调整默认模型；`e26e52bb` 拉取 OAuth 官方模型目录，但不替代下游 `/v1/models` 的 Codex 格式适配（U22）。保留本地 `gpt-5.6` 别名及 Astra 支持。
 - 本次上游整合：`ca7925ae` 新增 GPT-6 Sol/Luna，Codex 默认客户端版本更新为 `0.156.0`；仍未吸收本条目记录的全部渠道默认模型增量。
 - 生命周期：`等待上游吸收`
 - 原始意图：让 GPT-5.6、GPT-6 Astra 和 Claude Opus 5 不仅出现在 developer catalog，还能被相关渠道和 transformer 作为默认可用模型。
-- 必须保持：OpenAI Chat Completions、OpenAI Responses 和 Codex 渠道的快速添加模型包含 `gpt-6-astra`；Codex transformer default models 包含 `gpt-5.6` 和 `gpt-6-astra`，缺省 `Version` 使用包含 Astra catalog 的当前上游版本 `0.156.0`；Anthropic 和 Claude Code 渠道默认模型包含 `claude-opus-5`；Claude Code transformer default models 同样包含 `claude-opus-5`。
+- 必须保持：OpenAI Chat Completions、OpenAI Responses 和 Codex 渠道的快速添加模型包含 `gpt-6-astra`；Codex transformer default models 包含 `gpt-5.6` 和 `gpt-6-astra`，缺省 `Version` 使用当前上游版本 `0.159.0`；Anthropic 和 Claude Code 渠道默认模型包含 `claude-opus-5`；Claude Code transformer default models 同样包含 `claude-opus-5`。
 - 代码锚点：`frontend/src/features/channels/data/config_channels.ts`、`llm/transformer/openai/codex/constants.go`、`llm/transformer/anthropic/claudecode/constants.go`。
 - 提交锚点：`ab752d4b`、`0e91096d`、`44463a10`、`4eadf589`。
 - 合并审核：upstream `ac70e652` 已吸收 GPT-5.6 等 developer catalog 数据，`067fff2f` 又同步了 GPT-6 Astra 的模型、价格和能力，`96714b42` 已让 Codex 渠道和 transformer 默认支持 Astra 并将客户端版本更新到 `0.153.4`；但 OpenAI Chat Completions/OpenAI Responses 渠道的 Astra 快速添加与 Codex transformer 的通用 `gpt-5.6` 别名仍是 fork 增量，不能删除本条目。
@@ -233,7 +234,7 @@ git show --remerge-diff <merge-commit>
 
 - 生命周期：`等待上游吸收`
 - 原始意图：系统级查询、GraphQL schema、日志和 quota cache 都不能泄露个人 Key 或 provider secret，也不能在凭据变化后继续展示旧配额。
-- 必须保持：个人 API Key 始终只对创建者可见，系统 scope 不能绕过；API Key、disabled Key 和 provider quota identity 在事务提交后使缓存失效；quota checker 必须识别 `APIKeyConfigs` 等结构化凭据且不能记录或返回完整 secret；内部 quota routing 可最小化 bypass，但 GraphQL 配置读取要求 `read_settings`。
+- 必须保持：普通用户的个人 API Key 仅对创建者可见，普通系统 scope 不能绕过；现有系统 owner 和所属项目 owner 的查询例外保留，`60264178` 允许系统 owner 管理个人 Key，不能把 owner 身份与普通 scope 混同。API Key、disabled Key 和 provider quota identity 在事务提交后使缓存失效；quota checker 必须识别 `APIKeyConfigs` 等结构化凭据且不能记录或返回完整 secret；内部 quota routing 可最小化 bypass，但 GraphQL 配置读取要求 `read_settings`。
 - 代码锚点：`internal/scopes/rule_personal_apikey.go`、`internal/server/gql/dashboard.resolvers.go`、`internal/server/gql/axonhub.graphql`、`internal/server/gql/tracer.go`、`internal/server/gql/tracer_test.go`、`internal/server/biz/channel_provider_quota_hook.go`、`internal/server/biz/provider_quota.go`、`frontend/src/features/channels/data/channel-input.ts`。
 - 提交锚点：`b5bc14d2`、`e8656e4b`、`ccb025f8`；相关 merge resolution：`32d0699e`；本次结构化 quota 凭据预检可用 `git log -S'TestHasCredentialsForProvider_OpenCodeGoAPIKeyConfigs' -- internal/server/biz/provider_quota_url_test.go` 定位。
 - 合并审核：upstream `6027d959` 已用官方 API Key usage endpoint 替代 OpenCode Go cookie scraper，并通过 beta9 migration 清除旧 cookie 配置；接受删除旧 `authCookie` schema 和 UI。`d3132241` 与 `644859d0` 为 Command Code、Ollama 新增 quota cookie 和基础 GraphQL 变量脱敏；合并时必须保留 fork 对嵌套 secret descriptor/path、key 名和 payload 的更完整脱敏，并让 type/base URL/credentials 变化继续触发 provider quota cache 失效。其余路径仍须分别检查 secret read/log、duplicate channel、结构化 Key、cache cold/hot path 和事务 rollback；不能用前端隐藏代替服务端权限。
@@ -330,6 +331,7 @@ git show --remerge-diff <merge-commit>
 
 ### U18 渠道候选去重和重试预算语义
 
+- 本次上游整合：`f552c44a` 统一 reset/broken pipe 分类；保留 fork `CanRetryContext` 的 transport failure 直接换渠道策略，不能因分类器扩展而改成同渠道或换 Key 重试。此策略独立于 U04 的已完成响应尾部错误处理。
 - 本次上游整合：`40636bbd` 取消 sticky channel 一次失败即跳过的特殊规则，使其遵循普通同渠道重试设置；保留 fork `CanRetryContext` 的多 Key 轮换、本地 admission/transport 错误过滤和不同 channel 预算去重。
 - 生命周期：`等待上游吸收`
 - 原始意图：`MaxChannelRetries` 表示可尝试的不同 channel 数量，不能被同一 channel 的多条模型关联消耗完。

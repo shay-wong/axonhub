@@ -858,7 +858,7 @@ func TestInboundTransformer_TransformStream_DoesNotEmitFailureAfterCompleted(t *
 		eventTypes = append(eventTypes, event.Type)
 	}
 
-	require.ErrorIs(t, transformedStream.Err(), io.ErrUnexpectedEOF)
+	require.NoError(t, transformedStream.Err())
 	require.Contains(t, eventTypes, StreamEventTypeResponseCompleted)
 	require.NotContains(t, eventTypes, StreamEventTypeResponseFailed)
 	require.NotContains(t, eventTypes, StreamEventTypeError)

@@ -59,9 +59,11 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 
 			return nil, llm.ResponseMeta{}, &llm.ResponseError{StatusCode: statusCode, Detail: detail}
 		case "message_start":
-			messageStart = &event
-			if event.Message != nil && event.Message.Usage != nil {
-				usage = event.Message.Usage
+			if event.Message != nil {
+				messageStart = &event
+				if event.Message.Usage != nil {
+					usage = event.Message.Usage
+				}
 			}
 		case "content_block_start":
 			if event.ContentBlock != nil {
@@ -305,10 +307,12 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 			ID:          message.ID,
 			Usage:       convertToLlmUsage(usage, platformType),
 			ServiceTier: usage.ServiceTier,
+			Completed:   messageStart != nil && stopReason != nil && *stopReason != "",
 		}, nil
 	}
 
 	return data, llm.ResponseMeta{
-		ID: message.ID,
+		ID:        message.ID,
+		Completed: messageStart != nil && stopReason != nil && *stopReason != "",
 	}, nil
 }

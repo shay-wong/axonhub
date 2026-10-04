@@ -15,12 +15,14 @@ import (
 	"github.com/looplj/axonhub/internal/ent/apikey"
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/project"
+	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/ent/schema/schematype"
 	"github.com/looplj/axonhub/internal/ent/usagelog"
 	"github.com/looplj/axonhub/internal/ent/user"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/pkg/xtime"
 	"github.com/looplj/axonhub/internal/scopes"
+	"github.com/looplj/axonhub/internal/server/biz"
 )
 
 const (
@@ -415,14 +417,145 @@ func (r *queryResolver) queryAnalyticsFilterOptions(ctx context.Context, dateFil
 
 // dimStats holds aggregated dimension statistics from raw SQL queries.
 type dimStats struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	RequestCount int     `json:"request_count"`
-	InputTokens  int64   `json:"input_tokens"`
-	CachedTokens int64   `json:"cached_tokens"`
-	OutputTokens int64   `json:"output_tokens"`
-	TotalTokens  int64   `json:"total_tokens"`
-	Cost         float64 `json:"cost"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	RequestCount    int      `json:"request_count"`
+	InputTokens     int64    `json:"input_tokens"`
+	CachedTokens    int64    `json:"cached_tokens"`
+	OutputTokens    int64    `json:"output_tokens"`
+	TotalTokens     int64    `json:"total_tokens"`
+	Cost            float64  `json:"cost"`
+	TokensPerSecond *float64 `json:"tokens_per_second"`
+	TtftMs          *float64 `json:"ttft_ms"`
+}
+
+// dimensionPerformanceStats contains the nullable performance measurements for one usage dimension item.
+// A nil value means the selected logs did not have a completed execution with the required metric.
+type dimensionPerformanceStats struct {
+	TokensPerSecond *float64 `json:"tokens_per_second"`
+	TtftMs          *float64 `json:"ttft_ms"`
+}
+
+// queryDimensionPerformanceStats aggregates performance for the same usage-log rows as the analytics table.
+// It uses the newest completed attempt for each request and channel so retried attempts cannot inflate metrics.
+func (r *queryResolver) queryDimensionPerformanceStats(
+	ctx context.Context,
+	filter *AnalyticsFilter,
+	dateRange analyticsDateRange,
+	dimension AnalyticsDimension,
+) (map[string]dimensionPerformanceStats, error) {
+	type rawPerformanceStats struct {
+		ID              string   `json:"id"`
+		TokensPerSecond *float64 `json:"tokens_per_second"`
+		TtftMs          *float64 `json:"ttft_ms"`
+	}
+
+	var rawResults []rawPerformanceStats
+
+	scopeCtx := authz.WithSystemScopeDecision(ctx, scopes.ScopeReadDashboard)
+	err := r.productionUsageLogQuery().
+		Modify(func(s *sql.Selector) {
+			executionTable := sql.Table(requestexecution.Table).As("analytics_execution")
+			latestExecutionTable := sql.Table(requestexecution.Table).As("latest_analytics_execution")
+
+			s.Join(executionTable).On(
+				s.C(usagelog.FieldRequestID),
+				executionTable.C(requestexecution.FieldRequestID),
+			)
+			s.OnP(sql.ColumnsEQ(
+				s.C(usagelog.FieldChannelID),
+				executionTable.C(requestexecution.FieldChannelID),
+			))
+
+			// The correlated subquery keeps the current table's date and dimension filters on usage_logs.
+			// It only selects a single completed attempt for a request/channel pair to avoid retry double counting.
+			latestExecutionID := sql.Select(sql.Max(latestExecutionTable.C(requestexecution.FieldID))).
+				From(latestExecutionTable).
+				Where(sql.And(
+					sql.ColumnsEQ(latestExecutionTable.C(requestexecution.FieldRequestID), s.C(usagelog.FieldRequestID)),
+					sql.ColumnsEQ(latestExecutionTable.C(requestexecution.FieldChannelID), s.C(usagelog.FieldChannelID)),
+					sql.EQ(latestExecutionTable.C(requestexecution.FieldStatus), requestexecution.StatusCompleted),
+					sql.GT(latestExecutionTable.C(requestexecution.FieldMetricsLatencyMs), 0),
+				))
+			s.Where(
+				sql.EQ(executionTable.C(requestexecution.FieldID), latestExecutionID),
+			)
+
+			r.buildAnalyticsWhere(s, filter, dateRange)
+
+			var dimensionIDColumn string
+			switch dimension {
+			case AnalyticsDimensionChannel:
+				dimensionIDColumn = s.C(usagelog.FieldChannelID)
+			case AnalyticsDimensionModel:
+				dimensionIDColumn = s.C(usagelog.FieldModelID)
+			case AnalyticsDimensionAPIKey:
+				s.Where(sql.NotNull(s.C(usagelog.FieldAPIKeyID)))
+				dimensionIDColumn = s.C(usagelog.FieldAPIKeyID)
+			case AnalyticsDimensionUser:
+				apiKeyTable := sql.Table(apikey.Table)
+				userTable := sql.Table("users")
+				s.Join(apiKeyTable).On(
+					s.C(usagelog.FieldAPIKeyID),
+					apiKeyTable.C(apikey.FieldID),
+				)
+				s.Join(userTable).On(
+					apiKeyTable.C(apikey.FieldUserID),
+					userTable.C("id"),
+				)
+				s.Where(sql.EQ(apiKeyTable.C(apikey.FieldDeletedAt), 0))
+				dimensionIDColumn = userTable.C("id")
+			default:
+				return
+			}
+
+			// Throughput follows the requests table and biz.PerformanceRecord.Calculate:
+			// only completion_tokens count (reasoning/audio tokens are a breakdown of it), streaming
+			// requests exclude TTFT, and the generation time is clamped to biz.MinLatencyMs so cache
+			// hits (TTFT >= latency) cannot contribute a zero duration.
+			generationLatency := fmt.Sprintf(
+				"CASE WHEN %s AND %s IS NOT NULL THEN %s - %s ELSE %s END",
+				executionTable.C(requestexecution.FieldStream),
+				executionTable.C(requestexecution.FieldMetricsFirstTokenLatencyMs),
+				executionTable.C(requestexecution.FieldMetricsLatencyMs),
+				executionTable.C(requestexecution.FieldMetricsFirstTokenLatencyMs),
+				executionTable.C(requestexecution.FieldMetricsLatencyMs),
+			)
+			effectiveLatency := fmt.Sprintf(
+				"CASE WHEN %[1]s < %[2]d THEN %[2]d ELSE %[1]s END",
+				generationLatency,
+				biz.MinLatencyMs,
+			)
+			throughput := fmt.Sprintf(
+				"CASE WHEN SUM(%[1]s) > 0 THEN SUM(%[2]s) * 1000.0 / SUM(%[1]s) ELSE NULL END",
+				effectiveLatency,
+				s.C(usagelog.FieldCompletionTokens),
+			)
+			ttft := fmt.Sprintf(
+				"AVG(CASE WHEN %s AND %s IS NOT NULL AND %s > 0 THEN %s END)",
+				executionTable.C(requestexecution.FieldStream),
+				executionTable.C(requestexecution.FieldMetricsFirstTokenLatencyMs),
+				executionTable.C(requestexecution.FieldMetricsFirstTokenLatencyMs),
+				executionTable.C(requestexecution.FieldMetricsFirstTokenLatencyMs),
+			)
+
+			s.Select(
+				sql.As(dimensionIDColumn, "id"),
+				sql.As(throughput, "tokens_per_second"),
+				sql.As(ttft, "ttft_ms"),
+			).GroupBy(dimensionIDColumn)
+		}).
+		Scan(scopeCtx, &rawResults)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get analytics performance stats by %s: %w", dimension, err)
+	}
+
+	return lo.SliceToMap(rawResults, func(item rawPerformanceStats) (string, dimensionPerformanceStats) {
+		return item.ID, dimensionPerformanceStats{
+			TokensPerSecond: item.TokensPerSecond,
+			TtftMs:          item.TtftMs,
+		}
+	}), nil
 }
 
 func (r *queryResolver) queryChannelStats(ctx context.Context, filter *AnalyticsFilter, dateRange analyticsDateRange, limit int) ([]dimStats, error) {
@@ -719,6 +852,8 @@ func dimStatsToDimensionStats(items []dimStats) []*AnalyticsDimensionStat {
 			OutputTokens:      safeIntFromInt64(item.OutputTokens),
 			TotalTokens:       safeIntFromInt64(item.TotalTokens),
 			Cost:              item.Cost,
+			TokensPerSecond:   item.TokensPerSecond,
+			TtftMs:            item.TtftMs,
 		}
 	})
 }

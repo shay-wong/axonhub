@@ -368,6 +368,7 @@ const PriceCard = memo(function PriceCard({
   priceIndex,
   currencyCode,
   defaultTimezone,
+  portalContainer,
   onAddItem,
   onModelSelected,
   onDuplicatePrice,
@@ -387,6 +388,7 @@ const PriceCard = memo(function PriceCard({
   priceIndex: number;
   currencyCode?: string;
   defaultTimezone?: string;
+  portalContainer?: HTMLElement | null;
   onAddItem: (priceIndex: number) => void;
   onModelSelected: (priceIndex: number, modelId: string) => void;
   onDuplicatePrice: (priceIndex: number) => void;
@@ -483,7 +485,13 @@ const PriceCard = memo(function PriceCard({
               onAddVariant={onAddVariant}
               onRemoveVariant={onRemoveVariant}
             />
-            <PriceScheduleEditor control={control} priceIndex={priceIndex} currencyCode={currencyCode} defaultTimezone={defaultTimezone} />
+            <PriceScheduleEditor
+              control={control}
+              priceIndex={priceIndex}
+              currencyCode={currencyCode}
+              defaultTimezone={defaultTimezone}
+              portalContainer={portalContainer}
+            />
           </div>
 
           <div />
@@ -1011,7 +1019,11 @@ export function ChannelsModelPriceDialog() {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent ref={setDialogContent} className='flex h-[85vh] max-h-[800px] flex-col overflow-hidden sm:max-w-4xl'>
+      <DialogContent
+        ref={setDialogContent}
+        data-testid='channel-price-dialog'
+        className='flex h-[85vh] max-h-[800px] flex-col overflow-hidden sm:max-w-4xl'
+      >
         <DialogHeader>
           <DialogTitle>{t('price.title')}</DialogTitle>
           <DialogDescription>{t('price.description', { name: currentRow?.name })}</DialogDescription>
@@ -1122,7 +1134,11 @@ export function ChannelsModelPriceDialog() {
                 </div>
               </CardContent>
             </Card>
-            <div ref={priceListRef} className='min-h-40 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto pt-4 pr-4 md:min-h-0'>
+            <div
+              ref={priceListRef}
+              data-testid='price-list'
+              className='min-h-40 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto pt-4 pr-4 md:min-h-0'
+            >
               {fields.length === 0 && !isLoading && (
                 <div className='text-muted-foreground flex flex-col items-center justify-center py-12'>
                   <p>{t('price.noPrices')}</p>
@@ -1149,6 +1165,7 @@ export function ChannelsModelPriceDialog() {
                         priceIndex={index}
                         currencyCode={settings?.currencyCode}
                         defaultTimezone={settings?.timezone || 'UTC'}
+                        portalContainer={dialogContent}
                         onAddItem={addItem}
                         onModelSelected={onModelSelected}
                         onDuplicatePrice={duplicatePrice}
@@ -1169,7 +1186,7 @@ export function ChannelsModelPriceDialog() {
 
             <DialogFooter className='mt-6 shrink-0 gap-2 sm:justify-between'>
               <div className='flex flex-wrap items-center gap-2'>
-                <Button type='button' variant='outline' onClick={addPrice}>
+                <Button type='button' variant='outline' data-testid='price-add-button' onClick={addPrice}>
                   <IconPlus className='mr-2 h-4 w-4' />
                   {t('price.addPrice')}
                 </Button>

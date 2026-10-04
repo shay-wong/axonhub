@@ -20,5 +20,5 @@ func TestDefaultModelsIncludesGPT6Astra(t *testing.T) {
 }
 
 func TestCodexDefaultVersion(t *testing.T) {
-	require.Equal(t, "0.156.0", codexDefaultVersion)
+	require.Equal(t, "0.159.0", codexDefaultVersion)
 }

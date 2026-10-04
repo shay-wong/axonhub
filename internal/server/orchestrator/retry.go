@@ -21,7 +21,7 @@ func isRetryableError(err error) bool {
 		return false
 	}
 
-	return isRetryableTransportError(err) ||
+	return IsUpstreamTransportError(err) ||
 		httpclient.IsHTTPStatusCodeRetryable(ExtractStatusCodeFromError(err))
 }
 
@@ -29,7 +29,7 @@ func isRetryableErrorForChannel(err error, ch *biz.Channel) bool {
 	if err == nil {
 		return false
 	}
-	if isRetryableTransportError(err) {
+	if IsUpstreamTransportError(err) {
 		return true
 	}
 
@@ -77,6 +77,7 @@ func isTransportFailure(err error) bool {
 	return errors.Is(err, pipeline.ErrStreamFirstEventTimeout) ||
 		errors.Is(err, pipeline.ErrNonStreamResponseTimeout) ||
 		httpclient.IsTransportError(err) ||
+		IsUpstreamTransportError(err) ||
 		isRetryableTransportError(err)
 }
 

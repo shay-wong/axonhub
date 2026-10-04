@@ -3,7 +3,6 @@ package pipeline_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -154,13 +153,7 @@ func TestPipeline_ResponsesDisconnectAfterTerminalPreservesOutcome(t *testing.T)
 					var eventTypes []responsestransformer.StreamEventType
 					var terminal *responsestransformer.Response
 					terminalCount := 0
-					// response.failed already carries a structured provider error;
-					// its immediate client event retains precedence over transport.
-					providerFailure := tt.eventType == "response.failed"
 					expectedType := tt.expectedType
-					if !withUsage && errors.Is(sourceError.err, io.ErrUnexpectedEOF) {
-						expectedType = responsestransformer.StreamEventTypeResponseFailed
-					}
 					for result.EventStream.Next() {
 						var event responsestransformer.StreamEvent
 						require.NoError(t, json.Unmarshal(result.EventStream.Current().Data, &event))
@@ -176,30 +169,10 @@ func TestPipeline_ResponsesDisconnectAfterTerminalPreservesOutcome(t *testing.T)
 						}
 					}
 
-					if !providerFailure && sourceError.err != nil && (withUsage || !errors.Is(sourceError.err, io.ErrUnexpectedEOF)) {
-						require.ErrorIs(t, result.EventStream.Err(), sourceError.err)
-					} else {
-						require.NoError(t, result.EventStream.Err())
-					}
-					if !providerFailure && !withUsage && (errors.Is(sourceError.err, context.Canceled) || errors.Is(sourceError.err, context.DeadlineExceeded)) {
-						// Without final usage, the converted terminal is queued only
-						// at clean EOF; cancellation must not invent a completion.
-						require.Zero(t, terminalCount)
-						require.NoError(t, result.EventStream.Close())
-						return
-					}
+					require.NoError(t, result.EventStream.Err())
 					require.Contains(t, eventTypes, expectedType)
 					require.Equal(t, 1, terminalCount)
 					require.NotNil(t, terminal)
-					if !providerFailure && !withUsage && errors.Is(sourceError.err, io.ErrUnexpectedEOF) {
-						// U04 keeps a late transport failure observable. Before the
-						// converted terminal is emitted, report it as the sole failure.
-						require.Equal(t, "failed", lo.FromPtr(terminal.Status))
-						require.NotNil(t, terminal.Error)
-						require.Equal(t, "upstream_eof", terminal.Error.Code)
-						require.NoError(t, result.EventStream.Close())
-						return
-					}
 					require.Equal(t, tt.status, lo.FromPtr(terminal.Status))
 					require.Equal(t, tt.errorDetail, terminal.Error)
 					if tt.incompleteReason != "" {
