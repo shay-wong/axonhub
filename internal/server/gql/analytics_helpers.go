@@ -445,7 +445,7 @@ func (r *queryResolver) queryDimensionPerformanceStats(
 	dimension AnalyticsDimension,
 ) (map[string]dimensionPerformanceStats, error) {
 	type rawPerformanceStats struct {
-		ID              string   `json:"id"`
+		ID              *string  `json:"id"`
 		TokensPerSecond *float64 `json:"tokens_per_second"`
 		TtftMs          *float64 `json:"ttft_ms"`
 	}
@@ -490,21 +490,14 @@ func (r *queryResolver) queryDimensionPerformanceStats(
 			case AnalyticsDimensionModel:
 				dimensionIDColumn = s.C(usagelog.FieldModelID)
 			case AnalyticsDimensionAPIKey:
-				s.Where(sql.NotNull(s.C(usagelog.FieldAPIKeyID)))
 				dimensionIDColumn = s.C(usagelog.FieldAPIKeyID)
 			case AnalyticsDimensionUser:
 				apiKeyTable := sql.Table(apikey.Table)
-				userTable := sql.Table("users")
-				s.Join(apiKeyTable).On(
+				s.LeftJoin(apiKeyTable).On(
 					s.C(usagelog.FieldAPIKeyID),
 					apiKeyTable.C(apikey.FieldID),
 				)
-				s.Join(userTable).On(
-					apiKeyTable.C(apikey.FieldUserID),
-					userTable.C("id"),
-				)
-				s.Where(sql.EQ(apiKeyTable.C(apikey.FieldDeletedAt), 0))
-				dimensionIDColumn = userTable.C("id")
+				dimensionIDColumn = apiKeyTable.C(apikey.FieldUserID)
 			default:
 				return
 			}
@@ -551,7 +544,11 @@ func (r *queryResolver) queryDimensionPerformanceStats(
 	}
 
 	return lo.SliceToMap(rawResults, func(item rawPerformanceStats) (string, dimensionPerformanceStats) {
-		return item.ID, dimensionPerformanceStats{
+		id := "unattributed"
+		if item.ID != nil {
+			id = *item.ID
+		}
+		return id, dimensionPerformanceStats{
 			TokensPerSecond: item.TokensPerSecond,
 			TtftMs:          item.TtftMs,
 		}

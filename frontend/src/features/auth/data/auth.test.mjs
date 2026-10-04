@@ -25,12 +25,13 @@ async function setup(t) {
   };
   const pushed = [];
   const navigated = [];
+  const selectedProjects = [];
   const auth = { setUser() {}, setAccessToken() {} };
   globalThis.authRedirectTest = {
     ...redirects,
     useMutation: (options) => options,
     useAuthStore: (select) => select({ auth }),
-    useProjectStore: () => ({ selectedProjectId: 'project-1', setSelectedProjectId() {} }),
+    useProjectStore: () => ({ selectedProjectId: 'project-1', setSelectedProjectId: (id) => selectedProjects.push(id) }),
     getAuthenticatedLanding,
     NAV_ITEM_URLS: ['/', '/channels'],
     PROJECT_NAV_ITEM_URLS: ['/project/playground', '/project/requests'],
@@ -47,7 +48,7 @@ async function setup(t) {
   });
   const bindings = `const { ${Object.keys(globalThis.authRedirectTest).join(', ')} } = globalThis.authRedirectTest;\n`;
   const module = await import(`data:text/javascript;base64,${Buffer.from(bindings + code).toString('base64')}#${moduleIndex++}`);
-  return { ...module, pushed, navigated };
+  return { ...module, pushed, navigated, selectedProjects };
 }
 
 const data = {
@@ -75,6 +76,7 @@ test('OIDC authorization and exchange preserve the full original destination', a
   auth.useOIDCExchange().onSuccess({ data });
   assert.deepEqual(auth.pushed, [redirect]);
   assert.deepEqual(auth.navigated, []);
+  assert.deepEqual(auth.selectedProjects, ['project-1']);
   assert.equal(redirects.consumeOIDCRedirect(), undefined);
 });
 
@@ -92,4 +94,14 @@ test('failed OIDC exchange preserves the safe destination for another login atte
   auth.useOIDCExchange().onError(new Error('exchange failed'));
   assert.deepEqual(auth.navigated, [{ to: '/sign-in', search: { redirect: '/project/requests' } }]);
   assert.equal(redirects.consumeOIDCRedirect(), undefined);
+});
+
+test('password and OIDC login fall back when the returned route is not permitted', async (t) => {
+  const auth = await setup(t);
+  auth.useSignIn('/system').onSuccess(data);
+  redirects.storeOIDCRedirect('/project/api-keys');
+  auth.useOIDCExchange().onSuccess({ data });
+  assert.deepEqual(auth.pushed, []);
+  assert.deepEqual(auth.navigated, [{ to: '/project/playground' }, { to: '/project/playground' }]);
+  assert.deepEqual(auth.selectedProjects, ['project-1', 'project-1']);
 });

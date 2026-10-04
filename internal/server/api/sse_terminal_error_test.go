@@ -1,16 +1,28 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/looplj/axonhub/llm/httpclient"
 )
+
+func TestWriteSSEStreamEnd_TerminalBeforeDeadline(t *testing.T) {
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	disconnected := false
+	writeSSEStreamEnd(c, ctx, ctx.Err(), func(context.Context, error) any { return "unexpected error" }, true, &disconnected)
+	assert.Empty(t, w.Body.String(), "a delivered terminal response must not acquire a trailing timeout error")
+}
 
 // TestWriteSSEStream_ResponsesTerminalEventThenError reproduces the production
 // incident (pi client "unexpected EOF"): the upstream delivers a full Responses

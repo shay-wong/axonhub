@@ -9,6 +9,9 @@
 
 ### Fixed
 
+- Kept completed stream usage and costs after trailing disconnects without duplicate success counts or a trailing timeout error.
+- Applied project permissions to post-login return URLs and channel-edit permissions to execution key indices; kept performance metrics for unattributed usage.
+
 - Kept password and OIDC login destinations within the user's project permissions when sidebar entries are hidden.
 - Excluded diagnostic requests from new single-channel and retry load-balancing counters, while counting production API key rotation attempts.
 

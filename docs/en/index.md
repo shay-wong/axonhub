@@ -20,7 +20,7 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 | [API Key Profiles](guides/api-key-profiles.md) | Create and manage API key profiles |
 | [Permissions](guides/permissions.md) | Enterprise RBAC access control configuration |
 | [Load Balancing](guides/load-balance.md) | Smart routing, failover, diagnostic isolation, and retry counting |
-| [Cost Tracking](guides/cost-tracking.md) | Real-time monitoring and usage analytics |
+| [Cost Tracking](guides/cost-tracking.md) | Usage analytics, completed-stream accounting, and key identity visibility |
 | [Request Tracing](guides/tracing.md) | Complete request traceability |
 | [Request Override](guides/request-override.md) | Dynamically modify request parameters |
 | [Security](guides/security.md) | IP access control, IP blocklist, and API key IP restriction |

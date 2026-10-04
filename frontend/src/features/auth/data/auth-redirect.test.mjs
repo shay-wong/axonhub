@@ -133,3 +133,24 @@ test('owner hidden landing respects project membership and menu visibility', () 
     candidates: ['/project/api-keys'],
   }), { path: '/project/api-keys', projectID: 'project-1' });
 });
+
+test('return destination permissions use the selected project and preserve details, query and hash', () => {
+  const authUser = user({ projects: [
+    { projectID: 'project-1', effectiveScopes: ['read_requests'] },
+    { projectID: 'project-2', effectiveScopes: ['read_api_keys'] },
+  ] });
+  const navigation = { hiddenItems: [], candidates: [] };
+  const returnPath = '/project/requests/request-id?status=error#details';
+  assert.deepEqual(getAuthenticatedLanding(authUser, 'project-1', { ...navigation, returnPath }), {
+    path: returnPath, projectID: 'project-1',
+  });
+  assert.deepEqual(getAuthenticatedLanding(authUser, 'project-2', { ...navigation, returnPath }), {
+    path: '/settings/profile', projectID: null,
+  });
+  assert.deepEqual(getAuthenticatedLanding(authUser, 'stale-project', { ...navigation, returnPath }), {
+    path: returnPath, projectID: 'project-1',
+  });
+  assert.equal(getAuthenticatedLanding(user({ isOwner: true }), null, { ...navigation, returnPath }).path, '/');
+  assert.equal(getAuthenticatedLanding(authUser, 'project-1', { ...navigation, returnPath: '/system' }).path, '/settings/profile');
+  assert.equal(getAuthenticatedLanding(authUser, 'project-1', { ...navigation, returnPath: '/unknown' }).path, '/settings/profile');
+});

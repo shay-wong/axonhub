@@ -112,4 +112,22 @@ func TestAnalyticsDimensionStatsIncludesPerformanceMetrics(t *testing.T) {
 	require.InDelta(t, expectedTokensPerSecond, *channelStats[0].TokensPerSecond, 0.001)
 	require.NotNil(t, channelStats[0].TtftMs)
 	require.InDelta(t, expectedTTFTMs, *channelStats[0].TtftMs, 0.001)
+
+	// Missing key/user attribution remains a visible row with matching performance metrics.
+	for _, dimension := range []AnalyticsDimension{AnalyticsDimensionAPIKey, AnalyticsDimensionUser} {
+		rows, queryErr := resolver.AnalyticsDimensionStats(ctx, nil, dimension, nil)
+		require.NoError(t, queryErr)
+		require.Len(t, rows, 1)
+		require.Equal(t, "unattributed", rows[0].ID)
+		require.NotNil(t, rows[0].TokensPerSecond)
+		require.InDelta(t, expectedTokensPerSecond, *rows[0].TokensPerSecond, 0.001)
+	}
+
+	require.NoError(t, client.Channel.DeleteOneID(ch.ID).Exec(ctx))
+	channelStats, err = resolver.AnalyticsDimensionStats(ctx, nil, AnalyticsDimensionChannel, nil)
+	require.NoError(t, err)
+	require.Len(t, channelStats, 1)
+	require.Equal(t, ch.Name, channelStats[0].Name)
+	require.NotNil(t, channelStats[0].TokensPerSecond)
+	require.InDelta(t, expectedTokensPerSecond, *channelStats[0].TokensPerSecond, 0.001)
 }

@@ -179,7 +179,9 @@ Each request's usage log contains:
 - **Token Details**: Breakdown of various token types
 - **Cost Information**: total_cost, cost_items, cost_price_reference_id
 
-Completed streaming responses keep their usage and cost records even if the client disconnects after receiving the terminal event. The completed execution is not marked with the later cancellation error.
+Completed streaming responses keep their usage and cost records even if the client disconnects or a trailing transport error occurs after confirmed completion. Success is counted once, and a delivered terminal event is not followed by another timeout error. Usage alone does not prove completion; interrupted responses still fail.
+
+Execution API key indices, aliases, and suffixes require channel-edit permission. Analytics performance columns retain unattributed usage and attribution through deleted keys, consistent with the usage totals.
 
 ### GraphQL API
 

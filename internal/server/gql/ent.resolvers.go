@@ -15,6 +15,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/providerquotastatus"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/internal/scopes"
 	"github.com/samber/lo"
 )
 
@@ -722,12 +723,12 @@ func (r *requestExecutionResolver) ChannelID(ctx context.Context, obj *ent.Reque
 
 // ChannelAPIKeyIndex is the resolver for the channelAPIKeyIndex field.
 func (r *requestExecutionResolver) ChannelAPIKeyIndex(ctx context.Context, obj *ent.RequestExecution) (*int, error) {
-	if obj.ChannelAPIKeyIndex == nil || obj.ChannelID == 0 {
+	if !scopes.UserHasScope(ctx, scopes.ScopeWriteChannels) || obj == nil || obj.ChannelAPIKeyIndex == nil || obj.ChannelID == 0 {
 		return nil, nil
 	}
 
 	// Mirrors ChannelAPIKeySuffix: the position is only disclosed when the
-	// caller may read the channel it belongs to.
+	// caller may edit channels and read the channel it belongs to.
 	ch, err := getNilableChannel(ctx, r.client, obj.ChannelID)
 	if err != nil {
 		return nil, err

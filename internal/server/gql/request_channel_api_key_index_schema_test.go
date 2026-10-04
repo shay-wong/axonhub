@@ -8,10 +8,12 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/looplj/axonhub/internal/authz"
+	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/enttest"
 	"github.com/looplj/axonhub/internal/objects"
+	"github.com/looplj/axonhub/internal/scopes"
 )
 
 // The request-log pages build their queries as strings in TypeScript, so
@@ -207,10 +209,15 @@ func TestRequestExecutionResolver_ChannelAPIKeyIndex(t *testing.T) {
 	resolver := &requestExecutionResolver{&Resolver{client: client}}
 
 	// 1. Authorized context can read the index.
-	got, err := resolver.ChannelAPIKeyIndex(ctx, exec)
+	writeCtx := contexts.WithUser(ctx, &ent.User{Scopes: []string{string(scopes.ScopeWriteChannels)}})
+	got, err := resolver.ChannelAPIKeyIndex(writeCtx, exec)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	require.Equal(t, 2, *got)
+	readCtx := contexts.WithUser(ctx, &ent.User{Scopes: []string{string(scopes.ScopeReadChannels)}})
+	got, err = resolver.ChannelAPIKeyIndex(readCtx, exec)
+	require.NoError(t, err)
+	require.Nil(t, got, "channel readers must not see credential identity snapshots")
 
 	// 2. Nil index returns nil.
 	execNoIndex := &ent.RequestExecution{ChannelID: channelEntity.ID}

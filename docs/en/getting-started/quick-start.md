@@ -12,6 +12,8 @@ When AxonHub runs behind a reverse proxy, configure `server.trusted_proxies` wit
 
 ## First Steps
 
+After signing in again, return URLs must pass the selected project's permissions as well as same-origin validation. Unauthorized destinations fall back to a safe landing page.
+
 Password and OIDC sign-in respect project permissions when choosing a landing page. If that page is hidden in your sidebar, AxonHub selects a visible page you can access in the selected project; when none is available, it keeps the original safe landing page. Hiding a menu item does not change its access permissions.
 
 ### 1. Configure Your First Channel

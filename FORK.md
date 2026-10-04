@@ -171,6 +171,7 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- 本次独立整合修复：已完成响应的聚合回收仅在尚未记录完成时提交健康统计，避免成功计数重复；SSE 终态已发送后不再追加 deadline 错误。回归 `TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPersistsUsage` 同时验证完成后的 EOF/取消、费用与成功恰好一次；本次提交可用 `git log -S'if ts.perf != nil && !ts.perf.RequestCompleted' -- internal/server/orchestrator/outbound.go` 定位。
 - 本次上游整合：经维护者确认，采用 `7bb4ed57`、`ac050200` 的完整响应优先策略：明确成功终态或聚合器证明完成后，尾部 transport error 不再覆盖成功状态或重复向客户端发送错误；usage 本身不构成完成证据，未完成流仍失败，明确 failed/incomplete/cancelled 仍保留原终态。此决策替代旧版“终态后 transport error 一律失败”约定。完整成功后的客户端取消仍按 F04 保留费用。
 - `5edcc7fb` 的 turn-state 与 metadata 透传、`3786f2c5` 的统一终态元数据继续保留；本地精确终态事件和最新响应标识仍是独立不变量。
 - 生命周期：`等待上游吸收`
@@ -230,6 +231,7 @@ git show --remerge-diff <merge-commit>
 
 ### U09 凭据可见性、敏感字段和 provider quota 边界
 
+- 本次独立整合修复：`d72446d1` 新增的 `channelAPIKeyIndex` 继续采用本地 `write_channels` 边界，不能通过序号绕过别名/后缀的读取限制。回归：`TestRequestExecutionResolver_ChannelAPIKeyIndex`。定位：`git log -S'channel readers must not see credential identity snapshots' -- internal/server/gql/request_channel_api_key_index_schema_test.go`。
 - 本次上游整合：`1d3d2831` 已提供请求 execution 的 Key 后缀持久化；合并为唯一字段并保留最多 4 rune 校验，但 fork 的别名/header 快照及 `write_channels` 读取边界仍保留。`d4a34586` 改用 Command Code 账户 API Key 查询配额，不替代结构化 inference Key 身份与 quota cache 失效约束。
 
 - 生命周期：`等待上游吸收`
@@ -306,6 +308,7 @@ git show --remerge-diff <merge-commit>
 
 ### U16 多项目权限和邀请生命周期安全
 
+- 本次独立整合修复：JWT 续期后的登录 return-to URL 除同源检查外，还须通过当前项目的路由权限；不借用其他项目 scope，失败回退原安全落点。密码和 OIDC 使用同一 `getAuthenticatedLanding`；定位：`git log -S'returnPath?: string' -- frontend/src/features/auth/data/auth-redirect.ts`。
 - 本次独立兼容修复：上游 `3bc6075e` 的隐藏菜单回退必须通过所选项目的权限检查；密码和 OIDC 登录均复用同一落点函数，无可见且有权限的候选时保留原安全落点。代码、测试与文档在 merge 后独立提交，可用 `git log -S'navigation?: { hiddenItems: string[]; candidates: string[] }' -- frontend/src/features/auth/data/auth-redirect.ts` 定位。用户文档：`docs/en/getting-started/quick-start.md`、`docs/zh/getting-started/quick-start.md`。
 - 本次上游整合：`dfb17549` 将 `8c5f0ab1` 的登录/退出时清空项目改为按账号隔离 membership 查询缓存，并在选中项目验证完成前阻止项目查询；仍保留本地 `getAuthenticatedLanding` 对可访问项目和落地页权限的检查。
 - 生命周期：`等待上游吸收`
@@ -319,6 +322,7 @@ git show --remerge-diff <merge-commit>
 
 ### U17 Analytics 查询正确性和权限隔离
 
+- 本次独立整合修复：`ba84cab8` 的 tok/s、TTFT 查询复用本地 production/dateRange/scope 约束，并保持无归属及已删除 Key/用户的统计归属一致，不能让新增性能列静默丢行。回归：`TestAnalyticsDimensionStats` 所属 `analytics_performance_test.go`；定位：`git log -S'Missing key/user attribution remains a visible row' -- internal/server/gql/analytics_performance_test.go`。
 - 本次上游整合：`dfb17549` 的项目就绪保护保留；Analytics 用户/API Key 筛选仍按本地 system scope 与联合权限条件启用，不能改回仅检查 `read_users`。
 - 生命周期：`等待上游吸收`
 - 原始意图：analytics 结果必须可复现、受权限约束，并明确展示失败或截断，不能把测试流量或越权 identity 维度混入统计。

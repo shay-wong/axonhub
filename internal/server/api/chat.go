@@ -441,7 +441,7 @@ func writeSSEStreamEnd(
 	clientDisconnected *bool,
 ) {
 	switch {
-	case errors.Is(ctx.Err(), context.DeadlineExceeded) &&
+	case !terminalSeen && errors.Is(ctx.Err(), context.DeadlineExceeded) &&
 		(streamErr == nil || errors.Is(streamErr, context.Canceled) || errors.Is(streamErr, context.DeadlineExceeded)):
 		streamErr = ctx.Err()
 		log.Error(ctx, "Stream deadline exceeded", log.Cause(streamErr))

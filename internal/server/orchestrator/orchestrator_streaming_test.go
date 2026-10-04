@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/samber/lo"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -124,6 +126,15 @@ func TestChatCompletionOrchestrator_Process_StreamingEmptyRetryPersistsFinalExec
 }
 
 func TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPersistsUsage(t *testing.T) {
+	testCompletedResponsesPersistsUsage(t, context.Canceled)
+}
+
+func TestChatCompletionOrchestrator_Process_TransportErrorAfterResponsesCompletionPersistsUsage(t *testing.T) {
+	testCompletedResponsesPersistsUsage(t, io.ErrUnexpectedEOF)
+}
+
+func testCompletedResponsesPersistsUsage(t *testing.T, trailingError error) {
+	t.Helper()
 	ctx := authz.WithTestBypass(context.Background())
 	client := enttest.NewEntClient(t, "sqlite3", "file:ent?mode=memory&_fk=0")
 	defer client.Close()
@@ -132,12 +143,25 @@ func TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPers
 	project := createTestProject(t, ctx, client)
 	ch := createTestChannel(t, ctx, client)
 	channelService, requestService, systemService, usageLogService := setupTestServices(t, client)
+	_, err := client.ChannelModelPrice.Create().
+		SetChannelID(ch.ID).
+		SetModelID("gpt-4").
+		SetReferenceID("completed-response-price").
+		SetPrice(objects.ModelPrice{Items: []objects.ModelPriceItem{{
+			ItemCode: objects.PriceItemCodeUsage,
+			Pricing:  objects.Pricing{Mode: objects.PricingModeFlatFee, FlatFee: lo.ToPtr(decimal.NewFromFloat(0.5))},
+		}}}).Save(ctx)
+	require.NoError(t, err)
+	pricedChannel, err := channelService.GetChannel(ctx, ch.ID)
+	require.NoError(t, err)
+	usageLogService.ChannelService.PreloadModelPricesForTest(ctx, pricedChannel)
+	usageLogService.ChannelService.SetEnabledChannelsForTest([]*biz.Channel{pricedChannel})
 	executor := &mockExecutorWithErrorStream{
 		events: []*httpclient.StreamEvent{{
 			Type: "response.completed",
 			Data: []byte(`{"type":"response.completed","response":{"id":"resp_canceled_after_completed","object":"response","created_at":1700000000,"model":"gpt-4","status":"completed","service_tier":"default","output":[],"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}}`),
 		}},
-		streamErr: context.Canceled,
+		streamErr: trailingError,
 	}
 	outbound, err := responseapi.NewOutboundTransformer(ch.BaseURL, ch.Credentials.APIKey)
 	require.NoError(t, err)
@@ -195,6 +219,14 @@ func TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPers
 	require.Equal(t, int64(10), usageLog.PromptTokens)
 	require.Equal(t, int64(2), usageLog.CompletionTokens)
 	require.Equal(t, "default", usageLog.AppliedServiceTier)
+	require.NotNil(t, usageLog.TotalCost)
+	require.Equal(t, 0.5, *usageLog.TotalCost)
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		metrics, metricsErr := channelService.GetChannelMetrics(ctx, ch.ID)
+		assert.NoError(collect, metricsErr)
+		assert.EqualValues(collect, 1, metrics.SuccessCount)
+		assert.Zero(collect, metrics.FailureCount)
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestChatCompletionOrchestrator_Process_FirstResponsesErrorPersistsRequestBody(t *testing.T) {

@@ -316,6 +316,8 @@ Fork Release 构建可在**系统设置 > 关于**中安装更新或回滚到最
 
 Fork 还保留[按权限选择登录落点](docs/zh/getting-started/quick-start.md#第一步)和[诊断流量隔离与重试计数](docs/zh/guides/load-balance.md)。
 
+[完整流计费](docs/zh/guides/cost-tracking.md)在尾部断连后保留费用，并保护执行记录中 Key 身份的可见性。
+
 Codex 模型发现支持完整目录格式，同时保留普通 OpenAI 接口兼容性；刷新条件与上下文默认值见 [Codex 集成指南](docs/zh/guides/codex-integration.md#模型目录刷新)。
 
 自动禁用保留独立渠道/Key 策略及 Retry-After，并与全局规则协作；优先级见[渠道管理](docs/zh/guides/channel-management.md#自动禁用策略兼容)。

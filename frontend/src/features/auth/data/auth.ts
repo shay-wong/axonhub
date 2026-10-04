@@ -101,16 +101,16 @@ export function useSignIn(redirect?: string) {
       // Return to the page that triggered the sign-in, if any.
       consumeOIDCRedirect();
       const safeRedirect = getSafeRedirect(redirect);
-      if (safeRedirect) {
-        router.history.push(safeRedirect);
-        return;
-      }
-
       const landing = getAuthenticatedLanding(data.user, selectedProjectId, {
         hiddenItems: getHiddenNavItems(),
         candidates: data.user.isOwner ? NAV_ITEM_URLS : PROJECT_NAV_ITEM_URLS,
+        returnPath: safeRedirect,
       });
       setSelectedProjectId(landing.projectID);
+      if (safeRedirect && landing.path === safeRedirect) {
+        router.history.push(safeRedirect);
+        return;
+      }
       router.navigate({ to: landing.path });
     },
     onError: (error: any) => {
@@ -207,16 +207,16 @@ export function useOIDCExchange() {
       toast.success(i18n.t('common.success.signedIn'));
 
       const safeRedirect = consumeOIDCRedirect();
-      if (safeRedirect) {
-        router.history.push(safeRedirect);
-        return;
-      }
-
       const landing = getAuthenticatedLanding(data.user, selectedProjectId, {
         hiddenItems: getHiddenNavItems(),
         candidates: data.user.isOwner ? NAV_ITEM_URLS : PROJECT_NAV_ITEM_URLS,
+        returnPath: safeRedirect,
       });
       setSelectedProjectId(landing.projectID);
+      if (safeRedirect && landing.path === safeRedirect) {
+        router.history.push(safeRedirect);
+        return;
+      }
       router.navigate({ to: landing.path });
     },
     onError: (error: unknown) => {

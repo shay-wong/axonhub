@@ -178,8 +178,10 @@ func (ts *OutboundPersistentStream) Close() error {
 		if aggregatedCompleted {
 			log.Debug(ctx, "Stream has valid complete response without terminal event, treating as completed")
 			ts.state.StreamCompleted = true
-			ts.markPerformanceTerminal(streamTerminalCompleted, "")
-			enqueueCompletedPerformance(ts.ctx, ts.state)
+			if ts.perf != nil && !ts.perf.RequestCompleted {
+				ts.markPerformanceTerminal(streamTerminalCompleted, "")
+				enqueueCompletedPerformance(ts.ctx, ts.state)
+			}
 		}
 	} else {
 		ts.logFinalizationDecision(ctx, "no_outbound_chunks_to_aggregate", streamErr, ctxErr, false, nil)
