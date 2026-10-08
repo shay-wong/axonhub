@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`dc00c3edb57e639a0f06232a27b6cfa0aa0855d5`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`35d5554c357c3691a076ed54edc7eca8d0dddc10`
-- 本次 merge base：`89d36d610dc2ebf6d258e56bd1d051572a8c8449`
-- 审计范围：`git diff 35d5554c..HEAD`
+- 本次 upstream merge 的 fork parent：`ee6e59efd78e7876dded81538b6ba9bb8b98c8dc`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`b8bb3421e1fe946cfc4f0d86e8412098738f2793`
+- 本次 merge base：`35d5554c357c3691a076ed54edc7eca8d0dddc10`
+- 审计范围：`git diff b8bb3421..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -46,11 +46,11 @@ git show --remerge-diff <merge-commit>
 
 ## Fork 发布版本
 
-- Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta10`。
-- 本次 upstream parent 包含 tag `v1.0.0-beta10`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
+- Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta11`。
+- 本次 upstream parent 对应已发布 tag `v1.0.0-beta11`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.12`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.13`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.13`；upstream 发布基线已变更为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.1`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -147,6 +147,7 @@ git show --remerge-diff <merge-commit>
 
 ### U02 Codex Responses Lite 字段和约束保真
 
+- 本次上游整合：采用 `059a6e63` 的官方 Codex `additional_tools` 原始片段往返和严格域名识别；兼容 relay 继续不回放该片段，但保留调用方显式 Lite header/context 的既有 fork 策略。Tool Search 结构化条目、动态生图主模型不受影响。验证 `AdditionalTools`、`ResponsesLite` 和 `ToolSearch` 回归；本条其余约束尚未被等价吸收。
 - 生命周期：`等待上游吸收`
 - 原始意图：Codex Responses Lite 的 provider-private 字段不能在 inbound -> common model -> outbound 往返中丢失。
 - 必须保持：Lite header 与 `reasoning.context=all_turns` 成对保留；`parallel_tool_calls` 约束不丢失；provider-private 数据保存在现有 `ProviderExtensions` sidecar，不污染通用 `llm.Request`；clone 和 retry 后仍存在。
@@ -171,6 +172,7 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- 本次上游整合：采用 `81e519e9`，Anthropic/Responses 等待独立 usage-only chunk 后生成终态，避免 finish_reason chunk 的占位零值覆盖真实用量；保留 Responses 最新 usage 赋值、精确异常终态及已完成尾部错误策略。回归 `UsesUsageFromFinalUsageOnlyChunk` 与既有终态测试。
 - 本次独立整合修复：Chat 输出在收到显式 error/failed/canceled/incomplete 后，即使之前已有内容与 usage，clean EOF 也不得补成功 finish/[DONE]。复用 `Response.TerminalOutcome()` 判定；回归为 `TestInboundTransformer_ProviderTerminalDoesNotSynthesizeSuccess`，提交可用 `git log -S'TestInboundTransformer_ProviderTerminalDoesNotSynthesizeSuccess' -- llm/transformer/openai/inbound_stream_test.go` 定位。用户说明见 `docs/en/guides/cost-tracking.md` 与 `docs/zh/guides/cost-tracking.md`。
 - 本次上游整合：采用 `2f8de312` 的统一流式终态决策与多 choice 完成跟踪，以及 `ac7f4889` 的 Responses 中断协议错误；保留 fork 的异常终态原始错误/响应体、费用、健康统计仅计一次和渠道测试隔离。上游终态重构没有完全替代这些不变量，本条继续保留。
 - 本次独立整合修复：已完成响应的聚合回收仅在尚未记录完成时提交健康统计，避免成功计数重复；SSE 终态已发送后不再追加 deadline 错误。回归 `TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPersistsUsage` 同时验证完成后的 EOF/取消、费用与成功恰好一次；本次提交可用 `git log -S'if ts.perf != nil && !ts.perf.RequestCompleted' -- internal/server/orchestrator/outbound.go` 定位。
@@ -283,6 +285,7 @@ git show --remerge-diff <merge-commit>
 
 ### U14 测试流量与生产渠道健康状态隔离
 
+- 本次上游整合：采用 `b8bb3421` 的 System One 渠道/单 Key/批量 Key 测试格式和角色级 prompt protection；沿用 test source 的生产健康隔离，新增协议测试不替代本条隔离约束。
 - 本次独立兼容修复：上游 `5653bf0a` 新增单候选和重试选择计数，必须先检查 test source；多 Key 轮换按真实尝试计数，但诊断重试不进入生产计数。代码、测试与文档在 merge 后独立提交，可用 `git log -S'trackCurrentChannelSelection(ctx context.Context)' -- internal/server/orchestrator/outbound.go` 定位。用户文档：`docs/en/guides/load-balance.md`、`docs/zh/guides/load-balance.md`。
 - 本次上游整合：`6755e3bd` 的 fastestModels 空目录修复应用到本地 execution 查询：使用 `LEFT JOIN models` 与模型 ID 回退，保留 `se.source`/`ul.source` 过滤及无 requests JOIN 的既有语义。
 - 生命周期：`等待上游吸收`
