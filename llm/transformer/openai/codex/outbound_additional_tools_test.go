@@ -12,11 +12,7 @@ import (
 	"github.com/looplj/axonhub/llm/transformer/openai/responses"
 )
 
-// TestOutboundTransformer_AdditionalToolsScope guards the Codex side of the
-// Responses Lite tool definitions: a Lite request carries its tools in an
-// `additional_tools` input item rather than the top-level `tools` array. The
-// official backend is the only upstream that understands that item, so the item
-// has to survive for it and stay dropped for relays.
+// Codex relays speak the same tool protocol regardless of their hostname.
 func TestOutboundTransformer_AdditionalToolsScope(t *testing.T) {
 	body := []byte(`{
 		"model": "gpt-6-luna",
@@ -29,14 +25,14 @@ func TestOutboundTransformer_AdditionalToolsScope(t *testing.T) {
 	tests := []struct {
 		name     string
 		baseURL  string
-		preserve bool
+		official bool
 	}{
-		{name: "official backend", baseURL: "https://chatgpt.com/backend-api/codex#", preserve: true},
-		{name: "official backend without scheme", baseURL: "chatgpt.com/backend-api/codex", preserve: true},
-		{name: "compatible relay", baseURL: "https://relay.example.com/v1", preserve: false},
-		{name: "relay with the official host in its path", baseURL: "https://relay.example.com/chatgpt.com/v1", preserve: false},
-		{name: "relay whose hostname ends with the official host", baseURL: "https://chatgpt.com.relay.example/v1", preserve: false},
-		{name: "relay whose hostname starts with the official host", baseURL: "https://chatgpt.com-evil.example/v1", preserve: false},
+		{name: "official backend", baseURL: "https://chatgpt.com/backend-api/codex#", official: true},
+		{name: "official backend without scheme", baseURL: "chatgpt.com/backend-api/codex", official: true},
+		{name: "compatible relay", baseURL: "https://relay.example.com/v1"},
+		{name: "relay with the official host in its path", baseURL: "https://relay.example.com/chatgpt.com/v1"},
+		{name: "relay whose hostname ends with the official host", baseURL: "https://chatgpt.com.relay.example/v1"},
+		{name: "relay whose hostname starts with the official host", baseURL: "https://chatgpt.com-evil.example/v1"},
 	}
 
 	for _, tt := range tests {
@@ -49,6 +45,7 @@ func TestOutboundTransformer_AdditionalToolsScope(t *testing.T) {
 				}},
 			})
 			require.NoError(t, err)
+			require.Equal(t, tt.official, outbound.isOfficialCodex())
 
 			req, err := responses.NewInboundTransformer().TransformRequest(
 				t.Context(), &httpclient.Request{Body: body})
@@ -62,18 +59,9 @@ func TestOutboundTransformer_AdditionalToolsScope(t *testing.T) {
 			}
 			require.NoError(t, json.Unmarshal(wire.Body, &payload))
 
-			if tt.preserve {
-				require.Len(t, payload.Input, 2)
-				require.Contains(t, string(payload.Input[0]), `"additional_tools"`)
-				require.Contains(t, string(payload.Input[0]), `"exec"`)
-				require.Contains(t, string(payload.Input[1]), "Hello")
-
-				return
-			}
-
-			require.Len(t, payload.Input, 1)
-			require.NotContains(t, string(wire.Body), "additional_tools")
-			require.Contains(t, string(wire.Body), "Hello")
+			require.Len(t, payload.Input, 2)
+			require.JSONEq(t, `{"type":"additional_tools","role":"developer","tools":[{"type":"custom","name":"exec"}]}`, string(payload.Input[0]))
+			require.Contains(t, string(payload.Input[1]), "Hello")
 		})
 	}
 }

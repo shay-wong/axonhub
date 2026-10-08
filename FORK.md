@@ -147,7 +147,7 @@ git show --remerge-diff <merge-commit>
 
 ### U02 Codex Responses Lite 字段和约束保真
 
-- 本次上游整合：采用 `059a6e63` 的官方 Codex `additional_tools` 原始片段往返和严格域名识别；兼容 relay 继续不回放该片段，但保留调用方显式 Lite header/context 的既有 fork 策略。Tool Search 结构化条目、动态生图主模型不受影响。验证 `AdditionalTools`、`ResponsesLite` 和 `ToolSearch` 回归；本条其余约束尚未被等价吸收。
+- 上游整合与后续修复：采用 `059a6e63` 的 `additional_tools` 原始片段往返和严格域名识别，但 Codex 渠道无论官方或兼容 relay 都必须保留工具片段，不能按域名删除；普通 Responses 渠道维持默认不回放私有片段。此前沿用“仅官方保留”的策略会让中转丢失工具，现已修正。验证 `TestOutboundTransformer_AdditionalToolsScope` 同时覆盖完整工具保留与官方域名识别；用户说明见 `docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`。修复提交可用 `git log -S'PreserveAdditionalTools: true' -- llm/transformer/openai/codex/outbound.go` 定位。
 - 生命周期：`等待上游吸收`
 - 原始意图：Codex Responses Lite 的 provider-private 字段不能在 inbound -> common model -> outbound 往返中丢失。
 - 必须保持：Lite header 与 `reasoning.context=all_turns` 成对保留；`parallel_tool_calls` 约束不丢失；provider-private 数据保存在现有 `ProviderExtensions` sidecar，不污染通用 `llm.Request`；clone 和 retry 后仍存在。

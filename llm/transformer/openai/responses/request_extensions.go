@@ -397,9 +397,8 @@ func marshalCompactRequestPayload(payload CompactAPIRequest, llmReq *llm.Request
 
 // mergeRawOnlyInputItems replays the input items that are not rebuilt from the
 // unified request. `additional_tools` carries the tool definitions of Responses
-// Lite, so it is replayed only when the upstream speaks that private protocol
-// (the official Codex backend). Everywhere else it stays dropped: an
-// OpenAI-compatible upstream rejects the item type outright.
+// Lite, so Codex channels (including relays) opt into replaying it. Generic
+// Responses channels omit it because the public API does not support it.
 // mergeRawOnlyInputItems rebuilds the outgoing `input` array from the merged
 // request: items rebuilt from messages and raw items that had no representation
 // are interleaved back into the positions they were sent in.

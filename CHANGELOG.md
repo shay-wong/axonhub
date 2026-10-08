@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Preserved Responses Lite tool definitions for Codex-compatible relays such as Sub2API instead of dropping them based on the upstream hostname.
 - Prevented Chat streaming responses from appending a successful finish after an explicit upstream failure, cancellation, or incomplete outcome.
 - Kept completed stream usage and costs after trailing disconnects without duplicate success counts or a trailing timeout error.
 - Applied project permissions to post-login return URLs and channel-edit permissions to execution key indices; kept performance metrics for unattributed usage.
