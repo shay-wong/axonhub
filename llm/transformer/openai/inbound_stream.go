@@ -63,7 +63,7 @@ func (s *openAIInboundStream) Err() error             { return s.source.Err() }
 func (s *openAIInboundStream) Close() error           { return s.source.Close() }
 
 func (s *openAIInboundStream) observe(response *llm.Response) {
-	if response.Object == "[DONE]" {
+	if response.Object == "[DONE]" || response.TerminalOutcome() != llm.ResponseTerminalOutcomeNone {
 		s.done = true
 		return
 	}

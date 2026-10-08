@@ -171,6 +171,7 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- 本次独立整合修复：Chat 输出在收到显式 error/failed/canceled/incomplete 后，即使之前已有内容与 usage，clean EOF 也不得补成功 finish/[DONE]。复用 `Response.TerminalOutcome()` 判定；回归为 `TestInboundTransformer_ProviderTerminalDoesNotSynthesizeSuccess`，提交可用 `git log -S'TestInboundTransformer_ProviderTerminalDoesNotSynthesizeSuccess' -- llm/transformer/openai/inbound_stream_test.go` 定位。用户说明见 `docs/en/guides/cost-tracking.md` 与 `docs/zh/guides/cost-tracking.md`。
 - 本次上游整合：采用 `2f8de312` 的统一流式终态决策与多 choice 完成跟踪，以及 `ac7f4889` 的 Responses 中断协议错误；保留 fork 的异常终态原始错误/响应体、费用、健康统计仅计一次和渠道测试隔离。上游终态重构没有完全替代这些不变量，本条继续保留。
 - 本次独立整合修复：已完成响应的聚合回收仅在尚未记录完成时提交健康统计，避免成功计数重复；SSE 终态已发送后不再追加 deadline 错误。回归 `TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPersistsUsage` 同时验证完成后的 EOF/取消、费用与成功恰好一次；本次提交可用 `git log -S'if ts.perf != nil && !ts.perf.RequestCompleted' -- internal/server/orchestrator/outbound.go` 定位。
 - 本次上游整合：经维护者确认，采用 `7bb4ed57`、`ac050200` 的完整响应优先策略：明确成功终态或聚合器证明完成后，尾部 transport error 不再覆盖成功状态或重复向客户端发送错误；usage 本身不构成完成证据，未完成流仍失败，明确 failed/incomplete/cancelled 仍保留原终态。此决策替代旧版“终态后 transport error 一律失败”约定。完整成功后的客户端取消仍按 F04 保留费用。

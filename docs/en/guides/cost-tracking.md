@@ -181,6 +181,8 @@ Each request's usage log contains:
 
 Completed streaming responses keep their usage and cost records even if the client disconnects or a trailing transport error occurs after confirmed completion. Success is counted once, and a delivered terminal event is not followed by another timeout error. Usage alone does not prove completion; interrupted responses still fail.
 
+Explicit upstream failures, cancellations, and incomplete outcomes remain unchanged when forwarded as Chat Completions. Ending the connection without a transport error does not append a successful finish or `[DONE]`, even when content and usage have already arrived.
+
 Execution API key indices, aliases, and suffixes require channel-edit permission. Analytics performance columns retain unattributed usage and attribution through deleted keys, consistent with the usage totals.
 
 ### GraphQL API

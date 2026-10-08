@@ -106,6 +106,29 @@ func TestInboundTransformer_UpstreamErrorDoesNotSynthesizeFinish(t *testing.T) {
 	}
 }
 
+func TestInboundTransformer_ProviderTerminalDoesNotSynthesizeSuccess(t *testing.T) {
+	for name, terminal := range map[string]*llm.Response{
+		"error":      {Error: &llm.ResponseError{Detail: llm.ErrorDetail{Message: "provider failed"}}},
+		"failed":     {ProviderTerminalOutcome: llm.ResponseTerminalOutcomeFailed},
+		"canceled":   {ProviderTerminalOutcome: llm.ResponseTerminalOutcomeCanceled},
+		"incomplete": {ProviderTerminalOutcome: llm.ResponseTerminalOutcomeIncomplete},
+	} {
+		t.Run(name, func(t *testing.T) {
+			stream, err := NewInboundTransformer().TransformStream(t.Context(), streams.SliceStream([]*llm.Response{
+				openAIInboundTextChunk("partial"), openAIInboundUsageChunk(), terminal,
+			}))
+			require.NoError(t, err)
+			events := collectOpenAIInboundEvents(t, stream)
+			require.NoError(t, stream.Err())
+			require.Len(t, events, 3)
+			for _, event := range events {
+				require.False(t, event.CleanEOFCompletionEvidence)
+				require.NotEqual(t, "[DONE]", string(event.Data))
+			}
+		})
+	}
+}
+
 func openAIInboundTextChunk(content string) *llm.Response {
 	return &llm.Response{
 		ID: "chatcmpl-text",
