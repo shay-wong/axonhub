@@ -114,7 +114,7 @@ func NewOutboundTransformer(params Params) (*OutboundTransformer, error) {
 		alphaSearchPath = "/alpha/search"
 	}
 	imageMainModel := strings.TrimSpace(params.ImageMainModel)
-	if imageMainModel == "" {
+	if imageMainModel == "" || strings.HasPrefix(strings.ToLower(imageMainModel), "gpt-image-") {
 		imageMainModel = defaultImageMainModel
 	}
 
@@ -216,7 +216,6 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	// Clone request so we do not mutate upstream pipeline state.
 	reqCopy := *llmReq
 	originalRequestType := reqCopy.RequestType
-	originalAPIFormat := reqCopy.APIFormat
 	isImageRequest := originalRequestType == llm.RequestTypeImage
 
 	// Codex expects Responses API payload with some strict rules.
@@ -305,8 +304,10 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	}
 
 	if isImageRequest {
+		// Keep the Responses wire format so pass-through cannot replace the
+		// converted payload or response with the incompatible Images format.
+		// RequestType alone selects the image response conversion.
 		hreq.RequestType = originalRequestType.String()
-		hreq.APIFormat = originalAPIFormat.String()
 	}
 
 	// Session headers are normalized below; keep RawRequest intact for templates but prevent inbound merge from overriding them.

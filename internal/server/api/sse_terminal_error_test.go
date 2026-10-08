@@ -5,13 +5,18 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
+	"github.com/looplj/axonhub/llm/streams"
+	"github.com/looplj/axonhub/llm/transformer/openai"
 )
 
 func TestWriteSSEStreamEnd_TerminalBeforeDeadline(t *testing.T) {
@@ -20,8 +25,27 @@ func TestWriteSSEStreamEnd_TerminalBeforeDeadline(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	disconnected := false
-	writeSSEStreamEnd(c, ctx, ctx.Err(), func(context.Context, error) any { return "unexpected error" }, true, &disconnected)
+	writeSSEStreamEnd(c, ctx, ctx.Err(), encodeStreamError(func(context.Context, error) any { return "unexpected error" }), true, &disconnected)
 	assert.Empty(t, w.Body.String(), "a delivered terminal response must not acquire a trailing timeout error")
+}
+
+func TestWriteSSEStream_OpenAIChatCleanEOFIncludesSyntheticTerminal(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+	content := "hello"
+	stream, err := openai.NewInboundTransformer().TransformStream(t.Context(), streams.SliceStream([]*llm.Response{
+		{ID: "chatcmpl-sse", Choices: []llm.Choice{{Index: 0, Delta: &llm.Message{Content: llm.MessageContent{Content: &content}}}}},
+		{ID: "chatcmpl-sse", Usage: &llm.Usage{PromptTokens: 1, CompletionTokens: 1, TotalTokens: 2}},
+	}))
+	require.NoError(t, err)
+
+	WriteSSEStream(c, stream)
+	body := w.Body.String()
+	assert.Contains(t, body, `"finish_reason":"stop"`)
+	assert.Contains(t, body, "data: [DONE]")
+	assert.Less(t, strings.Index(body, `"finish_reason":"stop"`), strings.Index(body, "data: [DONE]"))
 }
 
 // TestWriteSSEStream_ResponsesTerminalEventThenError reproduces the production

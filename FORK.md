@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`13ee56a2b4af16e4455da21b14dbd3728e7fb0b9`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`89d36d610dc2ebf6d258e56bd1d051572a8c8449`
-- 本次 merge base：`809470775720976864a299f6d7d44cf464ccaa18`
-- 审计范围：`git diff 89d36d61..HEAD`
+- 本次 upstream merge 的 fork parent：`dc00c3edb57e639a0f06232a27b6cfa0aa0855d5`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`35d5554c357c3691a076ed54edc7eca8d0dddc10`
+- 本次 merge base：`89d36d610dc2ebf6d258e56bd1d051572a8c8449`
+- 审计范围：`git diff 35d5554c..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含 tag `v1.0.0-beta10`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.11`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.12`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.12`；upstream 发布基线仍为 `v1.0.0-beta10`，因此下一个规范化 fork 版本为 `v1.0.0-beta10-fork.13`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -171,6 +171,7 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- 本次上游整合：采用 `2f8de312` 的统一流式终态决策与多 choice 完成跟踪，以及 `ac7f4889` 的 Responses 中断协议错误；保留 fork 的异常终态原始错误/响应体、费用、健康统计仅计一次和渠道测试隔离。上游终态重构没有完全替代这些不变量，本条继续保留。
 - 本次独立整合修复：已完成响应的聚合回收仅在尚未记录完成时提交健康统计，避免成功计数重复；SSE 终态已发送后不再追加 deadline 错误。回归 `TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPersistsUsage` 同时验证完成后的 EOF/取消、费用与成功恰好一次；本次提交可用 `git log -S'if ts.perf != nil && !ts.perf.RequestCompleted' -- internal/server/orchestrator/outbound.go` 定位。
 - 本次上游整合：经维护者确认，采用 `7bb4ed57`、`ac050200` 的完整响应优先策略：明确成功终态或聚合器证明完成后，尾部 transport error 不再覆盖成功状态或重复向客户端发送错误；usage 本身不构成完成证据，未完成流仍失败，明确 failed/incomplete/cancelled 仍保留原终态。此决策替代旧版“终态后 transport error 一律失败”约定。完整成功后的客户端取消仍按 F04 保留费用。
 - `5edcc7fb` 的 turn-state 与 metadata 透传、`3786f2c5` 的统一终态元数据继续保留；本地精确终态事件和最新响应标识仍是独立不变量。
@@ -396,6 +397,7 @@ git show --remerge-diff <merge-commit>
 
 ### U23 Codex 默认生图主模型
 
+- 本次上游整合：采用 `5c789977` 的 Responses wire format，防止图像原始请求错误透传覆盖转换结果；主模型仍在请求时读取全局设置，不采用上游的渠道测试模型及 Luna 回退。验证新增 `TestCodexChannel_ImageMainModelIgnoresDefaultTestModel`，覆盖 API Key/OAuth、独立图像 endpoint 和测试模型别名。
 - 生命周期：`等待上游吸收`
 - 原始意图：避免 Codex 图片生成/编辑固定依赖账户不支持的 `gpt-5.4-mini`；主模型在“模型 → 设置”全局统一选择，不再逐渠道手填。
 - 必须保持：全局 `systemModelSettings.codexImageMainModel` 保存和回显；下拉候选使用已启用 Codex 渠道实际模型 ID，保留默认值及当前值，不传本地别名；未设置或空白默认 `gpt-6-astra`。旧渠道字段仅兼容读写，不再影响请求，不自动迁移任一渠道值；旧客户端省略全局字段时保留已有值。只改变图片生成/编辑的外层 Responses 主模型，图片工具模型仍为调用方图片模型，普通聊天模型不变；API Key、OAuth 及复用 token provider 路径均在请求时读取全局设置，保存后无需重启缓存渠道。

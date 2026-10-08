@@ -144,9 +144,9 @@ func (s *DefaultSelector) selectChannelCadidates(ctx context.Context, req *llm.R
 			continue
 		}
 
-		endpoints := applyForcedAPIFormats(ctx, ch, []biz.ChannelModelEntry{entry}, req.Model, ch.ResolveEndpoints())
+		endpoints := applyForcedAPIFormatsForRequest(ctx, ch, []biz.ChannelModelEntry{entry}, req.Model, req.RequestType, ch.ResolveEndpoints())
 		apiFormat := SelectAPIFormat(endpoints, req)
-		if req.RequestType == llm.RequestTypeAlphaSearch && apiFormat == "" {
+		if requiresExplicitEndpoint(req.RequestType) && apiFormat == "" {
 			continue
 		}
 
@@ -1133,8 +1133,11 @@ func (s *SpecifiedChannelSelector) Select(ctx context.Context, req *llm.Request)
 		return nil, fmt.Errorf("model %s not supported in channel %s", req.Model, channel.Name)
 	}
 
-	endpoints := applyForcedAPIFormats(ctx, channel, []biz.ChannelModelEntry{entry}, req.Model, channel.ResolveEndpoints())
+	endpoints := applyForcedAPIFormatsForRequest(ctx, channel, []biz.ChannelModelEntry{entry}, req.Model, req.RequestType, channel.ResolveEndpoints())
 	apiFormat := SelectAPIFormat(endpoints, req)
+	if requiresExplicitEndpoint(req.RequestType) && apiFormat == "" {
+		return []*ChannelModelsCandidate{}, nil
+	}
 
 	candidate := &ChannelModelsCandidate{
 		Channel:   channel,

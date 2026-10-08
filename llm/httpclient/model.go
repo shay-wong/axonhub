@@ -116,9 +116,10 @@ type Response struct {
 }
 
 type StreamEvent struct {
-	LastEventID string `json:"last_event_id,omitempty"`
-	Type        string `json:"type"`
-	Data        []byte `json:"data"`
+	LastEventID                string `json:"last_event_id,omitempty"`
+	Type                       string `json:"type"`
+	Data                       []byte `json:"data"`
+	CleanEOFCompletionEvidence bool   `json:"-"`
 	// StatusCode carries protocol-internal HTTP status metadata without changing
 	// the provider event payload sent to clients.
 	StatusCode int `json:"-"`

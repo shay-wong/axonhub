@@ -4,6 +4,7 @@
 
 - Added checksum-verified in-app updates, recent version history, and rollback with process-supervisor restart support for supported release and Docker deployments.
 - Added per-channel API key rules with status/keyword matching, configurable error thresholds, temporary auto-recovery, and permanent disable/delete actions.
+- NeuralWatt channels now show the elapsed monthly energy window marker on the kWh bar and an estimated period quota, matching the other windowed providers.
 - Allowed Fenno channels to opt into Codex-style Responses defaults; the option remains disabled by default.
 - Added Codex/OpenAI `ultrafast` service-tier forwarding, request tracking, and display support, with billing defaulting to twice the effective Fast price when no exact Ultrafast price is configured.
 

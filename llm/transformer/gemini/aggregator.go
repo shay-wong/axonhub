@@ -178,6 +178,7 @@ func buildGeminiResponse(
 	usage *UsageMetadata,
 ) ([]byte, llm.ResponseMeta, error) {
 	candidates := make([]*Candidate, len(candidateAggs))
+	completed := len(candidateAggs) > 0
 
 	for i := range candidates {
 		agg := candidateAggs[int64(i)]
@@ -240,6 +241,7 @@ func buildGeminiResponse(
 		// Determine finish reason
 		finishReason := agg.finishReason
 		if finishReason == "" {
+			completed = false
 			finishReason = "STOP"
 		}
 
@@ -270,7 +272,8 @@ func buildGeminiResponse(
 	}
 
 	return data, llm.ResponseMeta{
-		ID:    responseID,
-		Usage: llmUsage,
+		ID:        responseID,
+		Usage:     llmUsage,
+		Completed: completed,
 	}, nil
 }
