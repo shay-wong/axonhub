@@ -101,7 +101,7 @@ AxonHub 的模型配置文件支持将请求模型映射到具体提供商模型
 - 请求 `gpt-3.5-turbo` → 映射到 `deepseek-chat` 以降低成本。
 
 ### 常见问题
-- **经过中转后 Codex 看不到工具**：Sub2API 等兼容 Codex 协议的中转应使用 Codex 渠道，并升级到包含中转工具保留修复的版本。Codex 渠道不再按域名删除 `input` 中 `type: "additional_tools"` 的工具定义，无需额外开关；普通 OpenAI Responses 渠道仍默认不回放这种私有条目。
+- **经过中转后 Codex 看不到工具**：升级到包含 `additional_tools` 转发修复的版本。Responses、Codex 和 Compact 转发均保留此类输入条目，不按域名删除，也无需额外开关；不支持它的目标服务可能拒绝请求。转换到非 Responses 协议时明确返回 HTTP 400，不再静默丢工具，也不会重试或切换渠道。
 - **Codex 认证失败**：确保在启动 Codex 的同一 shell 会话中设置了 `AXONHUB_API_KEY`。
 - **模型结果异常**：检查 AxonHub 控制台中当前启用的配置文件映射，必要时禁用或调整规则。
 - **定时任务提示 `function_call_output` 缺少 `call_id`**：升级到包含 Codex 定时任务启动项兼容修复的 AxonHub 版本。

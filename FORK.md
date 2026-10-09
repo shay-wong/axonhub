@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`ee6e59efd78e7876dded81538b6ba9bb8b98c8dc`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`b8bb3421e1fe946cfc4f0d86e8412098738f2793`
-- 本次 merge base：`35d5554c357c3691a076ed54edc7eca8d0dddc10`
-- 审计范围：`git diff b8bb3421..HEAD`
+- 本次 upstream merge 的 fork parent：`da0a97b81802b6bfb6706202adcff58299bb2fcb`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`e863c6fe1942deddd0f6e471fa003c430e5314f0`
+- 本次 merge base：`b8bb3421e1fe946cfc4f0d86e8412098738f2793`
+- 审计范围：`git diff e863c6fe..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -47,10 +47,10 @@ git show --remerge-diff <merge-commit>
 ## Fork 发布版本
 
 - Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta11`。
-- 本次 upstream parent 对应已发布 tag `v1.0.0-beta11`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
+- 本次 upstream parent 包含已发布 tag `v1.0.0-beta11`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta10-fork.13`；upstream 发布基线已变更为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.1`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.2`；upstream 发布基线为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.3`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -147,7 +147,7 @@ git show --remerge-diff <merge-commit>
 
 ### U02 Codex Responses Lite 字段和约束保真
 
-- 上游整合与后续修复：采用 `059a6e63` 的 `additional_tools` 原始片段往返和严格域名识别，但 Codex 渠道无论官方或兼容 relay 都必须保留工具片段，不能按域名删除；普通 Responses 渠道维持默认不回放私有片段。此前沿用“仅官方保留”的策略会让中转丢失工具，现已修正。验证 `TestOutboundTransformer_AdditionalToolsScope` 同时覆盖完整工具保留与官方域名识别；用户说明见 `docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`。修复提交可用 `git log -S'PreserveAdditionalTools: true' -- llm/transformer/openai/codex/outbound.go` 定位。
+- 上游吸收：经维护者确认采用 `e863c6fe`，`additional_tools` 在所有 Responses/Codex/Compact 转发中保留，非 Responses 协议转换明确返回 400 并停止重试和换渠道。删除本地 `da0a97b8` 的保留开关，普通 Responses 不再过滤此条目，目标不支持时由目标服务拒绝。该工具透传修复已由上游替代，不再作为 fork 差异；本条仍记录尚未吸收的显式 Lite header/context、parallel tool calls 和 clone/retry 约束。
 - 生命周期：`等待上游吸收`
 - 原始意图：Codex Responses Lite 的 provider-private 字段不能在 inbound -> common model -> outbound 往返中丢失。
 - 必须保持：Lite header 与 `reasoning.context=all_turns` 成对保留；`parallel_tool_calls` 约束不丢失；provider-private 数据保存在现有 `ProviderExtensions` sidecar，不污染通用 `llm.Request`；clone 和 retry 后仍存在。

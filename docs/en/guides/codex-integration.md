@@ -101,7 +101,7 @@ AxonHub model profiles remap incoming model names to provider-specific equivalen
 - Request `gpt-3.5-turbo` → mapped to `deepseek-chat` for reducing costs.
 
 ### Troubleshooting
-- **Codex cannot see its tools through a relay**: use a Codex channel for a Codex-compatible relay such as Sub2API, and upgrade to a build that preserves `input` items with `type: "additional_tools"` for relays. Codex channels forward these tool definitions regardless of hostname; generic OpenAI Responses channels omit this private item by default. No extra switch is required.
+- **Codex cannot see its tools through a relay**: upgrade to a build containing the `additional_tools` forwarding fix. Responses, Codex, and Compact forwarding preserve these input items regardless of hostname, without an extra switch. A target that does not support them may reject the request. Converting such a request to a non-Responses protocol returns HTTP 400 instead of silently dropping tools, and does not retry or switch channels.
 - **Codex reports authentication errors**: ensure `AXONHUB_API_KEY` is exported in the same shell session that launches Codex.
 - **Unexpected model responses**: review active profile mappings in the AxonHub console; disable or adjust rules if necessary.
 - **Scheduled automation reports that `function_call_output` requires `call_id`**: upgrade AxonHub to a build containing the Codex automation bootstrap compatibility fix.

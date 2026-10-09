@@ -144,8 +144,6 @@ func NewOutboundTransformer(params Params) (*OutboundTransformer, error) {
 		BaseURL:        baseURL,
 		APIKeyProvider: auth.NewStaticKeyProvider("dummy"),
 		Transport:      params.Transport,
-		// Codex relays also need Lite tool definitions, regardless of hostname.
-		PreserveAdditionalTools: true,
 	})
 	if err != nil {
 		return nil, err
