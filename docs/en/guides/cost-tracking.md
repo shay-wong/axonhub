@@ -101,9 +101,47 @@ Configure pricing for each channel and model in the admin dashboard:
 
 #### Service Tier Prices
 
-You can add exact service-tier price overrides such as `priority` and `ultrafast`. AxonHub records the tier requested by Codex and the tier actually reported by OpenAI, then uses the applied tier for billing. For Codex responses that omit the applied tier or report `default`, the explicit `priority` or `ultrafast` request remains the billing fallback. Without an explicit `ultrafast` price, AxonHub charges twice the effective Fast (`priority`) price; if Fast also has no override, this is twice the effective base price. Other unconfigured tiers use the base model price.
+You can add exact service-tier price overrides such as `priority` and `ultrafast`. OpenAI's `fast` and `priority` names share the `priority` price key. AxonHub records the requested and applied tiers, then uses the applied tier for billing. For Codex responses that omit the applied tier or report `default`, the explicitly requested Fast or Ultrafast tier remains the billing fallback. An explicit tier price takes precedence; omitted items in a partial override still inherit the effective base price.
 
-OpenAI currently limits `ultrafast` to approved GPT-5.6 Sol customers. AxonHub forwards the explicit tier but does not bypass upstream access controls.
+When a tier price is absent, AxonHub uses these fallback ratios, verified against [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) on 2026-10-13:
+
+| Actual channel model | Fast without an override | Ultrafast without an override |
+| --- | --- | --- |
+| `gpt-6-astra`, `gpt-6.1-sol` | Effective base × 2 | Effective Fast × 3; base × 6 if Fast is also unconfigured |
+| `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` | Effective base × 2 | Legacy estimate: configured Fast × 2, otherwise base × 2 |
+| Other model IDs | Effective base | Legacy estimate: configured Fast × 2, otherwise base × 2 |
+
+These rules match exact actual channel model IDs, not request aliases, prefixes, or future model names. The effective base includes the active time schedule; custom rates and channel price multipliers are preserved. Other unconfigured tiers still use the base price. Legacy estimates do not imply official Ultrafast support: OpenAI currently lists only GPT-6 Astra and GPT-6.1 Sol for [Ultrafast](https://developers.openai.com/api/docs/guides/ultrafast-mode). Upstream access controls still apply.
+
+For GPT-6 Astra, official short-context rates per million tokens are:
+
+| Tier | Input | Cached input | Cache write | Output |
+| --- | --- | --- | --- | --- |
+| Standard | $10 | $1 | $12.50 | $50 |
+| Fast | $20 | $2 | $25 | $100 |
+| Ultrafast | $60 | $6 | $75 | $300 |
+
+#### Long-Context Prices
+
+Select **Input Context Tiered** (`usage_context`) for a price item to choose its rate using the request's total input tokens, including cached reads and writes. The selected rate applies to all tokens of that item. Output tokens do not count toward the threshold. Existing volume tiers still select by the item's own quantity; their behavior is unchanged.
+
+Catalog imports convert explicit `cost.tiers` context thresholds into this mode. Explicit thresholds take precedence over the legacy `context_over_200k` field; when only that legacy field exists, the threshold is 200,000. Model-specific service-tier context prices take precedence. For the GPT-6/GPT-5.6 Fast models in the table above, and Astra/GPT-6.1 Sol Ultrafast, imports can derive missing long-context tier rates using the catalog's per-item long/short ratios. Other models require explicit service-tier context prices.
+
+For Astra, input at or below **272,000** tokens uses short-context rates. Above that threshold, input/cache rates double and output rates increase by 1.5× for the whole request, in each service tier:
+
+| Tier | Long input | Long cached input | Long cache write | Long output |
+| --- | --- | --- | --- | --- |
+| Standard | $20 | $2 | $25 | $75 |
+| Fast | $40 | $4 | $50 | $150 |
+| Ultrafast | $120 | $12 | $150 | $450 |
+
+For example, 300,000 uncached input tokens and 100,000 output tokens cost $13.50 Standard, $27 Fast, or $81 Ultrafast before any configured price multiplier. Context pricing works inside schedules, service-tier overrides, and cache-write variants, and survives price JSON export/import and backups.
+
+**Existing fixed prices are not automatically converted.** Re-import the model under **Channels → Model Prices**, review its context thresholds and service-tier prices, and save; or configure the new mode manually. This affects subsequent requests only. Deploy matching frontend/backend versions before saving the new pricing mode.
+
+Existing saved prices and historical usage records are not overwritten. To replace an old explicit Fast/Ultrafast price, update it under **Channels → Model Prices** or re-import the model price after checking the preview. The fallback changes apply to new requests with missing tier prices. API token prices are separate from Codex subscription credit multipliers.
+
+[Tibo's October 11, 2026 announcement](https://x.com/thsottiaux/status/2109430894604026039) removes GPT-6.1 Sol long-context fees **when drawing usage from the subscription** in Codex/Work. It does not change the API rates used for AxonHub's cost estimates. For subscription-backed channels, these estimates do not represent actual subscription consumption; configure flat channel prices separately if that is the intended accounting policy.
 
 #### Cache Write Variants (Anthropic)
 

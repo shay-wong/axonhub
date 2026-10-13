@@ -81,7 +81,7 @@
 
 开启后，AxonHub 会补齐缺失的 Codex 原生 Responses 默认值，包括 `service_tier: priority`，但不会覆盖调用方已经显式传入的值，也不会改变图像请求。若上游需要完整保留调用方原始 Responses 语义，请保持关闭。
 
-无论该选项是否开启，显式传入的 `service_tier: ultrafast` 都会保留。OpenAI 目前只向获批的 GPT-5.6 Sol 客户开放 Ultrafast；账户不支持时，AxonHub 会原样返回上游错误。
+无论该选项是否开启，显式传入的 `service_tier: ultrafast` 都会保留。截至 2026-10-13，[OpenAI Ultrafast 文档](https://developers.openai.com/api/docs/guides/ultrafast-mode) 列出的支持模型为 GPT-6 Astra 和 GPT-6.1 Sol；模型或账户不支持时，AxonHub 会原样返回上游错误。计费规则及限制见[成本追踪](cost-tracking.md)。
 
 ## 模型重命名
 

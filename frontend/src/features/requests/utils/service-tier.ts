@@ -15,6 +15,6 @@ export function getSpeedMode(request: RequestServiceTierSource): string {
   if (speedMode === 'fast' || speedMode === 'ultrafast') return speedMode;
 
   const requestedServiceTier = execution?.requestedServiceTier?.trim().toLowerCase();
-  if (requestedServiceTier === 'priority') return 'fast';
+  if (requestedServiceTier === 'priority' || requestedServiceTier === 'fast') return 'fast';
   return requestedServiceTier === 'ultrafast' ? 'ultrafast' : '';
 }

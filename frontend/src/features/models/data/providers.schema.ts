@@ -52,7 +52,7 @@ const modelReasoningOptionSchema = z.object({
 
 const modelExperimentalModeSchema = z
   .object({
-    cost: modelTokenCostSchema.optional(),
+    cost: modelCostSchema.optional(),
     provider: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough();

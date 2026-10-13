@@ -477,6 +477,25 @@ func TestModelPrice_ValidateTierBounds(t *testing.T) {
 			wantError: "",
 		},
 		{
+			name:      "usage context accepts positive increasing bounds",
+			mode:      PricingModeContext,
+			bounds:    []int64{272000, 1000000},
+			wantError: "",
+		},
+		{
+			name:      "usage context rejects duplicate bounds",
+			mode:      PricingModeContext,
+			bounds:    []int64{272000, 272000},
+			wantError: "tiers[1].upTo must be greater than tiers[0].upTo",
+		},
+		{
+			name:            "service tier usage context rejects zero bound",
+			mode:            PricingModeContext,
+			bounds:          []int64{0},
+			serviceTierPath: true,
+			wantError:       "serviceTierPrices[0].items[0]: pricing: tiers[0].upTo must be greater than 0",
+		},
+		{
 			name:      "usage tiered rejects decreasing bounds",
 			mode:      PricingModeTiered,
 			bounds:    []int64{200, 100},

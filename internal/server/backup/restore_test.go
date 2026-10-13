@@ -456,6 +456,59 @@ func TestBackupService_Restore(t *testing.T) {
 	require.Equal(t, existingPrice.ReferenceID, restoredPrice.ReferenceID)
 }
 
+func TestBackupService_ContextPriceRoundTrip(t *testing.T) {
+	for _, version := range []string{BackupVersion, BackupVersionV5} {
+		t.Run(version, func(t *testing.T) {
+			client, service, ctx := setupBackupTest(t)
+			defer client.Close()
+			ch := createBackupTestChannel(t, client, ctx, "Context price", channel.TypeOpenai)
+			pricing := objects.Pricing{
+				Mode: objects.PricingModeContext,
+				UsageTiered: &objects.TieredPricing{Tiers: []objects.PriceTier{
+					{UpTo: lo.ToPtr(int64(272000)), PricePerUnit: decimal.NewFromInt(50)},
+					{PricePerUnit: decimal.NewFromInt(75)},
+				}},
+			}
+			price := objects.ModelPrice{
+				Items: []objects.ModelPriceItem{{ItemCode: objects.PriceItemCodeCompletion, Pricing: pricing}},
+				ServiceTierPrices: []objects.ServiceTierPrice{{
+					ServiceTier: "ultrafast",
+					Items:       []objects.ModelPriceItem{{ItemCode: objects.PriceItemCodeCompletion, Pricing: pricing}},
+				}},
+			}
+			row := client.ChannelModelPrice.Create().SetChannelID(ch.ID).
+				SetModelID("gpt-6-astra").SetPrice(price).SetReferenceID("context-price").SaveX(ctx)
+			data, err := service.Backup(ctx, BackupOptions{IncludeModelPrices: true})
+			require.NoError(t, err)
+			var exported BackupData
+			require.NoError(t, json.Unmarshal(data, &exported))
+			require.Len(t, exported.ChannelModelPrices, 1)
+			require.True(t, price.Equals(exported.ChannelModelPrices[0].Price))
+			exported.Version = version
+			data, err = json.Marshal(exported)
+			require.NoError(t, err)
+
+			// Replace the stored configuration before restoring, so the test
+			// proves recovery rather than reading back the untouched source.
+			client.ChannelModelPrice.UpdateOne(row).SetPrice(objects.ModelPrice{
+				Items: []objects.ModelPriceItem{{
+					ItemCode: objects.PriceItemCodeCompletion,
+					Pricing:  objects.Pricing{Mode: objects.PricingModeUsagePerUnit, UsagePerUnit: lo.ToPtr(decimal.NewFromInt(1))},
+				}},
+			}).SaveX(ctx)
+			require.NoError(t, service.Restore(ctx, data, RestoreOptions{
+				IncludeModelPrices: true, ModelPriceConflictStrategy: ConflictStrategyOverwrite,
+			}))
+			restored := client.ChannelModelPrice.Query().OnlyX(ctx)
+			require.NoError(t, restored.Price.Validate())
+			require.True(t, price.Equals(restored.Price))
+			require.Equal(t, objects.PricingModeContext, restored.Price.Items[0].Pricing.Mode)
+			require.Equal(t, int64(272000), *restored.Price.Items[0].Pricing.UsageTiered.Tiers[0].UpTo)
+			require.Equal(t, "75", restored.Price.Items[0].Pricing.UsageTiered.Tiers[1].PricePerUnit.String())
+		})
+	}
+}
+
 func TestBackupService_Restore_ModelPricesOnly(t *testing.T) {
 	client, service, ctx := setupBackupTest(t)
 	defer client.Close()

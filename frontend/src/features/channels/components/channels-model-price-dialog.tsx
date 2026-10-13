@@ -22,7 +22,7 @@ import { type ProviderModel, type ProvidersData } from '@/features/models/data/p
 import { useGeneralSettings } from '@/features/system/data/system';
 import { useChannels } from '../context/channels-context';
 import { useChannelModelPrices, useSaveChannelModelPrices } from '../data/channels';
-import { buildProviderModelPrice } from '../data/model-price-catalog';
+import { buildProviderModelPrice, mergeItemsWithProviderCost } from '../data/model-price-catalog';
 import {
   collectPriceFormValidationIssues,
   mapPriceFormDataToSaveInput,
@@ -31,14 +31,13 @@ import {
   replaceCatalogServiceTierPrices,
   type PriceFormData,
 } from '../data/model-price-form';
-import { saveChannelModelPriceInputSchema, type SaveChannelModelPriceInput } from '../data/schema';
+import { pricingModeSchema, saveChannelModelPriceInputSchema, type SaveChannelModelPriceInput } from '../data/schema';
 
 const priceItemCodes = ['prompt_tokens', 'completion_tokens', 'prompt_cached_tokens', 'prompt_write_cached_tokens'] as const;
-const pricingModes = ['flat_fee', 'usage_per_unit', 'usage_tiered', 'usage_volume'] as const;
 const promptWriteCacheVariantCodes = ['five_min', 'one_hour'] as const;
 
 const pricePricingFormSchema = z.object({
-  mode: z.enum(pricingModes),
+  mode: pricingModeSchema,
   flatFee: z.string().optional().nullable(),
   usagePerUnit: z.string().optional().nullable(),
   usageTiered: z
@@ -206,45 +205,6 @@ function findProviderModelById(providersData: ProvidersData, modelId: string, pr
 
 function buildItemsFromProviderModel(model: ProviderModel, multiplier: number = 1): PriceFormData['prices'][number]['price']['items'] {
   return buildProviderModelPrice(model, multiplier).items;
-}
-
-function mergeItemsWithProviderCost(
-  currentItems: PriceFormData['prices'][number]['price']['items'],
-  model: ProviderModel,
-  multiplier: number = 1
-): PriceFormData['prices'][number]['price']['items'] {
-  const byCode = new Map<(typeof priceItemCodes)[number], PriceFormData['prices'][number]['price']['items'][number]>();
-  currentItems.forEach((item) => {
-    byCode.set(item.itemCode, item);
-  });
-
-  const applyUsagePerUnit = (itemCode: (typeof priceItemCodes)[number], value: number) => {
-    const existing = byCode.get(itemCode);
-    if (existing) {
-      byCode.set(itemCode, {
-        ...existing,
-        pricing: {
-          mode: 'usage_per_unit',
-          usagePerUnit: (value * multiplier).toFixed(4),
-          flatFee: '',
-          usageTiered: null,
-        },
-      });
-      return;
-    }
-    byCode.set(itemCode, {
-      itemCode,
-      pricing: { mode: 'usage_per_unit', usagePerUnit: (value * multiplier).toFixed(4) },
-    });
-  };
-
-  const cost = model.cost;
-  if (cost?.input != null) applyUsagePerUnit('prompt_tokens', cost.input);
-  if (cost?.output != null) applyUsagePerUnit('completion_tokens', cost.output);
-  if (cost?.cache_read != null) applyUsagePerUnit('prompt_cached_tokens', cost.cache_read);
-  if (cost?.cache_write != null) applyUsagePerUnit('prompt_write_cached_tokens', cost.cache_write);
-
-  return Array.from(byCode.values());
 }
 
 const ServiceTierPricesEditor = memo(function ServiceTierPricesEditor({

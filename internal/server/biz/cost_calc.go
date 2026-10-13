@@ -18,7 +18,7 @@ func unitsInMillionTokens(units int64) decimal.Decimal {
 	return decimal.NewFromInt(units).Div(decimal.NewFromInt(1_000_000))
 }
 
-func computeItemSubtotal(quantity int64, pricing objects.Pricing) (objects.CostItem, decimal.Decimal) {
+func computeItemSubtotal(quantity, promptTokens int64, pricing objects.Pricing) (objects.CostItem, decimal.Decimal) {
 	item := objects.CostItem{
 		Quantity: quantity,
 	}
@@ -91,12 +91,16 @@ func computeItemSubtotal(quantity int64, pricing objects.Pricing) (objects.CostI
 		}
 
 		return item, decimal.Zero
-	case objects.PricingModeVolume:
+	case objects.PricingModeVolume, objects.PricingModeContext:
 		if pricing.UsageTiered != nil {
 			matchedIdx := -1
+			selectionQuantity := quantity
+			if pricing.Mode == objects.PricingModeContext {
+				selectionQuantity = promptTokens
+			}
 
 			for i, tier := range pricing.UsageTiered.Tiers {
-				if tier.UpTo != nil && quantity <= *tier.UpTo {
+				if tier.UpTo != nil && selectionQuantity <= *tier.UpTo {
 					matchedIdx = i
 					break
 				}
@@ -145,27 +149,56 @@ func ComputeUsageCost(usage *llm.Usage, price objects.ModelPrice, now time.Time)
 	return computeUsageCostWithItems(usage, effectivePriceItems(price, now))
 }
 
-// ComputeUsageCostForServiceTier calculates usage cost using an exact service-tier price match.
-// Ultrafast falls back to twice the effective Fast price; other missing and unknown tiers use the base price.
-func ComputeUsageCostForServiceTier(usage *llm.Usage, price objects.ModelPrice, serviceTier string, now ...time.Time) ([]objects.CostItem, decimal.Decimal) {
+// ComputeUsageCostForServiceTier uses explicit prices first, then published model-specific
+// tier ratios. Unlisted models retain the legacy Ultrafast fallback of twice Fast/base.
+// modelID is the actual channel model, not the client's pre-routing alias.
+func ComputeUsageCostForServiceTier(usage *llm.Usage, price objects.ModelPrice, modelID, serviceTier string, now ...time.Time) ([]objects.CostItem, decimal.Decimal) {
 	effectiveItems := effectivePriceItems(price, resolveCostTime(now...))
 	serviceTier = llm.CanonicalServiceTier(serviceTier)
-	if serviceTier == llm.ServiceTierUltrafast && !slices.ContainsFunc(price.ServiceTierPrices, func(tierPrice objects.ServiceTierPrice) bool {
-		return llm.CanonicalServiceTier(tierPrice.ServiceTier) == llm.ServiceTierUltrafast
-	}) {
-		items, total := computeUsageCostWithItems(usage, price.ItemsForServiceTierFromItems(llm.ServiceTierPriority, effectiveItems))
-		multiplier := decimal.NewFromInt(2)
-		for idx := range items {
-			items[idx].Subtotal = items[idx].Subtotal.Mul(multiplier)
-			for tierIdx := range items[idx].TierBreakdown {
-				items[idx].TierBreakdown[tierIdx].Subtotal = items[idx].TierBreakdown[tierIdx].Subtotal.Mul(multiplier)
-			}
-		}
-
-		return items, total.Mul(multiplier)
+	hasTierPrice := func(tier string) bool {
+		return slices.ContainsFunc(price.ServiceTierPrices, func(tierPrice objects.ServiceTierPrice) bool {
+			return llm.CanonicalServiceTier(tierPrice.ServiceTier) == tier
+		})
+	}
+	if hasTierPrice(serviceTier) {
+		return computeUsageCostWithItems(usage, price.ItemsForServiceTierFromItems(serviceTier, effectiveItems))
 	}
 
-	return computeUsageCostWithItems(usage, price.ItemsForServiceTierFromItems(serviceTier, effectiveItems))
+	// Ratios verified against https://developers.openai.com/api/docs/pricing on
+	// 2026-10-13. Restrict them to published model IDs; never infer future models.
+	var fastMultiplier int64 = 1
+	var ultrafastMultiplier int64 = 2
+	switch modelID {
+	case "gpt-6-astra", "gpt-6.1-sol":
+		fastMultiplier = 2
+		ultrafastMultiplier = 3 // relative to Fast (6x Standard)
+	case "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna":
+		fastMultiplier = 2
+	}
+
+	multiplier := decimal.NewFromInt(1)
+	switch serviceTier {
+	case llm.ServiceTierPriority:
+		multiplier = decimal.NewFromInt(fastMultiplier)
+	case llm.ServiceTierUltrafast:
+		if hasTierPrice(llm.ServiceTierPriority) {
+			effectiveItems = price.ItemsForServiceTierFromItems(llm.ServiceTierPriority, effectiveItems)
+		} else if ultrafastMultiplier == 3 {
+			// Only models with published Ultrafast pricing infer Fast from Standard.
+			ultrafastMultiplier *= fastMultiplier
+		}
+		multiplier = decimal.NewFromInt(ultrafastMultiplier)
+	}
+
+	items, total := computeUsageCostWithItems(usage, effectiveItems)
+	for idx := range items {
+		items[idx].Subtotal = items[idx].Subtotal.Mul(multiplier)
+		for tierIdx := range items[idx].TierBreakdown {
+			items[idx].TierBreakdown[tierIdx].Subtotal = items[idx].TierBreakdown[tierIdx].Subtotal.Mul(multiplier)
+		}
+	}
+
+	return items, total.Mul(multiplier)
 }
 
 func resolveCostTime(now ...time.Time) time.Time {
@@ -226,7 +259,7 @@ func computeUsageCostWithItems(usage *llm.Usage, priceItems []objects.ModelPrice
 					// Process 5m variant if present
 					if usage.PromptTokensDetails.WriteCached5MinTokens > 0 {
 						pricing := it.FindPromptWriteCacheVariantPricing(objects.PromptWriteCacheVariantCode5Min)
-						item, sub := computeItemSubtotal(usage.PromptTokensDetails.WriteCached5MinTokens, pricing)
+						item, sub := computeItemSubtotal(usage.PromptTokensDetails.WriteCached5MinTokens, usage.PromptTokens, pricing)
 						item.ItemCode = it.ItemCode
 						item.PromptWriteCacheVariantCode = objects.PromptWriteCacheVariantCode5Min
 						items = append(items, item)
@@ -236,7 +269,7 @@ func computeUsageCostWithItems(usage *llm.Usage, priceItems []objects.ModelPrice
 					// Process 1h variant if present
 					if usage.PromptTokensDetails.WriteCached1HourTokens > 0 {
 						pricing := it.FindPromptWriteCacheVariantPricing(objects.PromptWriteCacheVariantCode1Hour)
-						item, sub := computeItemSubtotal(usage.PromptTokensDetails.WriteCached1HourTokens, pricing)
+						item, sub := computeItemSubtotal(usage.PromptTokensDetails.WriteCached1HourTokens, usage.PromptTokens, pricing)
 						item.ItemCode = it.ItemCode
 						item.PromptWriteCacheVariantCode = objects.PromptWriteCacheVariantCode1Hour
 						items = append(items, item)
@@ -254,7 +287,7 @@ func computeUsageCostWithItems(usage *llm.Usage, priceItems []objects.ModelPrice
 			quantity = 0
 		}
 
-		item, sub := computeItemSubtotal(quantity, it.Pricing)
+		item, sub := computeItemSubtotal(quantity, usage.PromptTokens, it.Pricing)
 		item.ItemCode = it.ItemCode
 		items = append(items, item)
 		total = total.Add(sub)

@@ -4,6 +4,7 @@ enum PricingMode {
   usage_per_unit
   usage_tiered
   usage_volume
+  usage_context
 }
 
 enum PriceItemCode {

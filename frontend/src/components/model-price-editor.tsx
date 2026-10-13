@@ -8,10 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import type { PricingMode } from '@/features/channels/data/schema';
 
 const priceItemCodes = ['prompt_tokens', 'completion_tokens', 'prompt_cached_tokens', 'prompt_write_cached_tokens'] as const;
 const promptWriteCacheVariantCodes = ['five_min', 'one_hour'] as const;
-type PricingMode = 'flat_fee' | 'usage_per_unit' | 'usage_tiered' | 'usage_volume';
 
 type PriceEditorPricing = {
   mode: PricingMode;
@@ -180,7 +180,7 @@ const PriceItemRow = memo(function PriceItemRow({
   const requiredMessage = t('price.validation.priceRequired');
 
   useEffect(() => {
-    if ((pricingMode === 'usage_tiered' || pricingMode === 'usage_volume') && tierFields.length === 0) {
+    if ((pricingMode === 'usage_tiered' || pricingMode === 'usage_volume' || pricingMode === 'usage_context') && tierFields.length === 0) {
       appendTier({ upTo: null, pricePerUnit: '' });
     }
   }, [appendTier, pricingMode, tierFields.length]);
@@ -256,6 +256,7 @@ const PriceItemRow = memo(function PriceItemRow({
                     <SelectItem value='usage_per_unit'>{t('price.mode_usage_per_unit')}</SelectItem>
                     <SelectItem value='usage_tiered'>{t('price.mode_usage_tiered')}</SelectItem>
                     <SelectItem value='usage_volume'>{t('price.mode_usage_volume')}</SelectItem>
+                    <SelectItem value='usage_context'>{t('price.mode_usage_context')}</SelectItem>
                   </SelectContent>
                 </Select>
               </FormItem>
@@ -327,14 +328,15 @@ const PriceItemRow = memo(function PriceItemRow({
           </Button>
         </div>
 
-        {(pricingMode === 'usage_tiered' || pricingMode === 'usage_volume') && (
+        {(pricingMode === 'usage_tiered' || pricingMode === 'usage_volume' || pricingMode === 'usage_context') && (
           <div className='col-span-full mt-2 ml-4 min-w-0 space-y-2 rounded-md border border-dashed p-3'>
             <div className='text-muted-foreground flex items-center justify-between text-xs'>
-              <span>{t('price.tiers')}</span>
+              <span>{t(pricingMode === 'usage_context' ? 'price.contextTiers' : 'price.tiers')}</span>
               <Button type='button' variant='outline' size='icon-sm' onClick={() => appendTier({ upTo: null, pricePerUnit: '0' })}>
                 <IconPlus size={14} />
               </Button>
             </div>
+            {pricingMode === 'usage_context' && <p className='text-muted-foreground text-xs'>{t('price.contextTiersHint')}</p>}
             {tierFields.map((field, tierIndex) => (
               <div key={field.id} className='flex items-center gap-2'>
                 <FormField
@@ -497,9 +499,9 @@ const PriceVariantRow = memo(function PriceVariantRow({
     return formatted.replace(/[0.,\s]+/g, '').replace(/[A-Z]/g, '');
   }, [currencyCode, t]);
 
-  // Initialize tiers for usage_tiered and usage_volume mode
+  // Initialize tiers for all modes that select from tier prices.
   useEffect(() => {
-    if ((pricingMode === 'usage_tiered' || pricingMode === 'usage_volume') && tierFields.length === 0) {
+    if ((pricingMode === 'usage_tiered' || pricingMode === 'usage_volume' || pricingMode === 'usage_context') && tierFields.length === 0) {
       appendTier({ upTo: null, pricePerUnit: '' });
     }
   }, [appendTier, pricingMode, tierFields.length]);
@@ -561,6 +563,7 @@ const PriceVariantRow = memo(function PriceVariantRow({
                   <SelectItem value='usage_per_unit'>{t('price.mode_usage_per_unit')}</SelectItem>
                   <SelectItem value='usage_tiered'>{t('price.mode_usage_tiered')}</SelectItem>
                   <SelectItem value='usage_volume'>{t('price.mode_usage_volume')}</SelectItem>
+                  <SelectItem value='usage_context'>{t('price.mode_usage_context')}</SelectItem>
                 </SelectContent>
               </Select>
             </FormItem>
@@ -621,10 +624,10 @@ const PriceVariantRow = memo(function PriceVariantRow({
         </Button>
       </div>
 
-      {(pricingMode === 'usage_tiered' || pricingMode === 'usage_volume') && (
+      {(pricingMode === 'usage_tiered' || pricingMode === 'usage_volume' || pricingMode === 'usage_context') && (
         <div className='ml-4 space-y-2 rounded-md border border-dashed p-2'>
           <div className='text-muted-foreground flex items-center justify-between text-[10px]'>
-            <span>{t('price.tiers')}</span>
+            <span>{t(pricingMode === 'usage_context' ? 'price.contextTiers' : 'price.tiers')}</span>
             <Button
               type='button'
               variant='outline'
@@ -635,6 +638,7 @@ const PriceVariantRow = memo(function PriceVariantRow({
               <IconPlus size={10} />
             </Button>
           </div>
+          {pricingMode === 'usage_context' && <p className='text-muted-foreground text-xs'>{t('price.contextTiersHint')}</p>}
           {tierFields.map((field, tierIndex) => (
             <div key={field.id} className='flex items-center gap-1'>
               <FormField

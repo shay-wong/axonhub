@@ -57,7 +57,7 @@ func (s *UsageLogService) computeUsageCost(
 	}
 
 	if modelPrice, ok := ch.cachedModelPrices[modelID]; ok {
-		items, total := ComputeUsageCostForServiceTier(usage, modelPrice.Price, serviceTier, time.Now())
+		items, total := ComputeUsageCostForServiceTier(usage, modelPrice.Price, modelID, serviceTier, time.Now())
 
 		totalCost := total.InexactFloat64()
 		if log.DebugEnabled(ctx) {

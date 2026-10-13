@@ -83,7 +83,7 @@ Custom and global rules count failures independently for each key. Other errors 
 
 When enabled, AxonHub fills missing Codex-native Responses defaults, including `service_tier: priority`, while preserving values explicitly sent by the caller. Image requests are not changed. Leave the option disabled when the upstream should receive the caller's original Responses semantics unchanged.
 
-An explicit `service_tier: ultrafast` is preserved whether this option is enabled or disabled. OpenAI currently restricts Ultrafast processing to approved GPT-5.6 Sol customers, so unsupported accounts receive the upstream error unchanged.
+An explicit `service_tier: ultrafast` is preserved whether this option is enabled or disabled. As of 2026-10-13, [OpenAI lists GPT-6 Astra and GPT-6.1 Sol for Ultrafast](https://developers.openai.com/api/docs/guides/ultrafast-mode). Unsupported models or accounts receive the upstream error unchanged. See [service-tier pricing](cost-tracking.md#service-tier-prices) for billing rules and limitations.
 
 ## Model Renaming
 

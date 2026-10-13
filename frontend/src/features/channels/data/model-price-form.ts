@@ -241,7 +241,7 @@ function collectPricingIssues(
   if (mode === 'usage_per_unit' && !usagePerUnit) {
     issues.push({ code: 'priceRequired', path: [...pathPrefix, 'usagePerUnit'] });
   }
-  if (mode !== 'usage_tiered' && mode !== 'usage_volume') return;
+  if (mode !== 'usage_tiered' && mode !== 'usage_volume' && mode !== 'usage_context') return;
 
   const tiers = usageTiered?.tiers || [];
   if (tiers.length === 0) {

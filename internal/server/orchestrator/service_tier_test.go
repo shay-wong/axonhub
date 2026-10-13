@@ -247,6 +247,29 @@ func TestCaptureRequestedServiceTier_ResetsServiceTierForEveryAttempt(t *testing
 	require.Empty(t, state.SpeedMode)
 }
 
+func TestCaptureRequestedServiceTier_FastAlias(t *testing.T) {
+	for _, channelType := range []channel.Type{channel.TypeCodex, channel.TypeOpenaiResponses} {
+		t.Run(string(channelType), func(t *testing.T) {
+			state := stateWithChannelType(channelType)
+			middleware := captureRequestedServiceTier(&PersistentOutboundTransformer{state: state})
+			_, err := middleware.OnOutboundRawRequest(t.Context(), &httpclient.Request{
+				APIFormat: string(llm.APIFormatOpenAIResponse),
+				Body:      []byte(`{"service_tier":"fast"}`),
+			})
+			require.NoError(t, err)
+			require.Equal(t, llm.ServiceTierPriority, state.RequestedServiceTier)
+			require.Equal(t, "fast", state.SpeedMode)
+			if channelType == channel.TypeCodex {
+				require.Equal(t, llm.ServiceTierPriority, state.RequestPricingOverride)
+				require.Equal(t, biz.RequestPricingOverrideWhenAppliedDefault, state.RequestPricingOverridePolicy)
+			} else {
+				require.Empty(t, state.RequestPricingOverride)
+				require.Equal(t, biz.RequestPricingOverrideDisabled, state.RequestPricingOverridePolicy)
+			}
+		})
+	}
+}
+
 func TestCaptureRequestedServiceTier_PublicOpenAIFastKeepsResponseAuthoritative(t *testing.T) {
 	state := stateWithChannelType(channel.TypeOpenaiResponses)
 	middleware := captureRequestedServiceTier(&PersistentOutboundTransformer{state: state})

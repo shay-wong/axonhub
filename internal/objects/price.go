@@ -30,6 +30,10 @@ const (
 	// e.g. tiers are [{upTo: 1000, pricePerUnit: $0.01}, {upTo: nil, pricePerUnit: $0.02}],
 	// if usage is 1,500 then all tokens are billed at $0.02 => (1500/1e6)*$0.02.
 	PricingModeVolume PricingMode = "usage_volume"
+
+	// PricingModeContext selects the rate using total prompt tokens (including
+	// cache reads/writes), then bills all tokens of this item at that rate.
+	PricingModeContext PricingMode = "usage_context"
 )
 
 type Pricing struct {
@@ -73,7 +77,7 @@ func (p *Pricing) Equals(other *Pricing) bool {
 		if p.UsagePerUnit != nil && !p.UsagePerUnit.Equal(*other.UsagePerUnit) {
 			return false
 		}
-	case PricingModeTiered, PricingModeVolume:
+	case PricingModeTiered, PricingModeVolume, PricingModeContext:
 		return p.UsageTiered.Equals(other.UsageTiered)
 	}
 
@@ -94,7 +98,7 @@ func (p *Pricing) Validate() error {
 		if p.UsagePerUnit == nil {
 			return fmt.Errorf("usagePerUnit is required")
 		}
-	case PricingModeTiered, PricingModeVolume:
+	case PricingModeTiered, PricingModeVolume, PricingModeContext:
 		if p.UsageTiered == nil {
 			return fmt.Errorf("usageTiered is required")
 		}

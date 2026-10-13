@@ -15,7 +15,13 @@ const (
 // Unknown tiers remain distinct and deliberately use a model's base price when no exact
 // override is configured.
 func CanonicalServiceTier(tier string) string {
-	return strings.ToLower(strings.TrimSpace(tier))
+	tier = strings.ToLower(strings.TrimSpace(tier))
+	// OpenAI renamed Priority to Fast; both wire values use the same price key.
+	if tier == "fast" {
+		return ServiceTierPriority
+	}
+
+	return tier
 }
 
 // OpenAIServiceTier returns a canonical tier only for OpenAI-compatible request formats.

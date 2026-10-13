@@ -994,10 +994,10 @@ func TestComputeUsageCostForServiceTier(t *testing.T) {
 		},
 	}
 
-	_, standardTotal := ComputeUsageCostForServiceTier(usage, price, "")
-	_, priorityTotal := ComputeUsageCostForServiceTier(usage, price, "priority")
-	ultrafastItems, ultrafastTotal := ComputeUsageCostForServiceTier(usage, price, "ultrafast")
-	_, unknownTotal := ComputeUsageCostForServiceTier(usage, price, "unknown")
+	_, standardTotal := ComputeUsageCostForServiceTier(usage, price, "custom-model", "")
+	_, priorityTotal := ComputeUsageCostForServiceTier(usage, price, "custom-model", "priority")
+	ultrafastItems, ultrafastTotal := ComputeUsageCostForServiceTier(usage, price, "custom-model", "ultrafast")
+	_, unknownTotal := ComputeUsageCostForServiceTier(usage, price, "custom-model", "unknown")
 
 	require.True(t, decimal.NewFromInt(35).Equal(standardTotal))
 	require.True(t, decimal.NewFromInt(40).Equal(priorityTotal))
@@ -1009,7 +1009,7 @@ func TestComputeUsageCostForServiceTier(t *testing.T) {
 
 	withoutFastPrice := price
 	withoutFastPrice.ServiceTierPrices = nil
-	_, ultrafastWithoutFastTotal := ComputeUsageCostForServiceTier(usage, withoutFastPrice, "ultrafast")
+	_, ultrafastWithoutFastTotal := ComputeUsageCostForServiceTier(usage, withoutFastPrice, "custom-model", "ultrafast")
 	require.True(t, decimal.NewFromInt(70).Equal(ultrafastWithoutFastTotal))
 
 	price.ServiceTierPrices = append(price.ServiceTierPrices, objects.ServiceTierPrice{
@@ -1024,7 +1024,7 @@ func TestComputeUsageCostForServiceTier(t *testing.T) {
 			},
 		},
 	})
-	_, explicitUltrafastTotal := ComputeUsageCostForServiceTier(usage, price, "ultrafast")
+	_, explicitUltrafastTotal := ComputeUsageCostForServiceTier(usage, price, "custom-model", "ultrafast")
 	require.True(t, decimal.NewFromInt(50).Equal(explicitUltrafastTotal))
 }
 
@@ -1080,11 +1080,77 @@ func TestComputeUsageCostForServiceTierWithSchedule(t *testing.T) {
 	}
 	now := time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC)
 
-	_, standardTotal := ComputeUsageCostForServiceTier(usage, price, "", now)
-	_, priorityTotal := ComputeUsageCostForServiceTier(usage, price, "priority", now)
-	_, ultrafastTotal := ComputeUsageCostForServiceTier(usage, price, "ultrafast", now)
+	_, standardTotal := ComputeUsageCostForServiceTier(usage, price, "custom-model", "", now)
+	_, priorityTotal := ComputeUsageCostForServiceTier(usage, price, "custom-model", "priority", now)
+	_, ultrafastTotal := ComputeUsageCostForServiceTier(usage, price, "custom-model", "ultrafast", now)
 
 	require.True(t, decimal.NewFromInt(5).Equal(standardTotal))
 	require.True(t, decimal.NewFromInt(13).Equal(priorityTotal))
 	require.True(t, decimal.NewFromInt(26).Equal(ultrafastTotal))
+
+	_, officialUltrafast := ComputeUsageCostForServiceTier(usage, price, "gpt-6-astra", "ultrafast", now)
+	require.True(t, decimal.NewFromInt(39).Equal(officialUltrafast))
+	price.ServiceTierPrices = nil
+	_, officialFast := ComputeUsageCostForServiceTier(usage, price, "gpt-6-astra", "fast", now)
+	_, officialUltrafast = ComputeUsageCostForServiceTier(usage, price, "gpt-6-astra", "ultrafast", now)
+	require.True(t, decimal.NewFromInt(10).Equal(officialFast))
+	require.True(t, decimal.NewFromInt(30).Equal(officialUltrafast))
+}
+
+func TestComputeUsageCostForServiceTierOfficialRatios(t *testing.T) {
+	// Keep the request below the official 272K long-context threshold. Include
+	// cached reads/writes so fallback scaling cannot hide behind an input-only total.
+	usage := &llm.Usage{
+		PromptTokens: 200_000, CompletionTokens: 100_000,
+		PromptTokensDetails: &llm.PromptTokensDetails{CachedTokens: 50_000, WriteCachedTokens: 50_000},
+	}
+	price := objects.ModelPrice{Items: []objects.ModelPriceItem{
+		{ItemCode: objects.PriceItemCodeUsage, Pricing: objects.Pricing{Mode: objects.PricingModeUsagePerUnit, UsagePerUnit: mustDecimalPtr("10")}},
+		{ItemCode: objects.PriceItemCodeCompletion, Pricing: objects.Pricing{Mode: objects.PricingModeTiered, UsageTiered: &objects.TieredPricing{Tiers: []objects.PriceTier{{PricePerUnit: decimal.NewFromInt(50)}}}}},
+		{ItemCode: objects.PriceItemCodePromptCachedToken, Pricing: objects.Pricing{Mode: objects.PricingModeUsagePerUnit, UsagePerUnit: mustDecimalPtr("1")}},
+		{ItemCode: objects.PriceItemCodeWriteCachedTokens, Pricing: objects.Pricing{Mode: objects.PricingModeUsagePerUnit, UsagePerUnit: mustDecimalPtr("12.5")}},
+	}}
+	for _, tt := range []struct{ model, tier, total string }{
+		{"gpt-6-astra", "default", "6.675"},
+		{"gpt-6-astra", "priority", "13.35"},
+		{"gpt-6-astra", " FAST ", "13.35"},
+		{"gpt-6-astra", "ultrafast", "40.05"},
+		{"gpt-6.1-sol", "ultrafast", "40.05"},
+		{"gpt-6.1-sol", "fast", "13.35"},
+		{"gpt-6-sol", "fast", "13.35"},
+		{"gpt-6-luna", "fast", "13.35"},
+		{"gpt-5.6-sol", "fast", "13.35"},
+		{"gpt-5.6-terra", "fast", "13.35"},
+		{"gpt-5.6-luna", "fast", "13.35"},
+		{"gpt-5.6-sol", "ultrafast", "13.35"}, // legacy estimate, not published support
+		{"gpt-6-astra", "flex", "6.675"},
+		{"custom-model", "fast", "6.675"},
+		{"custom-model", "ultrafast", "13.35"},
+		{"gpt-6-future", "fast", "6.675"},
+	} {
+		t.Run(tt.model+"/"+tt.tier, func(t *testing.T) {
+			items, total := ComputeUsageCostForServiceTier(usage, price, tt.model, tt.tier)
+			require.Equal(t, tt.total, total.String())
+			sum := decimal.Zero
+			for _, item := range items {
+				sum = sum.Add(item.Subtotal)
+				if len(item.TierBreakdown) > 0 {
+					require.True(t, item.Subtotal.Equal(item.TierBreakdown[0].Subtotal))
+				}
+			}
+			require.True(t, sum.Equal(total))
+		})
+	}
+
+	// Custom prices remain authoritative, including partial overrides and the fast alias.
+	price.ServiceTierPrices = []objects.ServiceTierPrice{{ServiceTier: "fast", Items: []objects.ModelPriceItem{
+		{ItemCode: objects.PriceItemCodeUsage, Pricing: objects.Pricing{Mode: objects.PricingModeUsagePerUnit, UsagePerUnit: mustDecimalPtr("15")}},
+	}}}
+	_, fastTotal := ComputeUsageCostForServiceTier(usage, price, "gpt-6-astra", "priority")
+	_, ultrafastTotal := ComputeUsageCostForServiceTier(usage, price, "gpt-6-astra", "ultrafast")
+	require.Equal(t, "7.175", fastTotal.String())
+	require.Equal(t, "21.525", ultrafastTotal.String())
+	price.ServiceTierPrices = append(price.ServiceTierPrices, objects.ServiceTierPrice{ServiceTier: "ultrafast", Items: price.ServiceTierPrices[0].Items})
+	_, explicitTotal := ComputeUsageCostForServiceTier(usage, price, "gpt-6-astra", "ultrafast")
+	require.Equal(t, "7.175", explicitTotal.String())
 }

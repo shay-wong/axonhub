@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import ts from 'typescript';
 import {
   collectPriceFormValidationIssues,
   mapPriceFormDataToSaveInput,
@@ -361,13 +363,17 @@ test('validates scheduled items with the same duplicate rules as base prices', (
   assert.ok(issues.every((issue) => issue.path.includes('schedule')));
 });
 
-test('accepts positive strictly increasing tier bounds for usage tiered and usage volume prices', () => {
+test('accepts positive strictly increasing tier bounds for tiered, volume, and context prices', () => {
   const formData = {
     prices: [
       {
         modelId: 'gpt-5.3-codex',
         price: {
-          items: [tieredItem('prompt_tokens', 'usage_tiered', [100, 200]), tieredItem('completion_tokens', 'usage_volume', [100, 200])],
+          items: [
+            tieredItem('prompt_tokens', 'usage_tiered', [100, 200]),
+            tieredItem('completion_tokens', 'usage_volume', [100, 200]),
+            tieredItem('prompt_cached_tokens', 'usage_context', [272000]),
+          ],
           serviceTierPrices: [],
         },
       },
@@ -379,6 +385,18 @@ test('accepts positive strictly increasing tier bounds for usage tiered and usag
 
 test('rejects non-positive and non-increasing tier bounds in base and service-tier prices', () => {
   const cases = [
+    {
+      name: 'context duplicate bounds',
+      item: tieredItem('completion_tokens', 'usage_context', [272000, 272000]),
+      serviceTierPath: false,
+      invalidTierIndex: 1,
+    },
+    {
+      name: 'service tier context zero bound',
+      item: tieredItem('prompt_tokens', 'usage_context', [0]),
+      serviceTierPath: true,
+      invalidTierIndex: 0,
+    },
     {
       name: 'usage tiered decreasing bounds',
       item: tieredItem('prompt_tokens', 'usage_tiered', [200, 100]),
@@ -437,4 +455,124 @@ test('rejects non-positive and non-increasing tier bounds in base and service-ti
       name
     );
   });
+});
+
+test('round-trips context prices in base, service tiers, schedules, and cache variants through JSON and form edits', async () => {
+  // Exercise the actual API/JSON-import parser, including its pricing-mode enum.
+  const schemaSource = readFileSync(new URL('./schema.ts', import.meta.url), 'utf8')
+    .replace("'zod'", JSON.stringify(import.meta.resolve('zod')))
+    .replace("'@/gql/pagination'", JSON.stringify(new URL('../../../gql/pagination.ts', import.meta.url).href));
+  const schemaJS = ts.transpileModule(schemaSource, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2023 },
+  }).outputText;
+  const { channelModelPriceSchema, saveChannelModelPriceInputSchema } = await import(
+    `data:text/javascript;base64,${Buffer.from(schemaJS).toString('base64')}`
+  );
+  const contextItem = {
+    ...tieredItem('prompt_write_cached_tokens', 'usage_context', [272000]),
+    promptWriteCacheVariants: [
+      {
+        variantCode: 'one_hour',
+        pricing: tieredItem('prompt_write_cached_tokens', 'usage_context', [272000]).pricing,
+      },
+    ],
+  };
+  const serverPrices = [
+    {
+      id: 'context-price',
+      modelID: 'gpt-6-astra',
+      price: {
+        items: [contextItem],
+        serviceTierPrices: [{ serviceTier: 'ultrafast', items: [contextItem] }],
+        schedule: {
+          timezone: 'Asia/Shanghai',
+          overrides: [{ name: 'Night', priority: 1, when: { dailyTime: { start: '00:00', end: '06:00' } }, items: [contextItem] }],
+        },
+      },
+    },
+  ];
+  const form = mapServerPricesToFormData(serverPrices.map((price) => channelModelPriceSchema.parse(price)));
+  const allItems = [
+    form.prices[0].price.items[0],
+    form.prices[0].price.serviceTierPrices[0].items[0],
+    form.prices[0].price.schedule.overrides[0].items[0],
+  ];
+  for (const item of allItems) {
+    assert.equal(item.pricing.mode, 'usage_context');
+    item.pricing.usageTiered.tiers[1].pricePerUnit = ' 75 ';
+    item.promptWriteCacheVariants[0].pricing.usageTiered.tiers[0].pricePerUnit = ' 12.5 ';
+  }
+  assert.deepEqual(collectPriceFormValidationIssues(form), []);
+  const saved = mapPriceFormDataToSaveInput(form);
+  const reimported = mapSaveInputsToFormData(
+    JSON.parse(JSON.stringify(saved)).map((price) => saveChannelModelPriceInputSchema.parse(price))
+  );
+  assert.deepEqual(collectPriceFormValidationIssues(reimported), []);
+  assert.deepEqual(mapPriceFormDataToSaveInput(reimported), saved);
+  for (const item of [
+    saved[0].price.items[0],
+    saved[0].price.serviceTierPrices[0].items[0],
+    saved[0].price.schedule.overrides[0].items[0],
+  ]) {
+    assert.equal(item.pricing.mode, 'usage_context');
+    assert.deepEqual(item.pricing.usageTiered.tiers, [
+      { upTo: 272000, pricePerUnit: '1' },
+      { upTo: null, pricePerUnit: '75' },
+    ]);
+    assert.equal(item.promptWriteCacheVariants[0].pricing.mode, 'usage_context');
+    assert.equal(item.promptWriteCacheVariants[0].pricing.usageTiered.tiers[0].pricePerUnit, '12.5');
+  }
+});
+
+test('validates context tiers inside scheduled cache variants and service-tier overrides', () => {
+  const form = {
+    prices: [
+      {
+        modelId: 'gpt-6-astra',
+        price: {
+          items: [tieredItem('completion_tokens', 'usage_context', [272000])],
+          serviceTierPrices: [
+            {
+              serviceTier: 'ultrafast',
+              items: [
+                {
+                  itemCode: 'completion_tokens',
+                  pricing: { mode: 'usage_context', usageTiered: { tiers: [] } },
+                },
+              ],
+            },
+          ],
+          schedule: {
+            timezone: 'UTC',
+            overrides: [
+              {
+                name: 'Invalid cache threshold',
+                priority: 1,
+                when: {},
+                items: [
+                  {
+                    ...usageItem('prompt_write_cached_tokens', '1'),
+                    promptWriteCacheVariants: [
+                      {
+                        variantCode: 'one_hour',
+                        pricing: { mode: 'usage_context', usageTiered: { tiers: [{ upTo: 272000, pricePerUnit: '' }] } },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ],
+  };
+  const issues = collectPriceFormValidationIssues(form);
+  assert.equal(issues.length, 3);
+  assert.deepEqual(issues[0].path, ['prices', 0, 'price', 'serviceTierPrices', 0, 'items', 0, 'pricing', 'usageTiered']);
+  assert.ok(issues.slice(1).every((issue) => issue.path.includes('schedule') && issue.path.includes('promptWriteCacheVariants')));
+  assert.deepEqual(
+    issues.slice(1).map((issue) => issue.path.at(-1)),
+    ['pricePerUnit', 'upTo']
+  );
 });

@@ -6,10 +6,12 @@
 - Added per-channel API key rules with status/keyword matching, configurable error thresholds, temporary auto-recovery, and permanent disable/delete actions.
 - NeuralWatt channels now show the elapsed monthly energy window marker on the kWh bar and an estimated period quota, matching the other windowed providers.
 - Allowed Fenno channels to opt into Codex-style Responses defaults; the option remains disabled by default.
-- Added Codex/OpenAI `ultrafast` service-tier forwarding, request tracking, and display support, with billing defaulting to twice the effective Fast price when no exact Ultrafast price is configured.
+- Added Codex/OpenAI `ultrafast` service-tier forwarding, request tracking, and display support with independent tier prices.
 
 ### Fixed
 
+- Aligned missing Fast/Ultrafast prices for published GPT-6/GPT-5.6 models with official API ratios: Astra and GPT-6.1 Sol Ultrafast now falls back to 3× Fast or 6× base. Recognized OpenAI's `fast` alias in billing, catalog imports, and request display; preserved explicit saved prices and historical costs.
+- Added input-context pricing for all token items, including service-tier, schedule, and cache-write variant prices. Catalog imports now preserve context thresholds and supported OpenAI Fast/Ultrafast long-context rates. Re-import and save existing fixed prices to enable it; historical usage is unchanged.
 - Preserved Responses Lite tool definitions across Responses, Codex relays, and Compact forwarding; unsupported conversion to other protocols now returns an explicit error instead of silently dropping tools.
 - Prevented Chat streaming responses from appending a successful finish after an explicit upstream failure, cancellation, or incomplete outcome.
 - Kept completed stream usage and costs after trailing disconnects without duplicate success counts or a trailing timeout error.

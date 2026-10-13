@@ -1105,7 +1105,7 @@ func validateLegacyPricing(pricing *objects.Pricing) error {
 		if pricing.UsagePerUnit == nil {
 			return fmt.Errorf("usagePerUnit is required")
 		}
-	case objects.PricingModeTiered, objects.PricingModeVolume:
+	case objects.PricingModeTiered, objects.PricingModeVolume, objects.PricingModeContext:
 		if pricing.UsageTiered == nil {
 			return fmt.Errorf("usageTiered is required")
 		}
