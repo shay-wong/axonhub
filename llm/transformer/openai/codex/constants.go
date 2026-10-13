@@ -15,12 +15,11 @@ func DefaultModels() []string {
 		"gpt-6-luna",
 		"gpt-6.1-sol",
 		"codex-auto-review",
+		"gpt-image-2",
 	}
 }
 
 const (
-	defaultImageMainModel = "gpt-6-astra"
-
 	AxonHubOriginator = "axonhub"
 	AuthorizeURL      = "https://auth.openai.com/oauth/authorize"
 	//nolint:gosec // false alert.

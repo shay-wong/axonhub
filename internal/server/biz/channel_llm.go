@@ -240,7 +240,7 @@ func (svc *ChannelService) buildChannelWithOutbounds(c *ent.Channel, apiKeyOverr
 			continue
 		}
 
-		if c.Type != channel.TypeXai || ep.APIFormat == ch.Outbound.APIFormat().String() {
+		if (c.Type != channel.TypeXai || ep.APIFormat == ch.Outbound.APIFormat().String()) && (c.Type != channel.TypeCodex || !isNativeImageFormat(ep.APIFormat)) {
 			outbounds[ep.APIFormat] = ch.Outbound
 			continue
 		}
@@ -315,20 +315,22 @@ func (svc *ChannelService) buildCodexOutbound(
 	transport string,
 	alphaSearchPath string,
 	httpClient *httpclient.HttpClient,
+	endpointPath ...string,
 ) (transformer.Outbound, error) {
-	imageMainModel := func(ctx context.Context) string {
-		return svc.SystemService.ModelSettingsOrDefault(ctx).CodexImageMainModel
+	path := ""
+	if len(endpointPath) > 0 {
+		path = endpointPath[0]
 	}
 	if c.Credentials.IsOAuth() {
 		if ch != nil {
 			if existing, ok := ch.Outbound.(*codex.OutboundTransformer); ok {
 				if tokens := existing.TokenProvider(); tokens != nil {
 					return codex.NewOutboundTransformer(codex.Params{
-						TokenProvider:          tokens,
-						BaseURL:                baseURL,
-						Transport:              transport,
-						AlphaSearchPath:        alphaSearchPath,
-						ImageMainModelProvider: imageMainModel,
+						TokenProvider:   tokens,
+						BaseURL:         baseURL,
+						Transport:       transport,
+						AlphaSearchPath: alphaSearchPath,
+						EndpointPath:    path,
 					})
 				}
 			}
@@ -369,11 +371,11 @@ func (svc *ChannelService) buildCodexOutbound(
 		}
 
 		return codex.NewOutboundTransformer(codex.Params{
-			TokenProvider:          p,
-			BaseURL:                baseURL,
-			Transport:              transport,
-			AlphaSearchPath:        alphaSearchPath,
-			ImageMainModelProvider: imageMainModel,
+			TokenProvider:   p,
+			BaseURL:         baseURL,
+			Transport:       transport,
+			AlphaSearchPath: alphaSearchPath,
+			EndpointPath:    path,
 		})
 	}
 
@@ -381,11 +383,11 @@ func (svc *ChannelService) buildCodexOutbound(
 	tokens := oauth.NewAPIKeyTokenProvider(apiKeyProvider.Get)
 
 	return codex.NewOutboundTransformer(codex.Params{
-		TokenProvider:          tokens,
-		BaseURL:                baseURL,
-		Transport:              transport,
-		AlphaSearchPath:        alphaSearchPath,
-		ImageMainModelProvider: imageMainModel,
+		TokenProvider:   tokens,
+		BaseURL:         baseURL,
+		Transport:       transport,
+		AlphaSearchPath: alphaSearchPath,
+		EndpointPath:    path,
 	})
 }
 
@@ -412,6 +414,13 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 		if err := validateCommandCodeBaseURL(baseURL); err != nil {
 			return nil, err
 		}
+	}
+	if isNativeImageFormat(ep.APIFormat) && c.Type == channel.TypeCodex && ep.Transport != objects.ChannelEndpointTransportWebSocket {
+		primary, ok := ch.Outbound.(*codex.OutboundTransformer)
+		if !ok {
+			return nil, fmt.Errorf("channel %s requires a Codex outbound for Images", c.Name)
+		}
+		return codex.NewImageOutboundTransformer(codex.ImageParams{TokenProvider: primary.TokenProvider(), BaseURL: baseURL, EndpointPath: ep.Path})
 	}
 	if endpointTransport(ep) == objects.ChannelEndpointTransportWebSocket && !supportsWebSocketTransport(ep.APIFormat) {
 		return nil, fmt.Errorf("websocket transport only supports api_format %q", llm.APIFormatOpenAIResponse.String())
@@ -455,7 +464,7 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 		llm.APIFormatOpenAIResponseCompact.String():
 		transport := endpointTransport(ep)
 		if (c.Type == channel.TypeCodex || c.Type == channel.TypeFenno) && ep.APIFormat == llm.APIFormatOpenAIResponse.String() {
-			return svc.buildCodexOutbound(c, ch, baseURL, transport, "", ch.HTTPClient)
+			return svc.buildCodexOutbound(c, ch, baseURL, transport, "", ch.HTTPClient, ep.Path)
 		}
 
 		return responses.NewOutboundTransformerWithConfig(&responses.Config{
@@ -496,13 +505,6 @@ func (svc *ChannelService) buildNonDefaultEndpointOutbound(
 				EndpointPath:   ep.Path,
 				APIKeyProvider: apiKeyProvider(),
 			})
-		}
-		if (c.Type == channel.TypeCodex || c.Type == channel.TypeFenno) &&
-			(ep.APIFormat == llm.APIFormatOpenAIImageGeneration.String() ||
-				ep.APIFormat == llm.APIFormatOpenAIImageEdit.String()) {
-			transport := endpointTransport(ep)
-
-			return svc.buildCodexOutbound(c, ch, baseURL, transport, "", ch.HTTPClient)
 		}
 
 		return openai.NewOutboundTransformerWithConfig(&openai.Config{
