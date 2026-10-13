@@ -12,7 +12,7 @@ AxonHub can act as a drop-in replacement for OpenAI endpoints, letting Codex con
 
 ### Codex request headers
 
-Codex Responses and alpha-search requests use AxonHub's default Codex User-Agent unless the channel's User-Agent pass-through switch is enabled. Client attribution headers (`Http-Referer`, `X-Title`, `X-Platform`, `X-Zcode-*`, and `X-Os-*`) are excluded from these outbound requests. The original headers remain available if a retry switches to a different provider that consumes them. Explicit Responses Lite selection and session identity are preserved.
+Codex Responses, native Images, and alpha-search requests use AxonHub's default Codex User-Agent unless the channel's User-Agent pass-through switch is enabled. Client attribution headers (`Http-Referer`, `X-Title`, `X-Platform`, `X-Zcode-*`, and `X-Os-*`) are excluded from these outbound requests. The original headers remain available if a retry switches to a different provider that consumes them. Explicit Responses Lite selection and session identity are preserved. Native Images keeps its JSON protocol while normalizing the final session header.
 
 ### Prerequisites
 - AxonHub instance reachable from your development machine.

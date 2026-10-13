@@ -265,6 +265,7 @@ git show --remerge-diff <merge-commit>
 
 ### U12 Codex session header 最终规范化
 
+- 原生 Images 整合：采用 `3cb7e333` 后，独立 `imageOutbound` 同样使用 Codex 默认 UA/显式透传开关、指纹 skip 和 canonical session metadata；通过仅规范化 headers 的 Images finalizer 防止 merge/override 重引入旧 session，不能调用 Responses transport 清理而改变 JSON Images。回归：`image_headers_test.go`、`TestCodexNativeImagesUserAgentPassThrough`；当前独立变更定位：`git log -S'func (t *imageOutbound) FinalizeTransportRequest' -- llm/transformer/openai/codex/image_outbound.go`。
 - 本次上游整合：`931fafff` 的默认 Codex UA、显式 UA 透传开关和 Codex 专属指纹过滤被采用；保留本地 session/Lite 规范化。独立兼容修复通过出站 `SkipInboundHeaderMerge` 过滤 Responses/alpha-search 的指纹字段，按大小写无关方式匹配，不能删除源 map 或影响随后普通渠道的 attribution headers；Lite 校验也不能修改源 headers。当前变更定位：`git log -S'skipClientFingerprintHeaders' -- llm/transformer/openai/codex/headers.go`。回归覆盖转换、合并、重试和后续普通渠道；用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`。
 - 生命周期：`等待上游吸收`
 - 原始意图：前置转换确定的 Codex session ID 不能在后续 inbound header merge、retry 或 WebSocket executor 中被旧别名覆盖。

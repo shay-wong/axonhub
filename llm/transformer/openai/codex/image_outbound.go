@@ -6,15 +6,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
-
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/auth"
 	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/oauth"
 	"github.com/looplj/axonhub/llm/transformer"
 	"github.com/looplj/axonhub/llm/transformer/openai"
-	"github.com/looplj/axonhub/llm/transformer/shared"
 )
 
 type ImageParams struct {
@@ -26,6 +23,11 @@ type ImageParams struct {
 type imageOutbound struct {
 	transformer.Outbound
 	tokens oauth.TokenGetter
+}
+
+func (t *imageOutbound) FinalizeTransportRequest(request *httpclient.Request) *httpclient.Request {
+	normalizeCodexSessionHeaders(request)
+	return request
 }
 
 func (t *imageOutbound) AllowPassThroughBody(_ context.Context, req *llm.Request, _ *httpclient.Request) bool {
@@ -72,26 +74,23 @@ func (t *imageOutbound) TransformRequest(ctx context.Context, req *llm.Request) 
 	if req.RawRequest != nil {
 		raw = req.RawRequest.Headers
 	}
+	hreq.SkipInboundHeaderMerge = skipClientFingerprintHeaders(raw, hreq.SkipInboundHeaderMerge)
+	hreq.SkipInboundHeaderMerge[http.CanonicalHeaderKey(SessionHeader)] = true
+	hreq.SkipInboundHeaderMerge[http.CanonicalHeaderKey(SessionHeaderHyphen)] = true
+	// Client UA forwarding belongs to the orchestrator's opt-in middleware.
+	hreq.Headers.Set("User-Agent", codexDefaultUserAgent)
 	hreq.Headers.Set("Originator", AxonHubOriginator)
-	for _, header := range append([]string{"Originator", "User-Agent"}, PassthroughHeaders...) {
+	for _, header := range append([]string{"Originator"}, PassthroughHeaders...) {
 		if value := raw.Get(header); value != "" {
 			hreq.Headers.Set(header, value)
 		}
 	}
-	session := raw.Get(SessionHeaderHyphen)
-	if session == "" {
-		session = raw.Get(SessionHeader)
+	session := ensureSessionID(ctx, GetSessionIDFromHeaders(raw), raw.Get(TurnMetadataHeader))
+	if hreq.TransformerMetadata == nil {
+		hreq.TransformerMetadata = map[string]any{}
 	}
-	if session == "" {
-		session = ExtractSessionIDFromTurnMetadata(raw.Get(TurnMetadataHeader))
-	}
-	if session == "" {
-		session, _ = shared.GetSessionID(ctx)
-	}
-	if session == "" {
-		session = uuid.NewString()
-	}
-	hreq.Headers.Set(SessionHeaderHyphen, session)
+	hreq.TransformerMetadata[codexSessionIDMetadataKey] = session
+	normalizeCodexSessionHeaders(hreq)
 	if accountID := ExtractChatGPTAccountIDFromJWT(creds.AccessToken); accountID != "" {
 		hreq.Headers.Set("Chatgpt-Account-Id", accountID)
 	}

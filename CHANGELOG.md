@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Applied Codex User-Agent opt-in, client fingerprint filtering, and stable session headers to the new native Images path without changing its JSON protocol.
 - Kept multi-key retry budgets stable while disabled credentials are refreshed, and kept single-key diagnostics pinned to the selected key across retries.
 - Preserved original client headers during Codex fingerprint filtering so failover to other providers retains their attribution headers.
 - Aligned missing Fast/Ultrafast prices for published GPT-6/GPT-5.6 models with official API ratios: Astra and GPT-6.1 Sol Ultrafast now falls back to 3× Fast or 6× base. Recognized OpenAI's `fast` alias in billing, catalog imports, and request display; preserved explicit saved prices and historical costs.

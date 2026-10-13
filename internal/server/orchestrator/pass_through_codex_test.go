@@ -20,6 +20,39 @@ import (
 	"github.com/looplj/axonhub/llm/transformer/openai/codex"
 )
 
+func TestCodexNativeImagesUserAgentPassThrough(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(map[bool]string{false: "disabled", true: "enabled"}[enabled], func(t *testing.T) {
+			out, err := codex.NewImageOutboundTransformer(codex.ImageParams{
+				BaseURL:       "https://relay.example/v1",
+				TokenProvider: oauth.NewStaticTokenProvider(&oauth.OAuthCredentials{AccessToken: "test-token"}),
+			})
+			require.NoError(t, err)
+			raw := &httpclient.Request{Headers: http.Header{"User-Agent": {"client-editor/1.0"}}}
+			req := &llm.Request{Model: "gpt-image-2", RequestType: llm.RequestTypeImage, APIFormat: llm.APIFormatOpenAIImageGeneration,
+				RawRequest: raw, Image: &llm.ImageRequest{Prompt: "draw"}}
+			hreq, err := out.TransformRequest(t.Context(), req)
+			require.NoError(t, err)
+			defaultUA := hreq.Headers.Get("User-Agent")
+			require.NotEmpty(t, defaultUA)
+			require.NotEqual(t, "client-editor/1.0", defaultUA)
+			persistent := &PersistentOutboundTransformer{state: &PersistenceState{
+				LlmRequest: req, CurrentCandidate: &ChannelModelsCandidate{Channel: &biz.Channel{
+					Channel: &ent.Channel{Settings: &objects.ChannelSettings{PassThroughUserAgent: &enabled}},
+				}},
+			}}
+			hreq, err = applyUserAgentPassThrough(persistent, nil).OnOutboundRawRequest(t.Context(), hreq)
+			require.NoError(t, err)
+			hreq = httpclient.MergeInboundRequest(hreq, raw)
+			if enabled {
+				require.Equal(t, "client-editor/1.0", hreq.Headers.Get("User-Agent"))
+			} else {
+				require.Equal(t, defaultUA, hreq.Headers.Get("User-Agent"))
+			}
+		})
+	}
+}
+
 func TestImagesDoNotUseResponsesBridge(t *testing.T) {
 	const responseBody = `{"created":123,"data":[{"b64_json":"aW1hZ2U="}]}`
 	for _, input := range []struct {

@@ -12,7 +12,7 @@ AxonHub 可以作为 OpenAI 接口的直接替代方案，使 Codex 能够通过
 
 ### Codex 请求头
 
-Codex Responses 和 alpha-search 请求默认使用 AxonHub 的 Codex User-Agent，只有开启渠道的 User-Agent 透传开关时才使用客户端值。这两类出站请求会过滤客户端归属字段（`Http-Referer`、`X-Title`、`X-Platform`、`X-Zcode-*`、`X-Os-*`），但保留原始请求头，供重试切换到需要这些字段的其他提供商时使用。调用方显式选择的 Responses Lite 和会话身份保持不变。
+Codex Responses、原生 Images 和 alpha-search 请求默认使用 AxonHub 的 Codex User-Agent，只有开启渠道的 User-Agent 透传开关时才使用客户端值。这些出站请求会过滤客户端归属字段（`Http-Referer`、`X-Title`、`X-Platform`、`X-Zcode-*`、`X-Os-*`），但保留原始请求头，供重试切换到需要这些字段的其他提供商时使用。调用方显式选择的 Responses Lite 和会话身份保持不变。原生 Images 在最终规范化会话头时仍保持 JSON 协议。
 
 ### 前置要求
 - 可访问的 AxonHub 实例。

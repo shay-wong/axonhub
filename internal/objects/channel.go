@@ -244,7 +244,7 @@ type ChannelSettings struct {
 	// APIKeySelectionStrategy controls how a channel selects among upstream API keys.
 	APIKeySelectionStrategy string `json:"apiKeySelectionStrategy,omitempty"`
 
-	// Deprecated: retained for API compatibility; the global model setting is used instead.
+	// Deprecated: retained for API compatibility; native Images ignores this field.
 	CodexImageMainModel string `json:"codexImageMainModel,omitempty"`
 
 	// ModelProtocols force-specifies the outbound protocols for specific models of

@@ -32,7 +32,7 @@ func TestCodexModelsIncludeImageModel(t *testing.T) {
 		// Given the static fallback catalog, when it is requested.
 		models := DefaultModels()
 		// Then its original order is retained with the image model appended once.
-		require.Equal(t, []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol", "codex-auto-review", "gpt-image-2"}, models)
+		require.Equal(t, []string{"gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol", "codex-auto-review", "gpt-image-2"}, models)
 	})
 
 	for _, body := range []string{
