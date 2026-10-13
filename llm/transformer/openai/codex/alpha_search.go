@@ -35,9 +35,6 @@ func (t *OutboundTransformer) transformAlphaSearchRequest(ctx context.Context, l
 	var rawHeaders http.Header
 	if llmReq.RawRequest != nil && llmReq.RawRequest.Headers != nil {
 		rawHeaders = llmReq.RawRequest.Headers
-		// Keep client attribution headers off the wire: MergeInboundRequest runs
-		// after this transformer and would otherwise forward them upstream.
-		ScrubClientFingerprintHeaders(rawHeaders)
 	}
 	sessionID := GetSessionIDFromHeaders(rawHeaders)
 	if sessionID == "" {
@@ -116,13 +113,14 @@ func (t *OutboundTransformer) transformAlphaSearchRequest(ctx context.Context, l
 
 	baseURL := strings.TrimRight(t.baseURL, "#/")
 	return &httpclient.Request{
-		Method:      http.MethodPost,
-		URL:         baseURL + t.alphaSearchPath,
-		Headers:     headers,
-		Body:        body,
-		Auth:        &httpclient.AuthConfig{Type: httpclient.AuthTypeBearer, APIKey: creds.AccessToken},
-		RequestType: llm.RequestTypeAlphaSearch.String(),
-		APIFormat:   llm.APIFormatOpenAIAlphaSearch.String(),
+		SkipInboundHeaderMerge: skipClientFingerprintHeaders(rawHeaders, nil),
+		Method:                 http.MethodPost,
+		URL:                    baseURL + t.alphaSearchPath,
+		Headers:                headers,
+		Body:                   body,
+		Auth:                   &httpclient.AuthConfig{Type: httpclient.AuthTypeBearer, APIKey: creds.AccessToken},
+		RequestType:            llm.RequestTypeAlphaSearch.String(),
+		APIFormat:              llm.APIFormatOpenAIAlphaSearch.String(),
 	}, nil
 }
 

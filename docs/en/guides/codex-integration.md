@@ -10,6 +10,10 @@ AxonHub can act as a drop-in replacement for OpenAI endpoints, letting Codex con
 - You can aggregate Codex requests from the same conversation by enabling `server.trace.codex_trace_enabled` (uses `Session_id`) or adding extra headers via `server.trace.extra_trace_headers`.
 - Codex scheduled automations are supported even when the app starts them with an `automation_update` output that has no `call_id`.
 
+### Codex request headers
+
+Codex Responses and alpha-search requests use AxonHub's default Codex User-Agent unless the channel's User-Agent pass-through switch is enabled. Client attribution headers (`Http-Referer`, `X-Title`, `X-Platform`, `X-Zcode-*`, and `X-Os-*`) are excluded from these outbound requests. The original headers remain available if a retry switches to a different provider that consumes them. Explicit Responses Lite selection and session identity are preserved.
+
 ### Prerequisites
 - AxonHub instance reachable from your development machine.
 - Valid AxonHub API key with project access.

@@ -316,6 +316,8 @@ Fork safeguards also cover [permission-aware login destinations](docs/en/getting
 
 Codex model discovery supports its complete catalog format while preserving OpenAI compatibility; see the [Codex integration guide](docs/en/guides/codex-integration.md#model-catalog-refresh) for refresh conditions and context defaults.
 
+Codex outbound requests honor the channel's User-Agent pass-through switch and preserve original headers for failover while filtering client fingerprints; see [request header rules](docs/en/guides/codex-integration.md#codex-request-headers).
+
 Auto-disable keeps separate channel/key policies and Retry-After alongside global rules; see [policy precedence](docs/en/guides/channel-management.md#auto-disable-policy-compatibility).
 
 See the [documentation index](docs/en/index.md) for configuration details and more API examples.

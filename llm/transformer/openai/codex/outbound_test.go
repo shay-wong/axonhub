@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/transformer/openai"
 )
@@ -102,4 +103,68 @@ func TestCodexOutbound_ScrubsClientFingerprintHeaders(t *testing.T) {
 
 	assert.Equal(t, "client-value", merged.Headers.Get("X-Custom"))
 	assert.Equal(t, "codex_cli_rs", merged.Headers.Get("Originator"))
+}
+
+func TestCodexOutbound_FingerprintFilteringPreservesHeadersForFailover(t *testing.T) {
+	for _, alphaSearch := range []bool{false, true} {
+		name := "responses"
+		if alphaSearch {
+			name = "alpha-search"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			outbound := newTestCodexOutbound(t)
+			raw := &httpclient.Request{
+				Body:        []byte(`{"model":"gpt-5-codex","messages":[{"role":"user","content":"hello"}]}`),
+				ContentType: "application/json",
+				Headers: http.Header{
+					"Content-Type": []string{"application/json"},
+					"Http-Referer": []string{"https://editor.example/session"},
+					"x-title":      []string{"Editor"},
+					"X-PLATFORM":   []string{"darwin"},
+					"x-zcode-id":   []string{"client-session"},
+					"X-OS-NAME":    []string{"macOS"},
+					"X-Custom":     []string{"keep"},
+					"User-Agent":   []string{"Editor/1.0"},
+				},
+			}
+			raw.Headers.Set(SessionHeader, "session-underscore")
+			raw.Headers.Set(SessionHeaderHyphen, "session-hyphen")
+			raw.Headers.Set(ResponsesLiteHeader, "false")
+			original := raw.Headers.Clone()
+			request, err := openai.NewInboundTransformer().TransformRequest(ctx, raw)
+			require.NoError(t, err)
+			request.RawRequest = raw
+			if alphaSearch {
+				request.RequestType = llm.RequestTypeAlphaSearch
+				request.APIFormat = llm.APIFormatOpenAIAlphaSearch
+				request.AlphaSearch = &llm.AlphaSearchRequest{Body: []byte(`{"model":"gpt-5-codex","commands":{"search_query":[]}}`)}
+			}
+
+			for range 2 {
+				transformed, err := outbound.TransformRequest(ctx, request)
+				require.NoError(t, err)
+				merged := httpclient.MergeInboundRequest(transformed, raw)
+				for _, header := range []string{"Http-Referer", "x-title", "X-PLATFORM", "x-zcode-id", "X-OS-NAME"} {
+					require.NotContains(t, merged.Headers, header)
+					require.Empty(t, merged.Headers.Get(header))
+				}
+				require.Equal(t, "keep", merged.Headers.Get("X-Custom"))
+				require.Equal(t, codexDefaultUserAgent, merged.Headers.Get("User-Agent"))
+				if !alphaSearch {
+					require.Equal(t, "session-underscore", merged.Headers.Get(SessionHeaderHyphen))
+					require.Empty(t, merged.Headers.Get(SessionHeader))
+					require.Empty(t, merged.Headers.Get(ResponsesLiteHeader))
+				}
+				require.Equal(t, original, raw.Headers)
+			}
+
+			// Failover to an ordinary provider must still receive its attribution.
+			ordinary := httpclient.MergeInboundRequest(&httpclient.Request{Headers: make(http.Header)}, raw)
+			for _, header := range []string{"Http-Referer", "x-title", "X-PLATFORM", "x-zcode-id", "X-OS-NAME"} {
+				require.Equal(t, original[header], ordinary.Headers[header])
+			}
+			require.Equal(t, original, raw.Headers)
+		})
+	}
 }

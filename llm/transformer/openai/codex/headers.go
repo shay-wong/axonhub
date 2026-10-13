@@ -74,36 +74,29 @@ var clientFingerprintHeaderPrefixes = []string{
 	"X-Os-",
 }
 
-// ScrubClientFingerprintHeaders deletes client-private attribution headers from
-// an inbound request so that the later MergeInboundRequest step cannot copy them
-// onto the outbound request and hand the upstream the client's full fingerprint.
-//
-// This deliberately mirrors the existing Session_id handling in
-// OutboundTransformer.TransformRequest: MergeInboundRequest runs after the
-// transformer, so the only way for a transformer to keep a header off the wire
-// is to remove it from the inbound request it was given.
-//
-// Header names are canonicalized by http.Header, so exact-name lookups match
-// regardless of the case the client used.
-func ScrubClientFingerprintHeaders(headers http.Header) {
-	if headers == nil {
-		return
+// skipClientFingerprintHeaders keeps attribution out of the Codex request's
+// inbound-header merge without changing the source headers. A later retry on
+// another provider may need those headers (for example OpenRouter attribution).
+func skipClientFingerprintHeaders(headers http.Header, skip map[string]bool) map[string]bool {
+	if skip == nil {
+		skip = make(map[string]bool)
 	}
 
 	for _, name := range clientFingerprintHeaders {
-		headers.Del(name)
+		skip[http.CanonicalHeaderKey(name)] = true
 	}
 
-	// Deleting during range is safe in Go.
 	for name := range headers {
+		canonicalName := http.CanonicalHeaderKey(name)
 		for _, prefix := range clientFingerprintHeaderPrefixes {
-			if strings.HasPrefix(name, prefix) {
-				headers.Del(name)
-
+			if strings.HasPrefix(canonicalName, prefix) {
+				skip[canonicalName] = true
 				break
 			}
 		}
 	}
+
+	return skip
 }
 
 func ExtractSessionIDFromTurnMetadata(raw string) string {

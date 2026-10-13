@@ -320,6 +320,8 @@ Fork 还保留[按权限选择登录落点](docs/zh/getting-started/quick-start.
 
 Codex 模型发现支持完整目录格式，同时保留普通 OpenAI 接口兼容性；刷新条件与上下文默认值见 [Codex 集成指南](docs/zh/guides/codex-integration.md#模型目录刷新)。
 
+Codex 出站请求按渠道开关透传 User-Agent，过滤客户端指纹时保留换渠道所需的原始请求头；见[请求头规则](docs/zh/guides/codex-integration.md#codex-请求头)。
+
 自动禁用保留独立渠道/Key 策略及 Retry-After，并与全局规则协作；优先级见[渠道管理](docs/zh/guides/channel-management.md#自动禁用策略兼容)。
 
 更多配置和 API 示例请查看[完整文档索引](docs/zh/index.md)。

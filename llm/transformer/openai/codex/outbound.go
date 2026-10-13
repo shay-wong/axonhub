@@ -207,15 +207,11 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	var rawHeaders http.Header
 
 	if llmReq.RawRequest != nil && llmReq.RawRequest.Headers != nil {
-		rawHeaders = llmReq.RawRequest.Headers
+		rawHeaders = llmReq.RawRequest.Headers.Clone()
 		rawSessionID = llmReq.RawRequest.Headers.Get(SessionHeader)
 		if rawSessionID == "" {
 			rawSessionID = llmReq.RawRequest.Headers.Get(SessionHeaderHyphen)
 		}
-		// The ChatGPT Codex backend does not consume client attribution headers,
-		// so drop them before MergeInboundRequest can forward the client's
-		// fingerprint to chatgpt.com.
-		ScrubClientFingerprintHeaders(llmReq.RawRequest.Headers)
 		rawOriginator = llmReq.RawRequest.Headers.Get("Originator")
 		rawTurnMetadata = llmReq.RawRequest.Headers.Get(TurnMetadataHeader)
 
@@ -333,9 +329,11 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	}
 
 	// Session headers are normalized below; keep RawRequest intact for templates but prevent inbound merge from overriding them.
-	hreq.SkipInboundHeaderMerge = map[string]bool{
-		http.CanonicalHeaderKey(SessionHeader):       true,
-		http.CanonicalHeaderKey(SessionHeaderHyphen): true,
+	hreq.SkipInboundHeaderMerge = skipClientFingerprintHeaders(rawHeaders, hreq.SkipInboundHeaderMerge)
+	hreq.SkipInboundHeaderMerge[http.CanonicalHeaderKey(SessionHeader)] = true
+	hreq.SkipInboundHeaderMerge[http.CanonicalHeaderKey(SessionHeaderHyphen)] = true
+	if !responsesLite {
+		hreq.SkipInboundHeaderMerge[http.CanonicalHeaderKey(ResponsesLiteHeader)] = true
 	}
 
 	// Overwrite auth.

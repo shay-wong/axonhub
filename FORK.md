@@ -265,7 +265,7 @@ git show --remerge-diff <merge-commit>
 
 ### U12 Codex session header 最终规范化
 
-- 本次上游整合：`931fafff` 的默认 Codex UA、显式 UA 透传开关和 Codex 专属指纹过滤被采用；保留本地 session/Lite 规范化。原始 header map 保真与过滤的兼容修复应放在紧随 merge 的独立功能提交中，不能影响换到普通渠道后的 attribution headers。
+- 本次上游整合：`931fafff` 的默认 Codex UA、显式 UA 透传开关和 Codex 专属指纹过滤被采用；保留本地 session/Lite 规范化。独立兼容修复通过出站 `SkipInboundHeaderMerge` 过滤 Responses/alpha-search 的指纹字段，按大小写无关方式匹配，不能删除源 map 或影响随后普通渠道的 attribution headers；Lite 校验也不能修改源 headers。当前变更定位：`git log -S'skipClientFingerprintHeaders' -- llm/transformer/openai/codex/headers.go`。回归覆盖转换、合并、重试和后续普通渠道；用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`。
 - 生命周期：`等待上游吸收`
 - 原始意图：前置转换确定的 Codex session ID 不能在后续 inbound header merge、retry 或 WebSocket executor 中被旧别名覆盖。
 - 必须保持：resolved session ID 写入 transformer metadata；真正发送前统一写入 `Session-Id` 并删除下划线别名 `Session_id`/`session_id`；普通、流式、non-stream aggregation 和 WebSocket 复用使用同一 canonical identity；header merge 不修改源 map。上游 `5edcc7fb` 新增 turn-state 透传不改变此身份契约。

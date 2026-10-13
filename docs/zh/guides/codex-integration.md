@@ -10,6 +10,10 @@ AxonHub 可以作为 OpenAI 接口的直接替代方案，使 Codex 能够通过
 - 你可以开启 `server.trace.codex_trace_enabled`（使用 `Session_id`）或配置 `server.trace.extra_trace_headers` 将 Codex 同一次对话的请求聚合到同一条 Trace。
 - Codex App 使用缺少 `call_id` 的 `automation_update` 输出启动定时任务时，AxonHub 也能兼容处理。
 
+### Codex 请求头
+
+Codex Responses 和 alpha-search 请求默认使用 AxonHub 的 Codex User-Agent，只有开启渠道的 User-Agent 透传开关时才使用客户端值。这两类出站请求会过滤客户端归属字段（`Http-Referer`、`X-Title`、`X-Platform`、`X-Zcode-*`、`X-Os-*`），但保留原始请求头，供重试切换到需要这些字段的其他提供商时使用。调用方显式选择的 Responses Lite 和会话身份保持不变。
+
 ### 前置要求
 - 可访问的 AxonHub 实例。
 - 拥有项目访问权限的 AxonHub API Key。
