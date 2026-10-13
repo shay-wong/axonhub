@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`da0a97b81802b6bfb6706202adcff58299bb2fcb`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`e863c6fe1942deddd0f6e471fa003c430e5314f0`
-- 本次 merge base：`b8bb3421e1fe946cfc4f0d86e8412098738f2793`
-- 审计范围：`git diff e863c6fe..HEAD`
+- 本次 upstream merge 的 fork parent：`3a4ad27c7fc445479baa8bd4c47971d4f0c88350`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`7a0cfbf42b00829dd8811cc87488f6194ed5ae02`
+- 本次 merge base：`e863c6fe1942deddd0f6e471fa003c430e5314f0`
+- 审计范围：`git diff 7a0cfbf4..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -133,6 +133,7 @@ git show --remerge-diff <merge-commit>
 
 ### U01 API Key/渠道禁用、恢复和状态操作
 
+- 本次上游整合：`8262e95a` 在同渠道重试前读取持久化凭据状态，停用渠道不再继续重试；这不等价吸收 fork 的错误分类、计数所有权、多 Key 遍历或诊断隔离。刷新与本地轮换预算、指定测试 Key 的兼容修复应放在紧随 merge 的独立功能提交中。
 - 已确认采用上游规则计数语义：同一渠道内按 Key 和规则独立累计，其他规则命中或未匹配失败不清零；该 Key 成功时清零自己的规则计数，其他 Key 成功不影响它。保留 `ChannelAPIKeyRuleKeepsIndependentCounters`、`CustomAndGlobalCountersAreIndependent` 回归。
 - 配置迁移兼容修复独立于 merge：以 `statuses == nil` 区分未配置策略与显式关闭且空列表的策略，防止后者被旧配置重新开启。提交可用 `git log -S'TestNormalizeRetryPolicy_PreservesTemporaryLegacyPolicy' -- internal/server/biz/system_test.go` 定位。
 
@@ -161,6 +162,7 @@ git show --remerge-diff <merge-commit>
 
 ### U03 Tool Search 和跨协议工具调用语义
 
+- 本次上游整合：`5659a526` 将工具结果移至发起调用的 assistant 消息之后，并防止重复输出；与本地 reasoning 合并、custom tool、namespace 和 Tool Search helper 组合保留，不视为整项吸收。
 - 本次上游整合：`f92e69de` 的 Anthropic 并行工具控制与 `d5237439` 的 Chat allowed_tools 转换保留；这些未替代本地 Tool Search 和 deferred tools 往返。
 - 本次上游整合：`411734a7` 引入 namespace 分组、跨协议函数名还原、pipeline metadata 回传和 allowed_tools 保真；保留 fork 的 Tool Search、DeferLoading、并行工具消息聚合与 done-only 参数处理，不能把 namespace 支持当作整条能力已吸收。
 - 生命周期：`等待上游吸收`
@@ -174,6 +176,7 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- 本次上游整合：`b6d184a8` 将音频 data/transcript 视为非空内容；仍保留异常终态识别与完成后错误处理，不因仅有 usage 而认定成功。
 - 本次上游整合：采用 `81e519e9`，Anthropic/Responses 等待独立 usage-only chunk 后生成终态，避免 finish_reason chunk 的占位零值覆盖真实用量；保留 Responses 最新 usage 赋值、精确异常终态及已完成尾部错误策略。回归 `UsesUsageFromFinalUsageOnlyChunk` 与既有终态测试。
 - 本次独立整合修复：Chat 输出在收到显式 error/failed/canceled/incomplete 后，即使之前已有内容与 usage，clean EOF 也不得补成功 finish/[DONE]。复用 `Response.TerminalOutcome()` 判定；回归为 `TestInboundTransformer_ProviderTerminalDoesNotSynthesizeSuccess`，提交可用 `git log -S'TestInboundTransformer_ProviderTerminalDoesNotSynthesizeSuccess' -- llm/transformer/openai/inbound_stream_test.go` 定位。用户说明见 `docs/en/guides/cost-tracking.md` 与 `docs/zh/guides/cost-tracking.md`。
 - 本次上游整合：采用 `2f8de312` 的统一流式终态决策与多 choice 完成跟踪，以及 `ac7f4889` 的 Responses 中断协议错误；保留 fork 的异常终态原始错误/响应体、费用、健康统计仅计一次和渠道测试隔离。上游终态重构没有完全替代这些不变量，本条继续保留。
@@ -262,6 +265,7 @@ git show --remerge-diff <merge-commit>
 
 ### U12 Codex session header 最终规范化
 
+- 本次上游整合：`931fafff` 的默认 Codex UA、显式 UA 透传开关和 Codex 专属指纹过滤被采用；保留本地 session/Lite 规范化。原始 header map 保真与过滤的兼容修复应放在紧随 merge 的独立功能提交中，不能影响换到普通渠道后的 attribution headers。
 - 生命周期：`等待上游吸收`
 - 原始意图：前置转换确定的 Codex session ID 不能在后续 inbound header merge、retry 或 WebSocket executor 中被旧别名覆盖。
 - 必须保持：resolved session ID 写入 transformer metadata；真正发送前统一写入 `Session-Id` 并删除下划线别名 `Session_id`/`session_id`；普通、流式、non-stream aggregation 和 WebSocket 复用使用同一 canonical identity；header merge 不修改源 map。上游 `5edcc7fb` 新增 turn-state 透传不改变此身份契约。
