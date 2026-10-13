@@ -492,6 +492,12 @@ type PersistentOutboundTransformer struct {
 	wrapped                       transformer.Outbound
 	state                         *PersistenceState
 	outboundLlmRequestMiddlewares []pipeline.OutboundLlmRequestMiddleware
+	// Keep the total key-rotation budget stable when refresh removes disabled
+	// keys; the pipeline compares it with retries already spent on this candidate.
+	retryBudgetCandidate *ChannelModelsCandidate
+	retryBudget          int
+	// A test source recorded only on an execution must survive execution reset.
+	diagnosticRetry bool
 }
 
 func shouldForceStreamingForCandidate(candidate *ChannelModelsCandidate, req *llm.Request) bool {
@@ -1013,7 +1019,14 @@ func (p *PersistentOutboundTransformer) MaxSameChannelRetries() int {
 		return 0
 	}
 
-	return max(0, len(p.state.CurrentCandidate.Channel.GetEnabledAPIKeys())-1)
+	candidate := p.state.CurrentCandidate
+	if p.retryBudgetCandidate != candidate {
+		p.retryBudgetCandidate = candidate
+		p.retryBudget = 0
+	}
+	p.retryBudget = max(p.retryBudget, len(candidate.Channel.GetEnabledAPIKeys())-1)
+
+	return p.retryBudget
 }
 
 // PrepareForRetry implements the pipeline.ChannelRetryable interface.

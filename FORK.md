@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含已发布 tag `v1.0.0-beta11`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.2`；upstream 发布基线为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.3`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.3`；upstream 发布基线为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.4`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -133,7 +133,7 @@ git show --remerge-diff <merge-commit>
 
 ### U01 API Key/渠道禁用、恢复和状态操作
 
-- 本次上游整合：`8262e95a` 在同渠道重试前读取持久化凭据状态，停用渠道不再继续重试；这不等价吸收 fork 的错误分类、计数所有权、多 Key 遍历或诊断隔离。刷新与本地轮换预算、指定测试 Key 的兼容修复应放在紧随 merge 的独立功能提交中。
+- 本次上游整合：`8262e95a` 在同渠道重试前读取持久化凭据状态，停用渠道不再继续重试；这不等价吸收 fork 的错误分类、计数所有权、多 Key 遍历或诊断隔离。独立兼容修复保留当前候选的 Key 重试预算高水位，刷新后可用 Key 减少不能缩短已分配的总预算，切换候选时重新计算。代码及回归：`internal/server/orchestrator/outbound.go`、`internal/server/orchestrator/retry_channel_refresh_fork_test.go`；当前变更定位：`git log -S'retryBudgetCandidate' -- internal/server/orchestrator/outbound.go`。用户文档：`docs/en/guides/load-balance.md`、`docs/zh/guides/load-balance.md`；验证：`go test ./internal/server/orchestrator -run 'RefreshChannelBeforeRetry|RefreshRetry|RetryBudget'`。
 - 已确认采用上游规则计数语义：同一渠道内按 Key 和规则独立累计，其他规则命中或未匹配失败不清零；该 Key 成功时清零自己的规则计数，其他 Key 成功不影响它。保留 `ChannelAPIKeyRuleKeepsIndependentCounters`、`CustomAndGlobalCountersAreIndependent` 回归。
 - 配置迁移兼容修复独立于 merge：以 `statuses == nil` 区分未配置策略与显式关闭且空列表的策略，防止后者被旧配置重新开启。提交可用 `git log -S'TestNormalizeRetryPolicy_PreservesTemporaryLegacyPolicy' -- internal/server/biz/system_test.go` 定位。
 
@@ -291,6 +291,7 @@ git show --remerge-diff <merge-commit>
 
 ### U14 测试流量与生产渠道健康状态隔离
 
+- 凭据刷新兼容：诊断请求跳过生产凭据刷新，测试已禁用的指定 Key 时，重试不能改测其他健康 Key；上下文、request 和 execution 三种 test source 都有效，execution reset 后仍保留此身份约束。与 U01 的刷新兼容修复同一独立提交，回归在 `retry_channel_refresh_fork_test.go`；定位：`git log -S'diagnosticRetry' -- internal/server/orchestrator/retry_channel_refresh.go`。
 - 本次上游整合：采用 `b8bb3421` 的 System One 渠道/单 Key/批量 Key 测试格式和角色级 prompt protection；沿用 test source 的生产健康隔离，新增协议测试不替代本条隔离约束。
 - 本次独立兼容修复：上游 `5653bf0a` 新增单候选和重试选择计数，必须先检查 test source；多 Key 轮换按真实尝试计数，但诊断重试不进入生产计数。代码、测试与文档在 merge 后独立提交，可用 `git log -S'trackCurrentChannelSelection(ctx context.Context)' -- internal/server/orchestrator/outbound.go` 定位。用户文档：`docs/en/guides/load-balance.md`、`docs/zh/guides/load-balance.md`。
 - 本次上游整合：`6755e3bd` 的 fastestModels 空目录修复应用到本地 execution 查询：使用 `LEFT JOIN models` 与模型 ID 回退，保留 `se.source`/`ul.source` 过滤及无 requests JOIN 的既有语义。

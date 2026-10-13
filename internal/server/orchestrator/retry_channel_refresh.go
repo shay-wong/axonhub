@@ -54,6 +54,14 @@ func (p *PersistentOutboundTransformer) refreshChannelBeforeRetry(ctx context.Co
 		return nil
 	}
 
+	// Diagnostics may deliberately pin a disabled key with GetChannelWithKey.
+	// Rebuilding through GetChannel would silently test a different healthy key.
+	// Remember the source before PrepareForRetry clears the old execution.
+	p.diagnosticRetry = p.diagnosticRetry || shouldSkipHealthStateTrackingForState(ctx, p.state)
+	if p.diagnosticRetry {
+		return nil
+	}
+
 	candidate := p.state.CurrentCandidate
 	if candidate == nil || candidate.Channel == nil || p.state.ChannelService == nil {
 		return nil

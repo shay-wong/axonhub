@@ -6,6 +6,8 @@ AxonHub provides an intelligent adaptive load balancing system that automaticall
 
 Channel tests and probes are diagnostic traffic: they do not change production selection counts, health statistics, or automatic disable state, including single-channel selection and retries. Production retries, including API key rotation within one channel, count as additional selection attempts.
 
+When retrying a production request, AxonHub refreshes persisted channel credentials to avoid a key disabled during the request. A shrinking key list does not reduce the current candidate's total retry budget and skip untried keys; the budget is recalculated for the next candidate. A single-key diagnostic keeps testing the selected key, even if disabled, and never reports another key's success as that key's result.
+
 ### Intelligent Channel Selection
 - **Priority Grouping** - Candidates are first grouped by model association priority (Lower value = Higher priority)
 - **Session Consistency** - Requests from the same conversation are prioritized to route to previously successful channels

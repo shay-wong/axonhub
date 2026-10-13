@@ -19,7 +19,7 @@
 | [模型管理](guides/model-management.md) | 模型映射、关联和优先级配置 |
 | [API Key 配置文件](guides/api-key-profiles.md) | 创建和管理 API Key 配置文件 |
 | [权限管理](guides/permissions.md) | 企业级 RBAC 访问控制配置 |
-| [负载均衡](guides/load-balance.md) | 智能路由、故障转移、诊断隔离与重试计数 |
+| [负载均衡](guides/load-balance.md) | 智能路由、故障转移、Key 重试预算与指定 Key 诊断隔离 |
 | [成本追踪](guides/cost-tracking.md) | 用量分析、Fast/Ultrafast 与长上下文价格、完整流计费与 Key 身份可见性 |
 | [请求追踪](guides/tracing.md) | 完整的请求链路追踪 |
 | [请求覆盖](guides/request-override.md) | 动态修改请求参数 |

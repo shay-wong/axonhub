@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Kept multi-key retry budgets stable while disabled credentials are refreshed, and kept single-key diagnostics pinned to the selected key across retries.
 - Preserved original client headers during Codex fingerprint filtering so failover to other providers retains their attribution headers.
 - Aligned missing Fast/Ultrafast prices for published GPT-6/GPT-5.6 models with official API ratios: Astra and GPT-6.1 Sol Ultrafast now falls back to 3× Fast or 6× base. Recognized OpenAI's `fast` alias in billing, catalog imports, and request display; preserved explicit saved prices and historical costs.
 - Added input-context pricing for all token items, including service-tier, schedule, and cache-write variant prices. Catalog imports now preserve context thresholds and supported OpenAI Fast/Ultrafast long-context rates. Re-import and save existing fixed prices to enable it; historical usage is unchanged.

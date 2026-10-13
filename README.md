@@ -314,7 +314,7 @@ print(response.choices[0].message.content)
 
 Fork Release 构建可在**系统设置 > 关于**中安装更新或回滚到最近的兼容版本；需要运行用户能写入可执行文件目录，并由 Docker、systemd 等 supervisor 在进程退出后拉起。
 
-Fork 还保留[按权限选择登录落点](docs/zh/getting-started/quick-start.md#第一步)和[诊断流量隔离与重试计数](docs/zh/guides/load-balance.md)。
+Fork 还保留[按权限选择登录落点](docs/zh/getting-started/quick-start.md#第一步)和[多 Key 重试预算、指定 Key 诊断隔离与重试计数](docs/zh/guides/load-balance.md)。
 
 [完整流计费](docs/zh/guides/cost-tracking.md)在尾部断连后保留费用，并保护执行记录中 Key 身份的可见性。
 
