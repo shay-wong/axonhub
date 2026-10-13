@@ -326,7 +326,7 @@ Codex 出站请求按渠道开关透传 User-Agent，过滤客户端指纹时保
 
 更多配置和 API 示例请查看[完整文档索引](docs/zh/index.md)。
 
-在“模型 → 设置”中从列表选择全局 [Codex 默认生图主模型](docs/zh/guides/codex-integration.md#默认生图主模型)，默认 `gpt-6-astra`，所有 Codex 渠道统一使用。
+Codex 图片生成与编辑使用[原生 Images 接口](docs/zh/guides/codex-integration.md#原生图片生成与编辑)，不再需要默认生图主模型；中转服务必须支持相应端点。
 
 ---
 

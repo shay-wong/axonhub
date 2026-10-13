@@ -110,13 +110,11 @@ AxonHub 的模型配置文件支持将请求模型映射到具体提供商模型
 - **模型结果异常**：检查 AxonHub 控制台中当前启用的配置文件映射，必要时禁用或调整规则。
 - **定时任务提示 `function_call_output` 缺少 `call_id`**：升级到包含 Codex 定时任务启动项兼容修复的 AxonHub 版本。
 
-### 默认生图主模型
+### 原生图片生成与编辑
 
-在 **模型 → 设置** 中，通过 **Codex 默认生图主模型** 下拉列表统一选择所有 Codex 渠道使用的主模型，默认 `gpt-6-astra`。候选来自已启用 Codex 渠道的实际模型 ID，不使用本地映射别名；默认值和当前配置值始终保留在列表中。
+Codex Images 请求现在直接使用原生 `/images/generations` 和 `/images/edits` 端点，保留请求的图片模型（如 `gpt-image-2`），不再选择外层文本主模型。“模型 → 设置”中的默认生图主模型控件已移除；旧的全局和渠道字段仅保留 API 兼容，保存值不再影响生图。
 
-该设置用于图片生成和编辑请求的外层 Responses 主模型。生图工具仍保留请求指定的图片模型，例如 `gpt-image-2`；普通 Responses/聊天请求继续使用调用方明确选择的模型。上游账户必须同时支持主模型和生图能力；出现在列表中不代表所有渠道或 Key 都支持它。全局 API 字段为 `systemModelSettings.codexImageMainModel`，通过 `updateSystemModelSettings` 保存后对新请求生效，无需重启。
-
-升级后渠道级 `settings.codexImageMainModel` 仅保留 API 兼容，不再生效，也不会自动选取某个渠道的值作为全局设置。未配置全局值时使用 `gpt-6-astra`；原先使用其他主模型的用户需在上述全局入口重新选择。已有 Key 禁用或上游冷却状态不会被清除。
+上游必须支持原生 Images 端点。仅支持 Responses 生图工具的中转不能再通过已移除的桥接承接 Images API 请求；非 Codex 渠道需已有原生生图支持或显式配置 Images 端点。Images 只支持非流式请求，`stream: true` 会被拒绝。原生 `/responses` 请求中的 `image_generation` 工具继续沿用原有行为。参数和端点配置见[Images API](../api-reference/image-generation.md)。
 
 ### 相关文档
 - [追踪指南](tracing.md)

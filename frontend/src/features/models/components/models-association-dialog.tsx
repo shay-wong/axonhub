@@ -902,7 +902,6 @@ export function ModelsAssociationDialog() {
           autoReasoningEffort: settings!.autoReasoningEffort,
           modelBlacklistRegex: settings!.modelBlacklistRegex,
           hideUnroutableModelsInList: settings!.hideUnroutableModelsInList,
-          codexImageMainModel: settings!.codexImageMainModel,
           developerSettings: nextDeveloperSettings.sort((a, b) => a.developer.localeCompare(b.developer)),
         });
         handleClose();

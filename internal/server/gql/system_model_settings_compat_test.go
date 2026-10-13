@@ -100,15 +100,15 @@ func TestUpdateSystemModelSettings_AllowsExplicitDeveloperSettingsClear(t *testi
 	require.Empty(t, settings.DeveloperSettings)
 }
 
-func TestUpdateSystemModelSettings_ImageMainModelRoundTrip(t *testing.T) {
+func TestUpdateSystemModelSettings_AcceptsDeprecatedImageMainModel(t *testing.T) {
 	resolver, ctx, client := setupTestSystemModelSettingsResolver(t)
 	defer client.Close()
 	settings, err := resolver.systemService.ModelSettings(ctx)
 	require.NoError(t, err)
-	require.Equal(t, "gpt-6-astra", settings.CodexImageMainModel)
+	require.Empty(t, settings.CodexImageMainModel)
 
 	input, err := (&executionContext{}).unmarshalInputUpdateSystemModelSettingsInput(ctx, map[string]any{
-		"codexImageMainModel": " gpt-custom ",
+		"codexImageMainModel": "gpt-custom",
 	})
 	require.NoError(t, err)
 	ok, err := resolver.UpdateSystemModelSettings(ctx, input)

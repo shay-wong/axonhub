@@ -78,8 +78,9 @@ func (r *mutationResolver) UpdateWebhookNotifierConfig(ctx context.Context, inpu
 
 // UpdateSystemModelSettings is the resolver for the updateSystemModelSettings field.
 func (r *mutationResolver) UpdateSystemModelSettings(ctx context.Context, input biz.SystemModelSettings) (bool, error) {
-	// Older clients may omit developer rules or the global image model.
-	// Preserve those settings; an explicit empty developer list still clears rules.
+	// Preserve omitted developer rules and the deprecated image model for old clients.
+	// The image model is stored only for compatibility; native Images ignores it.
+	// An explicit empty developer list still clears rules.
 	// This still follows the existing last-writer-wins behavior for concurrent
 	// full settings updates; callers editing developer rules should send the
 	// complete developerSettings list.

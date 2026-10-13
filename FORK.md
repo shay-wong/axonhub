@@ -406,17 +406,16 @@ git show --remerge-diff <merge-commit>
 - 上游吸收条件：上游具备等价的目录格式协商、权限过滤、完整模型元数据及回归覆盖。
 - 验证：`go test ./internal/server/api -run 'TestOpenAIHandlers_(ListModels|RetrieveModel)|TestCodexCatalog' -count=1`。
 
-### U23 Codex 默认生图主模型
+### U23 旧生图主模型字段的升级兼容
 
-- 本次上游整合：采用 `5c789977` 的 Responses wire format，防止图像原始请求错误透传覆盖转换结果；主模型仍在请求时读取全局设置，不采用上游的渠道测试模型及 Luna 回退。验证新增 `TestCodexChannel_ImageMainModelIgnoresDefaultTestModel`，覆盖 API Key/OAuth、独立图像 endpoint 和测试模型别名。
 - 生命周期：`等待上游吸收`
-- 原始意图：避免 Codex 图片生成/编辑固定依赖账户不支持的 `gpt-5.4-mini`；主模型在“模型 → 设置”全局统一选择，不再逐渠道手填。
-- 必须保持：全局 `systemModelSettings.codexImageMainModel` 保存和回显；下拉候选使用已启用 Codex 渠道实际模型 ID，保留默认值及当前值，不传本地别名；未设置或空白默认 `gpt-6-astra`。旧渠道字段仅兼容读写，不再影响请求，不自动迁移任一渠道值；旧客户端省略全局字段时保留已有值。只改变图片生成/编辑的外层 Responses 主模型，图片工具模型仍为调用方图片模型，普通聊天模型不变；API Key、OAuth 及复用 token provider 路径均在请求时读取全局设置，保存后无需重启缓存渠道。
-- 代码锚点：`internal/server/biz/system.go`、`internal/server/biz/system_default.go`、`internal/server/biz/model_settings_inheritance.go`、`internal/server/biz/channel_llm.go`、`internal/server/gql/system.graphql`、`internal/server/gql/system.resolvers.go`、`llm/transformer/openai/codex/outbound.go`、`frontend/src/features/models/components/models-settings-dialog.tsx`、`frontend/src/features/system/data/system.ts`。
-- 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`；README、索引和 `CHANGELOG.md` 同步。
-- 提交锚点：渠道版起点 `52e8f5d8`；全局设置为本次改动，使用 `git log -S'CodexImageMainModel' -- internal/server/biz/system.go` 定位。
-- 合并审核/吸收条件：上游支持等价全局配置、默认值、即时生效、图片模型保真和普通聊天隔离后吸收；不能恢复硬编码 mini、逐渠道覆盖或用图片模型作为外层主模型。
-- 验证：`cd llm && go test ./transformer/openai/codex ./transformer/openai/responses`；`go test ./internal/server/biz ./internal/server/gql -run 'TestChannel(CodexImageMainModel|ImageMainModelSettingsRoundTrip)|TestUpdateSystemModelSettings'`。
+- 原始意图：采用上游 `3cb7e333` 原生 Images 后，移除失效的默认主模型 UI，同时避免缓存旧前端查询字段时触发 GraphQL 错误。
+- 已确认替换：不再保留 Images→Responses 桥接、外层主模型替换或默认 Astra；Images 使用调用方图片模型，普通 Responses 生图工具不变。仅支持 Responses 的中转不再自动获得 Images 能力。
+- 必须保持：旧全局 `systemModelSettings.codexImageMainModel`、更新 input 和渠道字段继续兼容读写，但不参与路由、模型替换或默认值；全局字段标记 deprecated，新 UI/查询/提交不再使用。旧持久化配置无需删除或迁移。
+- 代码锚点：`internal/server/biz/system.go`、`internal/server/gql/system.graphql`、`internal/server/gql/system.resolvers.go`；测试：`internal/server/gql/system_model_settings_compat_test.go`、`internal/server/biz/channel_image_main_model_test.go`。
+- 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`；README、索引与 CHANGELOG 同步。当前独立变更定位：`git log -S'Native Images no longer uses a separate main model.' -- internal/server/gql/system.graphql`。
+- 合并审核/吸收条件：原生 Images 本身为 upstream 能力，不恢复桥接或生图主模型 UI；仅在明确允许旧客户端 API 破坏性升级时删除遗留字段。
+- 验证：`go test ./internal/server/biz ./internal/server/gql -run 'NativeImagesIgnoreLegacyMainModel|UpdateSystemModelSettings|ChannelImageMainModelSettingsRoundTrip'`。
 
 
 ## Upstream Merge 审核清单

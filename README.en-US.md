@@ -322,7 +322,7 @@ Auto-disable keeps separate channel/key policies and Retry-After alongside globa
 
 See the [documentation index](docs/en/index.md) for configuration details and more API examples.
 
-Select the global [Codex default image main model](docs/en/guides/codex-integration.md#default-image-main-model) from the list in Models → Settings; all Codex channels share it, defaulting to `gpt-6-astra`.
+Codex image generation and editing use [native Images endpoints](docs/en/guides/codex-integration.md#native-image-generation-and-editing) without a default image main model; relays must support the corresponding endpoints.
 
 ---
 

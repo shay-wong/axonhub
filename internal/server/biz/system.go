@@ -460,7 +460,7 @@ type WebhookSubscription struct {
 
 // SystemModelSettings represents model-related configuration settings.
 type SystemModelSettings struct {
-	// CodexImageMainModel is shared by all Codex image generation/editing requests.
+	// Deprecated: retained for old clients and stored settings; native Images ignores this field.
 	CodexImageMainModel string `json:"codex_image_main_model"`
 
 	// FallbackToChannelsOnModelNotFound controls whether to fall back to legacy channel

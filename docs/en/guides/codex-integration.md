@@ -164,13 +164,11 @@ You can manually trigger a quota refresh by clicking the refresh icon in the quo
    - Plan type (if available)
    - Secondary window usage (if configured)
 
-### Default image main model
+### Native image generation and editing
 
-In **Models → Settings**, select the **Codex default image main model** shared by all Codex channels. The default is `gpt-6-astra`. The dropdown lists actual model IDs from enabled Codex channels rather than local mapping aliases; it always retains the default and current selection.
+Codex Images requests now use native `/images/generations` and `/images/edits` endpoints with the requested image model, such as `gpt-image-2`. No outer text model is selected. The default image main model control has been removed from Models → Settings; old global and channel values remain accepted for API compatibility but have no effect.
 
-This sets the outer Responses model for image generation and editing. The image tool keeps the requested image model, such as `gpt-image-2`; ordinary Responses/chat requests keep their explicitly selected model. Both the main model and image generation must be supported by the upstream account; appearing in the list does not guarantee support on every channel or key. The global API field is `systemModelSettings.codexImageMainModel`. Saving it through `updateSystemModelSettings` applies to new requests without a restart.
-
-After upgrading, channel-level `settings.codexImageMainModel` is retained only for API compatibility and has no effect. No individual channel value is automatically promoted to the global setting. If no global value is configured, `gpt-6-astra` is used; users who previously configured another main model must select it again in the global settings. Existing disabled keys and upstream cooldowns are not cleared.
+Your upstream must support native Images endpoints. A service that only supports Responses image tools can no longer serve Images API requests through the removed bridge. Non-Codex channels require existing native image support or an explicit Images endpoint. Images requests are non-streaming; `stream: true` is rejected. Native `/responses` requests with `image_generation` tools keep their existing behavior. See [Images API](../api-reference/image-generation.md) for parameters and endpoint configuration.
 
 ### Related Documentation
 - [Tracing Guide](tracing.md)

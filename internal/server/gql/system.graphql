@@ -244,7 +244,7 @@ input UpdateSecuritySettingsInput {
 }
 
 type SystemModelSettings {
-  codexImageMainModel: String!
+  codexImageMainModel: String! @deprecated(reason: "Native Images no longer uses a separate main model.")
   fallbackToChannelsOnModelNotFound: Boolean!
   queryAllChannelModels: Boolean!
   defaultModelAPIIncludeAll: Boolean!
@@ -255,7 +255,7 @@ type SystemModelSettings {
 }
 
 input UpdateSystemModelSettingsInput {
-  codexImageMainModel: String
+  codexImageMainModel: String @deprecated(reason: "Retained for old clients; native Images ignores this setting.")
   fallbackToChannelsOnModelNotFound: Boolean
   queryAllChannelModels: Boolean
   defaultModelAPIIncludeAll: Boolean
