@@ -32,7 +32,7 @@ func OpenAIServiceTier(format APIFormat, tier *string) *string {
 
 	switch format {
 	case "", APIFormatOpenAIChatCompletion, APIFormatOpenAICompletion,
-		APIFormatOpenAIResponse, APIFormatOpenAIResponseCompact:
+		APIFormatOpenAIResponse, APIFormatOpenAIResponseWebSocket, APIFormatOpenAIResponseCompact:
 		canonical := CanonicalServiceTier(*tier)
 		if canonical != "" {
 			return &canonical

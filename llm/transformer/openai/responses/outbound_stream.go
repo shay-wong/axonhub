@@ -336,7 +336,7 @@ func responseHasMeaningfulContent(resp *llm.Response) bool {
 		if message.Content.Content != nil && *message.Content.Content != "" {
 			return true
 		}
-		if len(message.Content.MultipleContent) > 0 || len(message.ToolCalls) > 0 || message.Refusal != "" {
+		if len(message.Content.MultipleContent) > 0 || len(message.ToolCalls) > 0 || len(message.InlineToolResults) > 0 || message.Refusal != "" {
 			return true
 		}
 		if (message.ReasoningContent != nil && *message.ReasoningContent != "") ||
@@ -359,6 +359,15 @@ func (s *responsesOutboundStream) Next() bool {
 	s.eventQueue = nil
 	s.queueIndex = 0
 
+	// A semantic terminal already carries the outcome and final usage.
+	if s.responseCompleted {
+		if !s.doneEmitted {
+			s.doneEmitted = true
+			s.enqueue(llm.DoneResponse)
+			return true
+		}
+		return false
+	}
 	if s.err != nil {
 		return false
 	}
@@ -1029,27 +1038,20 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		if s.responseCompleted {
 			return nil
 		}
+		s.applyResponseSnapshot(resp, streamEvent.Response)
+		refusal := *resp
+		refusal.Usage = nil
+		s.enqueueTerminalRefusal(&refusal, streamEvent.Response)
 		if !s.contentCommitted && streamEvent.Response != nil && streamEvent.Response.Error != nil &&
 			streamEvent.Response.Error.Code != "" {
 			if streamEvent.Response.Usage != nil {
-				s.state.usage = streamEvent.Response.Usage.ToUsage()
-				s.enqueue(&llm.Response{
-					Object:             "chat.completion.chunk",
-					ID:                 s.state.responseID,
-					Model:              s.state.responseModel,
-					Created:            s.state.created,
-					PreviousResponseID: s.state.previousResponseID,
-					Choices:            []llm.Choice{},
-					Usage:              s.state.usage,
-				})
+				s.enqueue(resp)
 			}
 			return responseFailedError(streamEvent)
 		}
 		// Response failed
 		s.responseCompleted = true
 		upstreamError := streamEvent.Error
-		s.applyResponseSnapshot(resp, streamEvent.Response)
-		s.enqueueTerminalRefusal(resp, streamEvent.Response)
 		if streamEvent.Response != nil {
 			if streamEvent.Response.Error != nil {
 				upstreamError = streamEvent.Response.Error
@@ -1210,10 +1212,11 @@ func responseFailedError(streamEvent StreamEvent) *llm.ResponseError {
 	detail := llm.ErrorDetail{}
 	if streamEvent.Response != nil && streamEvent.Response.Error != nil {
 		detail = llm.ErrorDetail{
-			Code:    streamEvent.Response.Error.Code,
-			Message: streamEvent.Response.Error.Message,
-			Type:    streamEvent.Response.Error.Type,
-			Param:   lo.FromPtr(streamEvent.Response.Error.Param),
+			Code:      streamEvent.Response.Error.Code,
+			Message:   streamEvent.Response.Error.Message,
+			Type:      streamEvent.Response.Error.Type,
+			Param:     lo.FromPtr(streamEvent.Response.Error.Param),
+			RequestID: streamEvent.Response.Error.RequestID,
 		}
 	}
 

@@ -75,7 +75,7 @@ func (q *rawStreamQueue) next(ctx context.Context) (*httpclient.StreamEvent, boo
 		q.backlog.release(rawStreamEventSize(event))
 		return event, true
 	case <-ctx.Done():
-		return nil, false
+		return q.nextBuffered()
 	}
 }
 

@@ -84,6 +84,23 @@ func TestServiceTierFromHTTPRequest(t *testing.T) {
 	}
 }
 
+func TestWebSocketServiceTierTracking(t *testing.T) {
+	for _, tier := range []string{"fast", "ultrafast"} {
+		t.Run(tier, func(t *testing.T) {
+			req := &httpclient.Request{
+				APIFormat: string(llm.APIFormatOpenAIResponseWebSocket),
+				Body:      []byte(`{"service_tier":"` + tier + `"}`),
+			}
+			require.Equal(t, tier, serviceTierFromHTTPRequest(req))
+			require.Equal(t, tier, speedModeFromHTTPRequest(req))
+			require.Equal(t, requestPricingOverride{
+				ServiceTier: llm.CanonicalServiceTier(tier),
+				Policy:      biz.RequestPricingOverrideWhenAppliedDefault,
+			}, requestPricingOverrideFromHTTPRequest(req, channel.TypeCodex))
+		})
+	}
+}
+
 func TestRequestPricingOverrideFromHTTPRequest(t *testing.T) {
 	tests := []struct {
 		name        string

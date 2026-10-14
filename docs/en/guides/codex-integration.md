@@ -16,6 +16,8 @@ Codex Responses, native Images, and alpha-search requests use AxonHub's default 
 
 ### Choose an entrypoint
 
+HTTP and WebSocket Responses requests preserve explicit Fast/Ultrafast tiers for forwarding, request logs, and billing. WebSocket connection isolation does not replace the canonical Codex session header. Before any content is produced, structured upstream failures can enter the configured retry flow; refusals and tool-search results count as content. A completed response ends without waiting for the upstream connection to close, retaining its final usage.
+
 Use the `/codex` compatibility entrypoint for Codex personal access token (PAT) authentication and a live native model catalog. Existing custom-provider configurations can continue using `/v1` with an API key and the bundled catalog described below. These are separate configurations; the `/codex` switch and catalog source are not required for `/v1`.
 
 ### PAT prerequisites and AxonHub setup

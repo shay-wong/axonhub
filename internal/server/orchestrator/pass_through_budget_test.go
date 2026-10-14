@@ -102,6 +102,30 @@ func TestRawStreamBacklog_ExactBudgets(t *testing.T) {
 	})
 }
 
+func TestRawStreamQueue_CancellationDrainsOriginalBufferedEvents(t *testing.T) {
+	queue := newRawStreamQueue(&rawStreamBacklog{})
+	queue.attach()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	events := make([]*httpclient.StreamEvent, 32)
+	for i := range events {
+		events[i] = &httpclient.StreamEvent{
+			Data: []byte(fmt.Sprintf(`{"type":"response.completed","response":{"id":"provider-%d","output":[{"id":"original-item"}]}}`, i)),
+		}
+		require.NoError(t, queue.enqueue(ctx, events[i]))
+	}
+	cancel()
+	for _, expected := range events {
+		actual, ok := queue.next(ctx)
+		require.True(t, ok)
+		require.Same(t, expected, actual)
+	}
+	_, ok := queue.next(ctx)
+	require.False(t, ok)
+	require.Zero(t, queue.backlog.bytes)
+	require.Zero(t, queue.backlog.count)
+}
+
 func TestRawStreamQueue_BlocksLargeLiveEventsUntilConsumerReads(t *testing.T) {
 	// Given: the pass-through consumer is attached but has stopped reading.
 	backlog := &rawStreamBacklog{attached: true}

@@ -23,6 +23,7 @@ import (
 	"github.com/looplj/axonhub/llm/oauth"
 	"github.com/looplj/axonhub/llm/pipeline"
 	"github.com/looplj/axonhub/llm/streams"
+	"github.com/looplj/axonhub/llm/transformer"
 	"github.com/looplj/axonhub/llm/transformer/anthropic"
 	"github.com/looplj/axonhub/llm/transformer/openai/codex"
 	responsestransformer "github.com/looplj/axonhub/llm/transformer/openai/responses"
@@ -461,6 +462,178 @@ func TestApplyPassThroughStream_PreservesIdentityAndBackMapsModel(t *testing.T) 
 	require.False(t, result.Next())
 }
 
+func TestResponsesIdentityStream_PreservesValidatedOutcome(t *testing.T) {
+	completed := &httpclient.StreamEvent{Data: []byte(`{"type":"response.completed","response":{"id":"provider-id","status":"completed"}}`)}
+	failed := &httpclient.StreamEvent{Data: []byte(`{"type":"response.failed","response":{"id":"provider-id","status":"failed"}}`)}
+	transportErr := errors.New("connection reset")
+	conversionErr := errors.New("invalid response item")
+	for _, tc := range []struct {
+		name     string
+		raw      []*httpclient.StreamEvent
+		drained  responsesDrainResult
+		wantLast *httpclient.StreamEvent
+		wantErr  error
+	}{
+		{name: "completion beats trailing disconnect", raw: []*httpclient.StreamEvent{completed}, drained: responsesDrainResult{terminal: completed}, wantLast: completed},
+		{name: "provider failure stays failure", raw: []*httpclient.StreamEvent{failed}, drained: responsesDrainResult{terminal: failed}, wantLast: failed},
+		{name: "interrupted raw stream receives validated failure", drained: responsesDrainResult{terminal: failed}, wantLast: failed},
+		{name: "completion does not hide conversion error", raw: []*httpclient.StreamEvent{completed}, drained: responsesDrainResult{err: conversionErr}, wantErr: conversionErr},
+		{name: "unvalidated completion does not hide cancellation", raw: []*httpclient.StreamEvent{completed}, drained: responsesDrainResult{err: context.Canceled}, wantErr: context.Canceled},
+		{name: "missing terminal keeps transport error", wantErr: transportErr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			drained := make(chan responsesDrainResult, 1)
+			drained <- tc.drained
+			stream := &responsesIdentityStream{
+				stream:  &errorAfterEventsStream{items: tc.raw, err: transportErr},
+				drained: drained,
+			}
+			var events []*httpclient.StreamEvent
+			for stream.Next() {
+				events = append(events, stream.Current())
+			}
+			if tc.wantLast == nil {
+				require.Empty(t, events)
+			} else {
+				require.Len(t, events, 1)
+				require.Same(t, tc.wantLast, events[0])
+			}
+			require.ErrorIs(t, stream.Err(), tc.wantErr)
+			require.NoError(t, stream.Close())
+		})
+	}
+}
+
+func TestResponsesIdentityStream_AdapterFailureClosesBackpressuredSource(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	state := &PersistenceState{
+		CurrentCandidate: &ChannelModelsCandidate{Channel: &biz.Channel{Channel: &ent.Channel{Name: "responses"}}},
+		LlmRequest:       &llm.Request{APIFormat: llm.APIFormatOpenAIResponseWebSocket},
+		RawProviderRequest: &httpclient.Request{
+			APIFormat: llm.APIFormatOpenAIResponse.String(),
+		},
+	}
+	outbound := &PersistentOutboundTransformer{state: state}
+	release := make(chan struct{})
+	events := make([]*httpclient.StreamEvent, 130)
+	events[0] = &httpclient.StreamEvent{Data: []byte(`not-json`)}
+	for i := 1; i < len(events); i++ {
+		events[i] = &httpclient.StreamEvent{Data: []byte(`{"type":"response.output_text.delta","delta":"x"}`)}
+	}
+	captured, err := captureRawProviderStream(outbound, nil).OnOutboundRawStream(ctx, &gatedStream{events: events, gateAt: 0, release: release})
+	require.NoError(t, err)
+	result, err := applyPassThroughStream(outbound, nil).OnInboundRawStream(ctx, captured)
+	require.NoError(t, err)
+	close(release)
+	require.Eventually(t, func() bool { return len(state.RawStreamCh) == cap(state.RawStreamCh) }, time.Second, time.Millisecond)
+	finished := make(chan bool, 1)
+	go func() { finished <- result.Next() }()
+	select {
+	case hasNext := <-finished:
+		require.False(t, hasNext)
+	case <-time.After(time.Second):
+		cancel()
+		<-finished
+		t.Fatal("adapter failure blocked waiting for the backpressured source")
+	}
+	require.ErrorIs(t, result.Err(), transformer.ErrInvalidResponse)
+	require.NoError(t, result.Close())
+}
+
+type cancelBeforeValidationStream struct {
+	streams.Stream[*httpclient.StreamEvent]
+	cancel context.CancelFunc
+}
+
+func TestResponsesIdentityStream_InconsistentEnvelopeDoesNotWaitForDrain(t *testing.T) {
+	for _, body := range []string{`{"type":"response.output_text.delta","delta":"x"}`, `{"delta":"x"}`} {
+		t.Run(body, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+			defer cancel()
+			state := &PersistenceState{
+				CurrentCandidate:   &ChannelModelsCandidate{Channel: &biz.Channel{Channel: &ent.Channel{Name: "responses"}}},
+				LlmRequest:         &llm.Request{APIFormat: llm.APIFormatOpenAIResponse},
+				RawProviderRequest: &httpclient.Request{APIFormat: llm.APIFormatOpenAIResponse.String()},
+			}
+			outbound := &PersistentOutboundTransformer{state: state}
+			events := []*httpclient.StreamEvent{{Type: "response.completed", Data: []byte(body)}}
+			for range 130 {
+				events = append(events, &httpclient.StreamEvent{Type: "response.output_text.delta", Data: []byte(`{"type":"response.output_text.delta","delta":"x"}`)})
+			}
+			events = append(events, &httpclient.StreamEvent{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"original","status":"completed","output":[]}}`)})
+			release := make(chan struct{})
+			captured, err := captureRawProviderStream(outbound, nil).OnOutboundRawStream(ctx, &gatedStream{events: events, gateAt: 0, release: release})
+			require.NoError(t, err)
+			converter, err := responsestransformer.NewOutboundTransformer("https://example.invalid", "test")
+			require.NoError(t, err)
+			llmStream, err := converter.TransformStream(ctx, &httpclient.Request{}, captured)
+			require.NoError(t, err)
+			converted, err := responsestransformer.NewInboundTransformer().TransformStream(ctx, llmStream)
+			require.NoError(t, err)
+			result, err := applyPassThroughStream(outbound, nil).OnInboundRawStream(ctx, converted)
+			require.NoError(t, err)
+			close(release)
+			var received []*httpclient.StreamEvent
+			for result.Next() {
+				received = append(received, result.Current())
+			}
+			require.NoError(t, ctx.Err(), "an SSE event label must not wait for a JSON terminal that has not arrived")
+			require.NoError(t, result.Err())
+			require.NoError(t, result.Close())
+			require.Len(t, received, len(events))
+			require.Equal(t, body, string(received[0].Data))
+			require.Equal(t, "original", gjson.GetBytes(received[len(received)-1].Data, "response.id").String())
+		})
+	}
+}
+
+func (s *cancelBeforeValidationStream) Next() bool {
+	if s.Stream.Next() {
+		_ = s.Stream.Current()
+		s.cancel()
+	}
+	return false
+}
+
+func (s *cancelBeforeValidationStream) Err() error { return context.Canceled }
+
+func TestResponsesIdentityStream_CancellationBeforeValidationDoesNotPublishCompletion(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	state := &PersistenceState{
+		CurrentCandidate:   &ChannelModelsCandidate{Channel: &biz.Channel{Channel: &ent.Channel{Name: "responses"}}},
+		LlmRequest:         &llm.Request{APIFormat: llm.APIFormatOpenAIResponse},
+		RawProviderRequest: &httpclient.Request{APIFormat: llm.APIFormatOpenAIResponse.String()},
+	}
+	outbound := &PersistentOutboundTransformer{state: state}
+	release := make(chan struct{})
+	event := &httpclient.StreamEvent{Data: []byte(`{"type":"response.completed","response":{"id":"original","status":"completed","output":[]}}`)}
+	captured, err := captureRawProviderStream(outbound, nil).OnOutboundRawStream(ctx, &gatedStream{events: []*httpclient.StreamEvent{event}, gateAt: 0, release: release})
+	require.NoError(t, err)
+	result, err := applyPassThroughStream(outbound, nil).OnInboundRawStream(ctx, &cancelBeforeValidationStream{Stream: captured, cancel: cancel})
+	require.NoError(t, err)
+	close(release)
+	require.False(t, result.Next(), "the raw terminal is not published when validation was canceled")
+	require.ErrorIs(t, result.Err(), context.Canceled)
+	require.NoError(t, result.Close())
+}
+
+type closeOnResponsesTerminalStream struct {
+	streams.Stream[*httpclient.StreamEvent]
+	closed chan struct{}
+}
+
+func (s *closeOnResponsesTerminalStream) Current() *httpclient.StreamEvent {
+	event := s.Stream.Current()
+	if isResponsesTerminal(event) {
+		_ = s.Stream.Close()
+		close(s.closed)
+		return &httpclient.StreamEvent{Data: []byte(`{"type":"response.completed","response":{"id":"converted-id","status":"completed","output":[]}}`)}
+	}
+	return event
+}
+
 func TestApplyPassThroughStream_QueueTransformsHeldAndAttachedEvents(t *testing.T) {
 	for _, tt := range []struct {
 		name       string
@@ -560,10 +733,17 @@ func TestApplyPassThroughStream_QueueTransformsHeldAndAttachedEvents(t *testing.
 			require.Equal(t, 1, heldCount)
 			require.Equal(t, rawStreamEventSize(events[0]), heldBytes)
 
-			result, err := applyPassThroughStream(outbound, nil).OnInboundRawStream(ctx, captured)
+			// A transformer may stop as soon as it consumes the terminal event.
+			drain := &closeOnResponsesTerminalStream{Stream: captured, closed: make(chan struct{})}
+			result, err := applyPassThroughStream(outbound, nil).OnInboundRawStream(ctx, drain)
 			require.NoError(t, err)
 			unblock()
 			defer result.Close()
+			select {
+			case <-drain.closed:
+			case <-ctx.Done():
+				t.Fatal("transformed stream did not receive terminal event")
+			}
 
 			for i := range tt.wantTypes {
 				require.True(t, result.Next())

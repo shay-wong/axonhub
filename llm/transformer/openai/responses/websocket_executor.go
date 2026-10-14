@@ -241,7 +241,7 @@ func (e *WebSocketExecutor) DoStream(ctx context.Context, request *httpclient.Re
 		}
 	}
 	headers.Set("OpenAI-Beta", WebSocketBetaHeaderValue)
-	if lane := shared.GetResponsesLane(ctx); lane != nil {
+	if lane := shared.GetResponsesLane(ctx); lane != nil && headers.Get("Session-Id") == "" {
 		headers.Set(webSocketSessionHeader, lane.ID())
 	}
 

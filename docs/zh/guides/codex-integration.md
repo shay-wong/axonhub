@@ -16,6 +16,8 @@ Codex Responses、原生 Images 和 alpha-search 请求默认使用 AxonHub 的 
 
 ### 选择接入方式
 
+HTTP 和 WebSocket Responses 请求都会保留显式 Fast/Ultrafast 档位，用于转发、请求日志和计费。WebSocket 连接隔离不会替换规范化的 Codex 会话头。输出内容前，上游结构化错误可以进入已配置的重试流程；拒绝内容和工具搜索结果也视为有效输出。响应完成后立即结束，不等待上游连接关闭，并保留最终用量。
+
 使用 `/codex` 兼容入口可通过 Codex personal access token（PAT）认证，并读取实时原生模型目录。已有自定义 provider 配置可继续使用 `/v1`、API Key 和下文介绍的内置目录。这是两种独立配置；`/v1` 不要求开启 `/codex` 开关或选择目录来源。
 
 ### PAT 前置要求与 AxonHub 设置

@@ -125,7 +125,7 @@ func fastSpeedFromJSONBody(body []byte) bool {
 func isOpenAIServiceTierFormat(apiFormat string) bool {
 	switch llm.APIFormat(apiFormat) {
 	case llm.APIFormatOpenAIChatCompletion, llm.APIFormatOpenAICompletion,
-		llm.APIFormatOpenAIResponse, llm.APIFormatOpenAIResponseCompact:
+		llm.APIFormatOpenAIResponse, llm.APIFormatOpenAIResponseWebSocket, llm.APIFormatOpenAIResponseCompact:
 		return true
 	default:
 		return false

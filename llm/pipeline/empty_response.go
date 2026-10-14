@@ -41,7 +41,7 @@ func hasMessageContent(msg *llm.Message) bool {
 		return true
 	}
 
-	if len(msg.ToolCalls) > 0 {
+	if len(msg.ToolCalls) > 0 || len(msg.InlineToolResults) > 0 {
 		return true
 	}
 

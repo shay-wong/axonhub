@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"mime"
 	"net/http"
@@ -467,6 +468,7 @@ func applyPassThroughResponse(outbound *PersistentOutboundTransformer, systemSer
 		if rawResp == nil {
 			return response, nil
 		}
+		injectCost := newResponsesCostInjector(ctx, outbound, systemService)
 
 		log.Debug(ctx, "applying pass-through response",
 			log.String("channel", outbound.GetCurrentChannel().Name),
@@ -477,6 +479,9 @@ func applyPassThroughResponse(outbound *PersistentOutboundTransformer, systemSer
 			cloned := *rawResp
 			if responsesIdentityPreservationEnabled(outbound) {
 				cloned.Body = preserveResponsesModel(rawResp.Body, responsesClientModel(outbound))
+			}
+			if injectCost != nil {
+				cloned.Body = injectCost(cloned.Body)
 			}
 
 			return &cloned, nil
@@ -492,6 +497,9 @@ func applyPassThroughResponse(outbound *PersistentOutboundTransformer, systemSer
 		cloned := *rawResp
 		cloned.Body = body
 		cloned.Request = response.Request
+		if injectCost != nil {
+			cloned.Body = injectCost(cloned.Body)
+		}
 
 		return &cloned, nil
 	})
@@ -599,18 +607,13 @@ func captureRawProviderStream(outbound *PersistentOutboundTransformer, systemSer
 
 					return
 				}
-
-				// Nothing drains rawStreamCh until the pass-through consumer attaches.
-				if held {
-					continue
-				}
-
-				if err := rawQueue.enqueue(attemptCtx, event); err != nil {
-					backlog.mu.Lock()
-					rawStreamErr = err
-					backlog.mu.Unlock()
-
-					return
+				if !held {
+					if err := rawQueue.enqueue(attemptCtx, event); err != nil {
+						backlog.mu.Lock()
+						rawStreamErr = err
+						backlog.mu.Unlock()
+						return
+					}
 				}
 			}
 		}()
@@ -659,20 +662,31 @@ func applyPassThroughStream(outbound *PersistentOutboundTransformer, systemServi
 			log.Int("held_events", len(held)),
 		)
 
+		injectCost := newResponsesCostInjector(ctx, outbound, systemService)
+		drained := make(chan responsesDrainResult, 1)
 		go func() {
+			result := responsesDrainResult{}
 			defer func() {
 				if r := recover(); r != nil {
 					log.Warn(ctx, "pass-through pipeline drain goroutine panicked, recovering",
 						log.Any("panic", r),
 						log.String("channel", channel.Name),
 					)
+					result.err = fmt.Errorf("pass-through pipeline drain panic: %v", r)
 				}
+				if err := stream.Close(); result.err == nil {
+					result.err = err
+				}
+				drained <- result
 			}()
-			defer stream.Close()
 
 			for stream.Next() {
-				_ = stream.Current()
+				event := stream.Current()
+				if result.terminal == nil && isResponsesTerminal(event) {
+					result.terminal = event
+				}
 			}
+			result.err = stream.Err()
 		}()
 
 		rawStream := streams.Stream[*httpclient.StreamEvent](&passThroughChannelStream{ctx: ctx, ch: rawCh, queue: queue, errRef: errRef, errMu: errMu, cancel: cancel})
@@ -691,6 +705,9 @@ func applyPassThroughStream(outbound *PersistentOutboundTransformer, systemServi
 			rawStream = &responsesIdentityStream{
 				stream:      rawStream,
 				clientModel: responsesClientModel(outbound),
+				drained:     drained,
+				rawBacklog:  outbound.state.RawStreamBacklog,
+				injectCost:  injectCost,
 			}
 		}
 
@@ -710,20 +727,111 @@ type responsesIdentityStream struct {
 	stream      streams.Stream[*httpclient.StreamEvent]
 	clientModel string
 	current     *httpclient.StreamEvent
+	injectCost  func([]byte) []byte
+	costCurrent *httpclient.StreamEvent
+	drained     <-chan responsesDrainResult
+	rawBacklog  *rawStreamBacklog
+	result      responsesDrainResult
+	terminal    bool
+	ended       bool
+	err         error
+}
+
+type responsesDrainResult struct {
+	terminal *httpclient.StreamEvent
+	err      error
+}
+
+func isResponsesTerminal(event *httpclient.StreamEvent) bool {
+	// Match the Responses transformer's JSON discriminator, not the SSE label.
+	return event != nil && isResponsesTerminalEvent(gjson.GetBytes(event.Data, "type").String())
 }
 
 func (s *responsesIdentityStream) Next() bool {
+	if s.ended {
+		return false
+	}
 	if !s.stream.Next() {
+		s.ended = true
+		if err := s.stream.Err(); errors.Is(err, transformer.ErrInvalidResponse) || errors.Is(err, transformer.ErrUnsupportedConversion) {
+			s.err = err
+		}
+		_ = s.stream.Close()
+		s.awaitDrain()
+		// Reuse the validated terminal event when transport failure interrupted raw output.
+		if s.err == nil && s.result.err == nil && !s.terminal && s.result.terminal != nil {
+			event := s.result.terminal
+			if s.rawBacklog != nil {
+				s.rawBacklog.mu.Lock()
+				original := s.rawBacklog.terminal
+				s.rawBacklog.mu.Unlock()
+				if original != nil && classifyStreamTerminalEvent(original) == classifyStreamTerminalEvent(event) {
+					event = original
+					if adapter, ok := s.stream.(*responsesTransportStream); ok {
+						var err error
+						event, err = responsestransformer.AdaptStreamEvent(event, adapter.source, adapter.target)
+						if err != nil {
+							s.err = err
+							return false
+						}
+					}
+				}
+			}
+			s.current = preserveResponsesStreamEventModel(event, s.clientModel)
+			s.terminal = true
+			return true
+		}
 		return false
 	}
 
 	s.current = preserveResponsesStreamEventModel(s.stream.Current(), s.clientModel)
+	if isResponsesTerminal(s.current) {
+		// Do not publish success before the persistence pipeline has validated it.
+		s.awaitDrain()
+		if s.result.err != nil {
+			_ = s.stream.Close()
+			s.ended = true
+			return false
+		}
+		s.terminal = true
+	}
 	return true
 }
 
-func (s *responsesIdentityStream) Current() *httpclient.StreamEvent { return s.current }
-func (s *responsesIdentityStream) Err() error                       { return s.stream.Err() }
-func (s *responsesIdentityStream) Close() error                     { return s.stream.Close() }
+func (s *responsesIdentityStream) Current() *httpclient.StreamEvent {
+	if s.injectCost != nil && s.current != nil && s.current != s.costCurrent {
+		cloned := *s.current
+		cloned.Data = s.injectCost(cloned.Data)
+		s.current = &cloned
+		s.costCurrent = s.current
+	}
+	return s.current
+}
+func (s *responsesIdentityStream) Err() error {
+	if s.err != nil {
+		return s.err
+	}
+	if s.result.err != nil {
+		return s.result.err
+	}
+	if s.ended && s.terminal {
+		return nil
+	}
+	return s.stream.Err()
+}
+
+func (s *responsesIdentityStream) awaitDrain() {
+	if s.drained != nil {
+		s.result = <-s.drained
+		s.drained = nil
+	}
+}
+
+func (s *responsesIdentityStream) Close() error {
+	err := s.stream.Close()
+	s.awaitDrain()
+	return err
+}
 
 func preserveResponsesStreamEventModel(event *httpclient.StreamEvent, clientModel string) *httpclient.StreamEvent {
 	if event == nil || clientModel == "" {
@@ -769,6 +877,7 @@ func (s *responsesTransportStream) Close() error { return s.stream.Close() }
 // including events filtered by the transformer and retained by persistence.
 type rawStreamBacklog struct {
 	mu       sync.Mutex
+	terminal *httpclient.StreamEvent
 	attached bool
 	events   []*httpclient.StreamEvent
 	bytes    int
@@ -790,6 +899,9 @@ var errRawPreAttachBudgetExceeded = fmt.Errorf("pass-through pre-attachment raw 
 func (b *rawStreamBacklog) hold(event *httpclient.StreamEvent) (bool, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.terminal == nil && isResponsesTerminal(event) {
+		b.terminal = event
+	}
 
 	if b.attached {
 		return false, nil

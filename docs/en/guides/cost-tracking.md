@@ -105,6 +105,8 @@ You can add exact service-tier price overrides such as `priority` and `ultrafast
 
 If a channel has no price for a model, AxonHub falls back to the model library's fixed input, output, and cache rates. The same service-tier rules apply to both API `usage.cost` and stored costs. Explicit channel prices take precedence. This live fallback does not import context brackets, schedules, or separate tier prices; configure those under **Channels → Model Prices**.
 
+When usage-cost injection is enabled, automatic Responses event preservation also retains the calculated `usage.cost` in JSON and streaming responses without replacing provider IDs or extension fields. Explicit body pass-through keeps its existing raw-response behavior.
+
 When a tier price is absent, AxonHub uses these fallback ratios, verified against [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) on 2026-10-13:
 
 | Actual channel model | Fast without an override | Ultrafast without an override |

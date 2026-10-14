@@ -419,8 +419,8 @@ func TestOutboundTransformer_TransformStream_PreservesCompletionAfterLateSourceE
 	require.NoError(t, stream.Err())
 	require.NotEmpty(t, responses)
 	require.Equal(t, "stop", lo.FromPtr(responses[0].Choices[0].FinishReason))
-	require.Zero(t, countDoneResponses(responses))
-	require.Equal(t, len(events), source.index)
+	require.Equal(t, 1, countDoneResponses(responses))
+	require.Equal(t, 1, source.index, "a complete response does not need to read a failing tail")
 }
 
 type responsesErrorAfterStream struct {
@@ -523,9 +523,10 @@ func TestOutboundTransformer_TransformStream_PreservesUpstreamErrors(t *testing.
 			wantStreamError: true,
 		},
 		{
-			name:       "response failed event",
-			event:      `{"type":"response.failed","response":{"id":"resp_failed","object":"response","status":"failed","output":[],"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Your input exceeds the context window of this model."}}}`,
-			wantStatus: http.StatusInternalServerError,
+			name:            "response failed event",
+			event:           `{"type":"response.failed","response":{"id":"resp_failed","object":"response","status":"failed","output":[],"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Your input exceeds the context window of this model."}}}`,
+			wantStatus:      http.StatusBadGateway,
+			wantStreamError: true,
 		},
 	}
 
@@ -896,7 +897,15 @@ func TestOutboundTransformer_TransformStream_PreservesTerminalSnapshots(t *testi
 			}}))
 			require.NoError(t, err)
 			responses, err := streams.All(stream)
-			require.NoError(t, err)
+			if terminalType == "response.failed" {
+				var responseErr *llm.ResponseError
+				require.ErrorAs(t, err, &responseErr)
+				require.ErrorIs(t, err, llm.ErrEmptyResponse)
+				require.Equal(t, "provider_error", responseErr.Detail.Code)
+				require.Equal(t, "failed", responseErr.Detail.Message)
+			} else {
+				require.NoError(t, err)
+			}
 			require.NotEmpty(t, responses)
 
 			terminal := responses[0]

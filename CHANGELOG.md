@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Preserved configured `usage.cost` injection in automatically forwarded Responses JSON and streams while retaining provider event identities and extension fields.
+- Preserved Fast/Ultrafast tracking and canonical session headers over native Responses WebSocket connections; retained failure metadata and tool-search output across pre-content retry handling.
 - Applied Fast/Ultrafast billing rules to model-library fallback prices consistently in API usage and stored costs.
 - Applied Codex User-Agent opt-in, client fingerprint filtering, and stable session headers to the new native Images path without changing its JSON protocol.
 - Kept multi-key retry budgets stable while disabled credentials are refreshed, and kept single-key diagnostics pinned to the selected key across retries.

@@ -94,6 +94,8 @@ git show --remerge-diff <merge-commit>
 
 ### F04 Fast/Ultrafast tier 识别、计费、价格表和展示
 
+- 原始响应保真整合：上游默认 Responses identity/transport 保真路径不能绕过已开启的 `InjectUsageCost`；JSON/SSE 仅回填本地费用字段，保留原始 ID、未知扩展及数值精度，继续使用实际渠道模型和相同 tier 优先级。显式 PassThroughBody 仍保留其既有原样语义。回归/当前变更定位：`git log -S'TestResponsesIdentityPreservesInjectedCost' -- internal/server/orchestrator/responses_identity_cost_test.go`。
+- 原生 WebSocket 整合：新增 `openai/responses-ws` 必须同时进入 `OpenAIServiceTier` 和 orchestrator 的档位识别分支，保留出站参数、SpeedMode、requested tier 及 Codex override。回归：`TestOpenAIServiceTierWebSocketForkCompatibility`、`TestWebSocketServiceTierTracking`；当前独立变更定位：`git log -S'TestWebSocketServiceTierTracking' -- internal/server/orchestrator/service_tier_test.go`。
 - 模型库兜底整合：采用 `cc1c7e5d` 的渠道无价格时查询模型库逻辑，但新增分支同样调用 `ComputeUsageCostForServiceTier`，保证 API `usage.cost` 与落库使用相同倍率和 provider tier 优先级。显式渠道价格优先；模型库目前仅提供固定输入/输出/缓存单价，不包含 context 阶梯、schedule 或独立 tier 价格。倍率仍精确匹配实际渠道模型 ID，不因去除推理后缀扩大范围。回归/独立提交定位：`git log -S'TestUsageCost_ModelLibraryFallbackServiceTier' -- internal/server/biz/usage_cost_model_library_tier_test.go`。
 - 生命周期：`长期保留`
 - 原始意图：准确识别 Codex/OpenAI/Anthropic 的 Fast 与 Ultrafast 请求意图和 provider 实际应用的 tier，并用正确价格计费、持久化和展示。
@@ -177,6 +179,8 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- Responses 协议整合：采用 `36364049` 的内容输出前 structured failure 重试与 `94cd05b1` 的终态后立即结束，避免继续等待尾流；保留失败 snapshot 的 ID/model/usage/tier/request ID，refusal 和 `InlineToolResults` 必须计为已输出内容，后续失败不能再判成空响应。Transformer 与 pipeline 的内容判定须一致；保留已有完整终态后的费用语义。当前独立变更定位：`git log -S'TestResponsesFailedAfterInlineToolResultForkCompatibility' -- llm/transformer/openai/responses/outbound_stream_fork_compat_test.go`。
+- 原样转发同样必须完成转换流的终态校验和用量持久化：已完成请求不能被尾流错误覆盖，未完成断流须交付失败终态。交付终态前等待转换流校验，保留原始终态快照用于同类型终态补发，避免提前关闭造成 response/item ID 或扩展字段丢失；适配失败须先取消生产者再等待转换流结束。回归覆盖 `orchestrator_streaming_test.go` 的已完成取消/断流及 `pass_through_test.go` 的 HTTP/WS 事件身份与关闭顺序。
 - 本次上游整合：`b6d184a8` 将音频 data/transcript 视为非空内容；仍保留异常终态识别与完成后错误处理，不因仅有 usage 而认定成功。
 - 本次上游整合：采用 `81e519e9`，Anthropic/Responses 等待独立 usage-only chunk 后生成终态，避免 finish_reason chunk 的占位零值覆盖真实用量；保留 Responses 最新 usage 赋值、精确异常终态及已完成尾部错误策略。回归 `UsesUsageFromFinalUsageOnlyChunk` 与既有终态测试。
 - 本次独立整合修复：Chat 输出在收到显式 error/failed/canceled/incomplete 后，即使之前已有内容与 usage，clean EOF 也不得补成功 finish/[DONE]。复用 `Response.TerminalOutcome()` 判定；回归为 `TestInboundTransformer_ProviderTerminalDoesNotSynthesizeSuccess`，提交可用 `git log -S'TestInboundTransformer_ProviderTerminalDoesNotSynthesizeSuccess' -- llm/transformer/openai/inbound_stream_test.go` 定位。用户说明见 `docs/en/guides/cost-tracking.md` 与 `docs/zh/guides/cost-tracking.md`。
@@ -266,6 +270,7 @@ git show --remerge-diff <merge-commit>
 
 ### U12 Codex session header 最终规范化
 
+- WebSocket lane 整合：lane ID 用于连接池隔离，但不能覆盖已规范化的 Codex `Session-Id` 或重新注入 `Session_id`。保留 `f7e60232` 的 HTTP/1.1 ALPN 限制。真实本地握手回归/当前独立变更定位：`git log -S'TestCodexWebSocketLaneCanonicalSessionForkCompatibility' -- llm/transformer/openai/codex/websocket_fork_compat_test.go`。
 - 原生 Images 整合：采用 `3cb7e333` 后，独立 `imageOutbound` 同样使用 Codex 默认 UA/显式透传开关、指纹 skip 和 canonical session metadata；通过仅规范化 headers 的 Images finalizer 防止 merge/override 重引入旧 session，不能调用 Responses transport 清理而改变 JSON Images。回归：`image_headers_test.go`、`TestCodexNativeImagesUserAgentPassThrough`；当前独立变更定位：`git log -S'func (t *imageOutbound) FinalizeTransportRequest' -- llm/transformer/openai/codex/image_outbound.go`。
 - 本次上游整合：`931fafff` 的默认 Codex UA、显式 UA 透传开关和 Codex 专属指纹过滤被采用；保留本地 session/Lite 规范化。独立兼容修复通过出站 `SkipInboundHeaderMerge` 过滤 Responses/alpha-search 的指纹字段，按大小写无关方式匹配，不能删除源 map 或影响随后普通渠道的 attribution headers；Lite 校验也不能修改源 headers。当前变更定位：`git log -S'skipClientFingerprintHeaders' -- llm/transformer/openai/codex/headers.go`。回归覆盖转换、合并、重试和后续普通渠道；用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`。
 - 生命周期：`等待上游吸收`
