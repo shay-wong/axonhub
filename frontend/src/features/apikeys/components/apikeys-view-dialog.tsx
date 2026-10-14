@@ -100,7 +100,7 @@ export function ApiKeysViewDialog() {
     };
   }, [activeExampleTab, piConfigCode, piPreRenderedCode]);
 
-  const codeExamples = useMemo(() => {
+  const codeExamples = useMemo<Record<string, { baseUrl: string; display: string; real: string }>>(() => {
     if (!selectedApiKey?.key) return {};
 
     return {
