@@ -94,6 +94,7 @@ git show --remerge-diff <merge-commit>
 
 ### F04 Fast/Ultrafast tier 识别、计费、价格表和展示
 
+- 模型库兜底整合：采用 `cc1c7e5d` 的渠道无价格时查询模型库逻辑，但新增分支同样调用 `ComputeUsageCostForServiceTier`，保证 API `usage.cost` 与落库使用相同倍率和 provider tier 优先级。显式渠道价格优先；模型库目前仅提供固定输入/输出/缓存单价，不包含 context 阶梯、schedule 或独立 tier 价格。倍率仍精确匹配实际渠道模型 ID，不因去除推理后缀扩大范围。回归/独立提交定位：`git log -S'TestUsageCost_ModelLibraryFallbackServiceTier' -- internal/server/biz/usage_cost_model_library_tier_test.go`。
 - 生命周期：`长期保留`
 - 原始意图：准确识别 Codex/OpenAI/Anthropic 的 Fast 与 Ultrafast 请求意图和 provider 实际应用的 tier，并用正确价格计费、持久化和展示。
 - 必须保持：request intent、provider-applied tier 和 request-derived pricing override 分开建模；Codex `priority`、`ultrafast` 只在 provider tier 为空或 default 时覆盖计费，且分别使用独立价格 key；OpenAI `fast` 在计费、价格导入和请求展示中等价于 `priority`；明确的非 default provider tier 优先；Anthropic `speed=fast` 使用 Fast price key；显式 `ultrafast` 不被 Codex 风格默认值覆盖；独立档位价格优先，部分覆盖中缺少的项继续继承有效基础价；已接收完整终态响应时，即使客户端随后取消或超时，也必须持久化 usage 和费用，且 completed execution 不得残留取消错误或失败状态码；定时价格表保留 prompt cache variants；请求列表分别展示 Fast 与 Ultrafast，并在移动端默认隐藏高密度列；列偏好迁移保留 v2 拆分列到 v3 合并列的既有语义，再把 v3 `usage` 等价展开为当前 `tokens`、`readCache` 和 `writeCache`。

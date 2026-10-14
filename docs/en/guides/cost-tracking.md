@@ -103,6 +103,8 @@ Configure pricing for each channel and model in the admin dashboard:
 
 You can add exact service-tier price overrides such as `priority` and `ultrafast`. OpenAI's `fast` and `priority` names share the `priority` price key. AxonHub records the requested and applied tiers, then uses the applied tier for billing. For Codex responses that omit the applied tier or report `default`, the explicitly requested Fast or Ultrafast tier remains the billing fallback. An explicit tier price takes precedence; omitted items in a partial override still inherit the effective base price.
 
+If a channel has no price for a model, AxonHub falls back to the model library's fixed input, output, and cache rates. The same service-tier rules apply to both API `usage.cost` and stored costs. Explicit channel prices take precedence. This live fallback does not import context brackets, schedules, or separate tier prices; configure those under **Channels → Model Prices**.
+
 When a tier price is absent, AxonHub uses these fallback ratios, verified against [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) on 2026-10-13:
 
 | Actual channel model | Fast without an override | Ultrafast without an override |

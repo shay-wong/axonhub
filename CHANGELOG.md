@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Applied Fast/Ultrafast billing rules to model-library fallback prices consistently in API usage and stored costs.
 - Applied Codex User-Agent opt-in, client fingerprint filtering, and stable session headers to the new native Images path without changing its JSON protocol.
 - Kept multi-key retry budgets stable while disabled credentials are refreshed, and kept single-key diagnostics pinned to the selected key across retries.
 - Preserved original client headers during Codex fingerprint filtering so failover to other providers retains their attribution headers.

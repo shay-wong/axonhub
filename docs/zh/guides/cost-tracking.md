@@ -103,6 +103,8 @@ AxonHub 支持三种定价模式：
 
 可以为 `priority`、`ultrafast` 等服务档位分别添加精确价格。OpenAI 的 `fast` 和 `priority` 共用 `priority` 价格键。AxonHub 同时记录请求档位和实际应用的档位，并优先按实际档位计费；如果 Codex 响应未返回档位或返回 `default`，则显式请求的 Fast 或 Ultrafast 仍作为计费兜底。独立档位价格优先；部分覆盖中省略的价格项仍继承当前有效基础价格。
 
+渠道未配置某模型的价格时，AxonHub 使用模型库的固定输入、输出和缓存单价兜底，API `usage.cost` 与落库费用同样遵循服务档位规则。显式渠道价格优先。实时兜底不会导入上下文阶梯、定时价格或独立档位价格；这些应在 **渠道 → 模型价格** 配置。
+
 未配置独立档位价格时，使用以下兜底倍率，依据 2026-10-13 核实的 [OpenAI API 官方价格](https://developers.openai.com/api/docs/pricing)：
 
 | 渠道实际模型 | 未配置 Fast 价格 | 未配置 Ultrafast 价格 |

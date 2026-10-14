@@ -79,7 +79,7 @@ func (s *UsageLogService) computeUsageCost(
 	// working when auto-configuration could not snapshot the price, for example
 	// when the model library price was added after the channel was created.
 	if price, ok := s.ChannelService.resolveModelLibraryPrice(ctx, modelID); ok {
-		items, total := ComputeUsageCost(usage, *price, time.Now())
+		items, total := ComputeUsageCostForServiceTier(usage, *price, modelID, serviceTier, time.Now())
 		totalCost := total.InexactFloat64()
 
 		if log.DebugEnabled(ctx) {
