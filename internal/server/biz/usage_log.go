@@ -74,6 +74,26 @@ func (s *UsageLogService) computeUsageCost(
 		return items, lo.ToPtr(totalCost), modelPrice.ReferenceID
 	}
 
+	// Fallback: the channel has no explicit price for this model, so bill with
+	// the model library price configured under the Models menu. This keeps cost
+	// working when auto-configuration could not snapshot the price, for example
+	// when the model library price was added after the channel was created.
+	if price, ok := s.ChannelService.resolveModelLibraryPrice(ctx, modelID); ok {
+		items, total := ComputeUsageCost(usage, *price, time.Now())
+		totalCost := total.InexactFloat64()
+
+		if log.DebugEnabled(ctx) {
+			log.Debug(ctx, "computed usage cost from model library fallback",
+				log.Int("channel_id", channelID),
+				log.String("model_id", modelID),
+				log.Float64("total_cost", totalCost),
+				log.Int64("total_tokens", usage.TotalTokens),
+			)
+		}
+
+		return items, lo.ToPtr(totalCost), modelLibraryPriceReferenceID(modelID)
+	}
+
 	return nil, nil, ""
 }
 

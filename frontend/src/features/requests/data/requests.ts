@@ -98,6 +98,7 @@ function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChann
                   promptCachedTokens
                   promptWriteCachedTokens
                   totalCost
+                  costPriceReferenceID
                 }
               }
             }
@@ -170,6 +171,7 @@ function buildRequestDetailQuery(permissions: { canViewApiKeys: boolean; canView
                   promptCachedTokens
                   promptWriteCachedTokens
                   totalCost
+                  costPriceReferenceID
                 }
             }
           }

@@ -14,32 +14,85 @@ AxonHub 可以作为 OpenAI 接口的直接替代方案，使 Codex 能够通过
 
 Codex Responses、原生 Images 和 alpha-search 请求默认使用 AxonHub 的 Codex User-Agent，只有开启渠道的 User-Agent 透传开关时才使用客户端值。这些出站请求会过滤客户端归属字段（`Http-Referer`、`X-Title`、`X-Platform`、`X-Zcode-*`、`X-Os-*`），但保留原始请求头，供重试切换到需要这些字段的其他提供商时使用。调用方显式选择的 Responses Lite 和会话身份保持不变。原生 Images 在最终规范化会话头时仍保持 JSON 协议。
 
-### 前置要求
-- 可访问的 AxonHub 实例。
-- 拥有项目访问权限的 AxonHub API Key。
-- Codex（OpenAI 兼容工具）的使用权限。
-- （可选）已在 AxonHub 控制台配置好的一个或多个模型配置文件。
+### 选择接入方式
 
-### 配置 Codex
-1. 编辑 `${HOME}/.codex/config.toml`，将 AxonHub 注册为 provider：
+使用 `/codex` 兼容入口可通过 Codex personal access token（PAT）认证，并读取实时原生模型目录。已有自定义 provider 配置可继续使用 `/v1`、API Key 和下文介绍的内置目录。这是两种独立配置；`/v1` 不要求开启 `/codex` 开关或选择目录来源。
+
+### PAT 前置要求与 AxonHub 设置
+- 开发机可以访问 AxonHub 实例。
+- 拥有项目访问权限的 AxonHub API Key。
+- 可以使用 Codex（OpenAI 兼容工具）。
+- AxonHub 中已有一个 Codex 渠道。该渠道提供上游地址、凭据和 HTTP 传输配置。
+
+配置 Codex 前，请在 AxonHub 的 **Codex 兼容**设置页中：
+
+1. 开启兼容开关。
+2. 选择用于原生模型目录的 Codex 渠道。
+3. 点击渠道的**测试**按钮，确认其 `/models` 接口可访问。测试不会保存设置、启用渠道或修改渠道状态。
+
+兼容开关默认关闭。保存开启的配置时必须选择一个现存 Codex 渠道。即使开关关闭，也可以执行目录测试；测试失败不会阻止保存。目录结果只会过滤为当前调用者可见的模型；这不等于允许手工指定该模型，推理请求仍由现有权限链路检查。
+
+### 配置 PAT 认证与 `/codex` 路由
+1. 编辑 `${HOME}/.codex/auth.json`，将 AxonHub API Key 作为 Codex personal access token 保存。请只使用此文件，不要使用 `CODEX_ACCESS_TOKEN`、`login --with-access-token` 或 `api_key` auth mode：
+   ```json
+   {"personal_access_token":"<your-axonhub-api-key>"}
+   ```
+2. 编辑 `${HOME}/.codex/config.toml`，让 provider 和认证 API 都指向同一个 `/codex` 兼容入口：
    ```toml
    model = "gpt-5"
-   model_provider = "axonhub-responses"
+   model_provider = "openai"
+   openai_base_url = "https://gateway.example/codex"
+   chatgpt_base_url = "https://gateway.example/codex"
 
-   [model_providers.axonhub-responses]
-   name = "AxonHub using Responses"
-   base_url = "http://127.0.0.1:8090/v1"
-   env_key = "AXONHUB_API_KEY"
-   wire_api = "responses"
-   query_params = {}
+   web_search = "live"
+   suppress_unstable_features_warning = true
+
+   [features]
+   fast_mode = true
+   context_management = true
    ```
-2. 导出供 Codex 读取的 API Key：
+3. 在启动 Codex 的同一个 shell 中设置必需的认证 API 地址：
    ```bash
-   export AXONHUB_API_KEY="<your-axonhub-api-key>"
+   export CODEX_AUTHAPI_BASE_URL="https://gateway.example/codex"
    ```
-3. 重启 Codex 以加载配置。
+   将示例主机替换为你的 AxonHub 地址。不要设置独立的目录 URL；whoami、models 和 Responses 请求都使用 `/codex` 入口。
+4. 重启 Codex 以加载配置。
 
-#### 模型目录刷新
+本指南使用的兼容入口如下：
+
+- `GET /codex/v1/user-auth-credential/whoami`：本地 API Key 身份信息。
+- `GET /codex/api/codex/accounts/check`：Codex 账户选择所需的账户元数据。
+- `GET /codex/models`：选定渠道的原生目录与调用者可见模型 ID 的交集。
+- `POST /codex/images/generations`：通过普通模型/渠道路由调用原生图片生成接口。
+- `POST /codex/images/edits`：通过普通模型/渠道路由调用原生图片编辑接口。
+- `POST /codex/responses`：Responses HTTP/SSE 推理。
+- `GET /codex/responses`：Responses WebSocket 推理。
+
+`/codex/models` 会从选定渠道获取目录，只保留与调用者可见模型 ID 完全一致的条目。它保留上游元数据与显示状态，不为别名或未知模型补充条目。同一来源和版本的并发拉取会合并，但没有持久目录缓存或内置回退；即使推理渠道可用，目录来源不可用也可能导致刷新失败。拉取使用选定渠道的凭据，不转发调用者的 API Key。
+
+### 既有 `/v1` 自定义 provider 配置
+
+使用 API Key 自定义 provider 时，单独配置 `${HOME}/.codex/config.toml`：
+
+```toml
+model = "gpt-5"
+model_provider = "axonhub-responses"
+
+[model_providers.axonhub-responses]
+name = "AxonHub using Responses"
+base_url = "http://127.0.0.1:8090/v1"
+env_key = "AXONHUB_API_KEY"
+wire_api = "responses"
+query_params = {}
+```
+
+在启动 Codex 的 shell 中导出 Key，然后重启 Codex：
+
+```bash
+export AXONHUB_API_KEY="<your-axonhub-api-key>"
+```
+
+#### `/v1` 模型目录刷新
 
 Codex 使用 `GET /v1/models?client_version=0.153.4` 发现模型。AxonHub 将非空的 `client_version` 查询参数视为请求 Codex 的 `{"models":[{"slug":"…",…}]}` 目录格式，无需额外开启 AxonHub 设置。普通 `/v1/models` 请求仍返回 OpenAI 的 `data/id` 格式；单独使用 `include=all` 不会切换到 Codex 格式。
 
@@ -79,8 +132,13 @@ server:
 **提示**：开启此功能后，AxonHub 会将同一个 Trace 的请求优先转发到同一个上游渠道，从而大幅提高提供商端的缓存命中率（例如 Anthropic 的 Prompt Caching）。
 
 #### 验证
-- 按以上配置发送测试 Prompt，AxonHub 日志中应出现 `/v1/responses` 调用。
+- 发送测试 Prompt；PAT 配置应请求 `/codex/responses`，API Key 自定义 provider 应请求 `/v1/responses`。
+- 使用 PAT 时，确认模型列表从 `/codex/models` 加载，且有可用的推理渠道。目录来源和推理渠道不必相同。
+- 如果 Codex 客户端使用账户发现功能，请确认使用同一 API Key 可以访问 `/codex/api/codex/accounts/check`。
+- 图片生成和编辑分别使用 `/codex/images/generations` 与 `/codex/images/edits`；实际路由到的推理渠道不一定是目录渠道，但必须提供对应的原生图片端点和模型。
 - 启用 AxonHub 的追踪功能可查看提示词、回复及延迟信息。
+
+当前版本的远程 compaction-v2 复用普通 Responses 路径：向 `/codex/responses` 发送 `compaction_trigger`，再把返回的压缩项用于后续 Responses 请求。不实现 history/notes API，也不新增独立的 `/codex/responses/compact` 路由；这些未支持路径返回 JSON 404。`context_management` 会启用 Codex 的 Responses 压缩流程，history notes 仍属于后续兼容工作范围。`fast_mode` 会让客户端请求 Responses 的 `service_tier`；该等级是否可用由上游模型目录和响应决定。当前没有独立的 `ultrafast` 接口或本地能力探测。既有 `/v1` 路由保持不变。
 
 ### 使用模型配置文件
 AxonHub 的模型配置文件支持将请求模型映射到具体提供商模型：
@@ -106,7 +164,9 @@ AxonHub 的模型配置文件支持将请求模型映射到具体提供商模型
 
 ### 常见问题
 - **经过中转后 Codex 看不到工具**：升级到包含 `additional_tools` 转发修复的版本。Responses、Codex 和 Compact 转发均保留此类输入条目，不按域名删除，也无需额外开关；不支持它的目标服务可能拒绝请求。转换到非 Responses 协议时明确返回 HTTP 400，不再静默丢工具，也不会重试或切换渠道。
-- **Codex 认证失败**：确保在启动 Codex 的同一 shell 会话中设置了 `AXONHUB_API_KEY`。
+- **API Key 自定义 provider 认证失败**：确保在启动 Codex 的同一 shell 会话中设置了 `AXONHUB_API_KEY`。
+- **PAT 认证失败**：确认 `${HOME}/.codex/auth.json` 的 `personal_access_token` 是有效的 AxonHub API Key，并确认 `CODEX_AUTHAPI_BASE_URL`、`openai_base_url` 和 `chatgpt_base_url` 指向同一个 `/codex` 入口。
+- **`/codex` 模型列表为空或不可用**：确认兼容开关已开启、已选择 Codex 渠道，且该渠道的 `/models` 接口通过设置页测试。模型 ID 必须与调用者可见 ID 完全一致。目录过滤不代替推理授权。`/v1` 的内置目录和客户端刷新限制见上文。
 - **模型结果异常**：检查 AxonHub 控制台中当前启用的配置文件映射，必要时禁用或调整规则。
 - **定时任务提示 `function_call_output` 缺少 `call_id`**：升级到包含 Codex 定时任务启动项兼容修复的 AxonHub 版本。
 

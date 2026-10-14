@@ -66,7 +66,16 @@ import {
   getApiFormatsForProvider,
   getChannelTypeForApiFormat,
 } from '../data/config_providers';
-import { getInitialApiFormatForChannel, getModelProtocolsForApiFormat } from '../data/protocol-options';
+import {
+  buildCodexResponsesEndpoints,
+  getCodexResponsesWebSocketState,
+  getCodexResponsesWebSocketURL,
+  hasCodexResponsesWebSocketOverrideReplacement,
+  getInitialApiFormatForChannel,
+  getModelProtocolsForApiFormat,
+  toHttpBaseURL,
+  translateLegacyCodexModelProtocols,
+} from '../data/protocol-options';
 import {
   Channel,
   ChannelType,
@@ -108,7 +117,6 @@ const DEFAULT_API_KEY_WEIGHT = 100;
 // allowing the Responses transformer to append /responses. Do not replace these
 // defaults with ## unless the upstream URL should be used fully raw.
 const OPENAI_RESPONSES_WEBSOCKET_BASE_URL = 'wss://api.openai.com/v1#';
-const CODEX_RESPONSES_WEBSOCKET_BASE_URL = 'wss://chatgpt.com/backend-api/codex#';
 
 function getResponsesTransportFromBaseURL(baseURL?: string): ResponsesTransport {
   return baseURL?.trim().toLowerCase().startsWith('ws') ? 'websocket' : 'http';
@@ -271,14 +279,15 @@ function getInitialAPIKeys(channel?: Channel): string[] {
   return normalizeAPIKeyList(channel?.credentials?.apiKeyConfigs?.map((config) => config.key));
 }
 
-function getResponsesTransportFromChannel(channel?: Pick<Channel, 'baseURL' | 'endpoints'>): ResponsesTransport {
+function getResponsesTransportFromChannel(channel?: Pick<Channel, 'type' | 'baseURL' | 'endpoints'>): ResponsesTransport {
+  // Codex always edits an HTTP(S) Base URL; WebSocket is its separate checkbox.
+  if (channel?.type === 'codex') return 'http';
   const responsesEndpoint = channel?.endpoints?.find((endpoint) => endpoint.apiFormat === OPENAI_RESPONSES);
   if (responsesEndpoint?.transport === 'http' || responsesEndpoint?.transport === 'websocket') return responsesEndpoint.transport;
   return getResponsesTransportFromBaseURL(channel?.baseURL);
 }
 
 function getResponsesWebSocketBaseURL(channelType: ChannelType): string | undefined {
-  if (channelType === 'codex') return CODEX_RESPONSES_WEBSOCKET_BASE_URL;
   if (channelType === 'openai_responses') return OPENAI_RESPONSES_WEBSOCKET_BASE_URL;
   return undefined;
 }
@@ -394,7 +403,7 @@ function getNextDuplicateName(name: string, existingNames: Set<string>) {
 // Providers that are always OAuth (no third-party API key mode)
 const alwaysOAuthProviderKeys = ['antigravity', 'github_copilot', 'xai_subscription'];
 
-function isOfficialCodexChannel(channel: { credentials?: { apiKey?: string } }): boolean {
+function isOfficialCodexChannel(channel: { credentials?: { apiKey?: string | null } | null }): boolean {
   try {
     const apiKey = channel.credentials?.apiKey || '';
     const json = JSON.parse(apiKey);
@@ -419,6 +428,14 @@ function extractCodexAuthJSONText(apiKey: string | undefined): string | undefine
   } catch {
     return undefined;
   }
+}
+
+// Codex forms edit only an HTTP(S) Base URL: official and auth.json rows show the
+// canonical Base URL and legacy WS(S) third-party rows their HTTP(S) equivalent.
+// Opening the form never changes the stored channel.
+function getInitialBaseURL(row: Pick<Channel, 'type' | 'baseURL' | 'credentials'>): string {
+  if (row.type !== 'codex') return row.baseURL;
+  return isOfficialCodexChannel(row) ? getDefaultBaseURL('codex') : toHttpBaseURL(row.baseURL);
 }
 
 export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpenChange, showModelsPanel = false }: Props) {
@@ -461,6 +478,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const [showClearAllPopover, setShowClearAllPopover] = useState(false);
   const [applyPatternFilter, setApplyPatternFilter] = useState(false);
   const hasAutoSetDuplicateNameRef = useRef(false);
+  const codexThirdPartyBaseURLRef = useRef('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [showCommandCodeAuthCookie, setShowCommandCodeAuthCookie] = useState(false);
   const [showOllamaAuthCookie, setShowOllamaAuthCookie] = useState(false);
@@ -611,6 +629,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     return OPENAI_CHAT_COMPLETIONS;
   });
   const [responsesTransport, setResponsesTransport] = useState<ResponsesTransport>(() => getResponsesTransportFromChannel(initialRow));
+  const initialCodexResponses = useMemo(() => getCodexResponsesWebSocketState(initialRow), [initialRow]);
+  const [codexResponsesWebSocket, setCodexResponsesWebSocket] = useState(initialCodexResponses.enabled);
   const [useGeminiVertex, setUseGeminiVertex] = useState(() => {
     if (initialRow) {
       return initialRow.type === 'gemini_vertex';
@@ -642,6 +662,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     );
     setSelectedApiFormat(apiFormat);
     setResponsesTransport(getResponsesTransportFromChannel(initialRow));
+    setCodexResponsesWebSocket(getCodexResponsesWebSocketState(initialRow).enabled);
     setUseGeminiVertex(initialRow.type === 'gemini_vertex');
     setUseAnthropicAws(initialRow.type === 'anthropic_aws');
     setUseKimiCoding(initialRow.type === 'moonshot_coding');
@@ -663,9 +684,11 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       resetAntigravityOAuth();
       resetXaiOAuth();
       setCodexAuthJSONText('');
+      codexThirdPartyBaseURLRef.current = '';
+      setCodexResponsesWebSocket(initialCodexResponses.enabled);
       setXaiSSOToken('');
     }
-  }, [open, resetCodexOAuth, resetClaudecodeOAuth, resetAntigravityOAuth, resetXaiOAuth]);
+  }, [open, resetCodexOAuth, resetClaudecodeOAuth, resetAntigravityOAuth, resetXaiOAuth, initialCodexResponses.enabled]);
 
   useEffect(() => {
     if (!open) {
@@ -814,7 +837,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       isEdit && currentRow
         ? {
             type: currentRow.type,
-            baseURL: currentRow.baseURL,
+            baseURL: getInitialBaseURL(currentRow),
             name: currentRow.name,
             policies: currentRow.policies ?? { stream: 'unlimited' },
             supportedModels: currentRow.supportedModels,
@@ -840,7 +863,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         : duplicateFromRow
           ? {
               type: duplicateFromRow.type,
-              baseURL: duplicateFromRow.baseURL,
+              baseURL: getInitialBaseURL(duplicateFromRow),
               name: duplicateFromRow.name,
               policies: duplicateFromRow.policies ?? { stream: 'unlimited' },
               supportedModels: duplicateFromRow.supportedModels,
@@ -1009,6 +1032,10 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     return t('channels.dialogs.fields.baseURL.placeholder');
   }, [selectedType, derivedChannelType, selectedApiFormat, responsesTransport, t]);
 
+  const watchedBaseURL = form.watch('baseURL');
+  const codexResponsesWebSocketURL =
+    isCodexType && codexResponsesWebSocket ? getCodexResponsesWebSocketURL(watchedBaseURL, initialRow?.endpoints) : undefined;
+
   // Sync form type when provider or API format changes
   const handleProviderChange = useCallback(
     (provider: string) => {
@@ -1031,7 +1058,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         setSelectedApiFormat(OPENAI_RESPONSES);
         form.setValue('type', 'codex');
         if (!isEdit) {
-          const baseURL = responsesTransport === 'websocket' ? getResponsesWebSocketBaseURL('codex') : getDefaultBaseURL('codex');
+          const baseURL = getDefaultBaseURL('codex');
           if (baseURL) {
             form.setValue('baseURL', baseURL, { shouldDirty: true });
           }
@@ -1103,7 +1130,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         }
       }
     },
-    [form, useGeminiVertex, useAnthropicAws, useKimiCoding, isDuplicate, isEdit, selectedApiFormat, isOAuthChannel, responsesTransport]
+    [form, useGeminiVertex, useAnthropicAws, useKimiCoding, isDuplicate, isEdit, selectedApiFormat, isOAuthChannel]
   );
 
   const handleApiFormatChange = useCallback(
@@ -1156,22 +1183,6 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       }
     },
     [selectedProvider, form, useGeminiVertex, useAnthropicAws, useKimiCoding, isDuplicate, isEdit, isOAuthChannel]
-  );
-
-  const handleResponsesTransportChange = useCallback(
-    (transport: ResponsesTransport) => {
-      if (isOAuthChannel && selectedProvider !== 'codex') return;
-      setResponsesTransport(transport);
-
-      const channelType = selectedProvider === 'codex' ? 'codex' : selectedType || derivedChannelType;
-      // Third-party Codex channels use custom endpoints — don't overwrite them on transport switch
-      if (isCodexType && authMode === 'third-party') return;
-      const baseURL = transport === 'websocket' ? getResponsesWebSocketBaseURL(channelType) : getDefaultBaseURL(channelType);
-      if (baseURL) {
-        form.setValue('baseURL', baseURL, { shouldDirty: true });
-      }
-    },
-    [authMode, derivedChannelType, form, isCodexType, isOAuthChannel, selectedProvider, selectedType]
   );
 
   const handleGeminiVertexChange = useCallback(
@@ -1281,10 +1292,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     const channelTypeForURL: ChannelType | undefined = providerToChannelType[selectedProvider];
 
     if (channelTypeForURL) {
-      const baseURL =
-        channelTypeForURL === 'codex' && responsesTransport === 'websocket'
-          ? getResponsesWebSocketBaseURL(channelTypeForURL)
-          : getDefaultBaseURL(channelTypeForURL);
+      const baseURL = getDefaultBaseURL(channelTypeForURL);
       if (baseURL) {
         // Use setValue instead of resetField to avoid infinite loop
         const currentURL = form.getValues('baseURL');
@@ -1304,7 +1312,6 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     resetClaudecodeOAuth,
     resetAntigravityOAuth,
     resetXaiOAuth,
-    responsesTransport,
   ]);
 
   const watchedDefaultTestModel = form.watch('defaultTestModel');
@@ -1494,20 +1501,30 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         isXAISubscriptionType;
       if (shouldUseProtocolDefaultBaseURL) {
         const currentType = selectedType || derivedChannelType;
-        const baseURL =
-          isCodexType && responsesTransport === 'websocket' ? getResponsesWebSocketBaseURL('codex') : getDefaultBaseURL(currentType);
+        const baseURL = getDefaultBaseURL(currentType);
         if (baseURL) {
           dataWithModels.baseURL = baseURL;
         }
       }
 
-      if (selectedApiFormat === OPENAI_RESPONSES && !baseURLMatchesResponsesTransport(dataWithModels.baseURL, responsesTransport)) {
+      // Codex always saves an HTTP(S) Base URL; its WebSocket endpoint is derived from it.
+      const requiredResponsesTransport: ResponsesTransport = isCodexType ? 'http' : responsesTransport;
+      if (
+        (isCodexType || selectedApiFormat === OPENAI_RESPONSES) &&
+        !baseURLMatchesResponsesTransport(dataWithModels.baseURL, requiredResponsesTransport)
+      ) {
         form.setError('baseURL', {
           type: 'manual',
-          message: t(getResponsesTransportBaseURLError(responsesTransport)),
+          message: t(getResponsesTransportBaseURLError(requiredResponsesTransport)),
         });
         return;
       }
+
+      if (isCodexType) {
+        dataWithModels.endpoints = buildCodexResponsesEndpoints(initialRow?.endpoints, codexResponsesWebSocket);
+      }
+      const codexModelProtocols =
+        isCodexType && initialRow ? translateLegacyCodexModelProtocols(initialRow, initialRow.settings?.modelProtocols) : undefined;
 
       if (isEdit && currentRow) {
         const existingModelProtocols = currentRow.settings?.modelProtocols;
@@ -1525,6 +1542,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
           ...(shouldUpdateModelProtocols
             ? { modelProtocols: getModelProtocolsForApiFormat(selectedApiFormat, supportedModels, existingModelProtocols) }
             : {}),
+          ...(codexModelProtocols ? { modelProtocols: codexModelProtocols } : {}),
         };
 
         const updateInput = {
@@ -1593,6 +1611,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                 ),
               }
             : {}),
+          ...(codexModelProtocols ? { modelProtocols: codexModelProtocols } : {}),
         });
 
         const createInput = {
@@ -2232,20 +2251,30 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                           <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
                             {t('channels.dialogs.fields.apiFormat.label')}
                           </FormLabel>
-                          <div className='max-w-64 space-y-1 md:col-span-6 md:max-w-none'>
-                            <SelectDropdown
-                              defaultValue={responsesTransport === 'websocket' ? OPENAI_RESPONSES_WEBSOCKET : OPENAI_RESPONSES}
-                              onValueChange={(value) =>
-                                handleResponsesTransportChange(value === OPENAI_RESPONSES_WEBSOCKET ? 'websocket' : 'http')
-                              }
-                              placeholder={t('channels.dialogs.fields.apiFormat.placeholder')}
-                              data-testid='api-format-select'
-                              isControlled={true}
-                              items={[
-                                { value: OPENAI_RESPONSES, label: getApiFormatLabel(OPENAI_RESPONSES) },
-                                { value: OPENAI_RESPONSES_WEBSOCKET, label: getApiFormatOptionLabel(OPENAI_RESPONSES_WEBSOCKET) },
-                              ]}
-                            />
+                          <div className='space-y-1 md:col-span-6'>
+                            <div className='flex min-h-9 items-center justify-between gap-4'>
+                              <span className='text-sm'>{getApiFormatLabel(OPENAI_RESPONSES)}</span>
+                              <label className='flex cursor-pointer items-center gap-2 text-sm'>
+                                <Checkbox
+                                  checked={codexResponsesWebSocket}
+                                  onCheckedChange={(checked) => setCodexResponsesWebSocket(checked === true)}
+                                  data-testid='codex-responses-websocket-checkbox'
+                                />
+                                <span>{t('channels.dialogs.fields.apiFormat.codexWebSocket.label')}</span>
+                              </label>
+                            </div>
+                            {codexResponsesWebSocketURL && (
+                              <p className='text-muted-foreground text-xs break-all' data-testid='codex-responses-websocket-url'>
+                                {t('channels.dialogs.fields.apiFormat.codexWebSocket.derivedURL', { url: codexResponsesWebSocketURL })}
+                              </p>
+                            )}
+                            {codexResponsesWebSocket && (initialCodexResponses.webSocketOnly || hasCodexResponsesWebSocketOverrideReplacement(initialRow)) && (
+                              <p className='text-xs text-amber-600 dark:text-amber-400' data-testid='codex-responses-websocket-upgrade-note'>
+                                {t(initialCodexResponses.webSocketOnly
+                                  ? 'channels.dialogs.fields.apiFormat.codexWebSocket.legacyUpgrade'
+                                  : 'channels.dialogs.fields.apiFormat.codexWebSocket.overrideReplacement')}
+                              </p>
+                            )}
                           </div>
                         </FormItem>
                       )}
@@ -2466,16 +2495,19 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                 value={authMode}
                                 onValueChange={(value) => {
                                   const mode = value as 'official' | 'auth-json' | 'third-party';
+                                  // Codex official and auth.json always use the canonical HTTPS Base URL;
+                                  // returning to third-party restores the URL entered there.
+                                  if (isCodexType && authMode === 'third-party') {
+                                    codexThirdPartyBaseURLRef.current = form.getValues('baseURL') ?? '';
+                                  }
                                   setAuthMode(mode);
                                   if (mode !== 'third-party') {
-                                    const currentType = selectedType || derivedChannelType;
-                                    const defaultURL =
-                                      isCodexType && responsesTransport === 'websocket'
-                                        ? getResponsesWebSocketBaseURL('codex')
-                                        : getDefaultBaseURL(currentType);
+                                    const defaultURL = getDefaultBaseURL(selectedType || derivedChannelType);
                                     if (defaultURL) {
                                       form.setValue('baseURL', defaultURL);
                                     }
+                                  } else if (isCodexType && codexThirdPartyBaseURLRef.current) {
+                                    form.setValue('baseURL', codexThirdPartyBaseURLRef.current);
                                   }
                                 }}
                               >
@@ -2495,8 +2527,9 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                                       onChange={(e) => setCodexAuthJSONText(e.target.value)}
                                       placeholder={t('channels.dialogs.codexAuthJson.placeholder')}
                                       className='min-h-[160px] resize-y font-mono text-xs'
+                                      data-testid='codex-auth-json-input'
                                     />
-                                    <Button type='button' variant='secondary' onClick={applyCodexAuthJSON}>
+                                    <Button type='button' variant='secondary' onClick={applyCodexAuthJSON} data-testid='codex-auth-json-apply'>
                                       {t('channels.dialogs.codexAuthJson.applyButton')}
                                     </Button>
                                     <p className='text-muted-foreground text-xs'>{t('channels.dialogs.codexAuthJson.description')}</p>

@@ -43,7 +43,7 @@ const (
 	defaultWebSocketIdleTTL       = 50 * time.Minute
 	defaultWebSocketMaxLifetime   = 50 * time.Minute
 	defaultWebSocketMaxPoolSize   = 128
-	defaultWebSocketMaxRetainedIn = 1 << 20
+	defaultWebSocketMaxRetainedIn = 16 << 20
 	minWebSocketCleanupDelay      = 10 * time.Millisecond
 )
 
@@ -60,6 +60,8 @@ type WebSocketExecutor struct {
 	maxLifetime      time.Duration
 	maxPoolSize      int
 	maxRetainedInput int
+	retainedBudget   *shared.ResponsesBudget
+	generation       uint64
 }
 
 func NewWebSocketExecutor(inner pipeline.Executor) *WebSocketExecutor {
@@ -72,6 +74,7 @@ func NewWebSocketExecutor(inner pipeline.Executor) *WebSocketExecutor {
 		if native := hc.GetNativeClient(); native != nil {
 			if transport, ok := native.Transport.(*http.Transport); ok && transport.TLSClientConfig != nil {
 				dialer.TLSClientConfig = transport.TLSClientConfig.Clone()
+				dialer.TLSClientConfig.NextProtos = []string{"http/1.1"}
 			}
 		}
 	}
@@ -84,6 +87,7 @@ func NewWebSocketExecutor(inner pipeline.Executor) *WebSocketExecutor {
 		maxLifetime:      defaultWebSocketMaxLifetime,
 		maxPoolSize:      defaultWebSocketMaxPoolSize,
 		maxRetainedInput: defaultWebSocketMaxRetainedIn,
+		retainedBudget:   shared.NewResponsesBudget(64 << 20),
 	}
 }
 
@@ -237,13 +241,16 @@ func (e *WebSocketExecutor) DoStream(ctx context.Context, request *httpclient.Re
 		}
 	}
 	headers.Set("OpenAI-Beta", WebSocketBetaHeaderValue)
+	if lane := shared.GetResponsesLane(ctx); lane != nil {
+		headers.Set(webSocketSessionHeader, lane.ID())
+	}
 
 	lease, err := e.acquirePreparedLease(ctx, request, wsURL, headers, payload)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := lease.conn.WriteJSON(payload); err != nil {
+	if err := lease.write(ctx, payload); err != nil {
 		lease.release(true)
 		return nil, fmt.Errorf("failed to write response.create websocket event: %w", err)
 	}
@@ -300,6 +307,8 @@ func (e *WebSocketExecutor) Close() error {
 }
 
 type webSocketPoolKey struct {
+	ChannelID  int
+	Model      string
 	URL        string
 	SessionID  string
 	Scope      string
@@ -325,6 +334,11 @@ type pooledWebSocketConn struct {
 	closed         bool
 	lastInput      []json.RawMessage
 	lastResponseID string
+	generation     uint64
+	retainedBytes  int
+	budget         *shared.ResponsesBudget
+	lane           *shared.ResponsesLane
+	origin         shared.ResponsesOrigin
 }
 
 type webSocketLease struct {
@@ -334,6 +348,8 @@ type webSocketLease struct {
 	reused        bool
 	nextFullInput []json.RawMessage
 	once          sync.Once
+	generation    uint64
+	native        bool
 }
 
 func (e *WebSocketExecutor) acquirePreparedLease(ctx context.Context, request *httpclient.Request, wsURL string, headers http.Header, payload map[string]any) (*webSocketLease, error) {
@@ -343,6 +359,7 @@ func (e *WebSocketExecutor) acquirePreparedLease(ctx context.Context, request *h
 		return nil, err
 	}
 
+	lease.native = shared.IsResponsesWebSocket(ctx)
 	if err := prepareWebSocketPayloadForLease(payload, lease); err != nil {
 		lease.release(true)
 		var reconnectErr *webSocketReconnectRequiredError
@@ -355,9 +372,29 @@ func (e *WebSocketExecutor) acquirePreparedLease(ctx context.Context, request *h
 		if err != nil {
 			return nil, err
 		}
+		lease.native = shared.IsResponsesWebSocket(ctx)
 		if err := prepareWebSocketPayloadForLease(payload, lease); err != nil {
 			lease.release(true)
 			return nil, err
+		}
+	}
+	lease.native = shared.IsResponsesWebSocket(ctx)
+	if attempt := shared.GetResponsesAttempt(ctx); attempt != nil {
+		origin := attempt.Origin()
+		if explicitPreviousResponseID(payload) != "" && origin.Generation != 0 && origin.Generation != lease.generation {
+			lease.release(true)
+			return nil, shared.ResponsesRecoveryError()
+		}
+		origin.Generation = lease.generation
+		attempt.SetOrigin(origin)
+		if lane := shared.GetResponsesLane(ctx); lane != nil && lease.pooled != nil {
+			lease.pooled.mu.Lock()
+			lease.pooled.lane, lease.pooled.origin = lane, origin
+			lease.pooled.mu.Unlock()
+			if !lane.RegisterLease(origin, func() { e.evict(lease.pooled) }) {
+				lease.release(true)
+				return nil, shared.ResponsesRecoveryError()
+			}
 		}
 	}
 
@@ -408,7 +445,7 @@ func (e *WebSocketExecutor) acquire(ctx context.Context, request *httpclient.Req
 				e.evict(pc)
 				continue
 			}
-			return &webSocketLease{conn: pc.conn, owner: e, pooled: pc, reused: used}, nil
+			return &webSocketLease{conn: pc.conn, owner: e, pooled: pc, reused: used, generation: pc.generation}, nil
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
@@ -463,6 +500,9 @@ func (e *WebSocketExecutor) getOrDialPooled(ctx context.Context, request *httpcl
 		return nil, fmt.Errorf("websocket session pool is full")
 	}
 	e.pool[key] = pc
+	e.generation++
+	pc.generation = e.generation
+	pc.budget = e.retainedBudget
 	e.scheduleCleanupLocked(now)
 	e.mu.Unlock()
 
@@ -490,6 +530,9 @@ func (e *WebSocketExecutor) dial(ctx context.Context, request *httpclient.Reques
 
 func (e *WebSocketExecutor) poolKey(ctx context.Context, request *httpclient.Request, wsURL string, headers http.Header) (webSocketPoolKey, bool) {
 	sessionID := webSocketSessionID(headers)
+	if lane := shared.GetResponsesLane(ctx); lane != nil {
+		sessionID = lane.ID()
+	}
 	if sessionID == "" {
 		if value, ok := shared.GetSessionID(ctx); ok {
 			sessionID = strings.TrimSpace(value)
@@ -503,7 +546,7 @@ func (e *WebSocketExecutor) poolKey(ctx context.Context, request *httpclient.Req
 		return webSocketPoolKey{}, false
 	}
 
-	return webSocketPoolKey{
+	key := webSocketPoolKey{
 		URL:        wsURL,
 		SessionID:  sessionID,
 		Scope:      strings.TrimSpace(scope),
@@ -515,7 +558,12 @@ func (e *WebSocketExecutor) poolKey(ctx context.Context, request *httpclient.Req
 		Project:    strings.TrimSpace(headers.Get(webSocketProjectHeader)),
 		BetaHeader: strings.TrimSpace(headers.Get("OpenAI-Beta")),
 		Headers:    headerPoolIdentity(headers),
-	}, true
+	}
+	if attempt := shared.GetResponsesAttempt(ctx); attempt != nil {
+		origin := attempt.Origin()
+		key.ChannelID, key.Model = origin.ChannelID, origin.Model
+	}
+	return key, true
 }
 
 func webSocketSessionID(headers http.Header) string {
@@ -801,6 +849,13 @@ func (pc *pooledWebSocketConn) close() {
 		return
 	}
 	pc.closed = true
+	if pc.lane != nil {
+		pc.lane.ForgetLease(pc.origin)
+	}
+	if pc.budget != nil {
+		pc.budget.Replace(pc.retainedBytes, 0)
+	}
+	pc.retainedBytes = 0
 	pc.lastInput = nil
 	pc.lastResponseID = ""
 	pc.mu.Unlock()
@@ -811,27 +866,6 @@ func (pc *pooledWebSocketConn) previousTurn() ([]json.RawMessage, string) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
 	return cloneRawMessages(pc.lastInput), pc.lastResponseID
-}
-
-func (pc *pooledWebSocketConn) rememberTurn(input []json.RawMessage, responseID string, maxInputBytes int) bool {
-	if strings.TrimSpace(responseID) == "" {
-		return false
-	}
-	if len(input) == 0 {
-		pc.mu.Lock()
-		pc.lastInput = nil
-		pc.lastResponseID = ""
-		pc.mu.Unlock()
-		return true
-	}
-	if maxInputBytes > 0 && rawMessagesSize(input) > maxInputBytes {
-		return false
-	}
-	pc.mu.Lock()
-	pc.lastInput = cloneRawMessages(input)
-	pc.lastResponseID = strings.TrimSpace(responseID)
-	pc.mu.Unlock()
-	return true
 }
 
 func (l *webSocketLease) release(evict bool) {
@@ -900,7 +934,22 @@ func (e *webSocketReconnectRequiredError) Error() string {
 }
 
 func prepareWebSocketPayloadForLease(payload map[string]any, lease *webSocketLease) error {
+	if explicitID := explicitPreviousResponseID(payload); explicitID != "" {
+		if lease == nil || lease.pooled == nil || !lease.reused {
+			return shared.ResponsesRecoveryError()
+		}
+		lease.pooled.mu.Lock()
+		valid := !lease.pooled.closed && lease.pooled.generation == lease.generation && lease.pooled.lastResponseID == explicitID
+		lease.pooled.mu.Unlock()
+		if !valid {
+			return shared.ResponsesRecoveryError()
+		}
+		return nil
+	}
 	if lease == nil || lease.pooled == nil {
+		return nil
+	}
+	if lease.native {
 		return nil
 	}
 
@@ -911,7 +960,9 @@ func prepareWebSocketPayloadForLease(payload map[string]any, lease *webSocketLea
 	if !ok {
 		return nil
 	}
-	lease.nextFullInput = cloneRawMessages(fullInput)
+	if !lease.native && (lease.owner == nil || rawMessagesSize(fullInput) <= lease.owner.maxRetainedInput) {
+		lease.nextFullInput = fullInput
+	}
 
 	previousInput, previousResponseID := lease.pooled.previousTurn()
 	if !lease.reused || previousResponseID == "" {
@@ -1126,6 +1177,11 @@ func (s *webSocketStream) Next() bool {
 	}
 
 	typ := streamEventType(msg)
+	if typ == "error" && isWebSocketRecoveryEvent(msg) {
+		s.setErr(shared.ResponsesRecoveryError())
+		s.finish(true)
+		return false
+	}
 	s.setCurrent(&httpclient.StreamEvent{
 		Type: typ,
 		Data: normalizeWebSocketEvent(msg),
@@ -1145,7 +1201,12 @@ func (s *webSocketStream) Next() bool {
 				// future incremental sends. If the input exceeds the memory
 				// budget, keep the healthy WebSocket connection and let the
 				// next turn send full context instead of evicting the session.
-				s.lease.rememberTurn(responseID, responseOutputFromWebSocketEvent(msg))
+				if s.lease.native || (s.lease.owner != nil && len(msg) > s.lease.owner.maxRetainedInput) {
+					s.lease.nextFullInput = nil
+					s.lease.rememberTurn(responseID, nil)
+				} else {
+					s.lease.rememberTurn(responseID, responseOutputFromWebSocketEvent(msg))
+				}
 			}
 		}
 		s.finish(evict)
@@ -1231,25 +1292,17 @@ func (s *webSocketStream) finish(evict bool) {
 	})
 }
 
-func (l *webSocketLease) rememberTurn(responseID string, output []json.RawMessage) bool {
-	if l == nil || l.pooled == nil {
-		return false
-	}
-	maxInputBytes := 0
-	if l.owner != nil {
-		maxInputBytes = l.owner.maxRetainedInput
-	}
-	input := append(cloneRawMessages(l.nextFullInput), output...)
-	return l.pooled.rememberTurn(input, responseID, maxInputBytes)
-}
-
 func responseIDFromWebSocketEvent(raw []byte) string {
 	var payload struct {
 		Response struct {
-			ID string `json:"id"`
+			ID     string `json:"id"`
+			Status string `json:"status"`
 		} `json:"response"`
 	}
 	_ = json.Unmarshal(raw, &payload)
+	if payload.Response.Status != "completed" {
+		return ""
+	}
 	return payload.Response.ID
 }
 

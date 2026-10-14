@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { AboutSettings } from './about-settings';
 import { BackupSettings } from './backup-settings';
 import { BrandSettings } from './brand-settings';
+import { CodexCompatibilitySettings } from './codex-compatibility-settings';
 import { DiagnosticsSettings } from './diagnostics-settings';
 import { GeneralSettings } from './general-settings';
 import { ProxyPresetsSettings } from './proxy-presets-settings';
@@ -17,7 +18,7 @@ import { SecuritySettings } from './security-settings';
 import { StorageSettings } from './storage-settings';
 import { WebhookSettings } from './webhook-settings';
 
-type SystemTabKey =
+export type SystemTabKey =
   | 'general'
   | 'security'
   | 'brand'
@@ -26,6 +27,7 @@ type SystemTabKey =
   | 'webhook'
   | 'proxy'
   | 'quota'
+  | 'codex'
   | 'backup'
   | 'diagnostics'
   | 'about';
@@ -39,6 +41,7 @@ const systemTabKeys = new Set<SystemTabKey>([
   'webhook',
   'proxy',
   'quota',
+  'codex',
   'backup',
   'diagnostics',
   'about',
@@ -140,6 +143,9 @@ export function SystemSettingsTabs({ initialTab }: SystemSettingsTabsProps) {
         <TabsTrigger value='quota' data-value='quota'>
           {t('system.tabs.quota')}
         </TabsTrigger>
+        <TabsTrigger value='codex' data-value='codex'>
+          {t('system.tabs.codex')}
+        </TabsTrigger>
         {isOwner && (
           <TabsTrigger value='diagnostics' data-value='diagnostics'>
             {t('system.tabs.diagnostics')}
@@ -178,6 +184,9 @@ export function SystemSettingsTabs({ initialTab }: SystemSettingsTabsProps) {
         </TabsContent>
         <TabsContent value='quota' className='mt-0 p-0'>
           <QuotaSettings />
+        </TabsContent>
+        <TabsContent value='codex' className='mt-0 p-0'>
+          <CodexCompatibilitySettings />
         </TabsContent>
         {isOwner && (
           <TabsContent value='diagnostics' className='mt-0 p-0'>

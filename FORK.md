@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`60e2f865293ddc0a8f3a4a93d21b763a16c87ad1`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`3cb7e3335cadd463fe7748c47dd003802125e3dd`
-- 本次 merge base：`7a0cfbf42b00829dd8811cc87488f6194ed5ae02`
-- 审计范围：`git diff 3cb7e333..HEAD`
+- 本次 upstream merge 的 fork parent：`d750eeb80f85bdead36f68edac37045b1ceec9c2`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`f7e602325f0ec413031b60b89e547b04781f85d3`
+- 本次 merge base：`3cb7e3335cadd463fe7748c47dd003802125e3dd`
+- 审计范围：`git diff f7e60232..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含已发布 tag `v1.0.0-beta11`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.3`；upstream 发布基线为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.4`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.4`；upstream 发布基线为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.5`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -403,7 +403,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`internal/server/api/openai.go`、`internal/server/api/codex_models.go`、`internal/server/api/codex_models_test.go`；官方资产、许可证和更新说明在 `internal/server/api/codexmodels/`。
 - 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`，各语言索引及 README；用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：本次修复可用 `git log -S'listCodexModels' -- internal/server/api/openai.go` 定位。
-- 合并审核：当前 upstream 基线 `4352a73f` 仍只有 OpenAI 目录格式。通用模型目录同步或增加 Astra ID 不等价于 Codex 目录协议支持；更新官方快照时同时检查客户端必填字段、模板、工具和 metadata 替换规则，并保留 Apache LICENSE/NOTICE。服务端适配不改变客户端是否发起刷新；纯 API Key 自定义 provider 的刷新限制需在用户文档保留。
+- 合并审核：`ca3059fe` 新增默认关闭的 PAT `/codex` 入口；其 `/codex/models` 从指定渠道实时拉取，并按精确 slug 取权限交集、保留上游 visibility。它与本地 `/v1/models?client_version=…` 的离线快照、前缀匹配和可见性语义不同，作为并行入口采用，不视为吸收 U22。更新官方快照时同时检查客户端必填字段、模板、工具和 metadata 替换规则，并保留 Apache LICENSE/NOTICE。服务端适配不改变客户端是否发起刷新；纯 API Key 自定义 provider 的刷新限制需在用户文档保留。
 - 上游吸收条件：上游具备等价的目录格式协商、权限过滤、完整模型元数据及回归覆盖。
 - 验证：`go test ./internal/server/api -run 'TestOpenAIHandlers_(ListModels|RetrieveModel)|TestCodexCatalog' -count=1`。
 
