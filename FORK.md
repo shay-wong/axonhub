@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`d750eeb80f85bdead36f68edac37045b1ceec9c2`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`f7e602325f0ec413031b60b89e547b04781f85d3`
-- 本次 merge base：`3cb7e3335cadd463fe7748c47dd003802125e3dd`
-- 审计范围：`git diff f7e60232..HEAD`
+- 本次 upstream merge 的 fork parent：`cea5a41cc64dd1aea5b63f14fc12a614700a11ee`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`1c695ac32a9aceb32dd0364d2dd7b4076586d0b6`
+- 本次 merge base：`f7e602325f0ec413031b60b89e547b04781f85d3`
+- 审计范围：`git diff 1c695ac3..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含已发布 tag `v1.0.0-beta11`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.4`；upstream 发布基线为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.5`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.5`；upstream 发布基线为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.6`，发布前仍须重新确认该 tag 未被占用。
 
 ## 长期保留
 
@@ -179,6 +179,7 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- 本次上游整合：`1c695ac3` 保留 WebSocket 失效连接的错误传播、不在 executor 内重放不确定已执行的请求，并修复阻塞读写取消与关闭后的错误覆盖；不改变上层配置的重试策略。继续保留 fork 的终态、费用和 canonical session 不变量。验证：`cd llm && go test -race ./transformer/openai/responses ./transformer/openai/codex -run 'WebSocket|ResponsesFailedAfterInlineToolResultForkCompatibility'`。
 - Responses 协议整合：采用 `36364049` 的内容输出前 structured failure 重试与 `94cd05b1` 的终态后立即结束，避免继续等待尾流；保留失败 snapshot 的 ID/model/usage/tier/request ID，refusal 和 `InlineToolResults` 必须计为已输出内容，后续失败不能再判成空响应。Transformer 与 pipeline 的内容判定须一致；保留已有完整终态后的费用语义。当前独立变更定位：`git log -S'TestResponsesFailedAfterInlineToolResultForkCompatibility' -- llm/transformer/openai/responses/outbound_stream_fork_compat_test.go`。
 - 原样转发同样必须完成转换流的终态校验和用量持久化：已完成请求不能被尾流错误覆盖，未完成断流须交付失败终态。交付终态前等待转换流校验，保留原始终态快照用于同类型终态补发，避免提前关闭造成 response/item ID 或扩展字段丢失；适配失败须先取消生产者再等待转换流结束。回归覆盖 `orchestrator_streaming_test.go` 的已完成取消/断流及 `pass_through_test.go` 的 HTTP/WS 事件身份与关闭顺序。
 - 本次上游整合：`b6d184a8` 将音频 data/transcript 视为非空内容；仍保留异常终态识别与完成后错误处理，不因仅有 usage 而认定成功。
