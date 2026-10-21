@@ -374,6 +374,9 @@ type ChannelCredentials struct {
 
 	// APIKeyConfigs is a structured API key list with per-key routing weight.
 	APIKeyConfigs []ChannelAPIKeyConfig `json:"apiKeyConfigs,omitempty"`
+	// VertexAPIKeys contains the project-bound credentials used by Gemini Vertex.
+	// The project and region must remain paired with the API key when keys rotate.
+	VertexAPIKeys []VertexAPIKey `json:"vertexApiKeys,omitempty"`
 
 	// ManagementAPIKey is an optional provider management/console API key used only
 	// for server-side quota checks (e.g. ZenMux). It is never attached to inference
@@ -385,6 +388,13 @@ type ChannelCredentials struct {
 
 	// GCP is the GCP credentials for the channel.
 	GCP *GCPCredential `json:"gcp,omitempty"`
+}
+
+// VertexAPIKey is a Gemini Vertex API key bound to its Google Cloud resource.
+type VertexAPIKey struct {
+	ProjectID string `json:"projectID"`
+	APIKey    string `json:"apiKey"`
+	Region    string `json:"region"`
 }
 
 // GetAllAPIKeys returns all API keys for the channel.
@@ -419,6 +429,10 @@ func (c *ChannelCredentials) GetAllAPIKeyConfigs() []ChannelAPIKeyConfig {
 	}
 	for _, key := range c.APIKeys {
 		configs = append(configs, ChannelAPIKeyConfig{Key: key, Weight: 100})
+	}
+
+	for _, credential := range c.VertexAPIKeys {
+		configs = append(configs, ChannelAPIKeyConfig{Key: credential.APIKey, Weight: 100})
 	}
 
 	return normalizeAPIKeyConfigs(configs)
@@ -466,6 +480,20 @@ func (c *ChannelCredentials) GetEnabledAPIKeys(disabledKeys []DisabledAPIKey) []
 	return c.GetEnabledAPIKeysAt(disabledKeys, time.Now())
 }
 
+func (c *ChannelCredentials) VertexAPIKey(apiKey string) (VertexAPIKey, bool) {
+	if c == nil {
+		return VertexAPIKey{}, false
+	}
+
+	for _, credential := range c.VertexAPIKeys {
+		if credential.APIKey == apiKey {
+			return credential, true
+		}
+	}
+
+	return VertexAPIKey{}, false
+}
+
 // GetEnabledAPIKeysAt returns API keys that are not disabled at the provided time.
 func (c *ChannelCredentials) GetEnabledAPIKeysAt(disabledKeys []DisabledAPIKey, now time.Time) []string {
 	configs := c.GetEnabledAPIKeyConfigsAt(disabledKeys, now)
@@ -487,7 +515,6 @@ func (c *ChannelCredentials) GetEnabledAPIKeyConfigsAt(disabledKeys []DisabledAP
 	if len(allConfigs) == 0 {
 		return nil
 	}
-
 	if len(disabledKeys) == 0 {
 		return allConfigs
 	}

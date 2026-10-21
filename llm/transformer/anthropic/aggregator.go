@@ -21,10 +21,13 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 	}
 
 	var (
-		messageStart  *StreamEvent
-		contentBlocks []MessageContentBlock
-		usage         *Usage
-		stopReason    *string
+		messageStart      *StreamEvent
+		contentBlocks     []MessageContentBlock
+		usage             *Usage
+		stopReason        *string
+		messageDeltaUsage bool
+		streamError       bool
+		usageEvidence     = llm.AccountingEvidenceUnavailable
 	)
 
 	for _, chunk := range chunks {
@@ -39,6 +42,11 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 
 		switch event.Type {
 		case "error":
+			streamError = true
+			usageEvidence = llm.AccountingEvidenceUnavailable
+			if event.Error == nil && event.RequestID == "" && chunk.StatusCode == 0 {
+				continue
+			}
 			detail := llm.ErrorDetail{Message: "upstream request failed", Type: "api_error", RequestID: event.RequestID}
 			if event.Error != nil {
 				detail.Message = event.Error.Message
@@ -188,6 +196,7 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 			}
 
 			if event.Usage != nil {
+				messageDeltaUsage = true
 				if usage == nil {
 					usage = event.Usage
 				} else {
@@ -252,7 +261,9 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 				}
 			}
 		case "message_stop":
-			// Final event, no additional processing needed
+			if messageStart != nil && messageDeltaUsage && !streamError {
+				usageEvidence = llm.AccountingEvidenceExplicitFinal
+			}
 		}
 	}
 
@@ -304,15 +315,17 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 	// Convert and return usage if available
 	if usage != nil {
 		return data, llm.ResponseMeta{
-			ID:          message.ID,
-			Usage:       convertToLlmUsage(usage, platformType),
-			ServiceTier: usage.ServiceTier,
-			Completed:   messageStart != nil && stopReason != nil && *stopReason != "",
+			ID:                 message.ID,
+			Usage:              convertToLlmUsage(usage, platformType),
+			ServiceTier:        usage.ServiceTier,
+			Completed:          messageStart != nil && stopReason != nil && *stopReason != "",
+			AccountingEvidence: usageEvidence,
 		}, nil
 	}
 
 	return data, llm.ResponseMeta{
-		ID:        message.ID,
-		Completed: messageStart != nil && stopReason != nil && *stopReason != "",
+		ID:                 message.ID,
+		Completed:          messageStart != nil && stopReason != nil && *stopReason != "",
+		AccountingEvidence: llm.AccountingEvidenceUnavailable,
 	}, nil
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { z } from 'zod';
-import { useForm } from 'react-hook-form';
+import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { X, RefreshCw, Search, ChevronLeft, ChevronRight, PanelLeft, Plus, Trash2, Eye, EyeOff, Copy, Play, Info, Ban } from 'lucide-react';
@@ -287,6 +287,18 @@ function getResponsesTransportFromChannel(channel?: Pick<Channel, 'type' | 'base
   return getResponsesTransportFromBaseURL(channel?.baseURL);
 }
 
+// Vertex credentials are project-bound triples; the form keeps the same shape as
+// the backend contract so project/region stay attached to their key.
+type VertexAPIKeyCredential = NonNullable<NonNullable<Channel['credentials']>['vertexApiKeys']>[number];
+
+function isVertexChannelType(channelType: ChannelType | undefined): boolean {
+  return channelType === 'gemini_vertex';
+}
+
+function emptyVertexAPIKey(): VertexAPIKeyCredential {
+  return { projectID: '', apiKey: '', region: 'global' };
+}
+
 function getResponsesWebSocketBaseURL(channelType: ChannelType): string | undefined {
   if (channelType === 'openai_responses') return OPENAI_RESPONSES_WEBSOCKET_BASE_URL;
   return undefined;
@@ -436,6 +448,81 @@ function extractCodexAuthJSONText(apiKey: string | undefined): string | undefine
 function getInitialBaseURL(row: Pick<Channel, 'type' | 'baseURL' | 'credentials'>): string {
   if (row.type !== 'codex') return row.baseURL;
   return isOfficialCodexChannel(row) ? getDefaultBaseURL('codex') : toHttpBaseURL(row.baseURL);
+}
+
+// Used by both the submit path and fetch-models: reads the access_token out of
+// an OAuth/auth.json credential, falling back to the raw string.
+function parseOauthToken(oauthApiKey: string): string {
+  if (!oauthApiKey) return '';
+  try {
+    const parsed = JSON.parse(oauthApiKey);
+    if (parsed.access_token) {
+      return parsed.access_token;
+    }
+    if (parsed.tokens?.access_token) {
+      return parsed.tokens.access_token;
+    }
+  } catch {
+    // Not JSON, use as-is
+  }
+  return oauthApiKey;
+}
+
+// A third-party Codex channel authenticates with a plain API key only. An OAuth
+// or auth.json row that is copied/edited into third-party mode still carries its
+// old JSON in `credentials.apiKey`; the backend replaces credentials wholesale,
+// so the inherited value must be dropped before submit or it silently revives.
+function getCodexThirdPartySubmitCredentials<T extends { apiKey?: string | null; apiKeys?: string[] | null }>(
+  credentials: T,
+  channel: { type?: ChannelType | null; authMode: string }
+): T {
+  if (channel.type !== 'codex' || channel.authMode !== 'third-party') return credentials;
+
+  const { apiKey: _inheritedOAuthCredentials, ...thirdPartyCredentials } = credentials;
+  return thirdPartyCredentials as T;
+}
+
+// Model fetch mirrors submit: third-party Codex uses only the plain key, every
+// other provider keeps preferring an OAuth credential when one is present.
+function getFetchModelsApiKey(input: {
+  type?: string | null;
+  authMode: string;
+  oauthApiKey?: string | null;
+  apiKeys?: (string | null | undefined)[] | null;
+}): string {
+  const plainApiKey = (input.apiKeys || []).find((key) => (key || '').trim().length > 0)?.trim() || '';
+  const oauthApiKey = input.oauthApiKey || '';
+
+  if (input.type === 'codex' && input.authMode === 'third-party') {
+    return plainApiKey;
+  }
+
+  // OAuth JSON is sent whole so the backend can detect isOAuthJSON.
+  if (oauthApiKey.trimStart().startsWith('{')) {
+    return oauthApiKey;
+  }
+
+  return parseOauthToken(oauthApiKey) || plainApiKey;
+}
+
+// Third-party Codex rejects an empty or OAuth-shaped credential so a save can
+// never persist a channel that still authenticates with the inherited JSON.
+function getCodexThirdPartyCredentialError(channel: {
+  type?: string | null;
+  authMode: string;
+  apiKeys?: (string | null | undefined)[] | null;
+}): string | undefined {
+  if (channel.type !== 'codex' || channel.authMode !== 'third-party') return undefined;
+
+  const apiKeys = (channel.apiKeys || []).map((key) => (key || '').trim()).filter((key) => key.length > 0);
+  if (apiKeys.length === 0) {
+    return 'channels.dialogs.oauth.errors.codexThirdPartyApiKeyRequired';
+  }
+  if (apiKeys.some((key) => key.startsWith('{'))) {
+    return 'channels.dialogs.oauth.errors.codexThirdPartyApiKeyInvalid';
+  }
+
+  return undefined;
 }
 
 export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpenChange, showModelsPanel = false }: Props) {
@@ -851,6 +938,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
               apiKey: currentRow.credentials?.apiKey || undefined,
               apiKeys: getInitialAPIKeys(currentRow),
               apiKeyConfigs: currentRow.credentials?.apiKeyConfigs || undefined,
+              vertexApiKeys: currentRow.type === 'gemini_vertex' ? (currentRow.credentials?.vertexApiKeys ?? undefined) : [],
               managementApiKey: currentRow.credentials?.managementApiKey || undefined,
               gcp: {
                 region: currentRow.credentials?.gcp?.region || '',
@@ -878,6 +966,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                 apiKey: duplicateFromRow.credentials?.apiKey || undefined,
                 apiKeys: getInitialAPIKeys(duplicateFromRow),
                 apiKeyConfigs: duplicateFromRow.credentials?.apiKeyConfigs || undefined,
+                vertexApiKeys: duplicateFromRow.type === 'gemini_vertex' ? (duplicateFromRow.credentials?.vertexApiKeys ?? undefined) : [],
                 managementApiKey: duplicateFromRow.credentials?.managementApiKey || undefined,
                 gcp: {
                   region: duplicateFromRow.credentials?.gcp?.region || '',
@@ -894,6 +983,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
               credentials: {
                 apiKeys: [],
                 apiKeyConfigs: [],
+                vertexApiKeys: isVertexChannelType(derivedChannelType) ? [emptyVertexAPIKey()] : [],
                 managementApiKey: undefined,
                 gcp: {
                   region: '',
@@ -909,6 +999,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             },
   });
 
+  const vertexApiKeyFields = useFieldArray({ control: form.control, name: 'credentials.vertexApiKeys' });
   const apiKeys = form.watch('credentials.apiKeys');
   const apiKeysCount = useMemo(() => (apiKeys || []).filter((k) => k.trim().length > 0).length, [apiKeys]);
   const isSubmitting = createChannel.isPending || duplicateChannel.isPending || updateChannelSettings.isPending;
@@ -971,6 +1062,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     hasAutoSetDuplicateNameRef.current = true;
   }, [open, isDuplicate, duplicateFromRow, allChannelNamesLoaded, allChannelNames, form]);
   const selectedType = form.watch('type') as ChannelType | undefined;
+  const isGeminiVertex = (selectedType || derivedChannelType) === 'gemini_vertex';
   const watchedAutoSync = form.watch('autoSyncSupportedModels');
   const watchedAutoSyncPattern = form.watch('autoSyncModelPattern');
 
@@ -982,6 +1074,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const isCopilotType = activeChannelType === 'github_copilot';
   const isXAISubscriptionType = activeChannelType === 'xai_subscription';
   const showRegularAPIKeyFields =
+    !isGeminiVertex &&
     (!(isCodexType || isClaudeCodeType || isCopilotType || isXAISubscriptionType) || authMode === 'third-party') &&
     selectedProvider !== 'antigravity' &&
     selectedType !== 'anthropic_gcp';
@@ -1193,6 +1286,12 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       if (selectedApiFormat === 'gemini/contents') {
         const newChannelType = checked ? 'gemini_vertex' : 'gemini';
         form.setValue('type', newChannelType);
+
+        // Switching into Vertex mode needs a row to edit: an empty list would
+        // reject the submit with no visible field to fill in.
+        if (checked && !(form.getValues('credentials.vertexApiKeys') ?? []).length) {
+          form.setValue('credentials.vertexApiKeys', [emptyVertexAPIKey()]);
+        }
 
         if (!isEdit) {
           const baseURLFieldState = form.getFieldState('baseURL', form.formState);
@@ -1459,11 +1558,53 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             type: derivedChannelType,
           };
 
+      // Vertex credentials are project-bound triples and are the only credential for
+      // that channel type: a leftover singular apiKey would still be selected at
+      // runtime and would not resolve to a project/region pair. Ordinary channels keep
+      // their flat apiKeys and never carry the Vertex field.
+      const submittedCredentials = valuesForSubmit.credentials;
+      const vertexApiKeys = submittedCredentials?.vertexApiKeys;
+      const credentials =
+        valuesForSubmit.type === 'gemini_vertex'
+          ? vertexApiKeys?.length
+            ? {
+                ...submittedCredentials,
+                apiKey: undefined,
+                apiKeys: undefined,
+                vertexApiKeys: vertexApiKeys.map((credential) => ({
+                  projectID: credential.projectID.trim(),
+                  apiKey: credential.apiKey.trim(),
+                  region: credential.region.trim() || 'global',
+                })),
+              }
+            : { ...submittedCredentials, vertexApiKeys: undefined }
+          : { ...submittedCredentials, vertexApiKeys: undefined };
+
+      // A third-party Codex channel authenticates with a plain API key: reject an
+      // empty or inherited OAuth-shaped credential instead of saving it.
+      const codexThirdPartyCredentialError = getCodexThirdPartyCredentialError({
+        type: values.type || derivedChannelType,
+        authMode,
+        apiKeys: values.credentials?.apiKeys,
+      });
+      if (codexThirdPartyCredentialError) {
+        form.setError('credentials.apiKeys', {
+          type: 'manual',
+          message: t(codexThirdPartyCredentialError),
+        });
+        return;
+      }
+
       const dataWithModels = {
         ...valuesForSubmit,
         supportedModels,
         manualModels,
-        credentials: valuesForSubmit.credentials,
+        credentials: credentials
+          ? getCodexThirdPartySubmitCredentials(credentials, {
+               type: valuesForSubmit.type,
+               authMode,
+             })
+          : credentials,
       };
       const channelSettingsPatch = {
         passThroughUserAgent,
@@ -1575,8 +1716,10 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
           values.credentials.gcp.projectID.trim() !== '' &&
           values.credentials?.gcp?.jsonData &&
           values.credentials.gcp.jsonData.trim() !== '';
+        const hasVertexApiKeys =
+          values.credentials?.vertexApiKeys && values.credentials.vertexApiKeys.some((binding) => binding.apiKey.trim() !== '');
 
-        if (!hasApiKey && !hasApiKeys && !hasManagementApiKey && !hasGcpCredentials) {
+        if (!hasApiKey && !hasApiKeys && !hasManagementApiKey && !hasGcpCredentials && !hasVertexApiKeys) {
           delete updateInput.credentials;
         }
 
@@ -1718,27 +1861,18 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     setSupportedModels([]);
     setManualModels([]);
   };
-  // Helper function to parse OAuth token from JSON string
-  const parseOauthToken = (oauthApiKey: string): string => {
-    if (!oauthApiKey) return '';
-    try {
-      const parsed = JSON.parse(oauthApiKey);
-      if (parsed.access_token) {
-        return parsed.access_token;
-      }
-      if (parsed.tokens?.access_token) {
-        return parsed.tokens.access_token;
-      }
-    } catch {
-      // Not JSON, use as-is
-    }
-    return oauthApiKey;
-  };
 
   const handleFetchModels = useCallback(async () => {
     const channelType = form.getValues('type');
     const baseURL = form.getValues('baseURL');
     const oauthApiKey = form.getValues('credentials.apiKey');
+    const vertexApiKeys = channelType === 'gemini_vertex' ? form.getValues('credentials.vertexApiKeys') : undefined;
+    const selectedVertexCredential = vertexApiKeys?.find(
+      (credential) =>
+        credential.apiKey.trim().length > 0 &&
+        credential.projectID.trim().length > 0 &&
+        credential.region.trim().length > 0,
+    );
 
     if (!channelType || !baseURL) {
       return;
@@ -1748,18 +1882,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       // OAuth credentials remain a single opaque value. Regular API keys are
       // ordered with the selected discovery key first so the server only falls
       // back when that key fails.
-      let oauthToken = '';
-      if (oauthApiKey) {
-        // If it's OAuth JSON, send full JSON so backend detects isOAuthJSON
-        if (oauthApiKey.trimStart().startsWith('{')) {
-          oauthToken = oauthApiKey;
-        } else {
-          const parsed = parseOauthToken(oauthApiKey || '');
-          if (parsed) {
-            oauthToken = parsed;
-          }
-        }
-      }
+      const oauthToken = getFetchModelsApiKey({ type: channelType, authMode, oauthApiKey, apiKeys: [] });
 
       const orderedAPIKeys = modelFetchAPIKey
         ? [modelFetchAPIKey, ...availableModelFetchAPIKeys.filter((key) => key !== modelFetchAPIKey)]
@@ -1768,8 +1891,10 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       const result = await fetchModels.mutateAsync({
         channelType,
         baseURL,
-        apiKey: oauthToken || undefined,
-        apiKeys: oauthToken ? undefined : orderedAPIKeys,
+        apiKey: selectedVertexCredential?.apiKey.trim() || oauthToken || undefined,
+        apiKeys: selectedVertexCredential || oauthToken ? undefined : orderedAPIKeys,
+        projectID: selectedVertexCredential?.projectID.trim() || undefined,
+        region: selectedVertexCredential?.region.trim() || undefined,
         channelID: isEdit ? currentRow?.id : undefined,
       });
 
@@ -1793,7 +1918,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     } catch (_error) {
       // Error is already handled by the mutation
     }
-  }, [availableModelFetchAPIKeys, fetchModels, form, isEdit, currentRow, modelFetchAPIKey]);
+  }, [availableModelFetchAPIKeys, fetchModels, form, isEdit, currentRow, modelFetchAPIKey, authMode]);
 
   const handleSyncNow = useCallback(async () => {
     if (!currentRow) return [];
@@ -1820,6 +1945,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     const baseURL = form.watch('baseURL');
     const apiKeys = form.watch('credentials.apiKeys');
     const hasApiKey = apiKeys?.some((key) => key.trim().length > 0);
+    const vertexApiKeys = form.watch('credentials.vertexApiKeys');
+    const hasVertexApiKey = vertexApiKeys?.some((credential) => credential.apiKey.trim().length > 0);
 
     if (isCodexType || isAntigravityType || isClineType || isXAISubscriptionType) {
       return !!baseURL;
@@ -1835,7 +1962,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       return !!baseURL;
     }
 
-    return !!baseURL && hasApiKey;
+    return !!baseURL && (isGeminiVertex ? hasVertexApiKey : hasApiKey);
   };
   // Memoize quick models to avoid re-evaluating on every render
   const currentType = form.watch('type');
@@ -2619,6 +2746,109 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                           </FormItem>
                         )}
                       />
+
+                      {isGeminiVertex && (
+                        <FormField
+                          control={form.control}
+                          name='credentials.vertexApiKeys'
+                          render={({ field }) => {
+                            const credentials = field.value || [];
+                            return (
+                              <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
+                                <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
+                                  {t('channels.dialogs.fields.vertexApiKey.label')}
+                                </FormLabel>
+                                <div className='space-y-3 md:col-span-6'>
+                                  {credentials.map((_, index) => (
+                                    <div className='grid gap-3 rounded-md border p-3' key={vertexApiKeyFields.fields[index]?.id ?? index}>
+                                      <div className='grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem_auto] sm:items-end'>
+                                        <FormField
+                                          control={form.control}
+                                          name={`credentials.vertexApiKeys.${index}.projectID`}
+                                          render={({ field: rowField }) => (
+                                            <FormItem className='grid gap-1.5'>
+                                              <FormLabel className='text-muted-foreground text-xs font-medium'>
+                                                {t('channels.dialogs.fields.vertexApiKey.projectIDLabel')}
+                                              </FormLabel>
+                                              <FormControl>
+                                                <Input
+                                                  value={rowField.value}
+                                                  onChange={(event) => rowField.onChange(event.target.value)}
+                                                  placeholder={t('channels.dialogs.fields.vertexApiKey.projectIDPlaceholder')}
+                                                />
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+                                        <FormField
+                                          control={form.control}
+                                          name={`credentials.vertexApiKeys.${index}.region`}
+                                          render={({ field: rowField }) => (
+                                            <FormItem className='grid gap-1.5'>
+                                              <FormLabel className='text-muted-foreground text-xs font-medium'>
+                                                {t('channels.dialogs.fields.vertexApiKey.regionLabel')}
+                                              </FormLabel>
+                                              <FormControl>
+                                                <Input
+                                                  value={rowField.value}
+                                                  onChange={(event) => rowField.onChange(event.target.value)}
+                                                  placeholder='global'
+                                                />
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+                                        <Button
+                                          type='button'
+                                          variant='ghost'
+                                          size='icon'
+                                          onClick={() => vertexApiKeyFields.remove(index)}
+                                          disabled={credentials.length <= 1}
+                                          aria-label={t('channels.dialogs.fields.vertexApiKey.remove')}
+                                        >
+                                          <Trash2 className='h-4 w-4' />
+                                        </Button>
+                                      </div>
+                                      <FormField
+                                        control={form.control}
+                                        name={`credentials.vertexApiKeys.${index}.apiKey`}
+                                        render={({ field: rowField }) => (
+                                          <FormItem className='grid gap-1.5'>
+                                            <FormLabel className='text-muted-foreground text-xs font-medium'>
+                                              {t('channels.dialogs.fields.vertexApiKey.apiKeyLabel')}
+                                            </FormLabel>
+                                            <FormControl>
+                                              <Input
+                                                type='password'
+                                                value={rowField.value}
+                                                onChange={(event) => rowField.onChange(event.target.value)}
+                                                placeholder={t('channels.dialogs.fields.vertexApiKey.apiKeyPlaceholder')}
+                                              />
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </div>
+                                  ))}
+                                  <Button
+                                    type='button'
+                                    variant='secondary'
+                                    onClick={() => vertexApiKeyFields.append({ projectID: '', apiKey: '', region: 'global' })}
+                                  >
+                                    <Plus className='mr-2 h-4 w-4' />
+                                    {t('channels.dialogs.fields.vertexApiKey.add')}
+                                  </Button>
+                                  <FormDescription>{t('channels.dialogs.fields.vertexApiKey.description')}</FormDescription>
+                                  <FormMessage />
+                                </div>
+                              </FormItem>
+                            );
+                          }}
+                        />
+                      )}
 
                       {showRegularAPIKeyFields && (
                         <FormField
