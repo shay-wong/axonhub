@@ -539,12 +539,12 @@ func (p *pipeline) stream(
 			cancel: firstEventGuard.cancelStream,
 		}
 	}
-	inboundStream = &terminalErrorFinalizingStream{
+	inboundStream = preserveStreamCapabilities(inboundStream, &terminalErrorFinalizingStream{
 		stream: inboundStream,
 		onError: func(err error) {
 			p.applyRawErrorResponseMiddlewares(ctx, err)
 		},
-	}
+	})
 
 	return httpclient.WithResponseHeaders(inboundStream, responseHeaders), nil
 }

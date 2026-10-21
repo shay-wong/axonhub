@@ -445,7 +445,7 @@ func (f *ModelFetcher) FetchModels(ctx context.Context, input FetchModelsInput) 
 			apiKeys = (&objects.ChannelCredentials{APIKeys: apiKeys}).GetEnabledAPIKeys(ch.DisabledAPIKeys)
 		}
 
-		if ch.Type == channel.TypeGeminiVertex && len(apiKeys) > 0 {
+		if ch.Type == channel.TypeGeminiVertex && len(apiKeys) == 1 {
 			if credential, ok := ch.Credentials.VertexAPIKey(apiKeys[0]); ok {
 				if input.ProjectID == nil || strings.TrimSpace(*input.ProjectID) == "" {
 					input.ProjectID = lo.ToPtr(credential.ProjectID)

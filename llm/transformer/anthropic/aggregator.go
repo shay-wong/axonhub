@@ -42,6 +42,9 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 
 		switch event.Type {
 		case "error":
+			if usageEvidence == llm.AccountingEvidenceExplicitFinal {
+				continue
+			}
 			streamError = true
 			usageEvidence = llm.AccountingEvidenceUnavailable
 			if event.Error == nil && event.RequestID == "" && chunk.StatusCode == 0 {

@@ -105,6 +105,9 @@ func TestChatCompletionOrchestrator_Process_StreamingEmptyRetryPersistsFinalExec
 	for result.ChatCompletionStream.Next() {
 		responseText += string(result.ChatCompletionStream.Current().Data)
 	}
+	acknowledger, ok := result.ChatCompletionStream.(streams.DeliveryAcknowledger)
+	require.True(t, ok)
+	acknowledger.AcknowledgeDelivery()
 	require.NoError(t, result.ChatCompletionStream.Err())
 	require.NoError(t, result.ChatCompletionStream.Close())
 	require.Contains(t, responseText, "Recovered")
@@ -200,6 +203,9 @@ func testCompletedResponsesPersistsUsage(t *testing.T, trailingError error) {
 	for result.ChatCompletionStream.Next() {
 		_ = result.ChatCompletionStream.Current()
 	}
+	acknowledger, ok := result.ChatCompletionStream.(streams.DeliveryAcknowledger)
+	require.True(t, ok)
+	acknowledger.AcknowledgeDelivery()
 	require.NoError(t, result.ChatCompletionStream.Err())
 	require.NoError(t, result.ChatCompletionStream.Close())
 
@@ -437,6 +443,9 @@ func TestChatCompletionOrchestrator_Process_PassThroughStreamBillsAcceptedExecut
 	for result.ChatCompletionStream.Next() {
 		_ = result.ChatCompletionStream.Current()
 	}
+	acknowledger, ok := result.ChatCompletionStream.(streams.DeliveryAcknowledger)
+	require.True(t, ok)
+	acknowledger.AcknowledgeDelivery()
 	require.NoError(t, result.ChatCompletionStream.Err())
 	require.NoError(t, result.ChatCompletionStream.Close())
 

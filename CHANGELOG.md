@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Preserved Fast/Ultrafast prices, provider errors, and original Responses events with delivery-aware stream accounting; stopped blocked pass-through producers safely on conversion failure.
+- Preserved Vertex key project/region bindings, aliases, and weights across edits, disabled-key deletion, and model-discovery fallback.
 - Preserved configured `usage.cost` injection in automatically forwarded Responses JSON and streams while retaining provider event identities and extension fields.
 - Preserved Fast/Ultrafast tracking and canonical session headers over native Responses WebSocket connections; retained failure metadata and tool-search output across pre-content retry handling.
 - Applied Fast/Ultrafast billing rules to model-library fallback prices consistently in API usage and stored costs.

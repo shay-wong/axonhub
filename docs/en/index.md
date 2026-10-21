@@ -15,12 +15,12 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 
 | Document | Description |
 |----------|-------------|
-| [Channel Management](guides/channel-management.md) | Configure providers and compatible auto-disable policies |
+| [Channel Management](guides/channel-management.md) | Configure providers, Vertex key identity, and compatible auto-disable policies |
 | [Model Management](guides/model-management.md) | Model mapping, associations, and priority configuration |
 | [API Key Profiles](guides/api-key-profiles.md) | Create and manage API key profiles |
 | [Permissions](guides/permissions.md) | Enterprise RBAC access control configuration |
 | [Load Balancing](guides/load-balance.md) | Smart routing, failover, key retry budgets, and fixed-key diagnostic isolation |
-| [Cost Tracking](guides/cost-tracking.md) | Usage analytics, Fast/Ultrafast and long-context prices, completed-stream accounting, and key identity visibility |
+| [Cost Tracking](guides/cost-tracking.md) | Usage analytics, Fast/Ultrafast and long-context prices, delivery-aware accounting, and key identity visibility |
 | [Request Tracing](guides/tracing.md) | Complete request traceability |
 | [Request Override](guides/request-override.md) | Dynamically modify request parameters |
 | [Security](guides/security.md) | IP access control, IP blocklist, and API key IP restriction |

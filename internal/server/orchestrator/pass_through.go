@@ -678,8 +678,11 @@ func applyPassThroughStream(outbound *PersistentOutboundTransformer, systemServi
 					)
 					result.err = fmt.Errorf("pass-through pipeline drain panic: %v", r)
 				}
-				if err := stream.Close(); result.err == nil {
-					result.err = err
+				// The delivery gate owns Close when terminal delivery is acknowledged separately.
+				if observer == nil {
+					if err := stream.Close(); result.err == nil {
+						result.err = err
+					}
 				}
 				drained <- result
 			}()
@@ -711,6 +714,7 @@ func applyPassThroughStream(outbound *PersistentOutboundTransformer, systemServi
 				drained:     drained,
 				rawBacklog:  outbound.state.RawStreamBacklog,
 				injectCost:  injectCost,
+				cancel:      outbound.state.RawStreamCancel,
 			}
 		}
 
@@ -842,6 +846,7 @@ type responsesIdentityStream struct {
 	injectCost  func([]byte) []byte
 	costCurrent *httpclient.StreamEvent
 	drained     <-chan responsesDrainResult
+	cancel      context.CancelFunc
 	rawBacklog  *rawStreamBacklog
 	result      responsesDrainResult
 	terminal    bool
@@ -867,6 +872,10 @@ func (s *responsesIdentityStream) Next() bool {
 		s.ended = true
 		if err := s.stream.Err(); errors.Is(err, transformer.ErrInvalidResponse) || errors.Is(err, transformer.ErrUnsupportedConversion) {
 			s.err = err
+			// Detaching the raw consumer does not stop a backpressured producer.
+			if s.cancel != nil {
+				s.cancel()
+			}
 		}
 		_ = s.stream.Close()
 		s.awaitDrain()
@@ -940,6 +949,9 @@ func (s *responsesIdentityStream) awaitDrain() {
 }
 
 func (s *responsesIdentityStream) Close() error {
+	if s.cancel != nil {
+		s.cancel()
+	}
 	err := s.stream.Close()
 	s.awaitDrain()
 	return err

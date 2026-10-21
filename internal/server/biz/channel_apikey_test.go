@@ -1097,6 +1097,32 @@ func TestChannelService_DeleteDisabledAPIKeys_PreservesStructuredKeyMetadata(t *
 	require.Equal(t, []objects.ChannelAPIKeyConfig{config}, updatedCh.Credentials.APIKeyConfigs)
 }
 
+func TestChannelService_DeleteDisabledAPIKeys_PreservesVertexKeyMetadata(t *testing.T) {
+	svc, client := setupTestChannelService(t)
+	defer client.Close()
+	ctx := authz.WithTestBypass(ent.NewContext(t.Context(), client))
+	config := objects.ChannelAPIKeyConfig{Key: "vertex-key", Name: "Primary Project", Weight: 250}
+	binding := objects.VertexAPIKey{APIKey: config.Key, ProjectID: "project-a", Region: "global"}
+	ch := client.Channel.Create().
+		SetType(channel.TypeGeminiVertex).
+		SetName("Structured Vertex Key Channel").
+		SetBaseURL("https://aiplatform.googleapis.com/v1").
+		SetCredentials(objects.ChannelCredentials{
+			APIKeyConfigs: []objects.ChannelAPIKeyConfig{config},
+			VertexAPIKeys: []objects.VertexAPIKey{binding},
+		}).
+		SetDisabledAPIKeys([]objects.DisabledAPIKey{{Key: config.Key}}).
+		SetSupportedModels([]string{"gemini-3.8-flash"}).
+		SetDefaultTestModel("gemini-3.8-flash").SaveX(ctx)
+	result, err := svc.DeleteDisabledAPIKeys(ctx, ch.ID, []string{config.Key})
+	require.NoError(t, err)
+	require.Equal(t, "ONE_KEY_PRESERVED", result.Message)
+	updated := client.Channel.GetX(ctx, ch.ID)
+	require.Equal(t, []objects.ChannelAPIKeyConfig{config}, updated.Credentials.APIKeyConfigs)
+	require.Equal(t, []objects.VertexAPIKey{binding}, updated.Credentials.VertexAPIKeys)
+	require.Empty(t, updated.DisabledAPIKeys)
+}
+
 func TestChannelService_DeleteDisabledAPIKeys_WithLegacyAPIKey(t *testing.T) {
 	svc, client := setupTestChannelService(t)
 	defer client.Close()

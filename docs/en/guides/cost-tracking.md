@@ -221,7 +221,9 @@ Each request's usage log contains:
 - **Token Details**: Breakdown of various token types
 - **Cost Information**: total_cost, cost_items, cost_price_reference_id
 
-Completed streaming responses keep their usage and cost records even if the client disconnects or a trailing transport error occurs after confirmed completion. Success is counted once, and a delivered terminal event is not followed by another timeout error. Usage alone does not prove completion; interrupted responses still fail.
+Streaming requests separate provider completion, downstream delivery, and accounting. A request is completed only after its successful terminal event is written to the client; the channel execution may still complete and retain its final usage and cost when delivery fails. A successful write does not prove the client has read or displayed the result. Success is counted once, and a delivered terminal event is not followed by another timeout error.
+
+For Chat Completions, Responses, and Anthropic Messages, partial usage without final accounting evidence is not billed. Explicit final usage remains billable even when the provider reports failure, cancellation, or an incomplete response. Fast/Ultrafast pricing and provider tier precedence remain unchanged, including final usage collected during stream cleanup. Historical records are not recalculated.
 
 Explicit upstream failures, cancellations, and incomplete outcomes remain unchanged when forwarded as Chat Completions. Ending the connection without a transport error does not append a successful finish or `[DONE]`, even when content and usage have already arrived.
 

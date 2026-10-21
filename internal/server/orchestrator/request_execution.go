@@ -274,6 +274,12 @@ func (m *persistRequestExecutionMiddleware) OnOutboundLlmResponse(ctx context.Co
 }
 
 func (m *persistRequestExecutionMiddleware) OnOutboundRawError(ctx context.Context, err error) {
+	// Finish deferred accounting before recording the pipeline rejection, so a
+	// provider terminal cannot overwrite a rejected attempt as completed later.
+	if owner := streamLifecycleFromContext(ctx); owner != nil {
+		owner.waitForAccounting()
+	}
+
 	// Update request execution with the real error message when request fails
 	state := m.outbound.state
 	if state == nil || state.RequestExec == nil {

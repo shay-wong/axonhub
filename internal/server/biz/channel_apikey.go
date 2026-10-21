@@ -460,6 +460,12 @@ func (svc *ChannelService) DeleteDisabledAPIKeys(ctx context.Context, channelID 
 			// binding survives the preserve-last-key rule.
 			preservedVertex := removedVertices[0]
 			newCredentials.VertexAPIKeys = append(newCredentials.VertexAPIKeys, preservedVertex)
+			for _, config := range ch.Credentials.APIKeyConfigs {
+				if config.Key == preservedVertex.APIKey {
+					newCredentials.APIKeyConfigs = []objects.ChannelAPIKeyConfig{config}
+					break
+				}
+			}
 			result.Message = "ONE_KEY_PRESERVED"
 		}
 	}

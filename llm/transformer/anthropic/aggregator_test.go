@@ -177,6 +177,19 @@ func TestAggregateStreamChunks_ReturnsNativeErrorEnvelope(t *testing.T) {
 	require.Equal(t, "req_123", responseErr.Detail.RequestID)
 }
 
+func TestAggregateStreamChunks_FinalUsageSurvivesTrailingProviderError(t *testing.T) {
+	_, meta, err := AggregateStreamChunks(t.Context(), []*httpclient.StreamEvent{
+		{Data: []byte(`{"type":"message_start","message":{"id":"msg","type":"message","role":"assistant","content":[],"model":"claude","usage":{"input_tokens":12,"output_tokens":0}}}`)},
+		{Data: []byte(`{"type":"message_delta","usage":{"output_tokens":34},"delta":{"stop_reason":"end_turn"}}`)},
+		{Data: []byte(`{"type":"message_stop"}`)},
+		{Data: []byte(`{"type":"error","error":{"type":"overloaded_error","message":"late failure"}}`)},
+	}, PlatformDirect)
+	require.NoError(t, err)
+	require.True(t, meta.Completed)
+	require.Equal(t, llm.AccountingEvidenceExplicitFinal, meta.AccountingEvidence)
+	require.Equal(t, int64(46), meta.Usage.TotalTokens)
+}
+
 func TestAggregateStreamChunks_MessageStopFinalizesOrderedUsage(t *testing.T) {
 	for _, usage := range []struct {
 		name   string

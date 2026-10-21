@@ -68,6 +68,7 @@ git show --remerge-diff <merge-commit>
 
 ### F02 API Key 稳定身份、别名、权重和路由
 
+- Vertex 凭据整合：采用 `ae491d69` 的项目/区域绑定与 `de5f9039` 的第三方 Codex 凭据、目录修复。Vertex Key 必须进入同一结构化 Key 身份集合，编辑/删除/保留最后一把 Key 时保留项目、区域、别名和权重；模型发现逐 Key 匹配绑定，跳过禁用 Key、失败才继续、首成功停止。回归：`internal/objects/channel_test.go`、`internal/server/biz/channel_apikey_test.go`、`internal/server/biz/model_fetcher_test.go`、`frontend/src/features/channels/components/channels-action-dialog-model-discovery.test.mjs`。用户文档：`docs/en/guides/channel-management.md`、`docs/zh/guides/channel-management.md`；独立兼容变更定位：`git log -S'TestChannelCredentialsVertexKeysPreserveStructuredIdentity' -- internal/objects/channel_test.go`。
 - 本次上游整合：`6115ae80` 的模型发现 header overrides、`a416de23` 的 Zhipu/ZAI raw URL 与 `/v1` relay 修复保留；仍按可用 Key 顺序尝试并在首次成功后停止，不恢复全量 Key 探测。
 
 - 本次上游整合：`65c65807` 在模型同步落库前重读渠道，保留拉取期间新保存的手动模型；此前按可用 Key 顺序发现、首个成功即停止的本地逻辑继续保留。
@@ -94,6 +95,7 @@ git show --remerge-diff <merge-commit>
 
 ### F04 Fast/Ultrafast tier 识别、计费、价格表和展示
 
+- 交付与计费分离：维护者确认采用 `3dcfa3ce` 至 `a946fca4` 的交付确认和最终用量证据。主 request 的 completed 需要成功写出终态；execution 完成与最终用量落库独立，不因交付失败丢失已确认费用。Chat/Responses/Anthropic 中间 usage 不计费；保留 `UsageLogEligible` 防重复与 requested/applied/override/policy 档位优先级。尾流异常同样保留原始 body、ID、tier 和最终 usage。独立兼容回归：`internal/server/orchestrator/stream_tail_fork_test.go`、`llm/pipeline/delivery_fork_compat_test.go`；定位：`git log --all -- internal/server/orchestrator/stream_tail_fork_test.go`。
 - 原始响应保真整合：上游默认 Responses identity/transport 保真路径不能绕过已开启的 `InjectUsageCost`；JSON/SSE 仅回填本地费用字段，保留原始 ID、未知扩展及数值精度，继续使用实际渠道模型和相同 tier 优先级。显式 PassThroughBody 仍保留其既有原样语义。回归/当前变更定位：`git log -S'TestResponsesIdentityPreservesInjectedCost' -- internal/server/orchestrator/responses_identity_cost_test.go`。
 - 原生 WebSocket 整合：新增 `openai/responses-ws` 必须同时进入 `OpenAIServiceTier` 和 orchestrator 的档位识别分支，保留出站参数、SpeedMode、requested tier 及 Codex override。回归：`TestOpenAIServiceTierWebSocketForkCompatibility`、`TestWebSocketServiceTierTracking`；当前独立变更定位：`git log -S'TestWebSocketServiceTierTracking' -- internal/server/orchestrator/service_tier_test.go`。
 - 模型库兜底整合：采用 `cc1c7e5d` 的渠道无价格时查询模型库逻辑，但新增分支同样调用 `ComputeUsageCostForServiceTier`，保证 API `usage.cost` 与落库使用相同倍率和 provider tier 优先级。显式渠道价格优先；模型库目前仅提供固定输入/输出/缓存单价，不包含 context 阶梯、schedule 或独立 tier 价格。倍率仍精确匹配实际渠道模型 ID，不因去除推理后缀扩大范围。回归/独立提交定位：`git log -S'TestUsageCost_ModelLibraryFallbackServiceTier' -- internal/server/biz/usage_cost_model_library_tier_test.go`。
@@ -179,6 +181,7 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- 交付生命周期整合：按维护者选择采用上游交付确认，区分 provider 终态、客户端写出结果与最终计费证据；这替代旧版“provider 完成即主 request 成功”的判断。fork 终态错误 wrapper 须透传交付/收尾能力；原样转发须先发布转换验证结果，再由交付 wrapper 关闭 producer，适配失败先显式停止 producer 再等待 drain，避免死锁。保留原始响应身份、整数精度和 usage.cost；`response.canceled` 与 `response.cancelled` 都进入最终用量判定。独立兼容回归：`internal/server/orchestrator/pass_through_delivery_compat_test.go`、`llm/pipeline/delivery_fork_compat_test.go`；定位：`git log --all -- internal/server/orchestrator/pass_through_delivery_compat_test.go`。
 - 本次上游整合：`1c695ac3` 保留 WebSocket 失效连接的错误传播、不在 executor 内重放不确定已执行的请求，并修复阻塞读写取消与关闭后的错误覆盖；不改变上层配置的重试策略。继续保留 fork 的终态、费用和 canonical session 不变量。验证：`cd llm && go test -race ./transformer/openai/responses ./transformer/openai/codex -run 'WebSocket|ResponsesFailedAfterInlineToolResultForkCompatibility'`。
 - Responses 协议整合：采用 `36364049` 的内容输出前 structured failure 重试与 `94cd05b1` 的终态后立即结束，避免继续等待尾流；保留失败 snapshot 的 ID/model/usage/tier/request ID，refusal 和 `InlineToolResults` 必须计为已输出内容，后续失败不能再判成空响应。Transformer 与 pipeline 的内容判定须一致；保留已有完整终态后的费用语义。当前独立变更定位：`git log -S'TestResponsesFailedAfterInlineToolResultForkCompatibility' -- llm/transformer/openai/responses/outbound_stream_fork_compat_test.go`。
 - 原样转发同样必须完成转换流的终态校验和用量持久化：已完成请求不能被尾流错误覆盖，未完成断流须交付失败终态。交付终态前等待转换流校验，保留原始终态快照用于同类型终态补发，避免提前关闭造成 response/item ID 或扩展字段丢失；适配失败须先取消生产者再等待转换流结束。回归覆盖 `orchestrator_streaming_test.go` 的已完成取消/断流及 `pass_through_test.go` 的 HTTP/WS 事件身份与关闭顺序。

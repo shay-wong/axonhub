@@ -134,11 +134,19 @@ func (ts *OutboundPersistentStream) consumeTailEvent(event *httpclient.StreamEve
 	}
 	ts.stateMu.Lock()
 	defer ts.stateMu.Unlock()
+	if ts.upstreamModelID == "" {
+		ts.upstreamModelID = modelname.FromEvent(event, ts.apiFormat)
+	}
 	ts.responseChunks = append(ts.responseChunks, httpclient.SummarizeBinaryChunk(event))
 	if ts.terminalState == streamTerminalNone && ts.terminalTracker.Observe(event) {
+		observeStreamTerminal(ts.state, event)
 		ts.terminalState = classifyAcceptedTerminalEvent(event)
 		ts.state.OutboundStreamTerminal = ts.terminalState
+		if ts.terminalState != streamTerminalCompleted {
+			ts.terminalError = streamTerminalErrorMessage(event, ts.terminalState)
+		}
 		ts.outcome.observeTerminal(ts.terminalState)
+		ts.markPerformanceTerminal(ts.terminalState, ts.terminalError)
 	}
 	return nil
 }
@@ -482,6 +490,7 @@ func (ts *OutboundPersistentStream) persistTerminalResponse(ctx context.Context,
 			ts.upstreamModelID,
 		); err != nil {
 			log.Warn(persistCtx, "Failed to persist terminal request execution response", log.Cause(err))
+			ts.persistenceErr = errors.Join(ts.persistenceErr, err)
 		}
 	} else {
 		log.Warn(persistCtx, "Failed to aggregate terminal request execution chunks", log.Cause(aggErr))
@@ -496,14 +505,17 @@ func (ts *OutboundPersistentStream) persistTerminalResponse(ctx context.Context,
 				ts.upstreamModelID,
 			); err != nil {
 				log.Warn(persistCtx, "Failed to persist raw terminal request execution response", log.Cause(err))
+				ts.persistenceErr = errors.Join(ts.persistenceErr, err)
 			}
 		} else if err := ts.RequestService.UpdateRequestExecutionStatusFromError(persistCtx, ts.requestExec.ID, terminalErr); err != nil {
 			log.Warn(persistCtx, "Failed to update terminal request execution status", log.Cause(err))
+			ts.persistenceErr = errors.Join(ts.persistenceErr, err)
 		}
 	}
 
 	if err := ts.RequestService.SaveRequestExecutionChunks(persistCtx, ts.requestExec.ID, ts.responseChunks); err != nil {
 		log.Warn(persistCtx, "Failed to save terminal request execution chunks", log.Cause(err))
+		ts.persistenceErr = errors.Join(ts.persistenceErr, err)
 	}
 }
 

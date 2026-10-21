@@ -687,7 +687,7 @@ func (a *streamAggregator) processEvent(ev *StreamEvent) {
 			a.status = "failed"
 		}
 
-	case StreamEventTypeResponseCancelled:
+	case StreamEventTypeResponseCancelled, StreamEventType("response.canceled"):
 		a.terminalSeen = true
 		a.terminalUsage = nil
 		if ev.Response != nil && ev.Response.Usage != nil {

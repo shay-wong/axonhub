@@ -644,6 +644,59 @@ func TestFetchModelsTriesAPIKeysInOrderUntilSuccess(t *testing.T) {
 	require.Equal(t, []ModelIdentify{{ID: "available-model"}}, result.Models)
 }
 
+func TestFetchModelsVertexFallbackKeepsBindingsUntilFirstSuccess(t *testing.T) {
+	var requestedPaths []string
+	var requestedKeys []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/provider-conf" {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		requestedPaths = append(requestedPaths, r.URL.Path)
+		key := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		requestedKeys = append(requestedKeys, key)
+		if key != "good-key" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{"models":[{"name":"models/gemini-test"}]}`))
+	}))
+	defer server.Close()
+	client := enttest.NewEntClient(t, "sqlite3", "file:vertex_model_bindings?mode=memory&_fk=0")
+	defer client.Close()
+	ctx := authz.WithSystemBypass(t.Context(), "test")
+	ch := client.Channel.Create().SetName("vertex-bindings").SetType(channel.TypeGeminiVertex).
+		SetBaseURL(server.URL + "/v1").
+		SetCredentials(objects.ChannelCredentials{
+			APIKeyConfigs: []objects.ChannelAPIKeyConfig{
+				{Key: "disabled-key", Name: "disabled", Weight: 100},
+				{Key: "bad-key", Name: "bad", Weight: 250},
+				{Key: "good-key", Name: "good", Weight: 100},
+			},
+			VertexAPIKeys: []objects.VertexAPIKey{
+				{APIKey: "disabled-key", ProjectID: "disabled-project", Region: "global"},
+				{APIKey: "bad-key", ProjectID: "project-a", Region: "global"},
+				{APIKey: "good-key", ProjectID: "project-b", Region: "us-central1"},
+				{APIKey: "unused-key", ProjectID: "project-c", Region: "global"},
+			},
+		}).SetDisabledAPIKeys([]objects.DisabledAPIKey{{Key: "disabled-key"}}).
+		SetSupportedModels([]string{"old-model"}).SetDefaultTestModel("old-model").SaveX(ctx)
+	fetcher := NewModelFetcher(httpclient.NewHttpClientWithClient(server.Client()), &ChannelService{AbstractService: &AbstractService{db: client}})
+	fetcher.geminiVertexFetcher.providerURL = server.URL + "/provider-conf"
+	result, err := fetcher.FetchModels(ctx, FetchModelsInput{ChannelType: channel.TypeGeminiVertex.String(), BaseURL: ch.BaseURL, ChannelID: &ch.ID})
+	require.NoError(t, err)
+	if result.Error != nil {
+		t.Fatalf("model fetch failed: %s; requests: %v, keys: %v", *result.Error, requestedPaths, requestedKeys)
+	}
+	require.Nil(t, result.Error)
+	require.Equal(t, []string{"bad-key", "good-key"}, requestedKeys)
+	require.Equal(t, []string{
+		"/v1/projects/project-a/locations/global/publishers/google/models",
+		"/v1/projects/project-b/locations/us-central1/publishers/google/models",
+	}, requestedPaths)
+	require.Equal(t, []ModelIdentify{{ID: "gemini-test"}}, result.Models)
+}
+
 func TestFetchModelsWithChannelIDSkipsDisabledStructuredKeys(t *testing.T) {
 	var requestedKeys []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

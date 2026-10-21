@@ -1531,8 +1531,11 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
           ...new Set(values.credentials.apiKeys.map((key) => key.trim()).filter((key) => key.length > 0)),
         ];
       }
-      const normalizedAPIKeyConfigs = reconcileAPIKeyConfigs(values.credentials?.apiKeys, apiKeyConfigs);
-      const shouldSubmitAPIKeyConfigs = showRegularAPIKeyFields && (hasStructuredAPIKeyConfigs || apiKeyConfigsDirty);
+      const configuredKeys = isGeminiVertex && values.credentials?.vertexApiKeys?.length
+        ? values.credentials.vertexApiKeys.map((credential) => credential.apiKey)
+        : values.credentials?.apiKeys;
+      const normalizedAPIKeyConfigs = reconcileAPIKeyConfigs(configuredKeys, apiKeyConfigs);
+      const shouldSubmitAPIKeyConfigs = (showRegularAPIKeyFields || isGeminiVertex) && (hasStructuredAPIKeyConfigs || apiKeyConfigsDirty);
       if (values.credentials && shouldSubmitAPIKeyConfigs) {
         values.credentials.apiKeyConfigs = normalizedAPIKeyConfigs;
       } else if (values.credentials) {
@@ -1757,10 +1760,15 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
           ...(codexModelProtocols ? { modelProtocols: codexModelProtocols } : {}),
         });
 
-        const createInput = {
-          ...(dataWithModels as z.infer<typeof createChannelInputSchema>),
+        const parsedCreateInput = createChannelInputSchema.safeParse({
+          ...dataWithModels,
           settings: nextSettings,
-        } as z.infer<typeof createChannelInputSchema>;
+        });
+        if (!parsedCreateInput.success) {
+          toast.error(parsedCreateInput.error.issues[0].message);
+          return;
+        }
+        const createInput = parsedCreateInput.data;
 
         if (isDuplicate && duplicateFromRow) {
           await duplicateChannel.mutateAsync({
@@ -1867,11 +1875,12 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     const baseURL = form.getValues('baseURL');
     const oauthApiKey = form.getValues('credentials.apiKey');
     const vertexApiKeys = channelType === 'gemini_vertex' ? form.getValues('credentials.vertexApiKeys') : undefined;
-    const selectedVertexCredential = vertexApiKeys?.find(
+    const availableVertexCredentials = vertexApiKeys?.filter(
       (credential) =>
         credential.apiKey.trim().length > 0 &&
         credential.projectID.trim().length > 0 &&
-        credential.region.trim().length > 0,
+        credential.region.trim().length > 0 &&
+        !disabledKeySet.has(credential.apiKey.trim()),
     );
 
     if (!channelType || !baseURL) {
@@ -1888,15 +1897,25 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         ? [modelFetchAPIKey, ...availableModelFetchAPIKeys.filter((key) => key !== modelFetchAPIKey)]
         : availableModelFetchAPIKeys;
 
-      const result = await fetchModels.mutateAsync({
+      const baseInput = {
         channelType,
         baseURL,
-        apiKey: selectedVertexCredential?.apiKey.trim() || oauthToken || undefined,
-        apiKeys: selectedVertexCredential || oauthToken ? undefined : orderedAPIKeys,
-        projectID: selectedVertexCredential?.projectID.trim() || undefined,
-        region: selectedVertexCredential?.region.trim() || undefined,
         channelID: isEdit ? currentRow?.id : undefined,
-      });
+      };
+      const inputs = availableVertexCredentials?.length
+        ? availableVertexCredentials.map((credential) => ({
+            ...baseInput,
+            apiKey: credential.apiKey.trim(),
+            projectID: credential.projectID.trim(),
+            region: credential.region.trim(),
+          }))
+        : [{ ...baseInput, apiKey: oauthToken || undefined, apiKeys: oauthToken ? undefined : orderedAPIKeys }];
+      let result;
+      for (const input of inputs) {
+        result = await fetchModels.mutateAsync(input);
+        if (!result.error) break;
+      }
+      if (!result) return;
 
       if (result.error) {
         toast.error(result.error);
@@ -1918,7 +1937,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     } catch (_error) {
       // Error is already handled by the mutation
     }
-  }, [availableModelFetchAPIKeys, fetchModels, form, isEdit, currentRow, modelFetchAPIKey, authMode]);
+  }, [availableModelFetchAPIKeys, disabledKeySet, fetchModels, form, isEdit, currentRow, modelFetchAPIKey, authMode]);
 
   const handleSyncNow = useCallback(async () => {
     if (!currentRow) return [];

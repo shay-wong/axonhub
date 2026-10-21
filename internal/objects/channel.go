@@ -419,16 +419,16 @@ func (c *ChannelCredentials) GetAllAPIKeyConfigs() []ChannelAPIKeyConfig {
 		return nil
 	}
 
-	if len(c.APIKeyConfigs) > 0 {
-		return normalizeAPIKeyConfigs(c.APIKeyConfigs)
-	}
-
 	var configs []ChannelAPIKeyConfig
-	if c.APIKey != "" && !c.IsOAuth() {
-		configs = append(configs, ChannelAPIKeyConfig{Key: c.APIKey, Weight: 100})
-	}
-	for _, key := range c.APIKeys {
-		configs = append(configs, ChannelAPIKeyConfig{Key: key, Weight: 100})
+	if len(c.APIKeyConfigs) > 0 {
+		configs = append(configs, c.APIKeyConfigs...)
+	} else {
+		if c.APIKey != "" && !c.IsOAuth() {
+			configs = append(configs, ChannelAPIKeyConfig{Key: c.APIKey, Weight: 100})
+		}
+		for _, key := range c.APIKeys {
+			configs = append(configs, ChannelAPIKeyConfig{Key: key, Weight: 100})
+		}
 	}
 
 	for _, credential := range c.VertexAPIKeys {
@@ -486,7 +486,7 @@ func (c *ChannelCredentials) VertexAPIKey(apiKey string) (VertexAPIKey, bool) {
 	}
 
 	for _, credential := range c.VertexAPIKeys {
-		if credential.APIKey == apiKey {
+		if strings.TrimSpace(credential.APIKey) == strings.TrimSpace(apiKey) {
 			return credential, true
 		}
 	}

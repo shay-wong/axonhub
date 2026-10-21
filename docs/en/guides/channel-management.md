@@ -69,6 +69,8 @@ sk-key-3
 - Different requests randomly select from available Keys
 - If one Key fails, the system automatically switches to another
 
+Gemini Vertex credentials pair each API key with a project and region. Editing or reordering a key preserves its existing alias and weight; keeping the last key when deleting disabled keys also keeps its project binding. Model discovery skips disabled keys, tries the next key only after failure, and stops after the first success. Project-bound discovery uses the matching key's project and region; the provider's public catalog may be used first.
+
 ## Auto-disable policy compatibility
 
 Global rules and the fork's separate channel/API key status-code policies are configured independently in retry settings. Custom channel rules run first, followed by global rules; a matching rule owns the failure even before its threshold is reached. Unmatched failures fall back to the separate status-code policies, with API key rules taking precedence over channel rules. Channel mode **Off** skips all automatic disabling.

@@ -43,7 +43,7 @@ func newTask5Execution(t *testing.T, ctx context.Context, client *ent.Client, fo
 		SetRequestBody([]byte(`{"stream":true}`)).SetStream(true).Save(ctx)
 	require.NoError(t, err)
 
-	return requestRow, execution, &PersistenceState{}
+	return requestRow, execution, &PersistenceState{UsageLogEligible: true}
 }
 
 func configureTask5Price(t *testing.T, ctx context.Context, client *ent.Client, channelID int) {
@@ -462,7 +462,7 @@ func TestStreamDeliveryAccounting_AttributionAndQuota(t *testing.T) {
 		usageService.ChannelService.SetEnabledChannelsForTest([]*biz.Channel{built})
 		outbound, err := openai.NewOutboundTransformer("https://example.test", "key")
 		require.NoError(t, err)
-		state := &PersistenceState{}
+		state := &PersistenceState{UsageLogEligible: true}
 		stream := NewOutboundPersistentStream(ctx, streams.SliceStream([]*httpclient.StreamEvent{
 			{Data: []byte(`{"id":"chat","model":"provider-wire-model","choices":[{"index":0,"finish_reason":"stop","delta":{}}]}`)},
 			{Data: []byte(fmt.Sprintf(`{"id":"chat","model":"provider-wire-model","choices":[],"usage":{"prompt_tokens":%d,"completion_tokens":%d,"total_tokens":%d,"prompt_tokens_details":{"cached_tokens":%d},"completion_tokens_details":{"reasoning_tokens":%d}}}`, counts.input, counts.output, counts.input+counts.output, counts.cached, counts.reasoning))},

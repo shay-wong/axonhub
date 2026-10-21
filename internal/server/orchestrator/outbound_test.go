@@ -1653,9 +1653,10 @@ func TestOutboundPersistentStream_Close_AggregatedResponsesCompletionHandling(t 
 			apiFormat:          llm.APIFormatOpenAIResponse,
 			aggregatedResponse: aggregated,
 			aggregatedMeta: llm.ResponseMeta{
-				ID:          "resp_456",
-				ServiceTier: "priority",
-				Completed:   true,
+				ID:                 "resp_456",
+				ServiceTier:        "priority",
+				Completed:          true,
+				AccountingEvidence: llm.AccountingEvidenceCleanEndCandidate,
 				Usage: &llm.Usage{
 					PromptTokens:     10,
 					CompletionTokens: 2,

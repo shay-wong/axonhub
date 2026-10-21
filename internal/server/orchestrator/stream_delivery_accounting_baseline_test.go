@@ -54,7 +54,7 @@ func TestStreamDeliveryAccountingBaseline(t *testing.T) {
 			streamCtx, cancel := context.WithCancel(ctx)
 			t.Cleanup(cancel)
 			event := &httpclient.StreamEvent{Type: scenario.eventType, Data: []byte(`{"type":"` + scenario.eventType + `","response":{"id":"resp_baseline","status":"` + scenario.status + `","output":[]` + scenario.usage + `}}`)}
-			stream := NewOutboundPersistentStream(streamCtx, streams.SliceStream([]*httpclient.StreamEvent{event}), req, exec, requestService, usageService, outbound, nil, &PersistenceState{})
+			stream := NewOutboundPersistentStream(streamCtx, streams.SliceStream([]*httpclient.StreamEvent{event}), req, exec, requestService, usageService, outbound, nil, &PersistenceState{UsageLogEligible: true})
 			// When
 			require.True(t, stream.Next())
 			stream.Current()

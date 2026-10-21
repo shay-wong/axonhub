@@ -126,6 +126,7 @@ export function ChannelsAPIKeyManagementDialog({ open, onOpenChange }: ChannelsA
     const boundKeys = new Set(vertexBindings.map((binding) => binding.apiKey));
     const keptKeys = new Set(keys);
     return {
+      ...buildAPIKeyCredentialsForUpdate(keys, currentRow.credentials),
       apiKeys: keys.filter((key) => !boundKeys.has(key)),
       vertexApiKeys: vertexBindings.filter((binding) => keptKeys.has(binding.apiKey)),
     };
