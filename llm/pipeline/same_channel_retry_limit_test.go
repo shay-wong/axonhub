@@ -27,6 +27,56 @@ func (m *mockOutboundWithRetryLimit) SameChannelRetryLimit() (int, bool) {
 	return 0, false
 }
 
+type mockContextOutboundWithRetryLimit struct {
+	*mockOutboundWithRetryLimit
+	failures int
+}
+
+func (m *mockContextOutboundWithRetryLimit) CanRetryContext(context.Context, error) bool {
+	m.failures++
+	return true
+}
+
+func TestPipeline_OptionalKeyRetryBudget(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		global, limit int
+		override      bool
+		keyFloor      int
+		disabled      bool
+		wantRetries   int
+	}{
+		{name: "default policy keeps global count", global: 3, wantRetries: 3},
+		{name: "zero override without key retry", global: 3, override: true},
+		{name: "zero override with key retry", global: 3, override: true, keyFloor: 2, wantRetries: 2},
+		{name: "override lower than key floor", global: 3, limit: 1, override: true, keyFloor: 2, wantRetries: 2},
+		{name: "override higher than key floor", global: 3, limit: 4, override: true, keyFloor: 2, wantRetries: 4},
+		{name: "no override with key retry", keyFloor: 2, wantRetries: 2},
+		{name: "disabled ignores override and keys", global: 3, limit: 4, override: true, keyFloor: 2, disabled: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			attempts := 0
+			outbound := &mockContextOutboundWithRetryLimit{mockOutboundWithRetryLimit: &mockOutboundWithRetryLimit{
+				mockOutbound:     mockOutbound{maxSameChannelRetries: func() int { return tt.keyFloor }},
+				sameChannelLimit: func() (int, bool) { return tt.limit, tt.override },
+			}}
+			p := &pipeline{
+				Executor: &mockExecutor{do: func(context.Context, *httpclient.Request) (*httpclient.Response, error) {
+					attempts++
+					return nil, errors.New("temporary failure")
+				}},
+				Inbound: &mockInbound{}, Outbound: outbound,
+				maxSameChannelRetries: tt.global, retriesDisabled: tt.disabled,
+			}
+			require.Equal(t, tt.wantRetries > 0, p.hasStreamRetryBudget())
+			_, err := p.Process(t.Context(), &httpclient.Request{})
+			require.Error(t, err)
+			require.Equal(t, tt.wantRetries+1, attempts)
+			require.Equal(t, attempts, outbound.failures, "register the failed key even after the retry budget is exhausted")
+		})
+	}
+}
+
 func TestPipeline_MaxSameChannelRetriesFor(t *testing.T) {
 	t.Run("falls back to the global value when the outbound has no override", func(t *testing.T) {
 		p := &pipeline{Outbound: &mockOutbound{}, maxSameChannelRetries: 2}
@@ -61,6 +111,15 @@ func TestPipeline_MaxSameChannelRetriesFor(t *testing.T) {
 		p := &pipeline{Outbound: outbound, maxSameChannelRetries: 0, retriesDisabled: true}
 		require.Equal(t, 0, p.maxSameChannelRetriesFor(), "the override only adjusts the count, it cannot switch retries back on")
 	})
+
+	t.Run("zero override preserves the outbound key-rotation floor", func(t *testing.T) {
+		outbound := &mockOutboundWithRetryLimit{
+			mockOutbound:     mockOutbound{maxSameChannelRetries: func() int { return 2 }},
+			sameChannelLimit: func() (int, bool) { return 0, true },
+		}
+		p := &pipeline{Outbound: outbound, maxSameChannelRetries: 0}
+		require.Equal(t, 2, p.maxSameChannelRetriesFor())
+	})
 }
 
 // TestPipeline_Process_ChannelLevelSameChannelRetries pins that a channel-level
@@ -68,7 +127,7 @@ func TestPipeline_MaxSameChannelRetriesFor(t *testing.T) {
 func TestPipeline_Process_ChannelLevelSameChannelRetries(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("zero override stops same-channel retries even when the global value allows them", func(t *testing.T) {
+	t.Run("zero override stops retries when key rotation is disabled", func(t *testing.T) {
 		execCalls := 0
 		executor := &mockExecutor{
 			do: func(ctx context.Context, req *httpclient.Request) (*httpclient.Response, error) {
@@ -94,7 +153,7 @@ func TestPipeline_Process_ChannelLevelSameChannelRetries(t *testing.T) {
 
 		_, err := p.Process(ctx, &httpclient.Request{})
 		require.Error(t, err)
-		require.Equal(t, 1, execCalls, "a zero channel override must stop same-channel retries despite the global value")
+		require.Equal(t, 1, execCalls, "a zero override must stop same-channel retries")
 	})
 
 	t.Run("override raises the retry count above the global value", func(t *testing.T) {

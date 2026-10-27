@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -45,7 +45,7 @@ interface Props {
 }
 
 interface UserFieldPickerProps {
-  field: { value: string; onChange: (value: string) => void };
+  field: { value?: string; onChange: (value: string) => void };
   options: { value: string; label: string }[];
   isLoading: boolean;
   hasMore: boolean;

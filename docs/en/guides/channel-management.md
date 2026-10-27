@@ -54,7 +54,7 @@ In short: **API Key Profile renames → Model Association selects channel → Ch
 
 ## Multiple API Keys
 
-When an account has multiple API Keys, you can configure them all in the same channel. AxonHub will automatically rotate between them for better stability.
+Multiple API keys can share a channel. Requests are assigned using the selected strategy.
 
 Simply add all keys in the API Keys field, one per line:
 ```
@@ -63,11 +63,32 @@ sk-key-2
 sk-key-3
 ```
 
-### Load Balancing
+### Key selection strategies
 
-- Same Trace ID always uses the same Key (session consistency)
-- Different requests randomly select from available Keys
-- If one Key fails, the system automatically switches to another
+The channel editor has one strategy selector, stored as `settings.apiKeyStrategy`:
+
+| Strategy | Behavior |
+|---|---|
+| `sticky` (default) | Keep the same key for a Trace when possible; choose randomly without a Trace |
+| `weighted_sticky` | Distribute new Traces by weight and retain affinity; use weighted random selection without a Trace |
+| `failover` | Prefer the highest available weight; break ties by Trace or randomly; prefer higher-weight keys again after recovery |
+| `random` | Choose uniformly on every selection without Trace affinity |
+| `round_robin` | Follow list order, switching after N calls, including failures |
+| `round_robin_success` | Switch after N successes; failures do not advance the success counter |
+| `priority` | Prefer the first available key in list order, including after its recovery |
+| `fixed` | Keep the current key until disabled or removed, then move forward; recovered earlier keys do not take over |
+
+`settings.apiKeyRoundRobinSwitchAfter` sets N, with a minimum of 1. Weights only affect `weighted_sticky` and `failover`. Sticky, round-robin, success-based round-robin, and fixed selection state survives channel cache reloads, but not process restarts.
+
+Legacy `settings.apiKeySelectionStrategy` remains readable. Without the new field, `trace_sticky` maps to `sticky`, while the other two legacy strategies keep their meaning. Saving in the editor writes the new field and clears the legacy field. All strategies use structured credentials, disabled-key filtering, and request-local failed-key exclusions. Temporary substitutes for fixed/success-based selection do not move the cursor used by subsequent requests.
+
+### Retry per API key
+
+Leave **Single-Channel Retries** empty to inherit the global count; 0 disables ordinary same-channel retries. The initial attempt is not a retry: five available keys require at least four retries to have a chance to try each key. With **Retry per API key** off, the editor warns when the budget cannot cover all keys. If the global setting is inaccessible, it reports that the count cannot be determined instead of guessing.
+
+**Retry per API key** (`settings.retryPerAPIKey`) defaults to off, including for existing channels without this field. When enabled, the effective budget is `max(channel or global retry count, available key count - 1)`, so even a channel count of 0 permits attempts with other keys. Unlike the previous fork's automatic budget increase, enable this option after upgrading to retain the opportunity to try every available key.
+
+Both modes exclude keys that failed within the current request and stop on success; exhausting the keys does not restart the cycle. Disabling retries globally overrides this option. Cancellation, non-retryable errors, and streams already delivering output do not restart requests to visit more keys. Connection failures switch channels under the existing policy. See [Load Balancing](load-balance.md) for more detail.
 
 Gemini Vertex credentials pair each API key with a project and region. Editing or reordering a key preserves its existing alias and weight; keeping the last key when deleting disabled keys also keeps its project binding. Model discovery skips disabled keys, tries the next key only after failure, and stops after the first success. Project-bound discovery uses the matching key's project and region; the provider's public catalog may be used first.
 
@@ -377,7 +398,7 @@ Configure `{from, to}` entries in the channel **Transform Options**; the first m
 
 ### Q: How to set up multiple API Keys?
 
-Enter all keys in the API Keys field, one per line. The system will automatically rotate them.
+Enter keys one per line in the channel editor and choose a key strategy above. Enable **Retry per API key** to allow attempts with every available key after retryable failures.
 
 ### Q: How to restore a disabled API Key?
 

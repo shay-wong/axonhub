@@ -156,6 +156,7 @@ const CREATE_CHANNEL_MUTATION = `
         }
         apiKeySelectionStrategy
         maxSingleChannelRetries
+        retryPerAPIKey
         modelProtocols {
           model
           apiFormats
@@ -271,6 +272,7 @@ const DUPLICATE_CHANNEL_MUTATION = `
         }
         apiKeySelectionStrategy
         maxSingleChannelRetries
+        retryPerAPIKey
         modelProtocols {
           model
           apiFormats
@@ -386,6 +388,7 @@ const BULK_CREATE_CHANNELS_MUTATION = `
         }
         apiKeySelectionStrategy
         maxSingleChannelRetries
+        retryPerAPIKey
         modelProtocols {
           model
           apiFormats
@@ -500,6 +503,7 @@ const CHANNEL_FIELDS_FRAGMENT = `
         }
         apiKeySelectionStrategy
         maxSingleChannelRetries
+        retryPerAPIKey
         modelProtocols {
           model
           apiFormats
@@ -761,7 +765,9 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
             pattern
             regex
           }
+          apiKeySelectionStrategy
           maxSingleChannelRetries
+          retryPerAPIKey
           modelProtocols {
             model
             apiFormats
@@ -1129,7 +1135,9 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
             pattern
             regex
           }
+          apiKeySelectionStrategy
           maxSingleChannelRetries
+          retryPerAPIKey
           modelProtocols {
             model
             apiFormats
@@ -1406,8 +1414,9 @@ const CHANNEL_QUERY_FULL_NODE_SELECTION = `
               pattern
               regex
             }
-        apiKeySelectionStrategy
-        maxSingleChannelRetries
+            apiKeySelectionStrategy
+            maxSingleChannelRetries
+            retryPerAPIKey
             modelProtocols {
               model
               apiFormats

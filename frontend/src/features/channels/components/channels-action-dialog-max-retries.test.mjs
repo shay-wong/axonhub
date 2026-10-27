@@ -8,7 +8,7 @@ import ts from 'typescript';
 const dialogSource = readFileSync(new URL('./channels-action-dialog.tsx', import.meta.url), 'utf8');
 const dialogAst = ts.createSourceFile('channels-action-dialog.tsx', dialogSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 
-const helperNames = ['formatMaxSingleChannelRetries', 'parseMaxSingleChannelRetriesInput'];
+const helperNames = ['formatMaxSingleChannelRetries', 'parseMaxSingleChannelRetriesInput', 'isRetryBudgetInsufficient'];
 
 let helpers;
 async function loadHelpers() {
@@ -69,4 +69,25 @@ test('the override input renders above the retryable status codes field with an 
   assert.notEqual(statusCodesIndex, -1, 'the retryable status codes field must exist');
   assert.ok(overrideIndex < statusCodesIndex, 'the override field must render above the retryable status codes field');
   assert.match(dialogSource, /channels\.dialogs\.maxSingleChannelRetries\.placeholder/);
+});
+
+test('retry per key is opt-in, survives edit/create, and can be explicitly disabled', () => {
+  assert.match(dialogSource, /useState<boolean>\(\(\) => initialRow\?\.settings\?\.retryPerAPIKey \?\? false\)/);
+  assert.match(dialogSource, /setRetryPerAPIKey\(initialRow\?\.settings\?\.retryPerAPIKey \?\? false\)/);
+  assert.match(dialogSource, /checked=\{retryPerAPIKey\}/);
+  assert.match(dialogSource, /setRetryPerAPIKey\(checked === true\)/);
+  assert.match(dialogSource, /const settingsPatch: Partial<ChannelSettings> = \{[\s\S]*?retryPerAPIKey,/);
+  assert.match(dialogSource, /mergeChannelSettingsForUpdate\(settingsForSubmit, \{[\s\S]*?retryPerAPIKey,/);
+});
+
+test('retry budget warnings count the first attempt and do not guess unknown settings', async () => {
+  const { isRetryBudgetInsufficient } = await loadHelpers();
+  assert.equal(isRetryBudgetInsufficient(4, 5), false);
+  assert.equal(isRetryBudgetInsufficient(3, 5), true);
+  assert.equal(isRetryBudgetInsufficient(0, 1), false);
+  assert.equal(isRetryBudgetInsufficient(0, 2), true);
+  assert.equal(isRetryBudgetInsufficient(undefined, 5), false);
+  assert.match(dialogSource, /useRetryPolicy\(\{ enabled: open && canReadSystemSettings \}\)/);
+  assert.match(dialogSource, /canReadSystemSettings \? retryPolicyData\?\.retryPolicy : undefined/);
+  assert.match(dialogSource, /retryPolicy\?\.enabled === false/);
 });

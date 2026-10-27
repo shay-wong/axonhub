@@ -13,10 +13,10 @@ import (
 func innerProvider(t *testing.T, ch *Channel) any {
 	t.Helper()
 
-	wrapped, ok := getAPIKeyProvider(ch).(*channelAPIKeyContextProvider)
+	wrapped, ok := getAPIKeyProvider(ch).(*recordingAPIKeyProvider)
 	require.True(t, ok, "getAPIKeyProvider must wrap the selected provider")
 
-	return wrapped.inner
+	return wrapped.provider
 }
 
 // A multi-key channel that temporarily drops to a single selectable key must

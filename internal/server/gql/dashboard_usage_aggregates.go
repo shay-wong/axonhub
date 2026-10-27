@@ -126,7 +126,8 @@ func (r *queryResolver) queryDashboardUsageAggregates(
 	timeWindow *string,
 ) ([]dashboardUsageAggregate, error) {
 	since, applyFilter := r.parseTimeWindow(ctx, timeWindow)
-	query := r.client.UsageLog.Query()
+	// 共享聚合仍只统计生产流量，避免测试与探测用量进入九个仪表盘图表。
+	query := r.productionUsageLogQuery()
 
 	switch dimension {
 	case dashboardUsageByChannel:

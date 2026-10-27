@@ -11,10 +11,8 @@ import (
 	"github.com/looplj/axonhub/internal/objects"
 )
 
-// TestModelPerformanceStatsUsesRequestModel verifies that the daily
-// performance aggregate groups by the client-requested model, not the channel
-// model stored on the execution.
-func TestModelPerformanceStatsUsesRequestModel(t *testing.T) {
+// 模型性能按实际执行模型归属，且主请求被清理后仍应保留统计。
+func TestModelPerformanceStatsUsesExecutionModelAfterRequestGC(t *testing.T) {
 	resolver, ctx := newDashboardUsageTestResolver(t)
 	client := resolver.client
 
@@ -77,7 +75,7 @@ func TestModelPerformanceStatsUsesRequestModel(t *testing.T) {
 	stats, err := resolver.ModelPerformanceStats(ctx)
 	require.NoError(t, err)
 	require.Len(t, stats, 1)
-	require.Equal(t, "request-model", stats[0].ModelID)
+	require.Equal(t, "channel-model", stats[0].ModelID)
 	require.Equal(t, 1, stats[0].RequestCount)
 
 	channelStats, err := resolver.ChannelPerformanceStats(ctx)
@@ -86,6 +84,21 @@ func TestModelPerformanceStatsUsesRequestModel(t *testing.T) {
 	require.Equal(t, "channel-a", channelStats[0].ChannelName)
 	require.Equal(t, 1, channelStats[0].RequestCount)
 	require.NotNil(t, channelStats[0].Throughput)
+
+	// 清空缓存后重新查询，确保验证的是保留下来的执行和用量记录。
+	require.NoError(t, client.Request.DeleteOneID(req.ID).Exec(ctx))
+	requestCount, err := client.Request.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, requestCount)
+	resetDashboardQueryCache()
+
+	statsAfterGC, err := resolver.ModelPerformanceStats(ctx)
+	require.NoError(t, err)
+	require.Equal(t, stats, statsAfterGC)
+
+	channelStatsAfterGC, err := resolver.ChannelPerformanceStats(ctx)
+	require.NoError(t, err)
+	require.Equal(t, channelStats, channelStatsAfterGC)
 }
 
 func TestFetchChannelNamesPropagatesLookupErrors(t *testing.T) {

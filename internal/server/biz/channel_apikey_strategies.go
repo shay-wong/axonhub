@@ -13,13 +13,23 @@ import (
 )
 
 // channelAPIKeyStrategy returns the multi-key strategy configured on a channel.
-// An empty result means the field was never set, which falls back to sticky.
+// Legacy fork strategies are read only when the canonical field is absent.
 func channelAPIKeyStrategy(ch *Channel) string {
-	if ch == nil || ch.Settings == nil || ch.Settings.APIKeyStrategy == nil {
+	if ch == nil || ch.Settings == nil {
 		return ""
 	}
-
-	return *ch.Settings.APIKeyStrategy
+	// 先读统一字段；旧配置只用于兼容，避免遗留权重策略被默认 sticky 覆盖。
+	if ch.Settings.APIKeyStrategy != nil && *ch.Settings.APIKeyStrategy != "" {
+		return *ch.Settings.APIKeyStrategy
+	}
+	switch ch.Settings.APIKeySelectionStrategy {
+	case APIKeySelectionStrategyWeightedSticky, APIKeySelectionStrategyFailover:
+		return ch.Settings.APIKeySelectionStrategy
+	case APIKeySelectionStrategyTraceSticky:
+		return objects.APIKeyStrategySticky
+	default:
+		return ""
+	}
 }
 
 // channelAPIKeySwitchAfter returns how many times a key is reused by the two
@@ -63,6 +73,10 @@ func strategyKeepsSelectionState(strategy string) bool {
 // cursors only, never the channel.
 func newMultiKeyProvider(ch *Channel) auth.APIKeyProvider {
 	switch channelAPIKeyStrategy(ch) {
+	case APIKeySelectionStrategyWeightedSticky:
+		return NewWeightedTraceStickyKeyProvider(ch)
+	case APIKeySelectionStrategyFailover:
+		return NewFailoverAPIKeyProvider(ch)
 	case objects.APIKeyStrategyRandom:
 		return NewRandomKeyProvider(ch)
 	case objects.APIKeyStrategyRoundRobin:
@@ -80,14 +94,42 @@ func newMultiKeyProvider(ch *Channel) auth.APIKeyProvider {
 	}
 }
 
-// selectableKeys returns the enabled keys snapshot plus the fallback used when
-// no key is enabled (mirrors TraceStickyKeyProvider's edge handling).
-func selectableKeys(ch *Channel) []string {
-	enabled := ch.cachedEnabledAPIKeys
+// selectableKeys shares the normalized credential and retry exclusion rules.
+func selectableKeys(ctx context.Context, ch *Channel) []string {
+	enabled := apiKeyConfigKeys(availableAPIKeyConfigs(ctx, ch))
 	if len(enabled) == 0 {
-		return []string{ch.Credentials.APIKeys[0]}
+		panicNoEnabledAPIKey(ch)
 	}
 	return enabled
+}
+
+// 请求内失败排除只影响当前重试，不移动 fixed / success 的全局游标。
+func retrySelectableKey(ctx context.Context, ch *Channel, selected string) string {
+	enabled := selectableKeys(ctx, ch)
+	if slices.Contains(enabled, selected) {
+		return selected
+	}
+	all := ch.Credentials.GetAllAPIKeys()
+	start := max(slices.Index(all, selected), 0)
+	for i := range len(all) {
+		key := all[(start+i)%len(all)]
+		if slices.Contains(enabled, key) {
+			return key
+		}
+	}
+	return enabled[0]
+}
+
+// 按当前时间计算禁用状态，让已到期的 Key 无需等待渠道缓存重建即可恢复。
+func unselectableAPIKeys(ch *Channel) map[string]struct{} {
+	enabled := ch.GetEnabledAPIKeys()
+	disabled := make(map[string]struct{})
+	for _, key := range ch.Credentials.GetAllAPIKeys() {
+		if !slices.Contains(enabled, key) {
+			disabled[key] = struct{}{}
+		}
+	}
+	return disabled
 }
 
 // positionOf returns the index of cursorKey inside all. When the key is absent
@@ -103,9 +145,7 @@ func positionOf(all []string, cursorKey string, cursorIdx int) int {
 
 // firstSelectableFrom walks the full key array forward from start (wrapping
 // around) and returns the first key without an active disable record, together
-// with its index. When every key is disabled it returns the first key as a
-// defensive fallback: the channel itself is taken out of service in that case,
-// so this selection is never actually used.
+// with its index. When every key is disabled it returns no key.
 func firstSelectableFrom(all []string, disabled map[string]struct{}, start int) (string, int) {
 	n := len(all)
 	if n == 0 {
@@ -123,7 +163,7 @@ func firstSelectableFrom(all []string, disabled map[string]struct{}, start int) 
 		}
 	}
 
-	return all[0], 0
+	return "", -1
 }
 
 // RandomKeyProvider selects an API key uniformly at random on every call,
@@ -137,7 +177,7 @@ func NewRandomKeyProvider(channel *Channel) *RandomKeyProvider {
 }
 
 func (p *RandomKeyProvider) Get(ctx context.Context) string {
-	enabled := selectableKeys(p.channel)
+	enabled := selectableKeys(ctx, p.channel)
 
 	//nolint:gosec // not a security issue, just a random selection.
 	selectedKey := enabled[rand.IntN(len(enabled))]
@@ -172,35 +212,23 @@ func (p *sharedStickyKeyProvider) Get(ctx context.Context) string {
 
 	ch := p.channel
 
-	enabled := ch.cachedEnabledAPIKeys
-	if len(enabled) == 0 {
-		return ch.Credentials.APIKeys[0]
-	}
+	enabled := selectableKeys(ctx, ch)
 
 	if len(enabled) == 1 {
+		recordSelectedAPIKey(ctx, enabled[0])
 		return enabled[0]
 	}
 
 	var selectedKey string
 
 	if trace, ok := contexts.GetTrace(ctx); ok && trace != nil {
-		selectedKey = p.state.stickyKeyFor(ch, trace.TraceID)
-
-		if log.DebugEnabled(ctx) {
-			log.Debug(ctx, "Trace sticky key selected",
-				log.String("trace_id", trace.TraceID),
-				log.String("key_prefix", safeAPIKeyPrefix(selectedKey)),
-			)
-		}
+		selectedKey = p.state.stickyKeyFor(ctx, ch, trace.TraceID)
+		logSelectedAPIKey(ctx, "Trace sticky key selected", ch, selectedKey, log.String("trace_id", trace.TraceID))
 	} else {
 		//nolint:gosec // not a security issue, just a random selection.
 		selectedKey = enabled[rand.IntN(len(enabled))]
 
-		if log.DebugEnabled(ctx) {
-			log.Debug(ctx, "Random key selected",
-				log.String("key_prefix", safeAPIKeyPrefix(selectedKey)),
-			)
-		}
+		logSelectedAPIKey(ctx, "Random key selected", ch, selectedKey)
 	}
 
 	contexts.WithChannelAPIKey(ctx, selectedKey)
@@ -240,9 +268,9 @@ func (p *RoundRobinKeyProvider) Get(ctx context.Context) string {
 	var selectedKey string
 
 	if p.state != nil {
-		selectedKey = p.state.nextRoundRobinKey(ch, p.per)
+		selectedKey = p.state.nextRoundRobinKey(ctx, ch, p.per)
 	} else {
-		enabled := selectableKeys(ch)
+		enabled := selectableKeys(ctx, ch)
 
 		//nolint:gosec // G115 - per is normalized to >= 1 at construction.
 		index := (p.fallback.Add(1) - 1) / uint64(p.per) % uint64(len(enabled))
@@ -275,13 +303,13 @@ func (p *RoundRobinSuccessKeyProvider) Get(ctx context.Context) string {
 	if p.state == nil {
 		// Defensive: without shared state there is nothing to advance, so behave
 		// like a static first-key selection.
-		enabled := selectableKeys(p.channel)
+		enabled := selectableKeys(ctx, p.channel)
 		contexts.WithChannelAPIKey(ctx, enabled[0])
 
 		return enabled[0]
 	}
 
-	selectedKey := p.state.selectRoundRobinSuccessKey(p.channel)
+	selectedKey := retrySelectableKey(ctx, p.channel, p.state.selectRoundRobinSuccessKey(p.channel))
 
 	contexts.WithChannelAPIKey(ctx, selectedKey)
 
@@ -300,7 +328,7 @@ func NewPriorityKeyProvider(channel *Channel) *PriorityKeyProvider {
 }
 
 func (p *PriorityKeyProvider) Get(ctx context.Context) string {
-	enabled := selectableKeys(p.channel)
+	enabled := selectableKeys(ctx, p.channel)
 	selectedKey := enabled[0]
 
 	contexts.WithChannelAPIKey(ctx, selectedKey)
@@ -330,13 +358,13 @@ func (p *FixedKeyProvider) Get(ctx context.Context) string {
 	if p.state == nil {
 		// Defensive: without shared state there is nothing to remember, so fall
 		// back to the first selectable key.
-		enabled := selectableKeys(p.channel)
+		enabled := selectableKeys(ctx, p.channel)
 		contexts.WithChannelAPIKey(ctx, enabled[0])
 
 		return enabled[0]
 	}
 
-	selectedKey := p.state.selectFixedKey(p.channel)
+	selectedKey := retrySelectableKey(ctx, p.channel, p.state.selectFixedKey(p.channel))
 
 	contexts.WithChannelAPIKey(ctx, selectedKey)
 

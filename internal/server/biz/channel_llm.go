@@ -164,7 +164,7 @@ func buildChannel(c *ent.Channel, httpClient *httpclient.HttpClient) *Channel {
 }
 
 // getAPIKeyProvider returns an APIKeyProvider based on the channel.
-// If multiple enabled API keys are configured, it returns a TraceStickyKeyProvider for consistent hashing.
+// If multiple API keys are configured, it applies the unified selection strategy.
 // Otherwise, it returns a StaticKeyProvider.
 //
 // NOTE: This function panics when there is no enabled API key. This is intended as an assertion:
@@ -187,18 +187,21 @@ func getAPIKeyProvider(ch *Channel) auth.APIKeyProvider {
 		panic(fmt.Errorf("no enabled api key configured for channel %s", ch.Name))
 	}
 
+	// Keep the configured policy active whenever the channel holds more than one
+	// key, even if only one is selectable right now. Falling back to a static
+	// provider drops the fixed cursor and the success counter, so traffic snaps
+	// back to a re-enabled key and round_robin_success loses the successes
+	// reported while the channel was down to one key.
+	if len(enabled) > 1 || len(ch.Credentials.GetAllAPIKeys()) > 1 {
+		return NewChannelAPIKeyContextProvider(newMultiKeyProvider(ch))
+	}
+
 	if len(enabled) == 1 {
 		return NewRecordingAPIKeyProvider(auth.NewStaticKeyProvider(enabled[0]))
 	}
 
-	switch ch.APIKeySelectionStrategy() {
-	case APIKeySelectionStrategyWeightedSticky:
-		return NewWeightedTraceStickyKeyProvider(ch)
-	case APIKeySelectionStrategyFailover:
-		return NewFailoverAPIKeyProvider(ch)
-	default:
-		return NewTraceStickyKeyProvider(ch)
-	}
+	panicNoEnabledAPIKey(ch)
+	return nil
 }
 
 // BuildOutboundByAPIFormat returns the outbound transformer for a resolved endpoint API format.

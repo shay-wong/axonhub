@@ -1,6 +1,7 @@
 package biz
 
 import (
+	"context"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -143,8 +144,8 @@ func (svc *ChannelService) forgetAPIKeySelectionState(channelID int) {
 
 // nextRoundRobinKey advances the shared round-robin counter and returns the key
 // for this request. Every request counts, whatever its outcome.
-func (st *apiKeySelectionState) nextRoundRobinKey(ch *Channel, per int) string {
-	enabled := selectableKeys(ch)
+func (st *apiKeySelectionState) nextRoundRobinKey(ctx context.Context, ch *Channel, per int) string {
+	enabled := selectableKeys(ctx, ch)
 	if len(enabled) == 0 {
 		return ""
 	}
@@ -167,11 +168,8 @@ func (st *apiKeySelectionState) nextRoundRobinKey(ch *Channel, per int) string {
 // provider it used to live in, so a remembered key is only reused while it is
 // still in the enabled set: once it is disabled or removed, the trace moves to a
 // key that can actually serve.
-func (st *apiKeySelectionState) stickyKeyFor(ch *Channel, traceID string) string {
-	enabled := ch.cachedEnabledAPIKeys
-	if len(enabled) == 0 {
-		return ch.Credentials.APIKeys[0]
-	}
+func (st *apiKeySelectionState) stickyKeyFor(ctx context.Context, ch *Channel, traceID string) string {
+	enabled := selectableKeys(ctx, ch)
 
 	if len(enabled) == 1 {
 		return enabled[0]
@@ -227,7 +225,7 @@ func (st *apiKeySelectionState) selectFixedKey(ch *Channel) string {
 		return ""
 	}
 
-	disabled := ch.cachedDisabledKeySet
+	disabled := unselectableAPIKeys(ch)
 
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -268,7 +266,7 @@ func (st *apiKeySelectionState) selectRoundRobinSuccessKey(ch *Channel) string {
 		return ""
 	}
 
-	disabled := ch.cachedDisabledKeySet
+	disabled := unselectableAPIKeys(ch)
 
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -344,7 +342,7 @@ func (svc *ChannelService) onAPIKeySuccess(channelID int, apiKey string) {
 	// Move past the key that just finished its turn, not back onto it.
 	selectedKey, idx := firstSelectableFrom(
 		all,
-		ch.cachedDisabledKeySet,
+		unselectableAPIKeys(ch),
 		positionOf(all, state.rrSuccessCursor, state.rrSuccessIdx)+1,
 	)
 

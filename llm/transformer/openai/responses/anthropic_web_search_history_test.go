@@ -83,13 +83,23 @@ func TestAnthropicWebSearchTerminalSnapshots(t *testing.T) {
 			wire, err := streams.All(converted)
 			require.NoError(t, err)
 			results := 0
+			errors := 0
 			for _, event := range wire {
+				if gjson.GetBytes(event.Data, "type").String() == "error" {
+					errors++
+					require.Equal(t, 1, results, "final search sources must precede the error")
+				}
 				if gjson.GetBytes(event.Data, "content_block.type").String() == "web_search_tool_result" {
 					results++
 					require.Equal(t, "https://debian.org", gjson.GetBytes(event.Data, "content_block.content.0.url").String())
 				}
 			}
 			require.Equal(t, 1, results)
+			if status == "failed" || status == "cancelled" {
+				require.Equal(t, 1, errors, "preserving search sources must not hide the terminal failure")
+			} else {
+				require.Zero(t, errors)
+			}
 		})
 	}
 }

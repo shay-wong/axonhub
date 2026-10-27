@@ -6,7 +6,7 @@ AxonHub provides an intelligent adaptive load balancing system that automaticall
 
 Channel tests and probes are diagnostic traffic: they do not change production selection counts, health statistics, or automatic disable state, including single-channel selection and retries. Production retries, including API key rotation within one channel, count as additional selection attempts.
 
-When retrying a production request, AxonHub refreshes persisted channel credentials to avoid a key disabled during the request. A shrinking key list does not reduce the current candidate's total retry budget and skip untried keys; the budget is recalculated for the next candidate. A single-key diagnostic keeps testing the selected key, even if disabled, and never reports another key's success as that key's result.
+When retrying a production request, AxonHub refreshes persisted channel credentials to avoid a key disabled during the request. Channel or global retry counts apply by default; only enabling [Retry per API key](channel-management.md#retry-per-api-key) increases the budget. With that option enabled, a shrinking key list does not reduce the current candidate's allocated budget; the budget is recalculated for the next candidate. A single-key diagnostic keeps testing the selected key, even if disabled, and never reports another key's success as that key's result.
 
 ### Intelligent Channel Selection
 - **Priority Grouping** - Candidates are first grouped by model association priority (Lower value = Higher priority)
@@ -155,6 +155,9 @@ tail -f axonhub.log | jq 'select(.msg | contains("Load balancing"))'
 ## 📈 Monitoring and Troubleshooting
 
 ### Key Metrics
+
+Daily model performance is attributed to the model actually called on the channel, rather than the client's alias. Model and channel performance aggregates remain available after the primary request record is cleaned up, while their execution and usage records are retained.
+
 - **Channel switching frequency** - Should be relatively low under normal conditions
 - **Error rate distribution** - High error rate on a channel may indicate configuration issues
 - **Response time** - Load balancing should optimize overall response time

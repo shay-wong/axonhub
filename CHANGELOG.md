@@ -2,6 +2,7 @@
 
 ### Added
 
+- Unified channel key selection into one eight-strategy selector, retaining weighted sticky and weighted failover settings. Added opt-in per-key retry coverage and a warning when the configured count may miss keys; existing channels now obey configured retry counts unless this option is enabled.
 - Added checksum-verified in-app updates, recent version history, and rollback with process-supervisor restart support for supported release and Docker deployments.
 - Added per-channel API key rules with status/keyword matching, configurable error thresholds, temporary auto-recovery, and permanent disable/delete actions.
 - NeuralWatt channels now show the elapsed monthly energy window marker on the kWh bar and an estimated period quota, matching the other windowed providers.

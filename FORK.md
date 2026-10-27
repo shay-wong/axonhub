@@ -50,12 +50,13 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含已发布 tag `v1.0.0-beta11`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.6`；upstream 发布基线为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.7`，发布前仍须重新确认该 tag 未被占用。
+- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.6`；upstream 发布基线为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.7`，发布前仍须重新确认该 tag 未被占用。2026-10-27 已核对远端 tags/releases；本次不修改版本文件、不发布。
 
 ## 长期保留
 
 ### F01 Fork 发布、更新和外部资产归属
 
+- 2026-10-27 独立整合：采用 upstream `docker-build.yml` 复用与分架构缓存，同时保留自定义 Docker Hub、fork 更新仓库/通道、beta checkout、manifest_only 幂等；PR 目标为 beta 且不传凭据或推送镜像。当前变更定位：`git log -S'dockerhub_image:' -- .github/workflows/docker-build.yml`；回归 `frontend/src/config/external-urls.test.mjs`。
 - 生命周期：`长期保留`
 - 原始意图：fork 的 release、Docker/Helm 制品、更新检查、问题链接和 fork 自有模型目录增量必须属于当前 fork，不能静默回落到 `looplj/axonhub` 的版本、镜像或额外模型数据。
 - 必须保持：`beta`/`stable` fork 发布通道独立；多架构 manifest 和 Helm 默认镜像属于 fork；版本比较识别 fork 后缀和 upstream prerelease；定时 unstable Docker 镜像从 fork 的 `beta` 分支构建、发布到 fork 配置的 Docker Hub 镜像，并内嵌 fork 仓库和 `beta` 更新通道；fork tag、二进制 Release 和多架构 Docker 发布全部成功后，通过仓库 Secrets `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` 发送一次非阻塞中文 Telegram 通知；通知使用 HTML、emoji 和发布 hashtag，展示版本、分支、提交、GHCR 与 Docker Hub 的 Bash 拉取命令及相关链接，并关闭链接预览；仓库、release 和 issues URL 可由构建环境覆盖且默认指向 `shay-wong/axonhub`；fork 自有模型增量由后端内嵌 `catalogdata/models.json` 承载，不再依赖浏览器直连仓库目录；定时模型目录同步从 fork 的 `beta` 分支运行，并将更新 PR 提交到 `beta`，不能依赖 fork 中不存在的 `unstable` 分支。
@@ -68,6 +69,8 @@ git show --remerge-diff <merge-commit>
 
 ### F02 API Key 稳定身份、别名、权重和路由
 
+- 2026-10-27 已确认统一策略：一个 `apiKeyStrategy` 选择器，支持 upstream 六种策略及 fork `weighted_sticky` / `failover`。新字段为空时兼容旧 `apiKeySelectionStrategy`，`trace_sticky` 映射共享 `sticky`；编辑保存新字段并清空旧字段。所有 provider 读取同一标准化可用 Key 集、遵守请求内失败排除，不回退已禁用 Key；fixed / 成功轮询的临时替补不移动全局游标。共享状态仅跨进程内渠道缓存重载，不跨服务重启。
+- 2026-10-27 重试决策替代旧自动预算下限：新增 `retryPerAPIKey`，nil/false（包括旧渠道）遵守渠道显式 `maxSingleChannelRetries` 或全局次数；true 时有效预算取配置次数与可用 Key 数减一的较大值。全局禁用始终优先，失败 Key 排除与预算开关分开，Key 耗尽不循环。UI 仅在可确定配置且 `重试次数 + 1 < 可用 Key 数` 时警告，未知全局设置不猜测。升级需显式开启才能恢复旧自动扩展预算。代码：`internal/server/biz/channel_apikey_strategies.go`、`internal/server/biz/channel_apikey_state.go`、`internal/server/biz/channel_settings.go`、`internal/server/orchestrator/outbound.go`、`llm/pipeline/pipeline.go`；真实 pipeline 回归 `internal/server/orchestrator/retry_per_apikey_test.go`。用户文档：`docs/en/guides/channel-management.md`、`docs/zh/guides/channel-management.md`、两语言 load-balance 指南/索引/README 与 `CHANGELOG.md` 同步。当前独立功能提交定位：`git log -S'RetryPerAPIKey' -- internal/objects/channel.go`。
 - Vertex 凭据整合：采用 `ae491d69` 的项目/区域绑定与 `de5f9039` 的第三方 Codex 凭据、目录修复。Vertex Key 必须进入同一结构化 Key 身份集合，编辑/删除/保留最后一把 Key 时保留项目、区域、别名和权重；模型发现逐 Key 匹配绑定，跳过禁用 Key、失败才继续、首成功停止。回归：`internal/objects/channel_test.go`、`internal/server/biz/channel_apikey_test.go`、`internal/server/biz/model_fetcher_test.go`、`frontend/src/features/channels/components/channels-action-dialog-model-discovery.test.mjs`。用户文档：`docs/en/guides/channel-management.md`、`docs/zh/guides/channel-management.md`；独立兼容变更定位：`git log -S'TestChannelCredentialsVertexKeysPreserveStructuredIdentity' -- internal/objects/channel_test.go`。
 - 本次上游整合：`6115ae80` 的模型发现 header overrides、`a416de23` 的 Zhipu/ZAI raw URL 与 `/v1` relay 修复保留；仍按可用 Key 顺序尝试并在首次成功后停止，不恢复全量 Key 探测。
 
@@ -138,6 +141,7 @@ git show --remerge-diff <merge-commit>
 
 ### U01 API Key/渠道禁用、恢复和状态操作
 
+- 预算高水位仅在显式 `retryPerAPIKey=true` 时启用；未配置或 false 时不再自动增加次数。此为 2026-10-27 维护者确认的新行为，见 F02；旧高水位回归必须显式开启开关。
 - 本次上游整合：`8262e95a` 在同渠道重试前读取持久化凭据状态，停用渠道不再继续重试；这不等价吸收 fork 的错误分类、计数所有权、多 Key 遍历或诊断隔离。独立兼容修复保留当前候选的 Key 重试预算高水位，刷新后可用 Key 减少不能缩短已分配的总预算，切换候选时重新计算。代码及回归：`internal/server/orchestrator/outbound.go`、`internal/server/orchestrator/retry_channel_refresh_fork_test.go`；当前变更定位：`git log -S'retryBudgetCandidate' -- internal/server/orchestrator/outbound.go`。用户文档：`docs/en/guides/load-balance.md`、`docs/zh/guides/load-balance.md`；验证：`go test ./internal/server/orchestrator -run 'RefreshChannelBeforeRetry|RefreshRetry|RetryBudget'`。
 - 已确认采用上游规则计数语义：同一渠道内按 Key 和规则独立累计，其他规则命中或未匹配失败不清零；该 Key 成功时清零自己的规则计数，其他 Key 成功不影响它。保留 `ChannelAPIKeyRuleKeepsIndependentCounters`、`CustomAndGlobalCountersAreIndependent` 回归。
 - 配置迁移兼容修复独立于 merge：以 `statuses == nil` 区分未配置策略与显式关闭且空列表的策略，防止后者被旧配置重新开启。提交可用 `git log -S'TestNormalizeRetryPolicy_PreservesTemporaryLegacyPolicy' -- internal/server/biz/system_test.go` 定位。
@@ -167,6 +171,7 @@ git show --remerge-diff <merge-commit>
 
 ### U03 Tool Search 和跨协议工具调用语义
 
+- 2026-10-27 独立整合：Anthropic `MessageContentBlock.UnmarshalJSON` 统一使用 `tool_blocks_json.go`，保留 ToolSearch 原始 ServerContent，并接入上游 WebSearch raw results；failed/cancelled 在内容已输出时先补最终搜索来源，再发送原始终态错误。回归及定位：`git log -S'final search sources must precede the error' -- llm/transformer/openai/responses/anthropic_web_search_history_test.go`。
 - 本次上游整合：`5659a526` 将工具结果移至发起调用的 assistant 消息之后，并防止重复输出；与本地 reasoning 合并、custom tool、namespace 和 Tool Search helper 组合保留，不视为整项吸收。
 - 本次上游整合：`f92e69de` 的 Anthropic 并行工具控制与 `d5237439` 的 Chat allowed_tools 转换保留；这些未替代本地 Tool Search 和 deferred tools 往返。
 - 本次上游整合：`411734a7` 引入 namespace 分组、跨协议函数名还原、pipeline metadata 回传和 allowed_tools 保真；保留 fork 的 Tool Search、DeferLoading、并行工具消息聚合与 done-only 参数处理，不能把 namespace 支持当作整条能力已吸收。
@@ -302,6 +307,7 @@ git show --remerge-diff <merge-commit>
 
 ### U14 测试流量与生产渠道健康状态隔离
 
+- 2026-10-27 独立整合：上游 Dashboard 共享聚合继续使用 `productionUsageLogQuery`，九个 request/token/cost widget 不混入诊断；`dashboard_cached_queries.go` 承载上游缓存辅助函数，不能放回 gqlgen 管理的 resolver 文件，否则生成时会被注释删除。代码 `internal/server/gql/dashboard_usage_aggregates.go`、`internal/server/gql/dashboard_cached_queries.go`；定位 `git log -S'productionUsageLogQuery' -- internal/server/gql/dashboard_usage_aggregates.go`；验证 `go test ./internal/server/gql -run 'Dashboard|CachedDashboard'`。
 - 凭据刷新兼容：诊断请求跳过生产凭据刷新，测试已禁用的指定 Key 时，重试不能改测其他健康 Key；上下文、request 和 execution 三种 test source 都有效，execution reset 后仍保留此身份约束。与 U01 的刷新兼容修复同一独立提交，回归在 `retry_channel_refresh_fork_test.go`；定位：`git log -S'diagnosticRetry' -- internal/server/orchestrator/retry_channel_refresh.go`。
 - 本次上游整合：采用 `b8bb3421` 的 System One 渠道/单 Key/批量 Key 测试格式和角色级 prompt protection；沿用 test source 的生产健康隔离，新增协议测试不替代本条隔离约束。
 - 本次独立兼容修复：上游 `5653bf0a` 新增单候选和重试选择计数，必须先检查 test source；多 Key 轮换按真实尝试计数，但诊断重试不进入生产计数。代码、测试与文档在 merge 后独立提交，可用 `git log -S'trackCurrentChannelSelection(ctx context.Context)' -- internal/server/orchestrator/outbound.go` 定位。用户文档：`docs/en/guides/load-balance.md`、`docs/zh/guides/load-balance.md`。
@@ -345,6 +351,7 @@ git show --remerge-diff <merge-commit>
 
 ### U17 Analytics 查询正确性和权限隔离
 
+- 2026-10-27 已确认模型每日性能继续按 execution 的实际模型统计，不采用 upstream 按 request 别名统计的新断言。去重及缓存优化保留，清理主请求后冷缓存查询仍保留模型/渠道性能。回归/当前变更定位：`git log -S'TestModelPerformanceStatsUsesExecutionModelAfterRequestGC' -- internal/server/gql/dashboard_performance_test.go`。
 - 本次独立整合修复：`ba84cab8` 的 tok/s、TTFT 查询复用本地 production/dateRange/scope 约束，并保持无归属及已删除 Key/用户的统计归属一致，不能让新增性能列静默丢行。回归：`TestAnalyticsDimensionStats` 所属 `analytics_performance_test.go`；定位：`git log -S'Missing key/user attribution remains a visible row' -- internal/server/gql/analytics_performance_test.go`。
 - 本次上游整合：`dfb17549` 的项目就绪保护保留；Analytics 用户/API Key 筛选仍按本地 system scope 与联合权限条件启用，不能改回仅检查 `read_users`。
 - 生命周期：`等待上游吸收`

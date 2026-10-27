@@ -1,6 +1,8 @@
 # Publish Docker image
 # Copy from new-api 
 # https://github.com/QuantumNous/new-api/blob/main/.github/workflows/docker-image-arm64.yml
+# The native-architecture build matrix is delegated to the shared reusable
+# workflow docker-build.yml (mode: release).
 
 name: Publish Docker image
 
@@ -37,142 +39,16 @@ on:
 
 jobs:
   build_single_arch:
-    name: Build & push (${{ matrix.arch }}) [native]
+    name: Build & push (release)
     if: ${{ inputs.manifest_only != true }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            platform: linux/amd64
-            runner: ubuntu-latest
-          - arch: arm64
-            platform: linux/arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
-
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      mode: release
+      ref: ${{ inputs.tag || github.ref }}
+      tag: ${{ inputs.tag || github.ref_name }}
     permissions:
-      packages: write
       contents: read
-
-    steps:
-      - name: Check out (shallow)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 1
-          ref: ${{ inputs.tag || github.ref }}
-          persist-credentials: false
-
-      - name: Resolve tag & write VERSION
-        id: version
-        env:
-          RELEASE_TAG: ${{ inputs.tag || '' }}
-        run: |
-          set -euo pipefail
-
-          if [ -n "$RELEASE_TAG" ]; then
-            TAG="${RELEASE_TAG#refs/tags/}"
-          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-          else
-            echo "A tag is required for Docker publishing." >&2
-            exit 1
-          fi
-
-          CHANNEL="stable"
-          if [[ "$TAG" == *beta* || "$TAG" == *rc* ]]; then
-            CHANNEL="beta"
-          fi
-          FLOATING_TAG="latest"
-          if [[ "$CHANNEL" == "beta" ]]; then
-            FLOATING_TAG="beta"
-          fi
-
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
-          echo "CHANNEL=$CHANNEL" >> "$GITHUB_ENV"
-          echo "FLOATING_TAG=$FLOATING_TAG" >> "$GITHUB_ENV"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
-          echo "floating_tag=$FLOATING_TAG" >> "$GITHUB_OUTPUT"
-          echo "$TAG" > internal/build/VERSION
-          echo "Building tag: $TAG for ${{ matrix.arch }}"
-
-      - name: Resolve Docker Hub image
-        id: dockerhub
-        env:
-          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || vars.DOCKERHUB_NAME || vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_IMAGE || secrets.DOCKERHUB_NAME || secrets.DOCKERHUB_NAMESPACE }}
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          DEFAULT_DOCKERHUB_NAMESPACE: ${{ github.repository_owner }}
-        run: |
-          set -euo pipefail
-
-          image="${DOCKERHUB_IMAGE:-}"
-          if [ -z "$image" ]; then
-            image="${DOCKERHUB_USERNAME:-$DEFAULT_DOCKERHUB_NAMESPACE}/axonhub"
-          fi
-
-          image="${image#docker.io/}"
-          image="${image%/}"
-
-          if [ -z "$image" ]; then
-            image="${DEFAULT_DOCKERHUB_NAMESPACE}/axonhub"
-          fi
-
-          if [[ "$image" == *:* ]] || [[ "$image" =~ [[:space:]] ]]; then
-            echo "DOCKERHUB_IMAGE/DOCKERHUB_NAME must be a Docker Hub namespace or repository path without tag." >&2
-            exit 1
-          fi
-
-          if [[ "$image" != */* ]]; then
-            image="${image}/axonhub"
-          fi
-
-          if [ -z "${DOCKERHUB_USERNAME:-}" ] || [ -z "${DOCKERHUB_TOKEN:-}" ]; then
-            echo "DOCKERHUB_USERNAME and DOCKERHUB_TOKEN are required for Docker Hub publishing." >&2
-            exit 1
-          fi
-
-          image="$(echo "$image" | tr '[:upper:]' '[:lower:]')"
-          echo "image=$image" >> "$GITHUB_OUTPUT"
-          echo "Docker Hub image: $image"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract metadata (labels)
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: |
-            ${{ steps.dockerhub.outputs.image }}
-
-      - name: Build & push single-arch image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          push: true
-          build-args: |
-            AXONHUB_UPDATE_REPOSITORY=${{ vars.UPDATE_REPOSITORY || github.repository }}
-            AXONHUB_UPDATE_CHANNEL=${{ steps.version.outputs.channel }}
-            VITE_GITHUB_REPOSITORY=${{ github.repository }}
-          tags: |
-            ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.tag }}-${{ matrix.arch }}
-            ${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.floating_tag }}-${{ matrix.arch }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha,scope=axonhub-${{ matrix.arch }}
-            type=gha,scope=axonhub-pr-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=axonhub-${{ matrix.arch }}
-          provenance: false
-          sbom: false
+    secrets: inherit
 
   create_manifests:
     name: Create multi-arch manifests (Docker Hub)

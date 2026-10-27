@@ -1,4 +1,4 @@
-# Test full Docker image build on PRs to unstable
+# Test full Docker image build on PRs to beta
 # Delegates the native-architecture build matrix to the shared reusable
 # workflow docker-build.yml (mode: test), which never logs in, tags, or
 # pushes an image.
@@ -8,7 +8,7 @@ name: Docker build (PR)
 on:
   pull_request:
     branches:
-      - unstable
+      - beta
 
 permissions:
   contents: read

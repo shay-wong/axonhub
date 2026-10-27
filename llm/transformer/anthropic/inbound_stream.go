@@ -637,6 +637,13 @@ func (s *anthropicInboundStream) Next() bool {
 		return s.Next() // Try next chunk
 	}
 	if terminalErr := chunk.TerminalError(); terminalErr != nil {
+		// 已开始输出时，先补齐终态携带的搜索结果，再发送失败事件。
+		if s.hasStarted {
+			if err := s.emitResponsesSearchBlocks(chunk.TransformerMetadata, true); err != nil {
+				s.err = fmt.Errorf("failed to finalize search blocks before error: %w", err)
+				return false
+			}
+		}
 		detail := ErrorDetail{
 			Type:      terminalErr.Detail.Type,
 			Message:   terminalErr.Detail.Message,

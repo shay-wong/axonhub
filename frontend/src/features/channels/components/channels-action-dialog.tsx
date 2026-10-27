@@ -27,17 +27,19 @@ import { TagsAutocompleteInput } from '@/components/ui/tags-autocomplete-input';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { AutoComplete } from '@/components/auto-complete';
-import { ApiKeyStrategyFields, type APIKeyStrategyValue } from './channel-api-key-strategy';
+import { ApiKeyStrategyFields } from './channel-api-key-strategy';
 import { SelectDropdown } from '@/components/select-dropdown';
 import {
   usePassThroughSettings,
   useProxyPresets,
   useQuotaRoutingSettings,
+  useRetryPolicy,
   useSaveProxyPreset,
   useUserAgentPassThroughSettings,
 } from '@/features/system/data/system';
 import { antigravityOAuthExchange, antigravityOAuthStart } from '../data/antigravity';
 import { formatAPIKeyIdentity, maskAPIKeySuffix } from '../data/api-key-display';
+import { recallAPIKeyStrategy, type APIKeyStrategyValue } from '../data/api-key-strategy';
 import {
   useCreateChannel,
   useDuplicateChannel,
@@ -110,7 +112,6 @@ const duplicateNameRegex = /^(.*) \((\d+)\)$/;
 
 type ApiFormatOption = ApiFormat;
 type ResponsesTransport = 'http' | 'websocket';
-type APIKeySelectionStrategy = 'trace_sticky' | 'weighted_sticky' | 'failover';
 
 const OPENAI_RESPONSES_WEBSOCKET: ApiFormatOption = 'openai/responses-ws';
 const DEFAULT_API_KEY_WEIGHT = 100;
@@ -241,18 +242,13 @@ function parseRetryableErrorPatternsInput(value: string): RetryableErrorPattern[
   return patterns;
 }
 
-function normalizeAPIKeySelectionStrategy(strategy?: string | null): APIKeySelectionStrategy {
-  switch (strategy) {
-    case 'weighted_sticky':
-    case 'failover':
-      return strategy;
-    default:
-      return 'trace_sticky';
-  }
-}
-
 function normalizeAPIKeyList(keys?: string[] | null): string[] {
   return [...new Set((keys || []).map((key) => key.trim()).filter((key) => key.length > 0))];
+}
+
+function isRetryBudgetInsufficient(retries: number | undefined, availableKeys: number): boolean {
+  // 首次调用不计入重试次数，N 个 Key 只需要 N-1 次重试机会。
+  return retries !== undefined && retries + 1 < availableKeys;
 }
 
 function normalizeAPIKeyWeight(weight?: number | null): number {
@@ -575,6 +571,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const canReadSystemSettings = hasSystemScope('read_settings');
   const { data: userAgentPassThroughSettings } = useUserAgentPassThroughSettings({ enabled: canReadSystemSettings });
   const { data: passThroughSettings } = usePassThroughSettings({ enabled: canReadSystemSettings });
+  const { data: retryPolicyData } = useRetryPolicy({ enabled: open && canReadSystemSettings });
   const [supportedModels, setSupportedModels] = useState<string[]>(() => initialRow?.supportedModels || []);
   const [manualModels, setManualModels] = useState<string[]>(() => initialRow?.manualModels || []);
   const [newModel, setNewModel] = useState('');
@@ -608,9 +605,6 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const [apiKeyConfigs, setApiKeyConfigs] = useState<ChannelAPIKeyConfig[]>(() => getInitialAPIKeyConfigs(initialRow));
   const [apiKeyConfigsDirty, setApiKeyConfigsDirty] = useState(false);
   const [modelFetchAPIKey, setModelFetchAPIKey] = useState(() => getInitialAPIKeys(initialRow)[0] || '');
-  const [apiKeySelectionStrategy, setApiKeySelectionStrategy] = useState<APIKeySelectionStrategy>(() =>
-    normalizeAPIKeySelectionStrategy(initialRow?.settings?.apiKeySelectionStrategy)
-  );
   const [showGcpJsonData, setShowGcpJsonData] = useState(false);
   const [confirmDisableKey, setConfirmDisableKey] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<'official' | 'auth-json' | 'third-party'>('official');
@@ -652,6 +646,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const [maxSingleChannelRetriesText, setMaxSingleChannelRetriesText] = useState(() =>
     formatMaxSingleChannelRetries(initialRow?.settings?.maxSingleChannelRetries)
   );
+  const [retryPerAPIKey, setRetryPerAPIKey] = useState<boolean>(() => initialRow?.settings?.retryPerAPIKey ?? false);
   const userAgentInheritLabel = userAgentPassThroughSettings
     ? t('channels.dialogs.userAgentPassThrough.inheritWithValue', {
         value: t(
@@ -667,7 +662,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       })
     : t('channels.dialogs.bodyPassThrough.inherit');
   const [apiKeyStrategy, setApiKeyStrategy] = useState<APIKeyStrategyValue>(
-    () => initialRow?.settings?.apiKeyStrategy ?? 'sticky'
+    () => recallAPIKeyStrategy(initialRow?.settings)
   );
   const [apiKeyRoundRobinSwitchAfter, setApiKeyRoundRobinSwitchAfter] = useState<number>(
     () => initialRow?.settings?.apiKeyRoundRobinSwitchAfter ?? 1
@@ -1054,13 +1049,18 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     () => normalizeAPIKeyList(apiKeys).filter((key) => !disabledKeySet.has(key)),
     [apiKeys, disabledKeySet]
   );
+  const retryPolicy = canReadSystemSettings ? retryPolicyData?.retryPolicy : undefined;
+  const retryCountInput = parseMaxSingleChannelRetriesInput(maxSingleChannelRetriesText);
+  const retryCount = retryCountInput.valid ? retryCountInput.value ?? retryPolicy?.maxSingleChannelRetries : undefined;
+  const retryBudgetWarning = !retryPerAPIKey && retryPolicy?.enabled &&
+    isRetryBudgetInsufficient(retryCount, availableModelFetchAPIKeys.length);
 
   useEffect(() => {
     if (!open) return;
     const nextConfigs = getInitialAPIKeyConfigs(initialRow);
     setApiKeyConfigs(nextConfigs);
     setModelFetchAPIKey(getInitialAPIKeys(initialRow)[0] || '');
-    setApiKeySelectionStrategy(normalizeAPIKeySelectionStrategy(initialRow?.settings?.apiKeySelectionStrategy));
+    setApiKeyStrategy(recallAPIKeyStrategy(initialRow?.settings));
     setApiKeyConfigsDirty(false);
   }, [open, initialRow]);
 
@@ -1660,7 +1660,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         passThroughUserAgent,
         passThroughBody,
         retryableStatusCodes,
-        ...(showRegularAPIKeyFields ? { apiKeySelectionStrategy } : {}),
+        // 保存统一策略时清除旧字段，后续复制或编辑不再恢复旧选择。
+        apiKeySelectionStrategy: '',
       };
       // The Command Code / Ollama quota cookie is a browser-session credential
       // that only belongs on its own channel type. Never let a
@@ -1726,6 +1727,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
           ...channelSettingsPatch,
           retryableErrorPatterns,
           maxSingleChannelRetries,
+          retryPerAPIKey,
           apiKeyStrategy,
           apiKeyRoundRobinSwitchAfter:
             apiKeyStrategy === 'round_robin' || apiKeyStrategy === 'round_robin_success'
@@ -1800,6 +1802,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
           ...channelSettingsPatch,
           retryableErrorPatterns,
           maxSingleChannelRetries,
+          retryPerAPIKey,
           ...quotaRoutingModeSettingsPatch(quotaRoutingMode),
           apiKeyStrategy,
           apiKeyRoundRobinSwitchAfter:
@@ -2187,10 +2190,6 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     [form]
   );
 
-  const handleAPIKeySelectionStrategyChange = useCallback((strategy: APIKeySelectionStrategy) => {
-    setApiKeySelectionStrategy(strategy);
-  }, []);
-
   // Remove deprecated models (models in supportedModels but not in fetchedModels and not manual)
   const removeDeprecatedModels = useCallback(() => {
     const fetchedModelsSet = new Set(fetchedModels);
@@ -2287,7 +2286,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             setRetryableStatusCodesText(formatRetryableStatusCodes(initialRow?.settings?.retryableStatusCodes));
             setRetryableErrorPatternsText(formatRetryableErrorPatterns(initialRow?.settings?.retryableErrorPatterns));
             setMaxSingleChannelRetriesText(formatMaxSingleChannelRetries(initialRow?.settings?.maxSingleChannelRetries));
-            setApiKeyStrategy(initialRow?.settings?.apiKeyStrategy ?? 'sticky');
+            setRetryPerAPIKey(initialRow?.settings?.retryPerAPIKey ?? false);
+            setApiKeyStrategy(recallAPIKeyStrategy(initialRow?.settings));
             setApiKeyRoundRobinSwitchAfter(initialRow?.settings?.apiKeyRoundRobinSwitchAfter ?? 1);
             // Reset provider and API format state
             if (initialRow) {
@@ -3051,39 +3051,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                         />
                       )}
 
-                      {showRegularAPIKeyFields && (
-                        <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
-                          <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
-                            {t('channels.dialogs.fields.apiKeySelectionStrategy.label')}
-                          </FormLabel>
-                          <div className='space-y-1 md:col-span-6'>
-                            <Select
-                              value={apiKeySelectionStrategy}
-                              onValueChange={(value) => handleAPIKeySelectionStrategyChange(value as APIKeySelectionStrategy)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value='trace_sticky'>
-                                  {t('channels.dialogs.fields.apiKeySelectionStrategy.options.traceSticky')}
-                                </SelectItem>
-                                <SelectItem value='weighted_sticky'>
-                                  {t('channels.dialogs.fields.apiKeySelectionStrategy.options.weightedSticky')}
-                                </SelectItem>
-                                <SelectItem value='failover'>
-                                  {t('channels.dialogs.fields.apiKeySelectionStrategy.options.failover')}
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <p className='text-muted-foreground text-xs'>
-                              {t(`channels.dialogs.fields.apiKeySelectionStrategy.descriptions.${apiKeySelectionStrategy}`)}
-                            </p>
-                          </div>
-                        </FormItem>
-                      )}
-
-<ApiKeyStrategyFields
+                      <ApiKeyStrategyFields
                         value={apiKeyStrategy}
                         switchAfter={apiKeyRoundRobinSwitchAfter}
                         onChange={(value) => setApiKeyStrategy(value)}
@@ -3600,6 +3568,28 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                             placeholder={t('channels.dialogs.maxSingleChannelRetries.placeholder')}
                             className='font-mono text-sm'
                           />
+                        </div>
+                      </FormItem>
+
+                      <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
+                        <div className='flex items-center gap-1.5 pt-2 md:col-span-2 md:justify-start'>
+                          <FormLabel className='font-medium'>{t('channels.dialogs.retryPerAPIKey.label')}</FormLabel>
+                        </div>
+                        <div className='space-y-1 md:col-span-6'>
+                          <label className='flex items-center gap-2 text-sm'>
+                            <Checkbox checked={retryPerAPIKey} onCheckedChange={(checked) => setRetryPerAPIKey(checked === true)} />
+                            <span>{t('channels.dialogs.retryPerAPIKey.checkbox')}</span>
+                          </label>
+                          <p className='text-muted-foreground text-xs'>{t('channels.dialogs.retryPerAPIKey.tooltip')}</p>
+                          {retryPolicy?.enabled === false ? (
+                            <p className='text-xs text-amber-600 dark:text-amber-400'>{t('channels.dialogs.retryPerAPIKey.globalDisabled')}</p>
+                          ) : retryBudgetWarning ? (
+                            <p className='text-xs text-amber-600 dark:text-amber-400'>
+                              {t('channels.dialogs.retryPerAPIKey.insufficient', { retries: retryCount, keys: availableModelFetchAPIKeys.length })}
+                            </p>
+                          ) : !retryPolicy ? (
+                            <p className='text-muted-foreground text-xs'>{t('channels.dialogs.retryPerAPIKey.globalUnknown')}</p>
+                          ) : null}
                         </div>
                       </FormItem>
 

@@ -56,3 +56,12 @@ test('every channel settings selection includes the image main model for edit an
     []
   );
 });
+
+test('channel settings round trips both key policies and per-channel retry limits', () => {
+  for (const field of ['apiKeySelectionStrategy', 'apiKeyStrategy', 'apiKeyRoundRobinSwitchAfter', 'maxSingleChannelRetries', 'retryPerAPIKey']) {
+    const missing = extractSettingsBlocks()
+      .filter(({ body }) => /\bretryableStatusCodes\b/.test(body))
+      .filter(({ body }) => !new RegExp(`\\b${field}\\b`).test(body));
+    assert.deepEqual(missing.map(({ name }) => name), [], `settings selections missing ${field}`);
+  }
+});

@@ -3,7 +3,7 @@
 # (mode: unstable), and docker-pr.yml (mode: test).
 # Owns the native-architecture matrix, checkout, VERSION materialization,
 # Docker Buildx setup, optional Docker Hub login/metadata, mode-specific tags,
-# and the single build-push step. Callers pass credentials explicitly and
+# and the single build-push step. Publishing callers inherit credentials and
 # keep their own manifest jobs.
 
 name: Docker build (shared)
@@ -26,6 +26,10 @@ on:
         description: 'Release tag (mode: release)'
         required: false
         type: string
+      dockerhub_image:
+        description: 'Resolved Docker Hub repository (optional override)'
+        required: false
+        type: string
       base_version:
         description: 'Base version (mode: unstable)'
         required: false
@@ -38,6 +42,12 @@ on:
       DOCKERHUB_USERNAME:
         required: false
       DOCKERHUB_TOKEN:
+        required: false
+      DOCKERHUB_IMAGE:
+        required: false
+      DOCKERHUB_NAME:
+        required: false
+      DOCKERHUB_NAMESPACE:
         required: false
 
 jobs:
@@ -66,13 +76,39 @@ jobs:
           persist-credentials: false
 
       - name: Resolve tag & write VERSION
+        id: version
         if: inputs.mode == 'release'
         env:
-          TAG: ${{ inputs.tag }}
-          ARCH: ${{ matrix.arch }}
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
+          set -euo pipefail
+
+          if [ -n "$RELEASE_TAG" ]; then
+            TAG="${RELEASE_TAG#refs/tags/}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            echo "A tag is required for Docker publishing." >&2
+            exit 1
+          fi
+
+          CHANNEL="stable"
+          if [[ "$TAG" == *beta* || "$TAG" == *rc* ]]; then
+            CHANNEL="beta"
+          fi
+          FLOATING_TAG="latest"
+          if [[ "$CHANNEL" == "beta" ]]; then
+            FLOATING_TAG="beta"
+          fi
+
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "CHANNEL=$CHANNEL" >> "$GITHUB_ENV"
+          echo "FLOATING_TAG=$FLOATING_TAG" >> "$GITHUB_ENV"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "floating_tag=$FLOATING_TAG" >> "$GITHUB_OUTPUT"
           echo "$TAG" > internal/build/VERSION
-          echo "Building tag: $TAG for $ARCH"
+          echo "Building tag: $TAG for ${{ matrix.arch }}"
 
       - name: Write VERSION
         if: inputs.mode == 'unstable'
@@ -81,6 +117,47 @@ jobs:
           BUILD_DATE: ${{ inputs.build_date }}
         run: printf '%s\n' "${BASE_VERSION}-unstable.${BUILD_DATE}" > internal/build/VERSION
 
+      - name: Resolve Docker Hub image
+        id: dockerhub
+        if: inputs.mode != 'test'
+        env:
+          DOCKERHUB_IMAGE: ${{ inputs.dockerhub_image || vars.DOCKERHUB_IMAGE || vars.DOCKERHUB_NAME || vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_IMAGE || secrets.DOCKERHUB_NAME || secrets.DOCKERHUB_NAMESPACE }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DEFAULT_DOCKERHUB_NAMESPACE: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+
+          image="${DOCKERHUB_IMAGE:-}"
+          if [ -z "$image" ]; then
+            image="${DOCKERHUB_USERNAME:-$DEFAULT_DOCKERHUB_NAMESPACE}/axonhub"
+          fi
+
+          image="${image#docker.io/}"
+          image="${image%/}"
+
+          if [ -z "$image" ]; then
+            image="${DEFAULT_DOCKERHUB_NAMESPACE}/axonhub"
+          fi
+
+          if [[ "$image" == *:* ]] || [[ "$image" =~ [[:space:]] ]]; then
+            echo "DOCKERHUB_IMAGE/DOCKERHUB_NAME must be a Docker Hub namespace or repository path without tag." >&2
+            exit 1
+          fi
+
+          if [[ "$image" != */* ]]; then
+            image="${image}/axonhub"
+          fi
+
+          if [ -z "${DOCKERHUB_USERNAME:-}" ] || [ -z "${DOCKERHUB_TOKEN:-}" ]; then
+            echo "DOCKERHUB_USERNAME and DOCKERHUB_TOKEN are required for Docker Hub publishing." >&2
+            exit 1
+          fi
+
+          image="$(echo "$image" | tr '[:upper:]' '[:lower:]')"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "Docker Hub image: $image"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
@@ -88,7 +165,7 @@ jobs:
         if: inputs.mode != 'test'
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract metadata (labels)
@@ -97,27 +174,29 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: |
-            looplj/axonhub
+            ${{ steps.dockerhub.outputs.image }}
 
       - name: Resolve image tags
         id: tags
         if: inputs.mode != 'test'
         env:
           MODE: ${{ inputs.mode }}
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ steps.version.outputs.tag }}
+          FLOATING_TAG: ${{ steps.version.outputs.floating_tag }}
+          IMAGE: ${{ steps.dockerhub.outputs.image }}
           BUILD_DATE: ${{ inputs.build_date }}
           ARCH: ${{ matrix.arch }}
         run: |
           case "$MODE" in
             release)
               printf -v TAGS '%s\n%s' \
-                "looplj/axonhub:${TAG}-${ARCH}" \
-                "looplj/axonhub:latest-${ARCH}"
+                "${IMAGE}:${TAG}-${ARCH}" \
+                "${IMAGE}:${FLOATING_TAG}-${ARCH}"
               ;;
             unstable)
               printf -v TAGS '%s\n%s' \
-                "looplj/axonhub:unstable-${ARCH}" \
-                "looplj/axonhub:unstable-${BUILD_DATE}-${ARCH}"
+                "${IMAGE}:unstable-${ARCH}" \
+                "${IMAGE}:unstable-${BUILD_DATE}-${ARCH}"
               ;;
             *)
               echo "Unknown mode: $MODE" >&2
@@ -137,6 +216,11 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: ${{ inputs.mode != 'test' }}
           pull: ${{ inputs.mode == 'test' }}
+          # 保留 fork 更新来源；每日构建跟随 beta，正式发布按标签区分渠道。
+          build-args: |
+            AXONHUB_UPDATE_REPOSITORY=${{ vars.UPDATE_REPOSITORY || github.repository }}
+            AXONHUB_UPDATE_CHANNEL=${{ steps.version.outputs.channel || 'beta' }}
+            VITE_GITHUB_REPOSITORY=${{ github.repository }}
           tags: ${{ steps.tags.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |

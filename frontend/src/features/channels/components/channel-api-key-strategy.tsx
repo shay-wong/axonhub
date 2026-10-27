@@ -2,8 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { FormLabel } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { SelectDropdown } from '@/components/select-dropdown';
-
-export type APIKeyStrategyValue = 'sticky' | 'random' | 'round_robin' | 'round_robin_success' | 'priority' | 'fixed';
+import type { APIKeyStrategyValue } from '../data/api-key-strategy';
 
 // GraphQL `Int` is a signed 32-bit value, so the switch-after count must stay
 // within this range or the save would be rejected by the server.
@@ -17,9 +16,7 @@ interface ApiKeyStrategyFieldsProps {
 }
 
 /**
- * Multi-key selection policy editor (fork feature). Extracted from
- * channels-action-dialog.tsx so the upstream dialog stays close to its
- * own baseline and only carries a single mount point here.
+ * Shared editor for upstream and fork multi-key policies.
  */
 export function ApiKeyStrategyFields({ value, switchAfter, onChange, onSwitchAfterChange }: ApiKeyStrategyFieldsProps) {
   const { t } = useTranslation();
@@ -43,9 +40,14 @@ export function ApiKeyStrategyFields({ value, switchAfter, onChange, onSwitchAft
             },
             { value: 'priority', label: t('channels.dialogs.fields.apiKeyStrategy.options.priority') },
             { value: 'fixed', label: t('channels.dialogs.fields.apiKeyStrategy.options.fixed') },
+            { value: 'weighted_sticky', label: t('channels.dialogs.fields.apiKeyStrategy.options.weightedSticky') },
+            { value: 'failover', label: t('channels.dialogs.fields.apiKeyStrategy.options.failover') },
           ]}
         />
         <p className='text-muted-foreground text-xs'>{t('channels.dialogs.fields.apiKeyStrategy.tooltip')}</p>
+        <p className='text-muted-foreground text-xs'>
+          {t(`channels.dialogs.fields.apiKeyStrategy.weights.${value === 'weighted_sticky' || value === 'failover' ? value : 'unused'}`)}
+        </p>
         <div className='flex items-center gap-2'>
           <Input
             type='number'

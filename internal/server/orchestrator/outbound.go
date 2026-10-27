@@ -1250,6 +1250,11 @@ func (p *PersistentOutboundTransformer) MaxSameChannelRetries() int {
 	}
 
 	candidate := p.state.CurrentCandidate
+	// 默认尊重渠道/全局次数；只有显式启用按 Key 重试才扩大轮换预算。
+	if candidate.Channel.Settings == nil || candidate.Channel.Settings.RetryPerAPIKey == nil || !*candidate.Channel.Settings.RetryPerAPIKey {
+		return 0
+	}
+
 	if p.retryBudgetCandidate != candidate {
 		p.retryBudgetCandidate = candidate
 		p.retryBudget = 0

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/looplj/axonhub/internal/contexts"
@@ -46,6 +47,7 @@ func TestRefreshChannelBeforeRetry_PreservesKeyRotationBudget(t *testing.T) {
 				keys[i] = fmt.Sprintf("key-%d", i)
 			}
 			entity := createRetryGuardChannel(t, ctx, client, "rotation-budget", objects.ChannelCredentials{APIKeys: keys})
+			client.Channel.UpdateOneID(entity.ID).SetSettings(&objects.ChannelSettings{RetryPerAPIKey: lo.ToPtr(true)}).SaveX(ctx)
 			snapshot := retryGuardSnapshot(t, ctx, svc, entity.ID)
 			outbound := newRetryGuardTransformer(svc, snapshot, "")
 			outbound.state.RetryPolicy = &biz.RetryPolicy{Enabled: true}
@@ -75,6 +77,7 @@ func TestRefreshChannelBeforeRetry_PreservesKeyRotationBudget(t *testing.T) {
 			// A different candidate starts with its own budget, even though the
 			// prior candidate had more keys before its credentials were refreshed.
 			next := createRetryGuardChannel(t, ctx, client, "next-budget", objects.ChannelCredentials{APIKeys: []string{"next-a", "next-b"}})
+			client.Channel.UpdateOneID(next.ID).SetSettings(&objects.ChannelSettings{RetryPerAPIKey: lo.ToPtr(true)}).SaveX(ctx)
 			nextCandidate := &ChannelModelsCandidate{
 				Channel: retryGuardSnapshot(t, ctx, svc, next.ID),
 				Models:  []biz.ChannelModelEntry{{ActualModel: "test-model"}},

@@ -129,6 +129,7 @@ export function mergeChannelSettingsForUpdate(
     retryableErrorPatterns: pick('retryableErrorPatterns', existing?.retryableErrorPatterns ?? []),
     apiKeySelectionStrategy: pick('apiKeySelectionStrategy', existing?.apiKeySelectionStrategy ?? null),
     maxSingleChannelRetries: pick('maxSingleChannelRetries', existing?.maxSingleChannelRetries ?? null),
+    retryPerAPIKey: pick('retryPerAPIKey', existing?.retryPerAPIKey ?? false),
     modelProtocols: pick('modelProtocols', existing?.modelProtocols ?? []),
     apiKeyStrategy: pick('apiKeyStrategy', existing?.apiKeyStrategy ?? null),
     apiKeyRoundRobinSwitchAfter: pick('apiKeyRoundRobinSwitchAfter', existing?.apiKeyRoundRobinSwitchAfter ?? null),

@@ -648,6 +648,7 @@ function parseClaudeQuotaData(quotaData: unknown, limits: ProviderQuotaLimit[]):
 }
 
 export type ProviderQuotaChannel = {
+  providerType?: string;
   id: string;
   name: string;
   // Display-sort rank set via the channels page "Order channels" dialog; the

@@ -214,6 +214,7 @@ type ChannelSettings {
   apiKeySelectionStrategy: String
   codexImageMainModel: String
   maxSingleChannelRetries: Int
+  retryPerAPIKey: Boolean
   modelProtocols: [ModelProtocol!]
   apiKeyStrategy: String
   apiKeyRoundRobinSwitchAfter: Int
@@ -303,6 +304,7 @@ input ChannelSettingsInput {
   apiKeySelectionStrategy: String
   codexImageMainModel: String
   maxSingleChannelRetries: Int
+  retryPerAPIKey: Boolean
   modelProtocols: [ModelProtocolInput!]
   apiKeyStrategy: String
   apiKeyRoundRobinSwitchAfter: Int
@@ -314,6 +316,9 @@ input ChannelSettingsInput {
 # values; nested objects replace the stored value as a whole. Use this
 # instead of updateChannel's settings input when only some settings change.
 input UpdateChannelSettingsInput {
+  apiKeySelectionStrategy: String
+  codexImageMainModel: String
+  retryPerAPIKey: Boolean
   extraModelPrefix: String
   modelMappings: [ModelMappingInput!]
   autoTrimedModelPrefixes: [String!]

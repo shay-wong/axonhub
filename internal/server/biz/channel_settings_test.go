@@ -95,6 +95,31 @@ func TestUpdateChannelSettingsInput_Apply(t *testing.T) {
 		require.True(t, merged.LowercaseModelID)
 	})
 
+	t.Run("fork fields preserve absence and allow explicit replacement", func(t *testing.T) {
+		stored := &objects.ChannelSettings{
+			APIKeySelectionStrategy: APIKeySelectionStrategyWeightedSticky,
+			CodexImageMainModel:     "legacy-image-model",
+		}
+		merged := (&UpdateChannelSettingsInput{HideMappedModels: lo.ToPtr(true)}).Apply(stored)
+		require.Equal(t, stored.APIKeySelectionStrategy, merged.APIKeySelectionStrategy)
+		require.Equal(t, stored.CodexImageMainModel, merged.CodexImageMainModel)
+		merged = (&UpdateChannelSettingsInput{
+			APIKeySelectionStrategy: lo.ToPtr(APIKeySelectionStrategyFailover),
+			CodexImageMainModel:     lo.ToPtr(""),
+		}).Apply(stored)
+		require.Equal(t, APIKeySelectionStrategyFailover, merged.APIKeySelectionStrategy)
+		require.Empty(t, merged.CodexImageMainModel)
+		require.Equal(t, APIKeySelectionStrategyWeightedSticky, stored.APIKeySelectionStrategy)
+	})
+
+	t.Run("retry per API key is opt in and patchable", func(t *testing.T) {
+		stored := &objects.ChannelSettings{RetryPerAPIKey: lo.ToPtr(true)}
+		merged := (&UpdateChannelSettingsInput{HideMappedModels: lo.ToPtr(true)}).Apply(stored)
+		require.True(t, *merged.RetryPerAPIKey)
+		merged = (&UpdateChannelSettingsInput{RetryPerAPIKey: lo.ToPtr(false)}).Apply(stored)
+		require.False(t, *merged.RetryPerAPIKey)
+	})
+
 	t.Run("explicitly empty list clears, absent list keeps", func(t *testing.T) {
 		patch := &UpdateChannelSettingsInput{
 			AutoTrimedModelPrefixes: []string{},

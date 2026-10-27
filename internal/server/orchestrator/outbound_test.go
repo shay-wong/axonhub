@@ -1210,6 +1210,7 @@ func TestPersistentOutboundTransformer_RotatesAPIKeysBeforeSwitchingChannel(t *t
 			Credentials: objects.ChannelCredentials{
 				APIKeys: []string{"key-1", "key-2", "key-3"},
 			},
+			Settings: &objects.ChannelSettings{RetryPerAPIKey: lo.ToPtr(true)},
 		},
 		Outbound: &mockTransformer{},
 	}
@@ -1320,6 +1321,7 @@ func TestPersistentOutboundTransformer_APIKeyRotationRespectsDisabledRetryPolicy
 		Channel: &ent.Channel{
 			ID:          40,
 			Credentials: objects.ChannelCredentials{APIKeys: []string{"key-1", "key-2"}},
+			Settings:    &objects.ChannelSettings{RetryPerAPIKey: lo.ToPtr(true)},
 		},
 		Outbound: &mockTransformer{},
 	}

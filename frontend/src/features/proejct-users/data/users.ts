@@ -14,7 +14,6 @@ import {
   UpdateUserInput,
   userSchema,
   projectUserSchema,
-  userConnectionSchema,
   userOptionConnectionSchema,
 } from './schema';
 

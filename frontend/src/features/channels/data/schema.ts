@@ -376,14 +376,13 @@ export const channelSettingsSchema = z.object({
   // tolerate any value an API client could have stored; the editor still bounds
   // user input. A strict upper bound here can reject a whole channel response.
   maxSingleChannelRetries: z.number().int().min(0).optional().nullable(),
+  retryPerAPIKey: z.boolean().optional().nullable(),
   modelProtocols: z.array(modelProtocolSchema).optional().nullable(),
   providerQuota: channelProviderQuotaSettingsSchema.optional().nullable(),
-  // The backend stores an empty strategy for "unset" and returns it verbatim, and
-  // an API client may store any string. Normalize every unrecognized value to the
-  // default instead of rejecting it, so such a channel still loads and the
-  // inferred type stays the narrow strategy union the editor expects.
+  // 保留空字符串表示未设置，旧渠道才能回读 apiKeySelectionStrategy；
+  // 未知非空策略降级为 sticky，避免整个渠道响应解析失败。
   apiKeyStrategy: z
-    .enum(['sticky', 'random', 'round_robin', 'round_robin_success', 'priority', 'fixed'])
+    .enum(['', 'sticky', 'random', 'round_robin', 'round_robin_success', 'priority', 'fixed', 'weighted_sticky', 'failover'])
     .catch('sticky')
     .nullable()
     .optional(),

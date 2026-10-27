@@ -351,21 +351,21 @@ func (p *pipeline) Process(ctx context.Context, request *httpclient.Request) (*R
 		// 1. Try same-channel retry first if supported
 		if !timeoutRetry {
 			if channelRetryable, ok := p.Outbound.(contextChannelRetryable); ok {
-				if channelRetryable.CanRetryContext(ctx, lastErr) && sameChannelRetries < p.getMaxSameChannelRetries() {
+				if channelRetryable.CanRetryContext(ctx, lastErr) && sameChannelRetries < p.maxSameChannelRetriesFor() {
 					if err := channelRetryable.PrepareForRetry(ctx); err == nil {
 						sameChannelRetries++
 						canRetry = true
 
 						slog.DebugContext(ctx, "retrying same channel",
 							slog.Int("same_channel_attempt", sameChannelRetries),
-							slog.Int("max_same_channel_retries", p.getMaxSameChannelRetries()),
+							slog.Int("max_same_channel_retries", p.maxSameChannelRetriesFor()),
 						)
 					} else {
 						slog.WarnContext(ctx, "failed to prepare same channel retry, will try channel switch", slog.Any("error", err))
 					}
 				}
 			} else if channelRetryable, ok := p.Outbound.(ChannelRetryable); ok {
-				if sameChannelRetries < p.getMaxSameChannelRetries() && channelRetryable.CanRetry(lastErr) {
+				if sameChannelRetries < p.maxSameChannelRetriesFor() && channelRetryable.CanRetry(lastErr) {
 					if err := channelRetryable.PrepareForRetry(ctx); err == nil {
 						sameChannelRetries++
 						canRetry = true
@@ -534,22 +534,26 @@ func (p *pipeline) hasMoreChannels(ctx context.Context) bool {
 	return false
 }
 
-// maxSameChannelRetriesFor returns the effective same-channel retry limit: a
-// channel-level override when retries are enabled and the outbound transformer
-// provides one, otherwise the global retry policy value. The override only
-// adjusts the count; it cannot enable retries that the global policy disabled.
+// maxSameChannelRetriesFor combines the channel/global retry policy with the
+// outbound key-rotation floor. Neither can enable a disabled retry policy.
 func (p *pipeline) maxSameChannelRetriesFor() int {
 	if p.retriesDisabled {
 		return 0
 	}
 
+	limit := p.maxSameChannelRetries
 	if override, ok := p.Outbound.(ChannelSameChannelRetryLimit); ok {
-		if limit, ok := override.SameChannelRetryLimit(); ok {
-			return limit
+		if channelLimit, ok := override.SameChannelRetryLimit(); ok {
+			limit = channelLimit
 		}
 	}
+	// retryPerAPIKey 开启时，outbound 返回按 Key 轮换的额外预算；默认不抬高
+	// 既有全局/渠道重试次数，保持旧配置语义。
+	if outbound, ok := p.Outbound.(sameChannelRetryLimiter); ok {
+		limit = max(limit, outbound.MaxSameChannelRetries())
+	}
 
-	return p.maxSameChannelRetries
+	return limit
 }
 
 func isResponseTimeoutError(err error) bool {
