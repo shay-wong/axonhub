@@ -37,22 +37,22 @@ func TestResolveAnalyticsDateRange(t *testing.T) {
 	}{
 		{
 			name:   "invalid date",
-			filter: &AnalyticsFilter{StartTime: lo.ToPtr("2026-02-30")},
+			filter: &AnalyticsFilter{StartTime: lo.ToPtr(time.Time{})},
 			match:  "invalid analytics startTime",
 		},
 		{
 			name: "reversed range",
 			filter: &AnalyticsFilter{
-				StartTime: lo.ToPtr("2026-07-14"),
-				EndTime:   lo.ToPtr("2026-07-13"),
+				StartTime: lo.ToPtr(time.Date(2026, 7, 14, 0, 0, 0, 0, time.UTC)),
+				EndTime:   lo.ToPtr(time.Date(2026, 7, 13, 0, 0, 0, 0, time.UTC)),
 			},
 			match: "must not be after",
 		},
 		{
 			name: "oversized range",
 			filter: &AnalyticsFilter{
-				StartTime: lo.ToPtr("2010-01-01"),
-				EndTime:   lo.ToPtr("2026-07-13"),
+				StartTime: lo.ToPtr(time.Date(2010, 1, 1, 0, 0, 0, 0, time.UTC)),
+				EndTime:   lo.ToPtr(time.Date(2026, 7, 13, 0, 0, 0, 0, time.UTC)),
 			},
 			match: "must not exceed",
 		},
@@ -84,8 +84,8 @@ func TestAnalyticsTimezoneSegmentsTrackDSTTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	dateRange, err := resolveAnalyticsDateRange(&AnalyticsFilter{
-		StartTime: lo.ToPtr("2026-03-07"),
-		EndTime:   lo.ToPtr("2026-03-09"),
+		StartTime: lo.ToPtr(time.Date(2026, 3, 7, 0, 0, 0, 0, time.UTC)),
+		EndTime:   lo.ToPtr(time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)),
 	}, loc, time.Date(2026, time.March, 9, 12, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
@@ -124,7 +124,7 @@ func TestQueryResolver_AnalyticsUsesProductionUsageAndBoundedRange(t *testing.T)
 	require.Equal(t, 1, defaultOverview.TotalRequests)
 	require.Equal(t, 30, defaultOverview.TotalTokens)
 
-	date := fixture.Now.Format(time.DateOnly)
+	date := fixture.Now
 	filter := &AnalyticsFilter{StartTime: &date, EndTime: &date}
 
 	overview, err := fixture.Resolver.AnalyticsOverview(fixture.Ctx, filter)
@@ -173,8 +173,8 @@ func TestQueryResolver_AnalyticsMetadataUsesDashboardScopeAndProductionUsage(t *
 
 	metadata, err := fixture.Resolver.AnalyticsMetadata(ctx)
 	require.NoError(t, err)
-	require.NotNil(t, metadata.EarliestDate)
-	require.Equal(t, fixture.Now.Format(time.DateOnly), *metadata.EarliestDate)
+	require.NotNil(t, metadata.EarliestTime)
+	require.True(t, metadata.EarliestTime.Equal(fixture.Now))
 }
 
 func TestQueryResolver_AnalyticsIdentityDimensionsRequireTheirScopes(t *testing.T) {
@@ -256,8 +256,8 @@ func TestQueryResolver_AnalyticsModelOptionsUseSelectedDateRange(t *testing.T) {
 		CreatedAt:        fixture.Now.AddDate(0, 0, -45),
 	})
 
-	startTime := fixture.Now.AddDate(0, 0, -60).Format(time.DateOnly)
-	endTime := fixture.Now.Format(time.DateOnly)
+	startTime := fixture.Now.AddDate(0, 0, -60)
+	endTime := fixture.Now
 	search := "historical"
 	options, err := fixture.Resolver.AnalyticsFilterOptions(
 		fixture.Ctx,
@@ -275,7 +275,7 @@ func TestQueryResolver_AnalyticsPreservesDeletedChannelAttribution(t *testing.T)
 	fixture := setupDashboardUsageFixture(t)
 	require.NoError(t, fixture.Client.Channel.DeleteOne(fixture.Channel).Exec(fixture.Ctx))
 
-	date := fixture.Now.Format(time.DateOnly)
+	date := fixture.Now
 	stats, err := fixture.Resolver.AnalyticsDimensionStats(
 		fixture.Ctx,
 		&AnalyticsFilter{StartTime: &date, EndTime: &date},
@@ -290,7 +290,7 @@ func TestQueryResolver_AnalyticsPreservesDeletedChannelAttribution(t *testing.T)
 
 func TestQueryResolver_AnalyticsUserDimensionSupportsProjectFilter(t *testing.T) {
 	fixture := setupDashboardUsageFixture(t)
-	date := fixture.Now.Format(time.DateOnly)
+	date := fixture.Now
 
 	stats, err := fixture.Resolver.AnalyticsDimensionStats(
 		fixture.Ctx,
@@ -360,7 +360,7 @@ func TestQueryResolver_AnalyticsUserFilterIncludesOtherUsersPersonalKeys(t *test
 
 	ctx := contexts.WithUser(t.Context(), adminUser)
 	ctx = authz.NewUserContext(ctx, adminUser.ID)
-	date := fixture.Now.Format(time.DateOnly)
+	date := fixture.Now
 	overview, err := fixture.Resolver.AnalyticsOverview(ctx, &AnalyticsFilter{
 		StartTime: &date,
 		EndTime:   &date,

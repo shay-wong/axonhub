@@ -5,8 +5,8 @@ import { graphqlRequest } from '@/gql/graphql';
 // --- Zod Schemas ---
 
 export const analyticsFilterSchema = z.object({
-  startTime: z.string().nullable().optional(), // 'YYYY-MM-DD' 或 ISO timestamp
-  endTime: z.string().nullable().optional(),
+  startTime: z.string().nullable().optional(), // RFC3339 timestamp (inclusive)
+  endTime: z.string().nullable().optional(), // RFC3339 timestamp (inclusive)
   projectIDs: z.array(z.string()).optional(),
   channelIDs: z.array(z.string()).optional(),
   modelIDs: z.array(z.string()).optional(),
@@ -61,6 +61,11 @@ export const analyticsFilterOptionSchema = z.object({
   label: z.string(),
 });
 
+export const analyticsMetadataSchema = z.object({
+  earliestTime: z.string().nullable().optional(),
+});
+
+export type AnalyticsMetadata = z.infer<typeof analyticsMetadataSchema>;
 export type AnalyticsFilterOption = z.infer<typeof analyticsFilterOptionSchema>;
 export type AnalyticsDimension = 'channel' | 'model' | 'apiKey' | 'user';
 export type AnalyticsFilterDimension = 'project' | AnalyticsDimension;
@@ -88,6 +93,14 @@ export const ANALYTICS_DIMENSION_LIMIT = 100;
 const ANALYTICS_FILTER_OPTION_LIMIT = 100;
 
 // --- GraphQL Queries ---
+
+const ANALYTICS_METADATA_QUERY = `
+  query GetAnalyticsMetadata {
+    analyticsMetadata {
+      earliestTime
+    }
+  }
+`;
 
 const ANALYTICS_OVERVIEW_QUERY = `
   query GetAnalyticsOverview($filter: AnalyticsFilter) {
@@ -136,7 +149,7 @@ const ANALYTICS_DIMENSION_STATS_QUERY = `
 `;
 
 const ANALYTICS_FILTER_OPTIONS_QUERY = `
-  query GetAnalyticsFilterOptions($dimension: AnalyticsFilterDimension!, $search: String, $first: Int!, $startTime: String, $endTime: String) {
+  query GetAnalyticsFilterOptions($dimension: AnalyticsFilterDimension!, $search: String, $first: Int!, $startTime: Time, $endTime: Time) {
     analyticsFilterOptions(dimension: $dimension, search: $search, first: $first, startTime: $startTime, endTime: $endTime) {
       id
       label
@@ -146,7 +159,7 @@ const ANALYTICS_FILTER_OPTIONS_QUERY = `
 
 // --- Helper: convert filter to GraphQL input ---
 
-// 直接发 YYYY-MM-DD 字符串，后端用系统时区解析（同仪表盘模式）
+// 时间范围以 RFC3339 时间戳传递，后端按绝对时刻过滤，精确到毫秒
 export function toGraphQLFilter(filter: AnalyticsFilter | null): Record<string, unknown> | null {
   if (!filter) return null;
 
@@ -164,6 +177,19 @@ export function toGraphQLFilter(filter: AnalyticsFilter | null): Record<string, 
 }
 
 // --- React Query Hooks ---
+
+export function useAnalyticsMetadata() {
+  return useQuery({
+    queryKey: ['analyticsMetadata'],
+    queryFn: async () => {
+      const data = await graphqlRequest<{ analyticsMetadata: AnalyticsMetadata }>(
+        ANALYTICS_METADATA_QUERY
+      );
+      return analyticsMetadataSchema.parse(data.analyticsMetadata);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
 
 export function useAnalyticsOverview(filter: AnalyticsFilter | null) {
   return useQuery({

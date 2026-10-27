@@ -1,9 +1,10 @@
-FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:26-alpine AS frontend-builder
 
 WORKDIR /build
 ARG VITE_GITHUB_REPOSITORY
 ENV VITE_GITHUB_REPOSITORY=${VITE_GITHUB_REPOSITORY}
-RUN corepack enable && corepack prepare pnpm@10 --activate
+RUN npm install --global corepack@0.36.0 \
+    && corepack enable
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile

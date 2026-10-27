@@ -297,6 +297,9 @@ func (r *queryResolver) fastestChannels(ctx context.Context, input FastestChanne
 	// available. ROW_NUMBER avoids the correlated MAX(id) scan that made these
 	// aggregates roughly three times slower on SQLite.
 	queryMode := qb.ThroughputModeRowNumber
+	if dialectName == dialect.Postgres {
+		queryMode = qb.ThroughputModeDistinctOn
+	}
 
 	// Build query using shared helper function
 	// Fetch more items than needed to allow confidence-based filtering
@@ -423,6 +426,9 @@ func (r *queryResolver) fastestModels(ctx context.Context, input FastestChannels
 	// available. ROW_NUMBER avoids the correlated MAX(id) scan that made these
 	// aggregates roughly three times slower on SQLite.
 	queryMode := qb.ThroughputModeRowNumber
+	if dialectName == dialect.Postgres {
+		queryMode = qb.ThroughputModeDistinctOn
+	}
 
 	// Build query with dialect-aware timestamp placeholder
 	// Fetch more items than needed to allow confidence-based filtering

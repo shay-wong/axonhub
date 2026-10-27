@@ -46,13 +46,9 @@ type analyticsTimezoneSegment struct {
 	offsetSeconds int
 }
 
-func parseAnalyticsDate(value string, loc *time.Location) (time.Time, error) {
-	parsed, err := time.ParseInLocation(time.DateOnly, value, loc)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("must use YYYY-MM-DD: %w", err)
-	}
-
-	return parsed, nil
+func startOfDay(value time.Time, loc *time.Location) time.Time {
+	value = value.In(loc)
+	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, loc)
 }
 
 func resolveAnalyticsDateRange(filter *AnalyticsFilter, loc *time.Location, nowUTC time.Time) (analyticsDateRange, error) {
@@ -61,20 +57,18 @@ func resolveAnalyticsDateRange(filter *AnalyticsFilter, loc *time.Location, nowU
 
 	endDay := today
 	if filter != nil && filter.EndTime != nil {
-		parsed, err := parseAnalyticsDate(*filter.EndTime, loc)
-		if err != nil {
-			return analyticsDateRange{}, fmt.Errorf("invalid analytics endTime: %w", err)
+		if filter.EndTime.IsZero() {
+			return analyticsDateRange{}, fmt.Errorf("invalid analytics endTime")
 		}
-		endDay = parsed
+		endDay = startOfDay(*filter.EndTime, loc)
 	}
 
 	startDay := endDay.AddDate(0, 0, -defaultAnalyticsRangeDays+1)
 	if filter != nil && filter.StartTime != nil {
-		parsed, err := parseAnalyticsDate(*filter.StartTime, loc)
-		if err != nil {
-			return analyticsDateRange{}, fmt.Errorf("invalid analytics startTime: %w", err)
+		if filter.StartTime.IsZero() {
+			return analyticsDateRange{}, fmt.Errorf("invalid analytics startTime")
 		}
-		startDay = parsed
+		startDay = startOfDay(*filter.StartTime, loc)
 	}
 
 	if startDay.After(endDay) {

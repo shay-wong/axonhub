@@ -44,6 +44,10 @@ var AllowedDailyQueryConfigs = map[DailyThroughputQueryType]DailyQueryFragmentCo
 	},
 }
 
+func isDistinctOnDialect(dialect string) bool {
+	return dialect == "postgres" || dialect == "postgresql"
+}
+
 // getDateExpression returns the dialect-specific date expression for grouping by day.
 // The dateExpr should include the column reference (e.g., "se.created_at").
 //
@@ -126,6 +130,10 @@ func buildDailyThroughputQuery(dialect string, timezone string, offsetSeconds in
 		return buildDailyMaxIDQuery(dateExpr, config, limit, paramPlaceholder)
 	}
 
+	if mode == ThroughputModeDistinctOn && isDistinctOnDialect(dialect) {
+		return buildDailyDistinctOnQuery(dateExpr, config, limit, paramPlaceholder)
+	}
+
 	return buildDailyRowNumberQuery(dateExpr, config, limit, paramPlaceholder)
 }
 
@@ -184,6 +192,40 @@ func buildDailyRowNumberQuery(dateExpr string, config DailyQueryFragmentConfig, 
 		"    WHERE se.rn = 1\n" +
 		"        AND se.source <> 'test'\n" +
 		"        AND ul.source <> 'test'\n" +
+		"    GROUP BY " + dateExpr + ", " + config.GroupByFields + "\n" +
+		")\n" +
+		"SELECT date, id, " + config.NameAlias + ", tokens_count, request_count, throughput\n" +
+		"FROM daily_stats\n" +
+		"WHERE daily_rn <= " + strconv.Itoa(limit) + "\n" +
+		"ORDER BY date DESC, throughput DESC"
+}
+
+func buildDailyDistinctOnQuery(dateExpr string, config DailyQueryFragmentConfig, limit int, startDatePlaceholder string) string {
+	throughputSQL := throughputCalculationSQL("se")
+	return "WITH successful_execs AS (\n" +
+		"    SELECT DISTINCT ON (request_id)\n" +
+		"        request_id,\n" +
+		"        channel_id,\n" +
+		"        metrics_latency_ms,\n" +
+		"        metrics_first_token_latency_ms,\n" +
+		"        stream,\n" +
+		"        created_at\n" +
+		"    FROM request_executions\n" +
+		"    WHERE status = 'completed' AND metrics_latency_ms > 0 AND created_at >= " + startDatePlaceholder + "\n" +
+		"    ORDER BY request_id, created_at DESC, id DESC\n" +
+		"),\n" +
+		"daily_stats AS (\n" +
+		"    SELECT\n" +
+		"        " + dateExpr + " as date,\n" +
+		"        " + config.IDColumn + " as id,\n" +
+		"        " + config.NameColumn + ",\n" +
+		"        SUM(ul.completion_tokens) as tokens_count,\n" +
+		"        COUNT(DISTINCT se.request_id) as request_count,\n" +
+		"        " + throughputSQL + " as throughput,\n" +
+		"        ROW_NUMBER() OVER (PARTITION BY " + dateExpr + " ORDER BY " + throughputSQL + " DESC) as daily_rn\n" +
+		"    FROM successful_execs se\n" +
+		"    JOIN usage_logs ul ON se.request_id = ul.request_id\n" +
+		"    " + config.JoinClause + "\n" +
 		"    GROUP BY " + dateExpr + ", " + config.GroupByFields + "\n" +
 		")\n" +
 		"SELECT date, id, " + config.NameAlias + ", tokens_count, request_count, throughput\n" +
@@ -254,6 +296,10 @@ func BuildDailyPerformanceStatsQuery(dialect string, timezone string, offsetSeco
 		return buildDailyPerformanceStatsMaxIDQuery(dateExpr, config, queryType, placeholder, throughputSQL)
 	}
 
+	if mode == ThroughputModeDistinctOn && isDistinctOnDialect(dialect) {
+		return buildDailyPerformanceStatsDistinctOnQuery(dateExpr, config, queryType, placeholder, throughputSQL)
+	}
+
 	return buildDailyPerformanceStatsRowNumberQuery(dateExpr, config, queryType, placeholder, throughputSQL)
 }
 
@@ -295,6 +341,49 @@ func buildDailyPerformanceStatsRowNumberQuery(dateExpr string, config DailyQuery
 		"    JOIN usage_logs ul ON se.request_id = ul.request_id\n" +
 		"    WHERE se.rn = 1\n" +
 		"        AND ul.source <> 'test'\n" +
+		"    GROUP BY exec_date, se." + getIDColumnName(queryType) + "\n" +
+		")\n" +
+		"SELECT date, id, tokens_count, latency_ms, ttft_ms, request_count, throughput\n" +
+		"FROM daily\n" +
+		"WHERE daily.throughput IS NOT NULL\n" +
+		"    AND daily.throughput > 0\n" +
+		"ORDER BY date DESC, throughput DESC"
+}
+
+func buildDailyPerformanceStatsDistinctOnQuery(dateExpr string, config DailyQueryFragmentConfig, queryType DailyThroughputQueryType, placeholder string, throughputSQL string) string {
+	return "WITH successful_execs AS (\n" +
+		"    SELECT DISTINCT ON (se.request_id)\n" +
+		"        se.request_id,\n" +
+		"        " + config.IDColumn + ",\n" +
+		"        se.metrics_latency_ms,\n" +
+		"        se.metrics_first_token_latency_ms,\n" +
+		"        se.stream,\n" +
+		"        " + dateExpr + " as exec_date\n" +
+		"    FROM request_executions se\n" +
+		"    WHERE se.status = 'completed'\n" +
+		"        AND se.metrics_latency_ms > 0\n" +
+		"        AND se.created_at >= " + placeholder + "\n" +
+		"    ORDER BY se.request_id, se.created_at DESC, se.id DESC\n" +
+		"),\n" +
+		"daily AS (\n" +
+		"    SELECT\n" +
+		"        exec_date as date,\n" +
+		"        se." + getIDColumnName(queryType) + " as id,\n" +
+		"        SUM(ul.completion_tokens) as tokens_count,\n" +
+		"        SUM(se.metrics_latency_ms) as latency_ms,\n" +
+		"        SUM(CASE\n" +
+		"            WHEN se.metrics_first_token_latency_ms IS NOT NULL AND se.metrics_first_token_latency_ms > 0\n" +
+		"            THEN se.metrics_first_token_latency_ms\n" +
+		"            ELSE 0\n" +
+		"        END) / NULLIF(SUM(CASE\n" +
+		"            WHEN se.metrics_first_token_latency_ms IS NOT NULL AND se.metrics_first_token_latency_ms > 0\n" +
+		"            THEN 1\n" +
+		"            ELSE 0\n" +
+		"        END), 0) as ttft_ms,\n" +
+		"        COUNT(DISTINCT se.request_id) as request_count,\n" +
+		"        " + throughputSQL + " as throughput\n" +
+		"    FROM successful_execs se\n" +
+		"    JOIN usage_logs ul ON se.request_id = ul.request_id\n" +
 		"    GROUP BY exec_date, se." + getIDColumnName(queryType) + "\n" +
 		")\n" +
 		"SELECT date, id, tokens_count, latency_ms, ttft_ms, request_count, throughput\n" +

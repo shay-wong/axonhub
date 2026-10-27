@@ -19,10 +19,10 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`e7fbb8df95eb0b2cb0ce35249bb452ffa5ab4ec6`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`532a80328d360bcddc517a99fdf1ede7586fe432`
-- 本次 merge base：`8d3c3865dc642307cabe0950e241d2c231c08f42`
-- 审计范围：`git diff 532a8032..HEAD`
+- 本次 upstream merge 的 fork parent：`45a6b33db5632d6ec2be903c33a5b8a3f1a0b3a3`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`0896305eeee89435049575d55a813f72901f703b`
+- 本次 merge base：`532a80328d360bcddc517a99fdf1ede7586fe432`
+- 审计范围：`git diff 0896305e..HEAD`
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -50,7 +50,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含已发布 tag `v1.0.0-beta11`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.6`；upstream 发布基线为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.7`，发布前仍须重新确认该 tag 未被占用。2026-10-27 已核对远端 tags/releases；本次不修改版本文件、不发布。
+- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.7`；upstream 发布基线为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.8`，发布前仍须重新确认该 tag 未被占用。2026-10-27 已核对远端 tags；本次不修改版本文件、不发布。
 
 ## 长期保留
 
@@ -233,6 +233,7 @@ git show --remerge-diff <merge-commit>
 
 ### U07 SIGHUP 配置重载和 PID 文件生命周期
 
+- 上游 `19123186` 在 PowerShell 启停脚本验证 PID 对应的进程路径，作为额外保护采用；它没有替代 Unix advisory flock 和 env-only reload。
 - 生命周期：`等待上游吸收`
 - 原始意图：配置重载不能杀死 env-only 部署、误发信号给复用 PID 的进程，或允许两个进程同时声称同一个 PID 文件。
 - 必须保持：env-only 启动也安装 SIGHUP handler；Unix PID file 使用贯穿进程生命周期的 advisory flock；reload 只接受仍被 owner 锁定的 PID file；stale/contended file 安全失败；Windows/AIX 等不支持平台跳过 PID management 并拒绝 reload。

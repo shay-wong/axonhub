@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/http"
 	"regexp"
 	"slices"
 	"strings"
@@ -79,6 +80,21 @@ func isTransportFailure(err error) bool {
 		httpclient.IsTransportError(err) ||
 		IsUpstreamTransportError(err) ||
 		isRetryableTransportError(err)
+}
+
+// channelRetriesOn429 reports whether the channel explicitly opts 429 into
+// same-channel retries by listing it in ChannelSettings.RetryableStatusCodes.
+//
+// 429 normally forces a channel switch: the retry loop reads it as "this channel
+// is being rate-limited", so retrying it would only burn an attempt. A channel
+// that lists 429 is saying the code means "the upstream endpoint is busy"
+// instead, where a same-channel retry can win the race.
+func channelRetriesOn429(ch *biz.Channel) bool {
+	if ch == nil || ch.Channel == nil || ch.Settings == nil {
+		return false
+	}
+
+	return slices.Contains(ch.Settings.RetryableStatusCodes, http.StatusTooManyRequests)
 }
 
 func matchesRetryableErrorPattern(err error, patterns []objects.RetryableErrorPattern) bool {

@@ -8,6 +8,7 @@ package gql
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"github.com/looplj/axonhub/internal/authz"
@@ -25,7 +26,6 @@ func (r *queryResolver) AnalyticsMetadata(ctx context.Context) (*AnalyticsMetada
 	}
 
 	scopeCtx := authz.WithSystemScopeDecision(ctx, scopes.ScopeReadDashboard)
-	loc := r.systemService.TimeLocation(ctx)
 
 	// Find earliest created_at
 	first, err := r.productionUsageLogQuery().Order(ent.Asc(usagelog.FieldCreatedAt)).First(scopeCtx)
@@ -37,8 +37,7 @@ func (r *queryResolver) AnalyticsMetadata(ctx context.Context) (*AnalyticsMetada
 		return nil, err
 	}
 
-	d := first.CreatedAt.In(loc).Format("2006-01-02")
-	return &AnalyticsMetadata{EarliestDate: &d}, nil
+	return &AnalyticsMetadata{EarliestTime: &first.CreatedAt}, nil
 }
 
 // AnalyticsOverview is the resolver for the analyticsOverview field.
@@ -191,7 +190,7 @@ func (r *queryResolver) AnalyticsDailyStats(ctx context.Context, filter *Analyti
 }
 
 // AnalyticsFilterOptions is the resolver for the analyticsFilterOptions field.
-func (r *queryResolver) AnalyticsFilterOptions(ctx context.Context, dimension AnalyticsFilterDimension, search *string, first *int, startTime *string, endTime *string) ([]*AnalyticsFilterOption, error) {
+func (r *queryResolver) AnalyticsFilterOptions(ctx context.Context, dimension AnalyticsFilterDimension, search *string, first *int, startTime *time.Time, endTime *time.Time) ([]*AnalyticsFilterOption, error) {
 	if err := authz.RequireSystemScope(ctx, scopes.ScopeReadDashboard); err != nil {
 		return nil, err
 	}
