@@ -419,41 +419,6 @@ type TextCitation struct {
 	CitedText      *string `json:"cited_text,omitempty"`
 }
 
-func (b *MessageContentBlock) UnmarshalJSON(data []byte) error {
-	// Peek at the type to decide how to unmarshal
-	var peek struct {
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal(data, &peek); err != nil {
-		return err
-	}
-
-	if peek.Type == "tool_search_tool_result" {
-		// For tool_search_tool_result, the "content" field has a non-standard shape.
-		// Unmarshal shared fields manually and store the full block as raw JSON.
-		var raw struct {
-			Type      string          `json:"type"`
-			ToolUseID *string         `json:"tool_use_id,omitempty"`
-			Content   json.RawMessage `json:"content,omitempty"`
-		}
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return err
-		}
-		b.Type = raw.Type
-		b.ToolUseID = raw.ToolUseID
-		b.ServerContent = data
-		return nil
-	}
-
-	// Default unmarshal for all other types
-	var alias messageContentBlockAlias
-	if err := json.Unmarshal(data, &alias); err != nil {
-		return err
-	}
-	*b = MessageContentBlock(alias)
-	return nil
-}
-
 func (b MessageContentBlock) MarshalJSON() ([]byte, error) {
 	// For tool_search_tool_result, emit the stored raw JSON as-is.
 	if b.Type == "tool_search_tool_result" && len(b.ServerContent) > 0 {

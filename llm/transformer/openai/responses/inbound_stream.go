@@ -477,9 +477,9 @@ func (s *responsesInboundStream) mergeTransformerMetadata(metadata map[string]an
 	}
 
 	if calls := getResponseWebSearchCallsFromMetadata(metadata); len(calls) > 0 {
-		existingCalls := getResponseWebSearchCallsFromMetadata(s.transformerMetadata)
-		mergedCalls := append(existingCalls, calls...)
-		s.transformerMetadata[responsesWebSearchCallsTransformerMetadataKey] = mergedCalls
+		for _, call := range calls {
+			appendResponseWebSearchCallMetadata(s.transformerMetadata, call)
+		}
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/scopes"
+	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/samber/lo"
 )
 
@@ -117,6 +118,14 @@ func (r *channelResolver) ProviderQuotaStatus(ctx context.Context, obj *ent.Chan
 			return nil, fmt.Errorf("failed to load provider quota type: %w", err)
 		}
 		pqs.ProviderType = provider.ProviderType
+	}
+
+	if !biz.IsSupportedProviderQuotaType(pqs.ProviderType.String()) {
+		// Rows created before a provider type was retired (e.g. 'wafer')
+		// remain in the database until purge runs. Surface them as "no
+		// status" instead of an unsupported-type error so one orphan row
+		// cannot break the quota view for every channel.
+		return nil, nil
 	}
 
 	enabled, err := authz.RunWithSystemBypass(ctx, "provider-quota-status-visibility", func(bypassCtx context.Context) (bool, error) {

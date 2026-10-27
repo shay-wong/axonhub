@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend-builder
 
 WORKDIR /build
 ARG VITE_GITHUB_REPOSITORY
@@ -16,7 +16,7 @@ RUN pnpm build
 FROM alpine AS frontend-dist
 COPY --from=frontend-builder /build/dist /dist
 
-FROM golang:alpine AS backend-builder
+FROM golang:1.27.3-alpine3.24 AS backend-builder
 
 WORKDIR /build
 ARG AXONHUB_UPDATE_REPOSITORY=shay-wong/axonhub

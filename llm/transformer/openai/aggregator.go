@@ -144,6 +144,7 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 		choicesAggs = make(map[int]*choiceAggregator)
 		// Map to track unique citations
 		citationsMap = make(map[string]struct{})
+		indexer      = newToolCallIndexer()
 	)
 
 	for _, chunk := range chunks {
@@ -175,10 +176,14 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 			}
 		}
 
+		data := chunk.Data
+
 		chunk, err := chunkTransformer(ctx, chunk)
 		if err != nil {
 			continue // Skip invalid chunks
 		}
+
+		indexer.applyToChunk(data, chunk)
 
 		// Process each choice in the chunk
 		for _, choice := range chunk.Choices {

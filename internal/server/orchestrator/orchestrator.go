@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/tidwall/gjson"
+
 	"github.com/looplj/axonhub/internal/authz"
 	"github.com/looplj/axonhub/internal/contexts"
 	entrequest "github.com/looplj/axonhub/internal/ent/request"
@@ -167,7 +169,16 @@ func (processor *ChatCompletionOrchestrator) WithProxy(proxy *httpclient.ProxyCo
 	return &c
 }
 
+// ResponseRoute identifies the committed upstream attempt without retaining
+// mutable persistence state or exposing provider credentials.
+type ResponseRoute struct {
+	ChannelID int
+	Model     string
+	APIFormat string
+}
+
 type ChatCompletionResult struct {
+	Route                         ResponseRoute
 	ChatCompletion                *httpclient.Response
 	ChatCompletionStream          streams.Stream[*httpclient.StreamEvent]
 	CodexResponseHeadersSupported bool
@@ -261,6 +272,10 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 			time.Duration(retryPolicy.StreamFirstEventTimeoutSeconds)*time.Second,
 			time.Duration(retryPolicy.NonStreamResponseTimeoutSeconds)*time.Second,
 		))
+	} else {
+		// Retries are switched off globally: a channel-level override must not
+		// turn same-channel retries back on.
+		pipelineOpts = append(pipelineOpts, pipeline.WithRetriesDisabled())
 	}
 
 	var middlewares []pipeline.Middleware
@@ -342,6 +357,8 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		captureRawProviderResponse(outbound, processor.SystemService),
 		captureRawProviderStream(outbound, processor.SystemService),
 		captureResponsesProvider(outbound),
+		// Run first on raw responses (reverse order), before capture fan-out.
+		closeCompletedAnthropicStream(outbound),
 	)
 
 	pipelineOpts = append(pipelineOpts, pipeline.WithMiddlewares(middlewares...))
@@ -414,6 +431,20 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		return ChatCompletionResult{}, err
 	}
 
+	// Pipeline retries finish before the response is returned. Snapshot the final
+	// route so downstream display estimates cannot share calibration across routes.
+	var route ResponseRoute
+	if channel := outbound.GetCurrentChannel(); channel != nil {
+		route.ChannelID = channel.ID
+	}
+	if state.RawProviderRequest != nil {
+		route.Model = gjson.GetBytes(state.RawProviderRequest.Body, "model").String()
+		route.APIFormat = state.RawProviderRequest.APIFormat
+	}
+	if route.Model == "" && state.RequestExec != nil {
+		route.Model = state.RequestExec.ModelID
+	}
+
 	// Return result based on stream type
 	if result.Stream {
 		if continuation != nil {
@@ -423,6 +454,7 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 			continuation = nil
 		}
 		return ChatCompletionResult{
+			Route:                         route,
 			ChatCompletion:                nil,
 			ChatCompletionStream:          result.EventStream,
 			CodexResponseHeadersSupported: outbound.SupportsCodexResponseHeaders(),
@@ -439,6 +471,7 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 	}
 
 	return ChatCompletionResult{
+		Route:                         route,
 		ChatCompletion:                result.Response,
 		ChatCompletionStream:          nil,
 		CodexResponseHeadersSupported: outbound.SupportsCodexResponseHeaders(),
