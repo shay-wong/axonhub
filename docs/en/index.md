@@ -15,12 +15,12 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 
 | Document | Description |
 |----------|-------------|
-| [Channel Management](guides/channel-management.md) | Unified key strategies, log aliases, optional per-key retries, Vertex key identity, and auto-disable |
+| [Channel Management](guides/channel-management.md) | Unified key strategies, log aliases, 429 key rotation, retry budgets, Vertex key identity, and auto-disable |
 | [Model Management](guides/model-management.md) | Model mapping, associations, and priority configuration |
 | [API Key Profiles](guides/api-key-profiles.md) | Create and manage API key profiles |
 | [Permissions](guides/permissions.md) | Enterprise RBAC access control configuration |
 | [Load Balancing](guides/load-balance.md) | Smart routing, failover, key retry budgets, and fixed-key diagnostic isolation |
-| [Cost Tracking](guides/cost-tracking.md) | Usage analytics, Fast/Ultrafast and long-context prices, delivery-aware accounting, and key identity visibility |
+| [Cost Tracking](guides/cost-tracking.md) | Bounded timestamp analytics, actual-model statistics, Fast/Ultrafast prices, delivery-aware accounting, and key identity visibility |
 | [Request Tracing](guides/tracing.md) | Complete request traceability |
 | [Request Override](guides/request-override.md) | Dynamically modify request parameters |
 | [Security](guides/security.md) | IP access control, IP blocklist, and API key IP restriction |

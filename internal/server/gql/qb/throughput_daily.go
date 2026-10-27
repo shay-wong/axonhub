@@ -206,6 +206,8 @@ func buildDailyDistinctOnQuery(dateExpr string, config DailyQueryFragmentConfig,
 		"    SELECT DISTINCT ON (request_id)\n" +
 		"        request_id,\n" +
 		"        channel_id,\n" +
+		"        model_id,\n" +
+		"        source,\n" +
 		"        metrics_latency_ms,\n" +
 		"        metrics_first_token_latency_ms,\n" +
 		"        stream,\n" +
@@ -226,6 +228,7 @@ func buildDailyDistinctOnQuery(dateExpr string, config DailyQueryFragmentConfig,
 		"    FROM successful_execs se\n" +
 		"    JOIN usage_logs ul ON se.request_id = ul.request_id\n" +
 		"    " + config.JoinClause + "\n" +
+		"    WHERE se.source <> 'test' AND ul.source <> 'test'\n" +
 		"    GROUP BY " + dateExpr + ", " + config.GroupByFields + "\n" +
 		")\n" +
 		"SELECT date, id, " + config.NameAlias + ", tokens_count, request_count, throughput\n" +
@@ -363,6 +366,7 @@ func buildDailyPerformanceStatsDistinctOnQuery(dateExpr string, config DailyQuer
 		"    WHERE se.status = 'completed'\n" +
 		"        AND se.metrics_latency_ms > 0\n" +
 		"        AND se.created_at >= " + placeholder + "\n" +
+		"        AND se.source <> 'test'\n" +
 		"    ORDER BY se.request_id, se.created_at DESC, se.id DESC\n" +
 		"),\n" +
 		"daily AS (\n" +
@@ -384,6 +388,7 @@ func buildDailyPerformanceStatsDistinctOnQuery(dateExpr string, config DailyQuer
 		"        " + throughputSQL + " as throughput\n" +
 		"    FROM successful_execs se\n" +
 		"    JOIN usage_logs ul ON se.request_id = ul.request_id\n" +
+		"    WHERE ul.source <> 'test'\n" +
 		"    GROUP BY exec_date, se." + getIDColumnName(queryType) + "\n" +
 		")\n" +
 		"SELECT date, id, tokens_count, latency_ms, ttft_ms, request_count, throughput\n" +

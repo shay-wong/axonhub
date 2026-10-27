@@ -56,6 +56,14 @@ func TestResolveAnalyticsDateRange(t *testing.T) {
 			},
 			match: "must not exceed",
 		},
+		{
+			name: "reversed times within one day",
+			filter: &AnalyticsFilter{
+				StartTime: lo.ToPtr(now.Add(time.Second)),
+				EndTime:   &now,
+			},
+			match: "must not be after",
+		},
 	}
 
 	for _, tt := range tests {

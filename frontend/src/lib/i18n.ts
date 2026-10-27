@@ -1,4 +1,4 @@
-import i18n from 'i18next';
+import i18n, { type i18n as I18n } from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
 
@@ -38,6 +38,21 @@ const resources = {
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
+  .use({
+    type: '3rdParty',
+    init(instance: I18n) {
+      // 在初始化完成前注册，保留 i18next 26 升级前的货币符号和精度。
+      instance.services.formatter?.add('currency', (value, lng, options) =>
+        new Intl.NumberFormat(options?.locale || lng, {
+          style: 'currency',
+          currency: options?.currency || 'USD',
+          currencyDisplay: 'narrowSymbol',
+          minimumFractionDigits: options?.minimumFractionDigits,
+          maximumFractionDigits: options?.maximumFractionDigits,
+        }).format(value)
+      );
+    },
+  })
   .init({
     resources,
     fallbackLng: 'en',
@@ -46,18 +61,6 @@ i18n
 
     interpolation: {
       escapeValue: false, // React 已经默认转义了
-      format: (value, format, lng, options) => {
-        if (format === 'currency') {
-          return new Intl.NumberFormat(options?.locale || lng, {
-            style: 'currency',
-            currency: options?.currency || 'USD',
-            currencyDisplay: 'narrowSymbol',
-            minimumFractionDigits: options?.minimumFractionDigits,
-            maximumFractionDigits: options?.maximumFractionDigits,
-          }).format(value);
-        }
-        return value;
-      },
     },
 
     detection: {

@@ -314,6 +314,8 @@ Fork safeguards also cover [permission-aware login destinations](docs/en/getting
 
 [Streaming accounting](docs/en/guides/cost-tracking.md) separates delivery from final usage, preserves confirmed costs after trailing disconnects, and protects execution key identity visibility; [multi-key management](docs/en/guides/channel-management.md) retains Vertex project bindings, aliases, and weights, with aliases preferred in request logs.
 
+[Analytics](docs/en/guides/cost-tracking.md#analytics-time-ranges) supports bounded timestamp ranges and actual-model statistics. [Key retries](docs/en/guides/channel-management.md#retry-per-api-key) keep failed keys excluded even when 429 is explicitly configured.
+
 Codex model discovery supports its complete catalog format while preserving OpenAI compatibility; see the [Codex integration guide](docs/en/guides/codex-integration.md#model-catalog-refresh) for refresh conditions and context defaults.
 
 Codex outbound requests honor the channel's User-Agent pass-through switch and preserve original headers for failover while filtering client fingerprints; see [request header rules](docs/en/guides/codex-integration.md#codex-request-headers).

@@ -10,9 +10,7 @@ import (
 	"github.com/looplj/axonhub/internal/server/biz"
 )
 
-// Listing 429 in RetryableStatusCodes is the only way a channel asks for a
-// same-channel retry on a rate limit; every other channel keeps switching
-// channels, which is the default behavior.
+// 显式 429 只控制未进入 Key 轮换的回退分支，不能覆盖请求内失败 Key 排除。
 func TestChannelRetriesOn429(t *testing.T) {
 	t.Run("a channel without settings does not opt in", func(t *testing.T) {
 		require.False(t, channelRetriesOn429(nil))

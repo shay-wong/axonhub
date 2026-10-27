@@ -24,6 +24,7 @@
   "analytics.filter.startDateAfterEndError": "Start date cannot be later than end date. Please select again.",
   "analytics.filter.allTime": "Since First Use",
   "analytics.filter.startAfterEndError": "Start time cannot be later than end time, please pick again",
+  "analytics.filter.yearRangeTooLong": "This year may span more than 366 reporting days. Please select a shorter range manually.",
   "analytics.overview.totalTokens": "Total Tokens",
   "analytics.overview.totalRequests": "Total Requests",
   "analytics.overview.totalCost": "Total Cost",

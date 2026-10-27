@@ -1162,6 +1162,7 @@ func (p *PersistentOutboundTransformer) CanRetryContext(ctx context.Context, err
 		errors.Is(err, pipeline.ErrEmptyAggregatedBody)
 	retryableForChannel := isRetryableErrorForChannel(err, p.state.CurrentCandidate.Channel)
 	if emptyResponse || retryableForChannel || p.matchesAPIKeyAutoDisableStatus(err) {
+		// 即使显式配置 429，也先轮换未失败的 Key；耗尽后换渠道，不重复调用失败 Key。
 		if handled, canRetry := p.canRetryWithNextAPIKey(ctx); handled {
 			return canRetry
 		}
@@ -1177,17 +1178,7 @@ func (p *PersistentOutboundTransformer) CanRetryContext(ctx context.Context, err
 		return true
 	}
 
-	// 429 Too Many Requests: skip same-channel retry and switch channels.
-	// The upstream is explicitly rate-limiting this channel, so retrying the same
-	// channel would just burn a retry attempt without any chance of success.
-	// Instead, force a channel switch so the next candidate (e.g. a backup channel)
-	// is tried immediately. The load balancer (e.g. ErrorAware strategy) will
-	// deprioritize this channel for subsequent requests and it will naturally
-	// recover as the rate-limit window resets.
-	//
-	// A channel that lists 429 in RetryableStatusCodes opts out: for that channel
-	// the code means "the upstream endpoint is busy", where a same-channel retry
-	// can win the race, so the error falls through to the per-channel check below.
+	// 未进入 Key 轮换的渠道才使用显式 429 同渠道重试；不覆盖上面的 Key 排除结果。
 	if (httpclient.IsRateLimitErr(err) || ExtractStatusCodeFromError(err) == http.StatusTooManyRequests) &&
 		!channelRetriesOn429(p.state.CurrentCandidate.Channel) {
 		log.Debug(context.Background(), "429 rate limit, skipping same-channel retry to switch to next channel",

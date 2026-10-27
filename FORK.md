@@ -69,6 +69,7 @@ git show --remerge-diff <merge-commit>
 
 ### F02 API Key 稳定身份、别名、权重和路由
 
+- 2026-10-27 已确认：整合 `c31867e0` 时保留请求内失败 Key 排除；渠道显式配置 `retryableStatusCodes: [429]` 仍只轮换未失败 Key，耗尽后换渠道，不重复失败 Key。仅无法进入 Key 轮换的路径沿用上游显式 429 同渠道重试；次数上限与 `retryPerAPIKey` 不变。回归：`TestExplicit429RetriesNeverReuseFailedKeys`，独立提交定位 `git log -S'TestExplicit429RetriesNeverReuseFailedKeys' -- internal/server/orchestrator/retry_per_apikey_test.go`；中英渠道指南与编辑器提示同步。
 - 请求日志别名展示：列表及执行详情优先使用执行时保存的 `channelAPIKeyName`，空白/缺失时回退 `keyN`，详情保留安全尾号；列表仅向拥有 `write_channels` 的用户请求别名，不读取完整凭据或用当前 Key 顺序反查历史。旧记录缺少别名快照不回填。代码/回归：`frontend/src/features/requests/utils/execution-request-headers.ts` 及同名 `.test.mjs`、`data/requests.ts`、`components/requests-columns.tsx`、`components/request-detail-content.tsx`；当前变更定位：`git log -S'formatExecutionAPIKeyLabel' -- frontend/src/features/requests/utils/execution-request-headers.ts`。用户说明在中英文 channel-management 指南。
 - 2026-10-27 已确认统一策略：一个 `apiKeyStrategy` 选择器，支持 upstream 六种策略及 fork `weighted_sticky` / `failover`。新字段为空时兼容旧 `apiKeySelectionStrategy`，`trace_sticky` 映射共享 `sticky`；编辑保存新字段并清空旧字段。所有 provider 读取同一标准化可用 Key 集、遵守请求内失败排除，不回退已禁用 Key；fixed / 成功轮询的临时替补不移动全局游标。共享状态仅跨进程内渠道缓存重载，不跨服务重启。
 - 2026-10-27 重试决策替代旧自动预算下限：新增 `retryPerAPIKey`，nil/false（包括旧渠道）遵守渠道显式 `maxSingleChannelRetries` 或全局次数；true 时有效预算取配置次数与可用 Key 数减一的较大值。全局禁用始终优先，失败 Key 排除与预算开关分开，Key 耗尽不循环。UI 仅在可确定配置且 `重试次数 + 1 < 可用 Key 数` 时警告，未知全局设置不猜测。升级需显式开启才能恢复旧自动扩展预算。代码：`internal/server/biz/channel_apikey_strategies.go`、`internal/server/biz/channel_apikey_state.go`、`internal/server/biz/channel_settings.go`、`internal/server/orchestrator/outbound.go`、`llm/pipeline/pipeline.go`；真实 pipeline 回归 `internal/server/orchestrator/retry_per_apikey_test.go`。用户文档：`docs/en/guides/channel-management.md`、`docs/zh/guides/channel-management.md`、两语言 load-balance 指南/索引/README 与 `CHANGELOG.md` 同步。当前独立功能提交定位：`git log -S'RetryPerAPIKey' -- internal/objects/channel.go`。
@@ -325,6 +326,7 @@ git show --remerge-diff <merge-commit>
 
 ### U15 前端交互和权限回归修复
 
+- 本次独立整合：`bb4e4aae` 升级 i18next 26 后不再支持旧 `interpolation.format`；初始化前通过 formatter service 注册 currency，保留 USD 默认、窄符号、locale 和小数精度。代码/真实运行回归：`frontend/src/lib/i18n.ts`、`i18n.test.mjs`；定位 `git log -S"instance.services.formatter" -- frontend/src/lib/i18n.ts`。用户说明在中英 cost-tracking 指南。
 - 本次上游整合：`4352a73f` 将渠道名左对齐并放在状态图标前；保留 fork 状态图标的操作权限和 tooltip。`177edbfc` 的批量标签管理与 `46687ed6` 的完成后实时预览保留属于 upstream 能力。
 - 本次上游整合：`be347865` 强制隐藏仅用于筛选的 `model` 虚拟列，避免固定表格布局中空列占宽；这是 upstream 修复，不登记为独立 fork 能力。`216c278d` 保留拉取模型后手动添加模型的入口，同时仍须保留本地按可用 Key 发现模型的行为。
 - 生命周期：`等待上游吸收`
@@ -353,6 +355,8 @@ git show --remerge-diff <merge-commit>
 
 ### U17 Analytics 查询正确性和权限隔离
 
+- 秒级范围的跨时区保护：近 12 个月使用 365 个浏览器本地日，为统计时区的 366 日上限预留余量；闰年最后一天的“本年”提示手动缩短范围，不静默裁剪。回归：`frontend/src/features/analytics/utils/date-range.test.mjs` 的真实快捷按钮回调测试。
+- 本次独立整合：`2851a192` 秒级 Time 输入接入本地权限、366 个本地日上限与 DST 分段；筛选选项查询同步 Time，默认/重置为近 30 个本地日 RFC3339，保留近 12 个月快捷项。`dc68318c` 的 PostgreSQL DISTINCT ON 排行继续过滤 production 并按 execution 实际模型统计；不依赖已清理的主请求。回归：`analytics_time_range_test.go`、`qb/throughput_daily_test.go`、`frontend/src/stores/analyticsStore.test.mjs`。当前功能提交定位 `git log -S'startDate.toISOString()' -- frontend/src/stores/analyticsStore.ts`。用户说明：中英 cost-tracking 指南。旧页面发送日期字符串或旧 metadata 字段会被新 schema 拒绝，升级后须刷新；没有持久化筛选状态迁移。
 - 2026-10-27 已确认模型每日性能继续按 execution 的实际模型统计，不采用 upstream 按 request 别名统计的新断言。去重及缓存优化保留，清理主请求后冷缓存查询仍保留模型/渠道性能。回归/当前变更定位：`git log -S'TestModelPerformanceStatsUsesExecutionModelAfterRequestGC' -- internal/server/gql/dashboard_performance_test.go`。
 - 本次独立整合修复：`ba84cab8` 的 tok/s、TTFT 查询复用本地 production/dateRange/scope 约束，并保持无归属及已删除 Key/用户的统计归属一致，不能让新增性能列静默丢行。回归：`TestAnalyticsDimensionStats` 所属 `analytics_performance_test.go`；定位：`git log -S'Missing key/user attribution remains a visible row' -- internal/server/gql/analytics_performance_test.go`。
 - 本次上游整合：`dfb17549` 的项目就绪保护保留；Analytics 用户/API Key 筛选仍按本地 system scope 与联合权限条件启用，不能改回仅检查 `read_users`。

@@ -13,20 +13,14 @@ interface AnalyticsFilterState {
   resetFilter: () => void;
 }
 
-function formatLocalDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 function createDefaultFilter(): AnalyticsFilter {
   const today = new Date();
   const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29);
+  const endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
 
   return {
-    startTime: formatLocalDate(startDate),
-    endTime: formatLocalDate(today),
+    startTime: startDate.toISOString(),
+    endTime: endDate.toISOString(),
     projectIDs: undefined,
     channelIDs: undefined,
     modelIDs: undefined,

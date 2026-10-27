@@ -139,9 +139,9 @@ func TestBuildDailyModelThroughputQuery(t *testing.T) {
 				"WITH successful_execs AS",
 				"DISTINCT ON (request_id)",
 				"ORDER BY request_id, created_at DESC, id DESC",
-				"JOIN requests r ON",
+				"se.source <> 'test'", "ul.source <> 'test'",
 				"JOIN models m ON",
-				"r.model_id",
+				"se.model_id",
 				"model_name",
 				"to_char",
 				"throughput",
@@ -697,8 +697,8 @@ func TestBuildDailyPerformanceStatsQuery(t *testing.T) {
 				"WITH successful_execs AS",
 				"DISTINCT ON (se.request_id)",
 				"ORDER BY se.request_id, se.created_at DESC, se.id DESC",
-				"JOIN requests r ON se.request_id = r.id",
-				"r.model_id",
+				"se.source <> 'test'", "ul.source <> 'test'",
+				"se.model_id",
 				"to_char",
 				"NULLIF(",
 				", 0)",
@@ -874,7 +874,7 @@ func TestBuildDailyThroughputQuery_DistinctOn(t *testing.T) {
 			"request dedup must use DISTINCT ON (se.request_id)")
 		assert.Contains(t, got, "ORDER BY se.request_id, se.created_at DESC, se.id DESC",
 			"DISTINCT ON must select the latest execution with the deterministic tie break")
-		assert.Contains(t, got, "JOIN requests r ON se.request_id = r.id", "model queries must keep the requests join")
+		assert.NotContains(t, got, "JOIN requests", "model queries use execution snapshots after request cleanup")
 		assert.Contains(t, got, "NULLIF(", "TTFT denominator must be retained")
 		assert.Contains(t, got, "GROUP BY exec_date, se.model_id", "day-level grouping must be retained")
 		assert.Contains(t, got, "WHERE daily.throughput IS NOT NULL", "positive-throughput post filter must be retained")

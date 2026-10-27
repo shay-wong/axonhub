@@ -318,6 +318,8 @@ Fork 还保留[按权限选择登录落点](docs/zh/getting-started/quick-start.
 
 [流式计费](docs/zh/guides/cost-tracking.md)区分交付状态与最终用量，在尾部断连后保留已确认费用，并保护执行记录中 Key 身份的可见性；[多 Key 管理](docs/zh/guides/channel-management.md)保留 Vertex 项目绑定、别名和权重，请求日志优先显示别名。
 
+[分析页](docs/zh/guides/cost-tracking.md#分析时间范围)支持有界精确时间范围与实际模型统计；[Key 重试](docs/zh/guides/channel-management.md#按-key-重试)即使显式配置 429，也不会重复失败的 Key。
+
 Codex 模型发现支持完整目录格式，同时保留普通 OpenAI 接口兼容性；刷新条件与上下文默认值见 [Codex 集成指南](docs/zh/guides/codex-integration.md#模型目录刷新)。
 
 Codex 出站请求按渠道开关透传 User-Agent，过滤客户端指纹时保留换渠道所需的原始请求头；见[请求头规则](docs/zh/guides/codex-integration.md#codex-请求头)。

@@ -142,3 +142,64 @@ test('an unchanged bound survives a fall-back DST hour', { skip: process.env.TZ 
 
   assert.equal(confirmed.startTime, later);
 });
+
+test('the twelve-month preset stays within 366 UTC reporting days from a Shanghai browser', (t) => {
+  const previousTimezone = process.env.TZ;
+  process.env.TZ = 'Asia/Shanghai';
+  t.after(() => {
+    if (previousTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTimezone;
+  });
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-27T18:00:00+08:00') });
+
+  const source = read('features/analytics/components/analytics-filter-bar.tsx');
+  const ast = ts.createSourceFile('filter.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let callback;
+  let preset;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(ast) === 'setQuickRange') callback = node.initializer.arguments[0];
+    if (ts.isJsxElement(node) && node.getText(ast).includes("t('analytics.filter.last12Months')") && node.openingElement.tagName.getText(ast) === 'Button') {
+      const onClick = node.openingElement.attributes.properties.find((attribute) => attribute.name?.getText(ast) === 'onClick');
+      preset = Number(onClick.initializer.expression.body.arguments[0].text);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.ok(callback);
+  assert.equal(preset, 365);
+  let selectedRange;
+  const applyRange = (start, end) => { selectedRange = { start, end }; };
+  const runPreset = new Function('startOfLocalDay', 'applyRange', transpile(`const run = ${callback.getText(ast)};`) + 'return run;')(startOfLocalDay, applyRange);
+  runPreset(preset);
+  const utcDay = (date) => Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  assert.equal((utcDay(selectedRange.end) - utcDay(selectedRange.start)) / 86_400_000 + 1, 366);
+});
+
+test('the year preset warns at the leap-year boundary without truncating or submitting the range', (t) => {
+  const source = read('features/analytics/components/analytics-filter-bar.tsx');
+  const ast = ts.createSourceFile('filter.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let callback;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(ast) === 'setQuickYear') callback = node.initializer.arguments[0];
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.ok(callback);
+  const ranges = [];
+  const errors = [];
+  const runPreset = new Function('applyRange', 'toast', 't', transpile(`const run = ${callback.getText(ast)};`) + 'return run;')(
+    (start, end) => ranges.push({ start, end }),
+    { error: (message) => errors.push(message) },
+    (key) => key
+  );
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(2024, 11, 31, 18) });
+  runPreset();
+  assert.deepEqual(errors, ['analytics.filter.yearRangeTooLong']);
+  assert.deepEqual(ranges, []);
+
+  const normalDate = new Date(2024, 11, 30, 18);
+  t.mock.timers.setTime(normalDate.getTime());
+  runPreset();
+  assert.deepEqual(ranges, [{ start: new Date(2024, 0, 1), end: normalDate }]);
+  assert.equal(errors.length, 1);
+});

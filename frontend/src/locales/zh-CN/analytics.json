@@ -24,6 +24,7 @@
   "analytics.filter.startDateAfterEndError": "开始日期不能晚于结束日期，请重新选择",
   "analytics.filter.allTime": "使用以来",
   "analytics.filter.startAfterEndError": "开始时间不能晚于结束时间，请重新选择",
+  "analytics.filter.yearRangeTooLong": "本年范围可能超过 366 个统计日，请手动选择较短范围",
   "analytics.overview.totalTokens": "总消耗 Token",
   "analytics.overview.totalRequests": "总请求数",
   "analytics.overview.totalCost": "总费用",

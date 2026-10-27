@@ -6,7 +6,15 @@ AxonHub provides real-time cost calculation and usage tracking for every request
 
 Cost tracking in AxonHub helps you monitor and control your AI spending across all providers and models. Each request is automatically analyzed and cost is calculated based on configurable pricing.
 
+Displayed costs retain the selected currency and locale, narrow currency symbols, and each view's fractional precision; the default currency is USD. The translation-library upgrade does not change this formatting contract.
+
 ## Features
+
+### Analytics time ranges
+
+Analytics supports second-precision selection with inclusive timestamp bounds and at most 366 local calendar days in the statistics timezone. The default and reset cover the last 30 browser-local days; the 12-month shortcut uses 365 browser-local days to leave room for timezone differences. On the last day of a leap year, the current-year shortcut asks you to choose a shorter range rather than silently truncating data or submitting a potentially oversized range. Daily charts use the configured statistics timezone, including daylight-saving changes. Performance rankings remain based on production executions and their actual models, even after original request records are cleaned up.
+
+`AnalyticsFilter.startTime`/`endTime` and `analyticsFilterOptions` time arguments now use GraphQL `Time` values in RFC3339 format, such as `2026-10-27T08:30:00+08:00`. `analyticsMetadata.earliestTime` replaces `earliestDate`. Refresh open pages after upgrading; API callers must update old date-only strings and `String` variable declarations.
 
 ### Token Type Tracking
 

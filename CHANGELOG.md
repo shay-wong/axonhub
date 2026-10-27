@@ -11,6 +11,9 @@
 
 ### Fixed
 
+- Kept failed keys excluded even when a channel explicitly opts 429 into retry; exhausting keys or the retry budget switches channels.
+- Preserved bounded, permission-aware analytics and actual-model production statistics with precise timestamps and PostgreSQL ranking optimizations; default and reset filters now send RFC3339 values.
+- Preserved currency symbols, locale selection, default USD, and fractional precision after upgrading i18next.
 - Request lists and execution details now prefer the recorded upstream key alias over `keyN`, retaining position fallback for older records and existing channel-write permissions.
 - Preserved Fast/Ultrafast prices, provider errors, and original Responses events with delivery-aware stream accounting; stopped blocked pass-through producers safely on conversion failure.
 - Preserved Vertex key project/region bindings, aliases, and weights across edits, disabled-key deletion, and model-discovery fallback.

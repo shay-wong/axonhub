@@ -228,6 +228,8 @@ WITH successful_execs AS (
     SELECT DISTINCT ON (request_id)
         request_id,
         channel_id,
+        source,
+        model_id,
         metrics_latency_ms,
         metrics_first_token_latency_ms,
         stream
@@ -257,6 +259,7 @@ SELECT
 FROM successful_execs se
 JOIN usage_logs ul ON se.request_id = ul.request_id
 ` + config.JoinClause + `
+WHERE se.source <> 'test' AND ul.source <> 'test'
 GROUP BY ` + config.GroupBy + `
 ORDER BY throughput DESC
 LIMIT ` + fmt.Sprintf("%d", limit)

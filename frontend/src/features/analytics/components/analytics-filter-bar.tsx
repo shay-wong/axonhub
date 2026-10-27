@@ -125,9 +125,16 @@ export function AnalyticsFilterBar() {
 
   const setQuickYear = useCallback(() => {
     const now = new Date();
+    const selectedDays = (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - Date.UTC(now.getFullYear(), 0, 1)) / 86_400_000 + 1;
+
+    // 满 366 个浏览器本地日可能横跨 367 个统计日，不静默截掉年初数据。
+    if (selectedDays >= 366) {
+      toast.error(t('analytics.filter.yearRangeTooLong'));
+      return;
+    }
 
     applyRange(new Date(now.getFullYear(), 0, 1), now);
-  }, [applyRange]);
+  }, [applyRange, t]);
 
   const hasFilters =
     filter.startTime ||
@@ -171,7 +178,8 @@ export function AnalyticsFilterBar() {
           <Button variant='outline' size='sm' className='h-8 text-xs' onClick={setQuickYear}>
             {t('analytics.filter.thisYear')}
           </Button>
-          <Button variant='outline' size='sm' className='h-8 text-xs' onClick={() => setQuickRange(366)}>
+          {/* 浏览器与统计时区可能相差一天，预留一天避免超过服务端 366 日上限。 */}
+          <Button variant='outline' size='sm' className='h-8 text-xs' onClick={() => setQuickRange(365)}>
             {t('analytics.filter.last12Months')}
           </Button>
         </div>

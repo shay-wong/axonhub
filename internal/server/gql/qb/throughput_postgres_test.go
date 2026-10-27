@@ -345,6 +345,8 @@ func newParitySchema(t *testing.T, dsn string) *sql.DB {
 			id BIGINT PRIMARY KEY,
 			request_id INT NOT NULL,
 			channel_id INT NULL,
+			model_id TEXT NOT NULL,
+			source TEXT NOT NULL DEFAULT 'api',
 			status TEXT NOT NULL,
 			metrics_latency_ms BIGINT NULL,
 			metrics_first_token_latency_ms BIGINT,
@@ -355,6 +357,7 @@ func newParitySchema(t *testing.T, dsn string) *sql.DB {
 			id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 			request_id INT NOT NULL,
 			completion_tokens BIGINT NOT NULL,
+			source TEXT NOT NULL DEFAULT 'api',
 			created_at TIMESTAMPTZ NOT NULL
 		)`,
 	}
@@ -394,8 +397,8 @@ func newParitySchema(t *testing.T, dsn string) *sql.DB {
 			ttft = e.ttftMS
 		}
 		_, err = db.ExecContext(ctx,
-			`INSERT INTO request_executions (id, request_id, channel_id, status, metrics_latency_ms, metrics_first_token_latency_ms, stream, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			`INSERT INTO request_executions (id, request_id, channel_id, status, metrics_latency_ms, metrics_first_token_latency_ms, stream, created_at, model_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, (SELECT model_id FROM requests WHERE id = $2))`,
 			e.id, e.requestID, channel, e.status, lat, ttft, e.stream, e.created,
 		)
 		require.NoError(t, err, "insert execution id=%d", e.id)

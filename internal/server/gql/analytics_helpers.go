@@ -39,6 +39,7 @@ type analyticsDateRange struct {
 	endDay          time.Time
 	startUTC        time.Time
 	endExclusiveUTC time.Time
+	endInclusiveUTC *time.Time
 }
 
 type analyticsTimezoneSegment struct {
@@ -52,26 +53,30 @@ func startOfDay(value time.Time, loc *time.Location) time.Time {
 }
 
 func resolveAnalyticsDateRange(filter *AnalyticsFilter, loc *time.Location, nowUTC time.Time) (analyticsDateRange, error) {
-	today := nowUTC.In(loc)
-	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, loc)
-
-	endDay := today
+	endDay := startOfDay(nowUTC, loc)
+	endExclusiveUTC := endDay.AddDate(0, 0, 1).UTC()
+	var endInclusiveUTC *time.Time
 	if filter != nil && filter.EndTime != nil {
 		if filter.EndTime.IsZero() {
 			return analyticsDateRange{}, fmt.Errorf("invalid analytics endTime")
 		}
 		endDay = startOfDay(*filter.EndTime, loc)
+		// 将上游包含结束瞬间的语义转换成内部半开区间，保留亚秒精度。
+		endExclusiveUTC = filter.EndTime.UTC().Add(time.Nanosecond)
+		endInclusiveUTC = lo.ToPtr(filter.EndTime.UTC())
 	}
 
 	startDay := endDay.AddDate(0, 0, -defaultAnalyticsRangeDays+1)
+	startUTC := startDay.UTC()
 	if filter != nil && filter.StartTime != nil {
 		if filter.StartTime.IsZero() {
 			return analyticsDateRange{}, fmt.Errorf("invalid analytics startTime")
 		}
 		startDay = startOfDay(*filter.StartTime, loc)
+		startUTC = filter.StartTime.UTC()
 	}
 
-	if startDay.After(endDay) {
+	if !startUTC.Before(endExclusiveUTC) {
 		return analyticsDateRange{}, fmt.Errorf("analytics startTime must not be after endTime")
 	}
 
@@ -86,8 +91,9 @@ func resolveAnalyticsDateRange(filter *AnalyticsFilter, loc *time.Location, nowU
 	return analyticsDateRange{
 		startDay:        startDay,
 		endDay:          endDay,
-		startUTC:        startDay.UTC(),
-		endExclusiveUTC: endDay.AddDate(0, 0, 1).UTC(),
+		startUTC:        startUTC,
+		endExclusiveUTC: endExclusiveUTC,
+		endInclusiveUTC: endInclusiveUTC,
 	}, nil
 }
 
@@ -202,10 +208,13 @@ func analyticsFixedOffsetDateExpression(dialectName, createdAtCol string, offset
 }
 
 func (r *queryResolver) buildAnalyticsWhere(s *sql.Selector, filter *AnalyticsFilter, dateRange analyticsDateRange) {
-	s.Where(sql.And(
-		sql.GTE(s.C(usagelog.FieldCreatedAt), dateRange.startUTC),
-		sql.LT(s.C(usagelog.FieldCreatedAt), dateRange.endExclusiveUTC),
-	))
+	s.Where(sql.GTE(s.C(usagelog.FieldCreatedAt), dateRange.startUTC))
+	if dateRange.endInclusiveUTC != nil {
+		// 数据库精度可能不足纳秒，显式使用 LTE 保留上游的包含结束点语义。
+		s.Where(sql.LTE(s.C(usagelog.FieldCreatedAt), *dateRange.endInclusiveUTC))
+	} else {
+		s.Where(sql.LT(s.C(usagelog.FieldCreatedAt), dateRange.endExclusiveUTC))
+	}
 
 	if filter == nil {
 		return
@@ -390,10 +399,7 @@ func (r *queryResolver) queryAnalyticsFilterOptions(ctx context.Context, dateFil
 			query.Where(usagelog.ModelIDContainsFold(searchTerm))
 		}
 		err = query.Modify(func(s *sql.Selector) {
-			s.Where(sql.And(
-				sql.GTE(s.C(usagelog.FieldCreatedAt), dateRange.startUTC),
-				sql.LT(s.C(usagelog.FieldCreatedAt), dateRange.endExclusiveUTC),
-			))
+			r.buildAnalyticsWhere(s, dateFilter, dateRange)
 			s.Select(sql.As(s.C(usagelog.FieldModelID), "id")).
 				GroupBy(s.C(usagelog.FieldModelID)).
 				OrderBy(s.C(usagelog.FieldModelID))

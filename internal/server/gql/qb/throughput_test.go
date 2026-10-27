@@ -241,7 +241,7 @@ func TestBuildThroughputQuery(t *testing.T) {
 			queryType:             ThroughputQueryByModel,
 			limit:                 10,
 			mode:                  ThroughputModeDistinctOn,
-			wantContains:          []string{"$1", "DISTINCT ON (request_id)", "WITH successful_execs AS", "JOIN requests r ON", "LEFT JOIN models m ON", "ORDER BY request_id, created_at DESC, id DESC", "LIMIT 10"},
+			wantContains:          []string{"$1", "DISTINCT ON (request_id)", "WITH successful_execs AS", "se.source <> 'test'", "ul.source <> 'test'", "LEFT JOIN models m ON", "ORDER BY request_id, created_at DESC, id DESC", "LIMIT 10"},
 			wantNotContains:       []string{"ROW_NUMBER()", "MAX(re2.id)"},
 		},
 		{
@@ -690,7 +690,7 @@ func TestBuildThroughputQuery_DistinctOn(t *testing.T) {
 				"WHERE status = 'completed' AND metrics_latency_ms > 0 AND created_at >= $1",
 				"ORDER BY request_id, created_at DESC, id DESC",
 				"FROM successful_execs se",
-				"GROUP BY r.model_id, m.name",
+				"GROUP BY se.model_id, m.name",
 			},
 			wantNotContains: []string{
 				"ROW_NUMBER()",
