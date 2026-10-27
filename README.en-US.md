@@ -312,7 +312,7 @@ Fork release builds can install updates or roll back to a recent compatible rele
 
 Fork safeguards also cover [permission-aware login destinations](docs/en/getting-started/quick-start.md#first-steps), [unified key strategies and optional per-key retries](docs/en/guides/channel-management.md#key-selection-strategies), and [fixed-key diagnostic isolation and retry counting](docs/en/guides/load-balance.md).
 
-[Streaming accounting](docs/en/guides/cost-tracking.md) separates delivery from final usage, preserves confirmed costs after trailing disconnects, and protects execution key identity visibility; [Vertex multi-key credentials](docs/en/guides/channel-management.md) retain project bindings, aliases, and weights.
+[Streaming accounting](docs/en/guides/cost-tracking.md) separates delivery from final usage, preserves confirmed costs after trailing disconnects, and protects execution key identity visibility; [multi-key management](docs/en/guides/channel-management.md) retains Vertex project bindings, aliases, and weights, with aliases preferred in request logs.
 
 Codex model discovery supports its complete catalog format while preserving OpenAI compatibility; see the [Codex integration guide](docs/en/guides/codex-integration.md#model-catalog-refresh) for refresh conditions and context defaults.
 

@@ -1,3 +1,7 @@
+export function formatExecutionAPIKeyLabel(name?: string | null, index?: number | null): string {
+  return name?.trim() || (index != null ? `key${index}` : '');
+}
+
 export function formatExecutionAPIKeyIdentity(name?: string | null, suffix?: string | null): string {
   const normalizedName = name?.trim();
   const normalizedSuffix = suffix?.trim();

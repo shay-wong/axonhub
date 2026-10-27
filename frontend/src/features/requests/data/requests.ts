@@ -14,7 +14,7 @@ import {
 } from './schema';
 
 // Dynamic GraphQL query builder
-function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChannels: boolean; canViewCallerUser: boolean }) {
+function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChannels: boolean; canViewCallerUser: boolean; canWriteChannels: boolean }) {
   const apiKeyFields = permissions.canViewApiKeys
     ? `
           apiKey {
@@ -41,7 +41,7 @@ function buildRequestsQuery(permissions: { canViewApiKeys: boolean; canViewChann
                     id
                     name
                   }
-                  channelAPIKeyIndex`
+                  channelAPIKeyIndex${permissions.canWriteChannels ? '\n                  channelAPIKeyName' : ''}`
     : '';
 
   return `
@@ -436,7 +436,7 @@ export async function fetchAdjacentRequestPage(params: {
   direction: 'older' | 'newer';
   pageSize: number;
   where?: Record<string, any>;
-  permissions: { canViewApiKeys: boolean; canViewChannels: boolean; canViewCallerUser: boolean };
+  permissions: { canViewApiKeys: boolean; canViewChannels: boolean; canViewCallerUser: boolean; canWriteChannels: boolean };
   projectId?: string | null;
 }): Promise<{ requests: Request[]; pageInfo: RequestConnection['pageInfo'] }> {
   const query = buildRequestsQuery(params.permissions);

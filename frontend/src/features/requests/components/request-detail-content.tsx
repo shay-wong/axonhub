@@ -25,7 +25,7 @@ import { ResponseFlow } from './response-flow';
 import { parseResponse } from '../utils/response-parser';
 import { parseRequestConversation } from '../utils/request-conversation';
 import { generateRequestCurl, generateExecutionCurl } from '../utils/curl-generator';
-import { formatExecutionRequestHeaders } from '../utils/execution-request-headers';
+import { formatExecutionAPIKeyLabel, formatExecutionRequestHeaders } from '../utils/execution-request-headers';
 import { getVideoLastFrameURL, isVideoRequestFormat } from '../utils/video-display';
 import { getExecutionModelAuditVerdict, MODEL_AUDIT_VERDICT_CLASS } from '../utils/upstream-model-audit';
 
@@ -823,6 +823,7 @@ export function RequestDetailContent({ requestId, projectId, previewRequest, isP
                 <div className='space-y-6'>
                   {executions.edges.map((edge: any, index: number) => {
                     const execution = edge.node;
+                    const executionKeyLabel = formatExecutionAPIKeyLabel(execution.channelAPIKeyName, execution.channelAPIKeyIndex);
                     const executionRequestHeaders = formatExecutionRequestHeaders(
                       execution.requestHeaders,
                       execution.channelAPIKeyName,
@@ -860,12 +861,12 @@ export function RequestDetailContent({ requestId, projectId, previewRequest, isP
                               <p className='text-muted-foreground font-mono text-sm'>
                                 {execution.channel?.name || t('requests.columns.unknown')}
                               </p>
-                              {(execution.channelAPIKeySuffix || execution.channelAPIKeyIndex != null) && (
+                              {(execution.channelAPIKeySuffix || executionKeyLabel) && (
                                 <div className='flex items-center gap-1.5 text-xs text-muted-foreground pt-0.5'>
                                   <Key className='h-3.5 w-3.5 shrink-0' />
                                   <span>{t('requests.columns.upstreamApiKey')}</span>
-                                  {execution.channelAPIKeyIndex != null && (
-                                    <span className='font-mono'>key{execution.channelAPIKeyIndex}</span>
+                                  {executionKeyLabel && (
+                                    <span className='min-w-0 truncate' title={executionKeyLabel}>{executionKeyLabel}</span>
                                   )}
                                   {execution.channelAPIKeySuffix && (
                                     <span className='font-mono'>••••{execution.channelAPIKeySuffix}</span>

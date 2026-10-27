@@ -65,6 +65,8 @@ sk-key-3
 
 ### Key selection strategies
 
+The request log's Key column and execution details prefer the alias recorded at execution time, falling back to `keyN` when absent. Details retain the safe key suffix. Viewing key identity requires channel-write permission. Historical records without an alias snapshot are not matched against today's key order; adding or changing an alias does not rewrite past records.
+
 The channel editor has one strategy selector, stored as `settings.apiKeyStrategy`:
 
 | Strategy | Behavior |

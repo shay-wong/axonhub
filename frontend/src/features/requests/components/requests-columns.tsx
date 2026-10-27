@@ -19,6 +19,7 @@ import { useGeneralSettings, useSecuritySettings, useUpdateSecuritySettings } fr
 import { useRequestPermissions } from '../../../hooks/useRequestPermissions';
 import { Request } from '../data/schema';
 import { getSpeedMode } from '../utils/service-tier';
+import { formatExecutionAPIKeyLabel } from '../utils/execution-request-headers';
 import { calculateTokensPerSecond, getTokensPerSecondValue } from '../utils/tokens-per-second';
 import { getRequestModelAuditTooltip, getUpstreamModelAudit } from '../utils/upstream-model-audit';
 import { getStatusColor } from './help';
@@ -515,16 +516,20 @@ export function useRequestsColumns(options?: UseRequestsColumnsOptions): ColumnD
           },
           {
             id: 'channelAPIKeyIndex',
-            accessorFn: (row) => row.executions?.edges?.[0]?.node?.channelAPIKeyIndex ?? '',
+            accessorFn: (row) => {
+              const execution = row.executions?.edges?.[0]?.node;
+              return formatExecutionAPIKeyLabel(execution?.channelAPIKeyName, execution?.channelAPIKeyIndex);
+            },
             header: ({ column }) => <DataTableColumnHeader column={column} title={t('requests.columns.channelAPIKeyIndex')} />,
             enableSorting: false,
             enableHiding: true,
             cell: ({ row }) => {
-              const index = row.original.executions?.edges?.[0]?.node?.channelAPIKeyIndex;
+              const execution = row.original.executions?.edges?.[0]?.node;
+              const label = formatExecutionAPIKeyLabel(execution?.channelAPIKeyName, execution?.channelAPIKeyIndex);
 
-              if (index == null) return <span className='text-muted-foreground font-mono text-xs'>-</span>;
+              if (!label) return <span className='text-muted-foreground font-mono text-xs'>-</span>;
 
-              return <span className='font-mono text-xs'>key{index}</span>;
+              return <span className='inline-block max-w-48 truncate align-middle text-xs' title={label}>{label}</span>;
             },
           },
         ] as ColumnDef<Request>[])

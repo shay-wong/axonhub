@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Request lists and execution details now prefer the recorded upstream key alias over `keyN`, retaining position fallback for older records and existing channel-write permissions.
 - Preserved Fast/Ultrafast prices, provider errors, and original Responses events with delivery-aware stream accounting; stopped blocked pass-through producers safely on conversion failure.
 - Preserved Vertex key project/region bindings, aliases, and weights across edits, disabled-key deletion, and model-discovery fallback.
 - Preserved configured `usage.cost` injection in automatically forwarded Responses JSON and streams while retaining provider event identities and extension fields.
