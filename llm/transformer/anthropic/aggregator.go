@@ -232,12 +232,12 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 			if event.Index != nil && int(*event.Index) < len(contentBlocks) {
 				index := int(*event.Index)
 
-				block := contentBlocks[index]
+				block := &contentBlocks[index]
 				if isAnthropicToolUseLike(block.Type) {
 					if !json.Valid(block.Input) {
 						slog.WarnContext(ctx, "invalid tool use input", slog.String("input", string(block.Input)))
 
-						repaired, err := jsonrepair.JSONRepair(string(block.Input))
+						repaired, err := jsonrepair.Repair(string(block.Input))
 						if err == nil {
 							block.Input = []byte(repaired)
 						}
@@ -249,14 +249,13 @@ func AggregateStreamChunks(ctx context.Context, chunks []*httpclient.StreamEvent
 						Content json.RawMessage `json:"content"`
 					}
 					if err := json.Unmarshal(block.ServerContent, &payload); err == nil && len(payload.Content) > 0 && !json.Valid(payload.Content) {
-						repaired, err := jsonrepair.JSONRepair(string(payload.Content))
+						repaired, err := jsonrepair.Repair(string(payload.Content))
 						if err == nil && json.Valid([]byte(repaired)) {
 							var raw map[string]json.RawMessage
 							if err := json.Unmarshal(block.ServerContent, &raw); err == nil {
 								raw["content"] = json.RawMessage(repaired)
 								if rebuilt, err := json.Marshal(raw); err == nil {
 									block.ServerContent = rebuilt
-									contentBlocks[index] = block
 								}
 							}
 						}

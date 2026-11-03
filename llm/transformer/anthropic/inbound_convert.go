@@ -927,10 +927,11 @@ func convertToolToLLM(tool Tool) (llm.Tool, bool) {
 		llmTool := llm.Tool{
 			Type: llm.ToolTypeFunction,
 			Function: llm.Function{
-				Name:        tool.Name,
-				Description: tool.Description,
-				Parameters:  tool.InputSchema,
-				Strict:      tool.Strict,
+				Name:           tool.Name,
+				Description:    tool.Description,
+				Parameters:     tool.InputSchema,
+				Strict:         tool.Strict,
+				AllowedCallers: tool.AllowedCallers,
 			},
 			CacheControl: convertToLLMCacheControl(tool.CacheControl),
 			DeferLoading: tool.DeferLoading,

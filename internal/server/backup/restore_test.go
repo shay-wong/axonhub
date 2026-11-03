@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -75,7 +76,7 @@ func TestBackupService_Restore_SystemConfigs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{IncludeSystemConfigs: true})
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{IncludeSystemConfigs: true})
 	require.NoError(t, err)
 
 	retryPolicy, err := client.System.Query().Where(system.KeyEQ(biz.SystemKeyRetryPolicy)).Only(ctx)
@@ -99,7 +100,7 @@ func TestBackupService_Restore_SystemConfigs(t *testing.T) {
 	require.True(t, ent.IsNotFound(err))
 
 	require.NoError(t, service.systemService.SetProxyPresets(ctx, []biz.ProxyPreset{{Name: "target", URL: "http://target.example.com"}}))
-	err = service.Restore(ctx, data, RestoreOptions{IncludeSystemConfigs: true, IncludeAPIKeys: true})
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{IncludeSystemConfigs: true, IncludeAPIKeys: true})
 	require.NoError(t, err)
 	webhookConfig, err := client.System.Query().Where(system.KeyEQ(biz.SystemKeyWebhookNotifierConfig)).Only(ctx)
 	require.NoError(t, err)
@@ -130,7 +131,7 @@ func TestBackupService_Restore_InvalidSystemConfigRollsBack(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{IncludeSystemConfigs: true})
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{IncludeSystemConfigs: true})
 	require.ErrorContains(t, err, "invalid model blacklist regex")
 
 	title, err := client.System.Query().Where(system.KeyEQ(biz.SystemKeyTitle)).Only(ctx)
@@ -156,7 +157,7 @@ func TestBackupService_Restore_InvalidProxyPresetsRollsBack(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{IncludeSystemConfigs: true, IncludeAPIKeys: true})
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{IncludeSystemConfigs: true, IncludeAPIKeys: true})
 	require.ErrorContains(t, err, "invalid JSON value")
 
 	title, err := client.System.Query().Where(system.KeyEQ(biz.SystemKeyTitle)).Only(ctx)
@@ -204,7 +205,7 @@ func TestBackupService_Restore_StoragePolicyOverridesLegacyStoreChunks(t *testin
 
 			data, err := json.Marshal(BackupData{Version: BackupVersion, SystemConfigs: test.configs})
 			require.NoError(t, err)
-			require.NoError(t, service.Restore(ctx, data, RestoreOptions{IncludeSystemConfigs: true}))
+			require.NoError(t, service.Restore(ctx, bytes.NewReader(data), RestoreOptions{IncludeSystemConfigs: true}))
 
 			policy, err := service.systemService.StoragePolicy(ctx)
 			require.NoError(t, err)
@@ -251,7 +252,7 @@ func TestBackupService_Restore_SystemModelSettingsRemapChannelIDs(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeSystemConfigs:    true,
 		IncludeChannels:         true,
 		ChannelConflictStrategy: ConflictStrategyOverwrite,
@@ -317,7 +318,7 @@ func TestBackupService_Restore_SystemModelSettingsMapsKnownChannelsAndPreservesW
 			data, err := json.Marshal(backupData)
 			require.NoError(t, err)
 
-			err = service.Restore(ctx, data, RestoreOptions{
+			err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 				IncludeSystemConfigs: true,
 				IncludeChannels:      test.includeChannels,
 			})
@@ -375,7 +376,7 @@ func TestBackupService_Restore_ModelSettingsMapsKnownChannelsAndPreservesWithout
 				Models:   []*BackupModel{{Model: *modelData}},
 			})
 			require.NoError(t, err)
-			err = service.Restore(ctx, data, RestoreOptions{
+			err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 				IncludeChannels:       test.includeChannels,
 				IncludeModels:         true,
 				ModelConflictStrategy: ConflictStrategyOverwrite,
@@ -413,7 +414,7 @@ func TestBackupService_Restore(t *testing.T) {
 	modelsBefore, err := client.Model.Query().Count(ctx)
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeChannels:         true,
 		IncludeModels:           true,
 		IncludeModelPrices:      true,
@@ -496,7 +497,7 @@ func TestBackupService_ContextPriceRoundTrip(t *testing.T) {
 					Pricing:  objects.Pricing{Mode: objects.PricingModeUsagePerUnit, UsagePerUnit: lo.ToPtr(decimal.NewFromInt(1))},
 				}},
 			}).SaveX(ctx)
-			require.NoError(t, service.Restore(ctx, data, RestoreOptions{
+			require.NoError(t, service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 				IncludeModelPrices: true, ModelPriceConflictStrategy: ConflictStrategyOverwrite,
 			}))
 			restored := client.ChannelModelPrice.Query().OnlyX(ctx)
@@ -546,7 +547,7 @@ func TestBackupService_Restore_ModelPricesOnly(t *testing.T) {
 	data, err := json.MarshalIndent(backupData, "", "  ")
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeChannels:         false,
 		IncludeModels:           false,
 		IncludeAPIKeys:          false,
@@ -646,7 +647,7 @@ func TestBackupService_Restore_RemapChannelIDsInModelSettingsAndAPIKeyProfiles(t
 	data, err := json.MarshalIndent(backupData, "", "  ")
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeChannels:         true,
 		IncludeModels:           true,
 		IncludeAPIKeys:          true,
@@ -720,7 +721,7 @@ func TestBackupService_Restore_RemapChannelIDsInProjectProfiles(t *testing.T) {
 	data, err := json.MarshalIndent(backupData, "", "  ")
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeProjects:         true,
 		IncludeChannels:         true,
 		ProjectConflictStrategy: ConflictStrategyOverwrite,
@@ -805,7 +806,7 @@ func TestBackupService_Restore_NewData(t *testing.T) {
 	data, err := json.MarshalIndent(backupData, "", "  ")
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeChannels:         true,
 		IncludeModels:           true,
 		IncludeModelPrices:      true,
@@ -887,7 +888,7 @@ func TestBackupService_Restore_UpdateExisting(t *testing.T) {
 	data, err := json.MarshalIndent(backupData, "", "  ")
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeChannels:         true,
 		IncludeModels:           true,
 		IncludeModelPrices:      true,
@@ -933,7 +934,7 @@ func TestBackupService_Restore_InvalidJSON(t *testing.T) {
 
 	invalidData := []byte("invalid json")
 
-	err := service.Restore(ctx, invalidData, RestoreOptions{
+	err := service.Restore(ctx, bytes.NewReader(invalidData), RestoreOptions{
 		IncludeChannels:         true,
 		IncludeModels:           true,
 		ChannelConflictStrategy: ConflictStrategyOverwrite,
@@ -955,7 +956,7 @@ func TestBackupService_Restore_InvalidVersion(t *testing.T) {
 	data, err := json.MarshalIndent(backupData, "", "  ")
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeChannels:         true,
 		IncludeModels:           true,
 		ChannelConflictStrategy: ConflictStrategyOverwrite,
@@ -999,7 +1000,7 @@ func TestBackupService_Restore_ModelPriceConflictStrategy_Skip(t *testing.T) {
 	data, err := json.MarshalIndent(backupData, "", "  ")
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeChannels:            false,
 		IncludeModels:              false,
 		IncludeAPIKeys:             false,
@@ -1053,7 +1054,7 @@ func TestBackupService_Restore_ModelPriceConflictStrategy_Overwrite(t *testing.T
 	data, err := json.MarshalIndent(backupData, "", "  ")
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeChannels:            false,
 		IncludeModels:              false,
 		IncludeAPIKeys:             false,
@@ -1107,7 +1108,7 @@ func TestBackupService_Restore_ModelPriceConflictStrategy_Error(t *testing.T) {
 	data, err := json.MarshalIndent(backupData, "", "  ")
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeChannels:            false,
 		IncludeModels:              false,
 		IncludeAPIKeys:             false,
@@ -1147,7 +1148,7 @@ func TestBackupService_Restore_UsageStats(t *testing.T) {
 	_, err = client.Request.Delete().Exec(ctx)
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeUsageStats: true,
 	})
 	require.NoError(t, err)
@@ -1203,7 +1204,7 @@ func TestBackupService_Restore_UsageStats(t *testing.T) {
 	executionCountBeforeSecondRestore, err := client.RequestExecution.Query().Count(ctx)
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeUsageStats: true,
 	})
 	require.NoError(t, err)
@@ -1239,7 +1240,7 @@ func TestBackupService_Restore_UsageStatsOnlyReusesUnchangedSourceRecords(t *tes
 	})
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{IncludeUsageStats: true})
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{IncludeUsageStats: true})
 	require.NoError(t, err)
 
 	require.Equal(t, 1, mustCountRequests(t, client, ctx))
@@ -1271,7 +1272,7 @@ func TestBackupService_Restore_UsageStatsOnlyReusesParentsWhenUsageLogWasDeleted
 
 	_, err = client.UsageLog.Delete().Exec(ctx)
 	require.NoError(t, err)
-	err = service.Restore(ctx, data, RestoreOptions{IncludeUsageStats: true})
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{IncludeUsageStats: true})
 	require.NoError(t, err)
 
 	require.Equal(t, 1, mustCountRequests(t, client, ctx))
@@ -1338,7 +1339,7 @@ func TestBackupService_Restore_UsageStatsOnlyDoesNotReuseAmbiguousRequestCandida
 		ambiguousIDs[candidate.ID] = struct{}{}
 	}
 
-	err = targetService.Restore(targetCtx, data, RestoreOptions{IncludeUsageStats: true})
+	err = targetService.Restore(targetCtx, bytes.NewReader(data), RestoreOptions{IncludeUsageStats: true})
 	require.NoError(t, err)
 	require.Equal(t, 4, mustCountRequests(t, targetClient, targetCtx))
 	restoredUsage, err := targetClient.UsageLog.Query().Only(targetCtx)
@@ -1440,7 +1441,7 @@ func TestBackupService_Restore_FullRequestLogsHydratesExternalStorageAndRestores
 
 	_, err = sourceClient.UsageLog.Delete().Exec(sourceCtx)
 	require.NoError(t, err)
-	err = sourceService.Restore(sourceCtx, data, RestoreOptions{
+	err = sourceService.Restore(sourceCtx, bytes.NewReader(data), RestoreOptions{
 		IncludeRequestLogs: true,
 		IncludeUsageStats:  true,
 	})
@@ -1461,7 +1462,7 @@ func TestBackupService_Restore_FullRequestLogsHydratesExternalStorageAndRestores
 	_ = createBackupTestFSDataStorage(t, targetClient, targetCtx, sourceStorage.Name, t.TempDir())
 	createBackupTestUsage(t, targetClient, targetCtx, targetProject, targetChannel, targetAPIKey)
 
-	err = targetService.Restore(targetCtx, data, RestoreOptions{
+	err = targetService.Restore(targetCtx, bytes.NewReader(data), RestoreOptions{
 		IncludeRequestLogs: true,
 		IncludeUsageStats:  true,
 	})
@@ -1576,7 +1577,7 @@ func TestBackupService_Restore_LegacyModelPriceNormalizesVariantCodes(t *testing
 	})
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{IncludeModelPrices: true})
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{IncludeModelPrices: true})
 	require.NoError(t, err)
 	restored, err := client.ChannelModelPrice.Query().Only(ctx)
 	require.NoError(t, err)
@@ -1620,7 +1621,7 @@ func TestBackupService_Restore_LegacyModelPriceRejectsInvalidTierBounds(t *testi
 	})
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{IncludeModelPrices: true})
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{IncludeModelPrices: true})
 	require.ErrorContains(t, err, "repair the legacy backup before restoring")
 	count, err := client.ChannelModelPrice.Query().Count(ctx)
 	require.NoError(t, err)
@@ -1656,7 +1657,7 @@ func TestBackupService_Restore_LegacyModelPriceRejectsNonIncreasingTierBounds(t 
 	})
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{IncludeModelPrices: true})
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{IncludeModelPrices: true})
 	require.ErrorContains(t, err, "tiers[1].upTo must be greater than tiers[0].upTo")
 	count, err := client.ChannelModelPrice.Query().Count(ctx)
 	require.NoError(t, err)
@@ -1692,7 +1693,7 @@ func TestBackupService_Restore_LegacyModelPriceRejectsDuplicateItemCodes(t *test
 	})
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{IncludeModelPrices: true})
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{IncludeModelPrices: true})
 	require.ErrorContains(t, err, "historical billing summed duplicate items")
 	require.ErrorContains(t, err, "combine the items in the backup")
 	count, err := client.ChannelModelPrice.Query().Count(ctx)
@@ -1767,7 +1768,7 @@ func TestBackupService_Restore_CurrentModelPriceRejectsDuplicateCodes(t *testing
 			})
 			require.NoError(t, err)
 
-			err = service.Restore(ctx, data, RestoreOptions{IncludeModelPrices: true})
+			err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{IncludeModelPrices: true})
 			require.ErrorContains(t, err, test.want)
 		})
 	}
@@ -1824,7 +1825,7 @@ func TestBackupService_Restore_UsageStatsPreservesResolvableRequestExecution(t *
 	_, err = client.UsageLog.Delete().Exec(ctx)
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeUsageStats:  true,
 		IncludeRequestLogs: true,
 	})
@@ -1877,7 +1878,7 @@ func TestBackupService_Restore_UsageStatsPreservesExecutionAfterChannelDeletion(
 	_, err = client.UsageLog.Delete().Exec(ctx)
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeUsageStats:  true,
 		IncludeRequestLogs: true,
 	})
@@ -1923,7 +1924,7 @@ func TestBackupService_Restore_UsageStatsPreservesExecutionAfterDataStorageDelet
 	_, err = client.UsageLog.Delete().Exec(ctx)
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeUsageStats:  true,
 		IncludeRequestLogs: true,
 	})
@@ -1971,7 +1972,7 @@ func TestBackupService_Restore_UsageStatsDoesNotReuseDeletedChannelIDAcrossDatab
 	unrelatedChannel := createBackupTestChannel(t, targetClient, targetCtx, sourceChannel.Name, channel.TypeOpenai)
 	require.Equal(t, sourceChannel.ID, unrelatedChannel.ID)
 
-	err = targetService.Restore(targetCtx, data, RestoreOptions{
+	err = targetService.Restore(targetCtx, bytes.NewReader(data), RestoreOptions{
 		IncludeProjects:    true,
 		IncludeAPIKeys:     true,
 		IncludeUsageStats:  true,
@@ -2021,7 +2022,7 @@ func TestBackupService_Restore_UsageStatsOnlyDoesNotRestoreExecutionContentFromF
 	targetChannel := createBackupTestChannel(t, targetClient, targetCtx, sourceChannel.Name, channel.TypeOpenai)
 	require.Equal(t, sourceChannel.ID, targetChannel.ID)
 
-	err = targetService.Restore(targetCtx, data, RestoreOptions{
+	err = targetService.Restore(targetCtx, bytes.NewReader(data), RestoreOptions{
 		IncludeProjects:   true,
 		IncludeAPIKeys:    true,
 		IncludeUsageStats: true,
@@ -2086,7 +2087,7 @@ func TestBackupService_Restore_UsageStatsResolvesRequestExecutionIDCollisionByFi
 	_, err = client.UsageLog.Delete().Exec(ctx)
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeUsageStats:  true,
 		IncludeRequestLogs: true,
 	})
@@ -2132,7 +2133,7 @@ func TestBackupService_Restore_UsageStatsWithoutAuditFields(t *testing.T) {
 	_, err = client.Request.Delete().Exec(ctx)
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeUsageStats:  true,
 		IncludeRequestLogs: true,
 	})
@@ -2169,7 +2170,7 @@ func TestBackupService_Restore_UsageStatsWithRequestLogs(t *testing.T) {
 	_, err = client.Request.Delete().Exec(ctx)
 	require.NoError(t, err)
 
-	err = service.Restore(ctx, data, RestoreOptions{
+	err = service.Restore(ctx, bytes.NewReader(data), RestoreOptions{
 		IncludeUsageStats:  true,
 		IncludeRequestLogs: true,
 	})

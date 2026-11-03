@@ -130,6 +130,7 @@ export function mergeChannelSettingsForUpdate(
     apiKeySelectionStrategy: pick('apiKeySelectionStrategy', existing?.apiKeySelectionStrategy ?? null),
     maxSingleChannelRetries: pick('maxSingleChannelRetries', existing?.maxSingleChannelRetries ?? null),
     retryPerAPIKey: pick('retryPerAPIKey', existing?.retryPerAPIKey ?? false),
+    responseTimeout: pick('responseTimeout', existing?.responseTimeout ?? null),
     modelProtocols: pick('modelProtocols', existing?.modelProtocols ?? []),
     apiKeyStrategy: pick('apiKeyStrategy', existing?.apiKeyStrategy ?? null),
     apiKeyRoundRobinSwitchAfter: pick('apiKeyRoundRobinSwitchAfter', existing?.apiKeyRoundRobinSwitchAfter ?? null),

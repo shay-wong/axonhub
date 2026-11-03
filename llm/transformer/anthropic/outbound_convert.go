@@ -315,12 +315,13 @@ func convertToolsAnthropic(tools []llm.Tool, config *Config) []Tool {
 			}
 
 			t := Tool{
-				Name:         tool.Function.Name,
-				Description:  tool.Function.Description,
-				InputSchema:  inputSchema,
-				Strict:       tool.Function.Strict,
-				CacheControl: convertToAnthropicCacheControl(tool.CacheControl),
-				DeferLoading: tool.DeferLoading,
+				Name:           tool.Function.Name,
+				Description:    tool.Function.Description,
+				InputSchema:    inputSchema,
+				Strict:         tool.Function.Strict,
+				AllowedCallers: tool.Function.AllowedCallers,
+				CacheControl:   convertToAnthropicCacheControl(tool.CacheControl),
+				DeferLoading:   tool.DeferLoading,
 			}
 			anthropicTools = append(anthropicTools, t)
 		case llm.ToolTypeWebSearch:

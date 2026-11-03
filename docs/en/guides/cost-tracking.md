@@ -153,6 +153,8 @@ For example, 300,000 uncached input tokens and 100,000 output tokens cost $13.50
 
 Existing saved prices and historical usage records are not overwritten. To replace an old explicit Fast/Ultrafast price, update it under **Channels → Model Prices** or re-import the model price after checking the preview. The fallback changes apply to new requests with missing tier prices. API token prices are separate from Codex subscription credit multipliers.
 
+When filling prices from the model library, the **Exchange Rate** and price multiplier both apply to base, Fast/Ultrafast, and context-bracket rates. The exchange rate defaults to **7.14** each time the dialog opens, independently of the system display currency; set it to **1** to retain USD prices. Filling a model preserves existing schedules and cache-write variants. Check those retained overrides before saving, because they are not converted automatically. Existing saved prices change only when you apply and save the new values.
+
 [Tibo's October 11, 2026 announcement](https://x.com/thsottiaux/status/2109430894604026039) removes GPT-6.1 Sol long-context fees **when drawing usage from the subscription** in Codex/Work. It does not change the API rates used for AxonHub's cost estimates. For subscription-backed channels, these estimates do not represent actual subscription consumption; configure flat channel prices separately if that is the intended accounting policy.
 
 #### Cache Write Variants (Anthropic)

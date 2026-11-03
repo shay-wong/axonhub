@@ -19,11 +19,11 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`9026143f82ba27aa7803ec97594085c6a45b2458`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`6c181e01fc2a49a536bed09bc96e16599ac682ad`
-- 本次 merge base：`0896305eeee89435049575d55a813f72901f703b`
-- 审计范围：`git diff 6c181e01..HEAD`
-- 2026-10-28 本次仅合入 12 项依赖更新（Go 服务/缓存/认证依赖、前端组件与时区数据、OpenAI 集成测试 SDK）；无业务源码或 schema 变化，没有新增上游等价吸收的 fork 能力。
+- 本次 upstream merge 的 fork parent：`fc51e2e3415dfc78a20e1bba4415b0c800513739`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`03ffac6f96b48396404b691fbf2d594c35c1c9a5`
+- 本次 merge base：`6c181e01fc2a49a536bed09bc96e16599ac682ad`
+- 审计范围：`git diff 03ffac6f..HEAD`
+- 2026-11-03 合入 29 个上游提交：渠道独立响应超时、模型库填价汇率、配额状态 Webhook、服务账号 Key 授权边界、大备份上传、协议转换及依赖更新。Dashboard helper 搬迁目标已由本地独立文件实现，继续复用；其余既有 fork 不变量保留，没有整项等价吸收。
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -47,11 +47,11 @@ git show --remerge-diff <merge-commit>
 
 ## Fork 发布版本
 
-- Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta11`。
-- 本次 upstream parent 包含已发布 tag `v1.0.0-beta11`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
+- Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta12`。
+- 本次 upstream parent 包含已发布 tag `v1.0.0-beta12`（`2b1a0f9321a4f783a4cceb2b4eb3a8303074487e`），但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.8`；upstream 发布基线为 `v1.0.0-beta11`，因此下一个规范化 fork 版本为 `v1.0.0-beta11-fork.9`，发布前仍须重新确认该 tag 未被占用。2026-10-28 已核对远端 tags；本次不修改版本文件、不发布。
+- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.9`；upstream 发布基线变为 `v1.0.0-beta12`，因此下一个规范化 fork 版本为 `v1.0.0-beta12-fork.1`，发布前仍须重新确认该 tag 未被占用。2026-11-03 已核对远端 tags；本次不修改版本文件、不发布。
 
 ## 长期保留
 
@@ -70,6 +70,7 @@ git show --remerge-diff <merge-commit>
 
 ### F02 API Key 稳定身份、别名、权重和路由
 
+- 2026-11-03 整合 `9142eb6a` 的渠道响应超时：`responseTimeout` 与 `retryPerAPIKey` 独立保存、回读和复制；每次选定渠道后解析超时，不改变失败 Key 排除或重试预算。前端全局默认值从既有 `retryPolicy` 响应包装读取。
 - 2026-10-27 已确认：整合 `c31867e0` 时保留请求内失败 Key 排除；渠道显式配置 `retryableStatusCodes: [429]` 仍只轮换未失败 Key，耗尽后换渠道，不重复失败 Key。仅无法进入 Key 轮换的路径沿用上游显式 429 同渠道重试；次数上限与 `retryPerAPIKey` 不变。回归：`TestExplicit429RetriesNeverReuseFailedKeys`，独立提交定位 `git log -S'TestExplicit429RetriesNeverReuseFailedKeys' -- internal/server/orchestrator/retry_per_apikey_test.go`；中英渠道指南与编辑器提示同步。
 - 请求日志别名展示：列表及执行详情优先使用执行时保存的 `channelAPIKeyName`，空白/缺失时回退 `keyN`，详情保留安全尾号；列表仅向拥有 `write_channels` 的用户请求别名，不读取完整凭据或用当前 Key 顺序反查历史。旧记录缺少别名快照不回填。代码/回归：`frontend/src/features/requests/utils/execution-request-headers.ts` 及同名 `.test.mjs`、`data/requests.ts`、`components/requests-columns.tsx`、`components/request-detail-content.tsx`；当前变更定位：`git log -S'formatExecutionAPIKeyLabel' -- frontend/src/features/requests/utils/execution-request-headers.ts`。用户说明在中英文 channel-management 指南。
 - 2026-10-27 已确认统一策略：一个 `apiKeyStrategy` 选择器，支持 upstream 六种策略及 fork `weighted_sticky` / `failover`。新字段为空时兼容旧 `apiKeySelectionStrategy`，`trace_sticky` 映射共享 `sticky`；编辑保存新字段并清空旧字段。所有 provider 读取同一标准化可用 Key 集、遵守请求内失败排除，不回退已禁用 Key；fixed / 成功轮询的临时替补不移动全局游标。共享状态仅跨进程内渠道缓存重载，不跨服务重启。
@@ -101,6 +102,7 @@ git show --remerge-diff <merge-commit>
 
 ### F04 Fast/Ultrafast tier 识别、计费、价格表和展示
 
+- 2026-11-03 整合 `03ffac6f` 的模型库填价汇率：复用统一价格 helper，以 `multiplier * exchangeRate` 同时缩放基础、服务档位和上下文价格；保留定时价格与缓存写入变体。汇率默认 `7.14`，每次打开重置，与系统显示币种独立；USD 原价应设为 `1`，已有价格不自动改写。回归：`frontend/src/features/channels/data/model-price-exchange-rate.test.mjs`；用户说明见中英 cost-tracking 指南。
 - 交付与计费分离：维护者确认采用 `3dcfa3ce` 至 `a946fca4` 的交付确认和最终用量证据。主 request 的 completed 需要成功写出终态；execution 完成与最终用量落库独立，不因交付失败丢失已确认费用。Chat/Responses/Anthropic 中间 usage 不计费；保留 `UsageLogEligible` 防重复与 requested/applied/override/policy 档位优先级。尾流异常同样保留原始 body、ID、tier 和最终 usage。独立兼容回归：`internal/server/orchestrator/stream_tail_fork_test.go`、`llm/pipeline/delivery_fork_compat_test.go`；定位：`git log --all -- internal/server/orchestrator/stream_tail_fork_test.go`。
 - 原始响应保真整合：上游默认 Responses identity/transport 保真路径不能绕过已开启的 `InjectUsageCost`；JSON/SSE 仅回填本地费用字段，保留原始 ID、未知扩展及数值精度，继续使用实际渠道模型和相同 tier 优先级。显式 PassThroughBody 仍保留其既有原样语义。回归/当前变更定位：`git log -S'TestResponsesIdentityPreservesInjectedCost' -- internal/server/orchestrator/responses_identity_cost_test.go`。
 - 原生 WebSocket 整合：新增 `openai/responses-ws` 必须同时进入 `OpenAIServiceTier` 和 orchestrator 的档位识别分支，保留出站参数、SpeedMode、requested tier 及 Codex override。回归：`TestOpenAIServiceTierWebSocketForkCompatibility`、`TestWebSocketServiceTierTracking`；当前独立变更定位：`git log -S'TestWebSocketServiceTierTracking' -- internal/server/orchestrator/service_tier_test.go`。
@@ -119,6 +121,7 @@ git show --remerge-diff <merge-commit>
 
 ### F05 历史 fork 备份恢复兼容和事务安全
 
+- 2026-11-03 整合 `b9415562` 的大备份上传与 `io.Reader` 解码，保留拒绝尾随数据、1.4/1.5 fork 备份、档位/Key 身份快照和事务回滚；本地恢复回归同步使用 reader，不重新引入整文件预读。
 - 本次上游整合：`7ca221d8` 将旧配额执行设置迁移到全局/渠道配额路由设置；新旧备份恢复继续在同一事务中校验配置并重映射渠道 ID，非法旧 JSON、旧 mode 或新 mode 必须回滚，不能因新增迁移路径绕过本地校验。
 - 生命周期：`长期保留`
 - 原始意图：旧 fork 版本导出的备份必须能在当前版本安全恢复，失败时不能留下半套配置，也不能破坏未包含在恢复载荷中的现有关系。
@@ -174,6 +177,7 @@ git show --remerge-diff <merge-commit>
 
 ### U03 Tool Search 和跨协议工具调用语义
 
+- 2026-11-03 整合 Anthropic `allowed_callers` 和工具输入修复回写；`DeferLoading` 与 `AllowedCallers` 同时保留。Tool Search 分支随依赖升级改用 `jsonrepair.Repair`，复用上游块指针，避免旧值回写类型冲突。既有 Tool Search 与新增 allowed-callers/aggregation 测试共同验证。
 - 2026-10-27 独立整合：Anthropic `MessageContentBlock.UnmarshalJSON` 统一使用 `tool_blocks_json.go`，保留 ToolSearch 原始 ServerContent，并接入上游 WebSearch raw results；failed/cancelled 在内容已输出时先补最终搜索来源，再发送原始终态错误。回归及定位：`git log -S'final search sources must precede the error' -- llm/transformer/openai/responses/anthropic_web_search_history_test.go`。
 - 本次上游整合：`5659a526` 将工具结果移至发起调用的 assistant 消息之后，并防止重复输出；与本地 reasoning 合并、custom tool、namespace 和 Tool Search helper 组合保留，不视为整项吸收。
 - 本次上游整合：`f92e69de` 的 Anthropic 并行工具控制与 `d5237439` 的 Chat allowed_tools 转换保留；这些未替代本地 Tool Search 和 deferred tools 往返。
@@ -258,6 +262,7 @@ git show --remerge-diff <merge-commit>
 
 ### U09 凭据可见性、敏感字段和 provider quota 边界
 
+- 2026-11-03 采用 `e5c904ef` 的服务账号 Key scope 授予校验及项目边界、`677166b4` 的配额状态 Webhook；保留个人 Key ownership、结构化上游 Key、事务提交后 quota cache 失效及配置读取权限，不视为整项吸收。
 - 本次独立整合修复：`d72446d1` 新增的 `channelAPIKeyIndex` 继续采用本地 `write_channels` 边界，不能通过序号绕过别名/后缀的读取限制。回归：`TestRequestExecutionResolver_ChannelAPIKeyIndex`。定位：`git log -S'channel readers must not see credential identity snapshots' -- internal/server/gql/request_channel_api_key_index_schema_test.go`。
 - 本次上游整合：`1d3d2831` 已提供请求 execution 的 Key 后缀持久化；合并为唯一字段并保留最多 4 rune 校验，但 fork 的别名/header 快照及 `write_channels` 读取边界仍保留。`d4a34586` 改用 Command Code 账户 API Key 查询配额，不替代结构化 inference Key 身份与 quota cache 失效约束。
 
@@ -311,6 +316,7 @@ git show --remerge-diff <merge-commit>
 
 ### U14 测试流量与生产渠道健康状态隔离
 
+- 2026-11-03 上游 `deaa6b49` 的 gqlgen helper 搬迁目标已由本地 `dashboard_cached_queries.go` 实现，保留单一定义，不重复搬入 `dashboard_helpers.go`；生成后仍须验证 production 过滤、execution 实际模型和清理主请求后的统计。
 - 2026-10-27 独立整合：上游 Dashboard 共享聚合继续使用 `productionUsageLogQuery`，九个 request/token/cost widget 不混入诊断；`dashboard_cached_queries.go` 承载上游缓存辅助函数，不能放回 gqlgen 管理的 resolver 文件，否则生成时会被注释删除。代码 `internal/server/gql/dashboard_usage_aggregates.go`、`internal/server/gql/dashboard_cached_queries.go`；定位 `git log -S'productionUsageLogQuery' -- internal/server/gql/dashboard_usage_aggregates.go`；验证 `go test ./internal/server/gql -run 'Dashboard|CachedDashboard'`。
 - 凭据刷新兼容：诊断请求跳过生产凭据刷新，测试已禁用的指定 Key 时，重试不能改测其他健康 Key；上下文、request 和 execution 三种 test source 都有效，execution reset 后仍保留此身份约束。与 U01 的刷新兼容修复同一独立提交，回归在 `retry_channel_refresh_fork_test.go`；定位：`git log -S'diagnosticRetry' -- internal/server/orchestrator/retry_channel_refresh.go`。
 - 本次上游整合：采用 `b8bb3421` 的 System One 渠道/单 Key/批量 Key 测试格式和角色级 prompt protection；沿用 test source 的生产健康隔离，新增协议测试不替代本条隔离约束。

@@ -66,6 +66,11 @@ const priceItemFormSchema = z.object({
     .optional()
     .nullable(),
 });
+// Default exchange rate applied when filling prices from the model library.
+// Library prices are in USD/MTok; 7.14 (exactly 50/7) matches the official
+// CNY prices (deepseek-chat 0.14/0.28/0.0028 -> CNY 1 / 2 / 0.02).
+// Not persisted: the dialog resets to the default on every open.
+const DEFAULT_EXCHANGE_RATE = 7.14;
 
 const createPriceFormSchema = (t: (key: string) => string) =>
   z
@@ -203,8 +208,12 @@ function findProviderModelById(providersData: ProvidersData, modelId: string, pr
   return null;
 }
 
-function buildItemsFromProviderModel(model: ProviderModel, multiplier: number = 1): PriceFormData['prices'][number]['price']['items'] {
-  return buildProviderModelPrice(model, multiplier).items;
+function buildItemsFromProviderModel(
+  model: ProviderModel,
+  multiplier: number = 1,
+  exchangeRate: number = 1
+): PriceFormData['prices'][number]['price']['items'] {
+  return buildProviderModelPrice(model, multiplier * exchangeRate).items;
 }
 
 const ServiceTierPricesEditor = memo(function ServiceTierPricesEditor({
@@ -553,6 +562,7 @@ export function ChannelsModelPriceDialog() {
   const [selectedProviderId, setSelectedProviderId] = useState<string>('');
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [multiplier, setMultiplier] = useState<number>(1);
+  const [exchangeRate, setExchangeRate] = useState<number>(DEFAULT_EXCHANGE_RATE);
 
   useEffect(() => {
     if (!isOpen || !providersData) return;
@@ -561,6 +571,14 @@ export function ChannelsModelPriceDialog() {
     setSelectedModelId('');
     setMultiplier(1);
   }, [defaultProviderId, isOpen, providersData]);
+
+  // Reset the exchange rate only when the dialog opens. A separate effect keeps
+  // late-arriving provider data from overwriting a rate the user already typed.
+  useEffect(() => {
+    if (isOpen) {
+      setExchangeRate(DEFAULT_EXCHANGE_RATE);
+    }
+  }, [isOpen]);
 
   const providerModels = useMemo(() => {
     if (!selectedProviderId || !providersData) return [];
@@ -758,14 +776,14 @@ export function ChannelsModelPriceDialog() {
     (priceIndex: number, providerModel: ProviderModel) => {
       const currentPrice = getValues(`prices.${priceIndex}.price`);
       const currentItems = getValues(`prices.${priceIndex}.price.items`) || [];
-      const merged = mergeItemsWithProviderCost(currentItems, providerModel, multiplier);
-      const catalogPrice = buildProviderModelPrice(providerModel, multiplier);
+      const merged = mergeItemsWithProviderCost(currentItems, providerModel, multiplier * exchangeRate);
+      const catalogPrice = buildProviderModelPrice(providerModel, multiplier * exchangeRate);
       setValue(`prices.${priceIndex}.price`, replaceCatalogServiceTierPrices({ ...currentPrice, items: merged }, catalogPrice), {
         shouldDirty: true,
         shouldValidate: true,
       });
     },
-    [getValues, setValue, multiplier]
+    [getValues, setValue, multiplier, exchangeRate]
   );
 
   const applyProviderModelById = useCallback(
@@ -790,13 +808,13 @@ export function ChannelsModelPriceDialog() {
       append({
         modelId,
         price: {
-          items: buildItemsFromProviderModel(found.model, multiplier),
-          serviceTierPrices: buildProviderModelPrice(found.model, multiplier).serviceTierPrices,
+          items: buildItemsFromProviderModel(found.model, multiplier, exchangeRate),
+          serviceTierPrices: buildProviderModelPrice(found.model, multiplier * exchangeRate).serviceTierPrices,
         },
       });
       toast.success(t('price.apply.added', { modelId }));
     },
-    [append, applyProviderModelToIndex, getValues, providersData, t, multiplier]
+    [append, applyProviderModelToIndex, getValues, providersData, t, multiplier, exchangeRate]
   );
 
   const onModelSelected = useCallback(
@@ -994,7 +1012,7 @@ export function ChannelsModelPriceDialog() {
             <Card className='mb-4 max-h-[15vh] shrink-0 overflow-y-auto md:max-h-none md:overflow-visible'>
               <CardContent className='pt-0 md:pt-4'>
                 <div className='text-muted-foreground mb-3 text-xs'>{t('price.apply.usdHint')}</div>
-                <div className='grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_80px_auto] md:items-end'>
+                <div className='grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_80px_80px_auto] md:items-end'>
                   <div className='min-w-0'>
                     <FormLabel className='text-sm'>{t('price.apply.provider')}</FormLabel>
                     <AutoCompleteSelect
@@ -1036,6 +1054,17 @@ export function ChannelsModelPriceDialog() {
                       min='0'
                     />
                   </div>
+                  <div className='min-w-0'>
+                    <FormLabel className='text-sm'>{t('price.apply.exchangeRate')}</FormLabel>
+                    <Input
+                      type='number'
+                      value={exchangeRate}
+                      onChange={(e) => setExchangeRate(parseFloat(e.target.value) || 0)}
+                      className='h-8'
+                      step='any'
+                      min='0'
+                    />
+                  </div>
                   <div className='flex gap-2'>
                     <Button
                       type='button'
@@ -1066,8 +1095,8 @@ export function ChannelsModelPriceDialog() {
                           append({
                             modelId,
                             price: {
-                              items: buildItemsFromProviderModel(found.model, multiplier),
-                              serviceTierPrices: buildProviderModelPrice(found.model, multiplier).serviceTierPrices,
+                              items: buildItemsFromProviderModel(found.model, multiplier, exchangeRate),
+                              serviceTierPrices: buildProviderModelPrice(found.model, multiplier * exchangeRate).serviceTierPrices,
                             },
                           });
                           added += 1;

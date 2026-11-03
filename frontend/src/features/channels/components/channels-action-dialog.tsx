@@ -8,6 +8,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { X, RefreshCw, Search, ChevronLeft, ChevronRight, PanelLeft, Plus, Trash2, Eye, EyeOff, Copy, Play, Info, Ban } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { RESPONSE_TIMEOUT_MAX_SECONDS } from '@/config/retry-policy';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { useHorizontalScroll } from '@/hooks/use-horizontal-scroll';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -212,6 +213,32 @@ function parseMaxSingleChannelRetriesInput(value: string): { valid: boolean; val
   }
 
   return { valid: true, value: parsed };
+}
+
+function formatResponseTimeoutSeconds(value: number | null | undefined): string {
+  return value === null || value === undefined ? '' : String(value);
+}
+
+// Parses one optional response timeout input.
+// - empty string => null (inherit the global timeout)
+// - undefined   => invalid input
+// - number      => override in seconds
+function parseResponseTimeoutSeconds(value: string): number | null | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (!/^\d+$/.test(trimmed)) {
+    return undefined;
+  }
+
+  const seconds = Number(trimmed);
+  if (seconds > RESPONSE_TIMEOUT_MAX_SECONDS) {
+    return undefined;
+  }
+
+  return seconds;
 }
 
 function parseRetryableErrorPatternsInput(value: string): RetryableErrorPattern[] | null {
@@ -648,6 +675,15 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
     formatMaxSingleChannelRetries(initialRow?.settings?.maxSingleChannelRetries)
   );
   const [retryPerAPIKey, setRetryPerAPIKey] = useState<boolean>(() => initialRow?.settings?.retryPerAPIKey ?? false);
+  const [responseTimeoutMode, setResponseTimeoutMode] = useState<'INHERIT' | 'CUSTOM'>(() =>
+    initialRow?.settings?.responseTimeout?.mode === 'CUSTOM' ? 'CUSTOM' : 'INHERIT'
+  );
+  const [streamFirstEventTimeoutText, setStreamFirstEventTimeoutText] = useState(() =>
+    formatResponseTimeoutSeconds(initialRow?.settings?.responseTimeout?.streamFirstEventTimeoutSeconds)
+  );
+  const [nonStreamResponseTimeoutText, setNonStreamResponseTimeoutText] = useState(() =>
+    formatResponseTimeoutSeconds(initialRow?.settings?.responseTimeout?.nonStreamResponseTimeoutSeconds)
+  );
   const userAgentInheritLabel = userAgentPassThroughSettings
     ? t('channels.dialogs.userAgentPassThrough.inheritWithValue', {
         value: t(
@@ -668,6 +704,19 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
   const [apiKeyRoundRobinSwitchAfter, setApiKeyRoundRobinSwitchAfter] = useState<number>(
     () => initialRow?.settings?.apiKeyRoundRobinSwitchAfter ?? 1
   );
+
+  // Describes the global timeout a channel field inherits when left empty.
+  const formatGlobalTimeoutSeconds = (seconds: number | undefined): string => {
+    if (seconds === undefined) {
+      return t('channels.dialogs.responseTimeout.valueUnset');
+    }
+    if (seconds <= 0) {
+      return t('channels.dialogs.responseTimeout.valueDisabled');
+    }
+    return `${seconds}s`;
+  };
+  const formatGlobalTimeoutPlaceholder = (seconds: number | undefined): string =>
+    t('channels.dialogs.responseTimeout.inheritWithValue', { value: formatGlobalTimeoutSeconds(seconds) });
 
   // Memoized proxy config for OAuth exchange
   const proxyConfig: ProxyConfig | undefined = useMemo(() => {
@@ -1602,6 +1651,24 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
       }
       const maxSingleChannelRetries = maxSingleChannelRetriesParsed.value;
 
+      const streamFirstEventTimeoutSeconds =
+        responseTimeoutMode === 'CUSTOM' ? parseResponseTimeoutSeconds(streamFirstEventTimeoutText) : null;
+      const nonStreamResponseTimeoutSeconds =
+        responseTimeoutMode === 'CUSTOM' ? parseResponseTimeoutSeconds(nonStreamResponseTimeoutText) : null;
+      if (streamFirstEventTimeoutSeconds === undefined || nonStreamResponseTimeoutSeconds === undefined) {
+        toast.error(t('channels.dialogs.responseTimeout.validation'));
+        return;
+      }
+
+      const responseTimeout: ChannelSettings['responseTimeout'] =
+        responseTimeoutMode === 'CUSTOM'
+          ? {
+              mode: 'CUSTOM',
+              streamFirstEventTimeoutSeconds,
+              nonStreamResponseTimeoutSeconds,
+            }
+          : null;
+
       const valuesForSubmit = isEdit
         ? values
         : {
@@ -1734,6 +1801,8 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             apiKeyStrategy === 'round_robin' || apiKeyStrategy === 'round_robin_success'
               ? apiKeyRoundRobinSwitchAfter
               : null,
+
+          responseTimeout,
           // Cookie edits (including clearing the saved cookie) travel through
           // the settings patch; mergeChannelSettingsForUpdate preserves the
           // field when the patch omits it and carries the null clear through.
@@ -1804,6 +1873,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
           retryableErrorPatterns,
           maxSingleChannelRetries,
           retryPerAPIKey,
+          responseTimeout,
           ...quotaRoutingModeSettingsPatch(quotaRoutingMode),
           apiKeyStrategy,
           apiKeyRoundRobinSwitchAfter:
@@ -2290,6 +2360,14 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
             setRetryPerAPIKey(initialRow?.settings?.retryPerAPIKey ?? false);
             setApiKeyStrategy(recallAPIKeyStrategy(initialRow?.settings));
             setApiKeyRoundRobinSwitchAfter(initialRow?.settings?.apiKeyRoundRobinSwitchAfter ?? 1);
+
+            setResponseTimeoutMode(initialRow?.settings?.responseTimeout?.mode === 'CUSTOM' ? 'CUSTOM' : 'INHERIT');
+            setStreamFirstEventTimeoutText(
+              formatResponseTimeoutSeconds(initialRow?.settings?.responseTimeout?.streamFirstEventTimeoutSeconds)
+            );
+            setNonStreamResponseTimeoutText(
+              formatResponseTimeoutSeconds(initialRow?.settings?.responseTimeout?.nonStreamResponseTimeoutSeconds)
+            );
             // Reset provider and API format state
             if (initialRow) {
               setSelectedProvider(getProviderFromChannelType(initialRow.type) || 'openai');
@@ -3647,6 +3725,89 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                             placeholder={t('channels.dialogs.retryableErrorPatterns.placeholder')}
                             className='min-h-[88px] resize-y font-mono text-sm'
                           />
+                        </div>
+                      </FormItem>
+
+                      <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
+                        <div className='flex items-center gap-1.5 pt-2 md:col-span-2 md:justify-start'>
+                          <FormLabel className='font-medium'>{t('channels.dialogs.responseTimeout.label')}</FormLabel>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type='button'
+                                className='text-muted-foreground hover:text-foreground inline-flex items-center'
+                                aria-label={t('channels.dialogs.responseTimeout.tooltip')}
+                              >
+                                <Info className='h-3.5 w-3.5' />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent className='max-w-sm'>
+                              <p>{t('channels.dialogs.responseTimeout.tooltip')}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                        <div className='space-y-3 md:col-span-6'>
+                          <Select
+                            value={responseTimeoutMode}
+                            onValueChange={(value) => setResponseTimeoutMode(value as 'INHERIT' | 'CUSTOM')}
+                          >
+                            <SelectTrigger data-testid='response-timeout-mode'>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value='INHERIT'>
+                                {retryPolicy
+                                  ? t('channels.dialogs.responseTimeout.inheritWithValues', {
+                                      stream: formatGlobalTimeoutSeconds(retryPolicy.streamFirstEventTimeoutSeconds),
+                                      nonStream: formatGlobalTimeoutSeconds(retryPolicy.nonStreamResponseTimeoutSeconds),
+                                    })
+                                  : t('channels.dialogs.responseTimeout.inherit')}
+                              </SelectItem>
+                              <SelectItem value='CUSTOM'>{t('channels.dialogs.responseTimeout.custom')}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {responseTimeoutMode === 'CUSTOM' && (
+                            <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                              <div className='space-y-1'>
+                                <span className='text-sm font-medium'>{t('channels.dialogs.responseTimeout.streamFirstEvent.label')}</span>
+                                <div className='flex items-center gap-2'>
+                                  <Input
+                                    type='number'
+                                    min={0}
+                                    max={RESPONSE_TIMEOUT_MAX_SECONDS}
+                                    value={streamFirstEventTimeoutText}
+                                    onChange={(event) => setStreamFirstEventTimeoutText(event.target.value)}
+                                    placeholder={formatGlobalTimeoutPlaceholder(retryPolicy?.streamFirstEventTimeoutSeconds)}
+                                    className='w-32'
+                                    data-testid='response-timeout-stream-first-event'
+                                  />
+                                  <span className='text-muted-foreground text-sm'>s</span>
+                                </div>
+                                <p className='text-muted-foreground text-xs'>
+                                  {t('channels.dialogs.responseTimeout.streamFirstEvent.description')}
+                                </p>
+                              </div>
+                              <div className='space-y-1'>
+                                <span className='text-sm font-medium'>{t('channels.dialogs.responseTimeout.nonStream.label')}</span>
+                                <div className='flex items-center gap-2'>
+                                  <Input
+                                    type='number'
+                                    min={0}
+                                    max={RESPONSE_TIMEOUT_MAX_SECONDS}
+                                    value={nonStreamResponseTimeoutText}
+                                    onChange={(event) => setNonStreamResponseTimeoutText(event.target.value)}
+                                    placeholder={formatGlobalTimeoutPlaceholder(retryPolicy?.nonStreamResponseTimeoutSeconds)}
+                                    className='w-32'
+                                    data-testid='response-timeout-non-stream'
+                                  />
+                                  <span className='text-muted-foreground text-sm'>s</span>
+                                </div>
+                                <p className='text-muted-foreground text-xs'>
+                                  {t('channels.dialogs.responseTimeout.nonStream.description')}
+                                </p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </FormItem>
 
