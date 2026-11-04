@@ -271,7 +271,7 @@ function useChannelStatusActions(channel: Channel, t: ReturnType<typeof useTrans
 
   const handleDisabledKeys = useCallback(() => {
     setCurrentRow(channel);
-    setOpen('disabledAPIKeys');
+    setOpen('keyManagement');
   }, [channel, setCurrentRow, setOpen]);
 
   const onClickByActionID: Record<ChannelStatusActionID, () => void> = {

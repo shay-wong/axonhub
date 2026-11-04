@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useChannels } from '../context/channels-context';
 import { useChannelDetails } from '../data/channels';
 import { ChannelsActionDialog } from './channels-action-dialog';
@@ -9,15 +10,14 @@ import { ChannelsBulkApplyTemplateDialog } from './channels-bulk-apply-template-
 import { ChannelsBulkArchiveDialog } from './channels-bulk-archive-dialog';
 import { ChannelsBulkAutoDisableDialog } from './channels-bulk-auto-disable-dialog';
 import { ChannelsBulkClearTemplateDialog } from './channels-bulk-clear-template-dialog';
-import { ChannelsBulkManageTagsDialog } from './channels-bulk-manage-tags-dialog';
 import { ChannelsBulkDeleteDialog } from './channels-bulk-delete-dialog';
 import { ChannelsBulkDisableDialog } from './channels-bulk-disable-dialog';
 import { ChannelsBulkEnableDialog } from './channels-bulk-enable-dialog';
 import { ChannelsBulkImportDialog } from './channels-bulk-import-dialog';
+import { ChannelsBulkManageTagsDialog } from './channels-bulk-manage-tags-dialog';
 import { ChannelsBulkOrderingDialog } from './channels-bulk-ordering-dialog';
 import { ChannelsBulkTestDialog } from './channels-bulk-test-dialog';
 import { ChannelsDeleteDialog } from './channels-delete-dialog';
-import { ChannelsDisabledAPIKeysDialog } from './channels-disabled-api-keys-dialog';
 import { ChannelsEndpointsDialog } from './channels-endpoints-dialog';
 import { ChannelsErrorResolvedDialog } from './channels-error-resolved-dialog';
 import { ChannelsModelMappingDialog } from './channels-model-mapping-dialog';
@@ -33,9 +33,10 @@ import { ChannelsTestHistoryDrawer } from './channels-test-history-drawer';
 import { ChannelsTransformOptionsDialog } from './channels-transform-options-dialog';
 
 export function ChannelsDialogs() {
+  const { channelPermissions } = usePermissions();
   const { open, setOpen, currentRow: partialCurrentRow, setCurrentRow, selectedChannels } = useChannels();
   const detailsQuery = useChannelDetails(partialCurrentRow?.id, {
-    enabled: Boolean(partialCurrentRow && open),
+    enabled: Boolean(partialCurrentRow && open && (open !== 'keyManagement' || channelPermissions.canWrite)),
   });
 
   useEffect(() => {
@@ -89,7 +90,23 @@ export function ChannelsDialogs() {
 
       <ChannelsBulkOrderingDialog open={open === 'bulkOrdering'} onOpenChange={(isOpen) => setOpen(isOpen ? 'bulkOrdering' : null)} />
 
-      {currentRow && (
+      {partialCurrentRow && open === 'keyManagement' && channelPermissions.canWrite && (
+        <ChannelsAPIKeyManagementDialog
+          key={`channel-key-management-${partialCurrentRow.id}`}
+          open
+          loading={!detailsQuery.isError && (detailsQuery.isFetching || !detailsQuery.data || detailsQuery.data !== partialCurrentRow)}
+          loadError={detailsQuery.isError}
+          onRetry={() => void detailsQuery.refetch()}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              setOpen(null);
+              setCurrentRow(null);
+            }
+          }}
+        />
+      )}
+
+      {currentRow && open !== 'keyManagement' && (
         <>
           <ChannelsActionDialog
             key={`channel-edit-${currentRow.id}`}
@@ -331,19 +348,6 @@ export function ChannelsDialogs() {
             channel={currentRow}
           />
 
-          <ChannelsDisabledAPIKeysDialog
-            key={`channel-disabled-api-keys-${currentRow.id}`}
-            open={open === 'disabledAPIKeys'}
-            onOpenChange={(isOpen) => {
-              if (!isOpen) {
-                setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
-              }
-            }}
-          />
-
           <ChannelsAvailabilityDialog
             key={`channel-availability-${currentRow.id}`}
             open={open === 'availability'}
@@ -356,19 +360,6 @@ export function ChannelsDialogs() {
               }
             }}
             currentRow={currentRow}
-          />
-
-          <ChannelsAPIKeyManagementDialog
-            key={`channel-key-management-${currentRow.id}`}
-            open={open === 'keyManagement'}
-            onOpenChange={(isOpen) => {
-              if (!isOpen) {
-                setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
-              }
-            }}
           />
         </>
       )}

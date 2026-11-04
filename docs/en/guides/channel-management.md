@@ -96,6 +96,12 @@ Manually adding `429` to a channel's **Retryable Status Codes** does not reuse a
 
 Gemini Vertex credentials pair each API key with a project and region. Editing or reordering a key preserves its existing alias and weight; keeping the last key when deleting disabled keys also keeps its project binding. Model discovery skips disabled keys, tries the next key only after failure, and stops after the first success. Project-bound discovery uses the matching key's project and region; the provider's public catalog may be used first.
 
+### Unified key management
+
+The disabled-key icon beside a channel name, the disabled-key menu item, and **Key Management** open the same dialog. It opens immediately while channel details and disabled status load inside it. Failed loads can be retried; credential changes are unavailable until loading succeeds.
+
+One list supports importing, testing, copying, disabling, restoring, and deleting keys, alongside aliases, disable reasons, error codes, and recovery countdowns. Restore one, selected, or all disabled credentials; temporary expiry refreshes status. OAuth credentials can be restored but cannot be copied, tested, or deleted as API keys. API key operations retain last-key and Vertex project-binding protections. Entry points and actions still require channel-write permission.
+
 ## Auto-disable policy compatibility
 
 Global rules and the fork's separate channel/API key status-code policies are configured independently in retry settings. Custom channel rules run first, followed by global rules; a matching rule owns the failure even before its threshold is reached. Unmatched failures fall back to the separate status-code policies, with API key rules taking precedence over channel rules. Channel mode **Off** skips all automatic disabling.

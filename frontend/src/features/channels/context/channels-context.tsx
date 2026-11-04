@@ -35,7 +35,6 @@ type ChannelsDialogType =
   | 'rateLimit'
   | 'availability'
   | 'keyManagement'
-  | 'disabledAPIKeys'
   | 'endpoints';
 
 interface ChannelsContextType {

@@ -13,7 +13,7 @@ function read(relativePath) {
 test('disabled API key dialog queries and fully renders the disable reason', () => {
   // The management dialog uses a dedicated query, so the reason must be selected and typed there explicitly.
   const channelsData = read('features/channels/data/channels.ts');
-  const dialog = read('features/channels/components/channels-disabled-api-keys-dialog.tsx');
+  const dialog = read('features/channels/components/channels-api-key-management-dialog.tsx');
   const queryStart = channelsData.indexOf('const GET_CHANNEL_DISABLED_API_KEYS_QUERY');
   const queryEnd = channelsData.indexOf('const GET_CHANNEL_MODEL_PRICES_QUERY', queryStart);
   const hookStart = channelsData.indexOf('export function useChannelDisabledAPIKeys');
@@ -21,8 +21,11 @@ test('disabled API key dialog queries and fully renders the disable reason', () 
 
   assert.match(channelsData.slice(queryStart, queryEnd), /disabledAPIKeys\s*\{[\s\S]*\breason\b/);
   assert.match(channelsData.slice(hookStart, hookEnd), /reason\?:\s*string\s*\|\s*null/);
-  assert.match(dialog, /whitespace-pre-wrap break-words[^>]*>\{dk\.reason\}<\/span>/);
-  assert.doesNotMatch(dialog, /truncate[^>]*>\{dk\.reason\}/);
+  const reasonSpan = dialog.match(/<span className='([^']*)'>\{dk\.reason\}<\/span>/);
+  assert.ok(reasonSpan, 'the full disable reason must be rendered as text');
+  assert.ok(reasonSpan[1].split(/\s+/).includes('whitespace-pre-wrap'));
+  assert.ok(reasonSpan[1].split(/\s+/).includes('break-words'));
+  assert.doesNotMatch(reasonSpan[1], /truncate|line-clamp/);
 });
 
 test('disabled API key reason label is localized', () => {

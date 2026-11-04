@@ -1902,7 +1902,7 @@ async function updateChannelSettingsRequest(id: string, patch: Partial<ChannelSe
   return channelSchema.parse(data.updateChannelSettings);
 }
 
-async function fetchLatestChannel(channelID: string): Promise<Channel> {
+export async function fetchLatestChannel(channelID: string): Promise<Channel> {
   const data = await graphqlRequest<{ queryChannels: ChannelConnection }>(QUERY_CHANNELS_QUERY, {
     input: {
       first: 1,
@@ -2822,7 +2822,7 @@ export function useChannelDisabledAPIKeys(channelId: string, options?: { enabled
         return data.node?.disabledAPIKeys || [];
       } catch (error) {
         handleError(error, t('common.errors.internalServerError'));
-        return [];
+        throw error;
       }
     },
     enabled: !!channelId && options?.enabled !== false,

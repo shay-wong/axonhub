@@ -291,7 +291,7 @@ Fork release builds can install updates or roll back to a recent compatible rele
 
 Fork safeguards also cover [permission-aware login destinations](docs/en/getting-started/quick-start.md#first-steps), [unified key strategies and optional per-key retries](docs/en/guides/channel-management.md#key-selection-strategies), and [fixed-key diagnostic isolation and retry counting](docs/en/guides/load-balance.md).
 
-[Streaming accounting](docs/en/guides/cost-tracking.md) separates delivery from final usage, preserves confirmed costs after trailing disconnects, and protects execution key identity visibility; [multi-key management](docs/en/guides/channel-management.md) retains Vertex project bindings, aliases, and weights, with aliases preferred in request logs.
+[Streaming accounting](docs/en/guides/cost-tracking.md) separates delivery from final usage, preserves confirmed costs after trailing disconnects, and protects execution key identity visibility; [multi-key management](docs/en/guides/channel-management.md) unifies key and disabled-credential recovery dialogs while retaining Vertex project bindings, aliases, and weights, with aliases preferred in request logs.
 
 [Analytics](docs/en/guides/cost-tracking.md#analytics-time-ranges) supports bounded timestamp ranges and actual-model statistics. [Key retries](docs/en/guides/channel-management.md#retry-per-api-key) keep failed keys excluded even when 429 is explicitly configured.
 

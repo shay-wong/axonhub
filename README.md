@@ -295,7 +295,7 @@ Fork Release 构建可在**系统设置 > 关于**中安装更新或回滚到最
 
 Fork 还保留[按权限选择登录落点](docs/zh/getting-started/quick-start.md#第一步)、[统一 Key 策略与可选按 Key 重试](docs/zh/guides/channel-management.md#key-选择策略)，以及[指定 Key 诊断隔离与重试计数](docs/zh/guides/load-balance.md)。
 
-[流式计费](docs/zh/guides/cost-tracking.md)区分交付状态与最终用量，在尾部断连后保留已确认费用，并保护执行记录中 Key 身份的可见性；[多 Key 管理](docs/zh/guides/channel-management.md)保留 Vertex 项目绑定、别名和权重，请求日志优先显示别名。
+[流式计费](docs/zh/guides/cost-tracking.md)区分交付状态与最终用量，在尾部断连后保留已确认费用，并保护执行记录中 Key 身份的可见性；[多 Key 管理](docs/zh/guides/channel-management.md)统一密钥与禁用恢复弹窗，保留 Vertex 项目绑定、别名和权重，请求日志优先显示别名。
 
 [分析页](docs/zh/guides/cost-tracking.md#分析时间范围)支持有界精确时间范围与实际模型统计；[Key 重试](docs/zh/guides/channel-management.md#按-key-重试)即使显式配置 429，也不会重复失败的 Key。
 
