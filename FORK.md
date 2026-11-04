@@ -19,11 +19,11 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`fc51e2e3415dfc78a20e1bba4415b0c800513739`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`03ffac6f96b48396404b691fbf2d594c35c1c9a5`
-- 本次 merge base：`6c181e01fc2a49a536bed09bc96e16599ac682ad`
-- 审计范围：`git diff 03ffac6f..HEAD`
-- 2026-11-03 合入 29 个上游提交：渠道独立响应超时、模型库填价汇率、配额状态 Webhook、服务账号 Key 授权边界、大备份上传、协议转换及依赖更新。Dashboard helper 搬迁目标已由本地独立文件实现，继续复用；其余既有 fork 不变量保留，没有整项等价吸收。
+- 本次 upstream merge 的 fork parent：`3cc81bb92bc708b87d9cd454c7a6de267e311572`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`8a9df52283d9d9c3909c839267ce890a2913231e`
+- 本次 merge base：`03ffac6f96b48396404b691fbf2d594c35c1c9a5`
+- 审计范围：`git diff 8a9df522..HEAD`
+- 2026-11-04 合入 12 个上游提交：AI SDK 流式工具调用按 index 保留 ID、安全审核主模型使用请求内短 ID 并映射回原始 ID，以及 Go/前端依赖更新。无文本冲突；ReasoningContent 的折叠容器 props 只传给容器，不再重复传给 Streamdown 2.x（其方向与动画回调类型不同）。统一密钥弹窗及既有 fork 不变量保留，没有整项等价吸收。
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -51,7 +51,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含已发布 tag `v1.0.0-beta12`（`2b1a0f9321a4f783a4cceb2b4eb3a8303074487e`），但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta11-fork.9`；upstream 发布基线变为 `v1.0.0-beta12`，因此下一个规范化 fork 版本为 `v1.0.0-beta12-fork.1`，发布前仍须重新确认该 tag 未被占用。2026-11-03 已核对远端 tags；本次不修改版本文件、不发布。
+- 最近已发布 fork tag 为 `v1.0.0-beta12-fork.1`；upstream 发布基线仍为 `v1.0.0-beta12`，因此下一个规范化 fork 版本为 `v1.0.0-beta12-fork.2`，发布前仍须重新确认该 tag 未被占用。2026-11-04 已核对远端 tags；本次不修改版本文件、不发布。
 
 ## 长期保留
 
