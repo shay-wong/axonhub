@@ -19,11 +19,11 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`3cc81bb92bc708b87d9cd454c7a6de267e311572`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`8a9df52283d9d9c3909c839267ce890a2913231e`
-- 本次 merge base：`03ffac6f96b48396404b691fbf2d594c35c1c9a5`
-- 审计范围：`git diff 8a9df522..HEAD`
-- 2026-11-04 合入 12 个上游提交：AI SDK 流式工具调用按 index 保留 ID、安全审核主模型使用请求内短 ID 并映射回原始 ID，以及 Go/前端依赖更新。无文本冲突；ReasoningContent 的折叠容器 props 只传给容器，不再重复传给 Streamdown 2.x（其方向与动画回调类型不同）。统一密钥弹窗及既有 fork 不变量保留，没有整项等价吸收。
+- 本次 upstream merge 的 fork parent：`3a94aeedc2df07d8bb4c166b5392e04a63a88263`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`ce0e132513f078528d9b422ad04a3fcf4531353d`
+- 本次 merge base：`8a9df52283d9d9c3909c839267ce890a2913231e`
+- 审计范围：`git diff ce0e1325..HEAD`
+- 2026-11-06 合入 27 个上游提交：插件系统与网关事件、请求持久化性能、真实用量终态、匹配条件函数、Codex 图片模型与额度恢复、CI 按改动范围检查及依赖更新。`klauspost/compress` 升至 `v1.20.3`，修复 `GO-2026-6865`。生成代码按合并后的源 schema 重新生成；保留本地分析权限、Key 身份与禁用规则、终态错误、模型别名和工具参数精度，没有整项 fork 能力等价吸收。
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -51,7 +51,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含已发布 tag `v1.0.0-beta12`（`2b1a0f9321a4f783a4cceb2b4eb3a8303074487e`），但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta12-fork.1`；upstream 发布基线仍为 `v1.0.0-beta12`，因此下一个规范化 fork 版本为 `v1.0.0-beta12-fork.2`，发布前仍须重新确认该 tag 未被占用。2026-11-04 已核对远端 tags；本次不修改版本文件、不发布。
+- 最近已发布 fork tag 为 `v1.0.0-beta12-fork.1`；upstream 发布基线仍为 `v1.0.0-beta12`，因此下一个规范化 fork 版本为 `v1.0.0-beta12-fork.2`，发布前仍须重新确认该 tag 未被占用。2026-11-06 已核对远端 tags；本次不修改版本文件、不发布。
 
 ## 长期保留
 
@@ -148,6 +148,7 @@ git show --remerge-diff <merge-commit>
 
 ### U01 API Key/渠道禁用、恢复和状态操作
 
+- 2026-11-06 插件事件整合：凭据禁用/恢复事件接入本地状态机，保留稳定 Key 身份与脱敏日志；临时禁用仍要求未来到期时间。插件 GraphQL 的新增 mutation 清单纳入 `clearChannelTemporaryDisable` 并验证只读权限不能调用；回归：`channel_events_test.go`、`plugin_endpoint_test.go`。
 - 预算高水位仅在显式 `retryPerAPIKey=true` 时启用；未配置或 false 时不再自动增加次数。此为 2026-10-27 维护者确认的新行为，见 F02；旧高水位回归必须显式开启开关。
 - 本次上游整合：`8262e95a` 在同渠道重试前读取持久化凭据状态，停用渠道不再继续重试；这不等价吸收 fork 的错误分类、计数所有权、多 Key 遍历或诊断隔离。独立兼容修复保留当前候选的 Key 重试预算高水位，刷新后可用 Key 减少不能缩短已分配的总预算，切换候选时重新计算。代码及回归：`internal/server/orchestrator/outbound.go`、`internal/server/orchestrator/retry_channel_refresh_fork_test.go`；当前变更定位：`git log -S'retryBudgetCandidate' -- internal/server/orchestrator/outbound.go`。用户文档：`docs/en/guides/load-balance.md`、`docs/zh/guides/load-balance.md`；验证：`go test ./internal/server/orchestrator -run 'RefreshChannelBeforeRetry|RefreshRetry|RetryBudget'`。
 - 已确认采用上游规则计数语义：同一渠道内按 Key 和规则独立累计，其他规则命中或未匹配失败不清零；该 Key 成功时清零自己的规则计数，其他 Key 成功不影响它。保留 `ChannelAPIKeyRuleKeepsIndependentCounters`、`CustomAndGlobalCountersAreIndependent` 回归。
@@ -199,7 +200,7 @@ git show --remerge-diff <merge-commit>
 - Responses 协议整合：采用 `36364049` 的内容输出前 structured failure 重试与 `94cd05b1` 的终态后立即结束，避免继续等待尾流；保留失败 snapshot 的 ID/model/usage/tier/request ID，refusal 和 `InlineToolResults` 必须计为已输出内容，后续失败不能再判成空响应。Transformer 与 pipeline 的内容判定须一致；保留已有完整终态后的费用语义。当前独立变更定位：`git log -S'TestResponsesFailedAfterInlineToolResultForkCompatibility' -- llm/transformer/openai/responses/outbound_stream_fork_compat_test.go`。
 - 原样转发同样必须完成转换流的终态校验和用量持久化：已完成请求不能被尾流错误覆盖，未完成断流须交付失败终态。交付终态前等待转换流校验，保留原始终态快照用于同类型终态补发，避免提前关闭造成 response/item ID 或扩展字段丢失；适配失败须先取消生产者再等待转换流结束。回归覆盖 `orchestrator_streaming_test.go` 的已完成取消/断流及 `pass_through_test.go` 的 HTTP/WS 事件身份与关闭顺序。
 - 本次上游整合：`b6d184a8` 将音频 data/transcript 视为非空内容；仍保留异常终态识别与完成后错误处理，不因仅有 usage 而认定成功。
-- 本次上游整合：采用 `81e519e9`，Anthropic/Responses 等待独立 usage-only chunk 后生成终态，避免 finish_reason chunk 的占位零值覆盖真实用量；保留 Responses 最新 usage 赋值、精确异常终态及已完成尾部错误策略。回归 `UsesUsageFromFinalUsageOnlyChunk` 与既有终态测试。
+- 用量终态整合：采用 `81e519e9` 后再吸收 `0fa12b22`、`e2759aad`，按真实 token 计数识别最终 usage，不再要求独立 usage-only chunk；零占位不覆盖真实计数，usage 之后仍有输出时不据此前用量计费。保留 Responses 最新 usage 赋值、精确异常终态及已完成尾部错误策略。回归 `UsesUsageFromFinalUsageOnlyChunk`、`UsesUsageFromFinishChunk`、`FinalizesOnZeroCompletionUsage` 与既有终态测试。
 - 本次独立整合修复：Chat 输出在收到显式 error/failed/canceled/incomplete 后，即使之前已有内容与 usage，clean EOF 也不得补成功 finish/[DONE]。复用 `Response.TerminalOutcome()` 判定；回归为 `TestInboundTransformer_ProviderTerminalDoesNotSynthesizeSuccess`，提交可用 `git log -S'TestInboundTransformer_ProviderTerminalDoesNotSynthesizeSuccess' -- llm/transformer/openai/inbound_stream_test.go` 定位。用户说明见 `docs/en/guides/cost-tracking.md` 与 `docs/zh/guides/cost-tracking.md`。
 - 本次上游整合：采用 `2f8de312` 的统一流式终态决策与多 choice 完成跟踪，以及 `ac7f4889` 的 Responses 中断协议错误；保留 fork 的异常终态原始错误/响应体、费用、健康统计仅计一次和渠道测试隔离。上游终态重构没有完全替代这些不变量，本条继续保留。
 - 本次独立整合修复：已完成响应的聚合回收仅在尚未记录完成时提交健康统计，避免成功计数重复；SSE 终态已发送后不再追加 deadline 错误。回归 `TestChatCompletionOrchestrator_Process_CanceledAfterResponsesCompletionPersistsUsage` 同时验证完成后的 EOF/取消、费用与成功恰好一次；本次提交可用 `git log -S'if ts.perf != nil && !ts.perf.RequestCompleted' -- internal/server/orchestrator/outbound.go` 定位。
@@ -227,6 +228,7 @@ git show --remerge-diff <merge-commit>
 
 ### U06 GPT-5.6、GPT-6 Astra 和 Claude Opus 5 默认模型
 
+- 2026-11-06 采用上游 Claude 5.5 默认模型和完整 Codex image 模型集合；快速添加列表移除即将退休的 Claude 4.5，同时保留 fork 的 `claude-opus-5` 与 `gpt-5.6` 别名。默认项更新不修改既有渠道已保存的模型。
 - 本次上游整合：`d0384f43` 更新 Codex 客户端为 `0.159.0` 并调整默认模型；`e26e52bb` 拉取 OAuth 官方模型目录，但不替代下游 `/v1/models` 的 Codex 格式适配（U22）。保留本地 `gpt-5.6` 别名及 Astra 支持。
 - 本次上游整合：`ca7925ae` 新增 GPT-6 Sol/Luna，Codex 默认客户端版本更新为 `0.156.0`；仍未吸收本条目记录的全部渠道默认模型增量。
 - 生命周期：`等待上游吸收`
@@ -252,6 +254,7 @@ git show --remerge-diff <merge-commit>
 
 ### U08 JSON 大整数精度
 
+- 2026-11-06 吸收 Ollama 跨 chunk 工具调用累计与稳定序号，仍通过 `toolCallArgumentsString` 严格解析每次调用参数；不得退回 `json.Marshal(any)` 丢失原始大整数或静默忽略错误。回归：`llm/transformer/ollama/outbound_test.go`。
 - 生命周期：`等待上游吸收`
 - 原始意图：工具参数和 trace 规范化不能经过 `float64` 后改变超过 JavaScript safe integer 范围的 JSON 数字。
 - 必须保持：Ollama 工具调用参数和 trace canonicalization 使用精确数字解码；区分 `9007199254740992` 与 `9007199254740993`；拒绝 trailing JSON content，而不是静默规范化错误输入。

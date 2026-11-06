@@ -277,6 +277,7 @@ func (m *persistRequestMiddleware) OnInboundRawResponse(ctx context.Context, htt
 			log.Warn(persistCtx, "Failed to update speech request status to completed", log.Cause(err))
 		}
 
+		publishRequestCompleted(persistCtx, state, llmResp.Usage, false, metrics)
 		return httpResp, nil
 	}
 
@@ -288,6 +289,7 @@ func (m *persistRequestMiddleware) OnInboundRawResponse(ctx context.Context, htt
 		log.Warn(persistCtx, "Failed to update request status to completed", log.Cause(err))
 	}
 
+	publishRequestCompleted(persistCtx, state, llmResp.Usage, false, metrics)
 	return httpResp, nil
 }
 

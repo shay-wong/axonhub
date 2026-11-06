@@ -23,14 +23,15 @@ import (
 )
 
 func TestExtractErrorMessage_ResponseError(t *testing.T) {
-	err := fmt.Errorf("failed to stream request: %w", &llm.ResponseError{
+	var responseErr error = &llm.ResponseError{
 		StatusCode: http.StatusBadGateway,
 		Detail: llm.ErrorDetail{
 			Message: "provider unavailable",
 			Code:    "upstream_error",
 			Type:    "server_error",
 		},
-	})
+	}
+	err := fmt.Errorf("failed to stream request: %w", responseErr)
 
 	require.Equal(t, "provider unavailable", ExtractErrorMessage(err))
 }
@@ -70,16 +71,16 @@ func TestChatCompletionOrchestrator_Process_ErrorHandling(t *testing.T) {
 	channelSelector := &staticChannelSelector{candidates: channelsToTestCandidates([]*biz.Channel{bizChannel}, "gpt-4")}
 
 	orchestrator := &ChatCompletionOrchestrator{
-		channelSelector:   channelSelector,
-		Inbound:           openai.NewInboundTransformer(),
-		RequestService:    requestService,
-		ChannelService:    channelService,
-		PromptProvider:    &stubPromptProvider{},
-		SystemService:     systemService,
-		UsageLogService:   usageLogService,
-		PipelineFactory:   pipeline.NewFactory(executor),
-		ModelMapper:       NewModelMapper(),
-		channelLimiterManager:      NewChannelLimiterManager(),
+		channelSelector:       channelSelector,
+		Inbound:               openai.NewInboundTransformer(),
+		RequestService:        requestService,
+		ChannelService:        channelService,
+		PromptProvider:        &stubPromptProvider{},
+		SystemService:         systemService,
+		UsageLogService:       usageLogService,
+		PipelineFactory:       pipeline.NewFactory(executor),
+		ModelMapper:           NewModelMapper(),
+		channelLimiterManager: NewChannelLimiterManager(),
 		Middlewares: []pipeline.Middleware{
 			stream.EnsureUsage(),
 		},
@@ -135,16 +136,16 @@ func TestChatCompletionOrchestrator_Process_NoChannelsAvailable(t *testing.T) {
 	channelSelector := &staticChannelSelector{candidates: []*ChannelModelsCandidate{}}
 
 	orchestrator := &ChatCompletionOrchestrator{
-		channelSelector:   channelSelector,
-		Inbound:           openai.NewInboundTransformer(),
-		RequestService:    requestService,
-		ChannelService:    channelService,
-		PromptProvider:    &stubPromptProvider{},
-		SystemService:     systemService,
-		UsageLogService:   usageLogService,
-		PipelineFactory:   pipeline.NewFactory(executor),
-		ModelMapper:       NewModelMapper(),
-		channelLimiterManager:      NewChannelLimiterManager(),
+		channelSelector:       channelSelector,
+		Inbound:               openai.NewInboundTransformer(),
+		RequestService:        requestService,
+		ChannelService:        channelService,
+		PromptProvider:        &stubPromptProvider{},
+		SystemService:         systemService,
+		UsageLogService:       usageLogService,
+		PipelineFactory:       pipeline.NewFactory(executor),
+		ModelMapper:           NewModelMapper(),
+		channelLimiterManager: NewChannelLimiterManager(),
 		Middlewares: []pipeline.Middleware{
 			stream.EnsureUsage(),
 		},
@@ -187,16 +188,16 @@ func TestChatCompletionOrchestrator_Process_InvalidRequest(t *testing.T) {
 	channelSelector := &staticChannelSelector{candidates: channelsToTestCandidates([]*biz.Channel{bizChannel}, "gpt-4")}
 
 	orchestrator := &ChatCompletionOrchestrator{
-		channelSelector:   channelSelector,
-		Inbound:           openai.NewInboundTransformer(),
-		RequestService:    requestService,
-		ChannelService:    channelService,
-		PromptProvider:    &stubPromptProvider{},
-		SystemService:     systemService,
-		UsageLogService:   usageLogService,
-		PipelineFactory:   pipeline.NewFactory(executor),
-		ModelMapper:       NewModelMapper(),
-		channelLimiterManager:      NewChannelLimiterManager(),
+		channelSelector:       channelSelector,
+		Inbound:               openai.NewInboundTransformer(),
+		RequestService:        requestService,
+		ChannelService:        channelService,
+		PromptProvider:        &stubPromptProvider{},
+		SystemService:         systemService,
+		UsageLogService:       usageLogService,
+		PipelineFactory:       pipeline.NewFactory(executor),
+		ModelMapper:           NewModelMapper(),
+		channelLimiterManager: NewChannelLimiterManager(),
 		Middlewares: []pipeline.Middleware{
 			stream.EnsureUsage(),
 		},

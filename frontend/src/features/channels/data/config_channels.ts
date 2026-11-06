@@ -175,7 +175,7 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
   anthropic: {
     channelType: 'anthropic',
     baseURL: 'https://api.anthropic.com',
-    defaultModels: ['claude-opus-5', 'claude-opus-4-5', 'claude-sonnet-4-5'],
+    defaultModels: ['claude-opus-5', 'claude-opus-5-5', 'claude-sonnet-5-5'],
     apiFormat: ANTHROPIC_MESSAGES,
     color: 'bg-gray-100 text-gray-800 border-gray-200',
     icon: Anthropic,
@@ -750,7 +750,7 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
   claudecode: {
     channelType: 'claudecode',
     baseURL: 'https://api.anthropic.com/v1',
-    defaultModels: ['claude-opus-5', 'claude-haiku-4-5', 'claude-sonnet-4-5', 'claude-opus-4-5'],
+    defaultModels: ['claude-opus-5', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'],
     apiFormat: ANTHROPIC_MESSAGES,
     color: 'bg-orange-100 text-orange-800 border-orange-200',
     icon: Claude,

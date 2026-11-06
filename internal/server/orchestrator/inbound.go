@@ -113,7 +113,7 @@ func (ts *InboundPersistentStream) Current() *httpclient.StreamEvent {
 				observeStreamTerminal(ts.state, event)
 				ts.terminalState = classifyAcceptedTerminalEvent(event)
 				ts.terminalState = ts.finalTerminalState()
-				ts.outcome.observeTerminal(ts.terminalState)
+				ts.outcome.observeTerminalEvent(ts.terminalState, event)
 				ts.state.StreamCompleted = ts.outcome.deliveryState() == streamTerminalCompleted
 				ts.stateMu.Unlock()
 			}
@@ -439,6 +439,14 @@ func (ts *InboundPersistentStream) Close() error {
 		ts.state.DeliveryAcknowledged = true
 	}
 	ctx := ts.ctx
+	// Close is idempotent; publish only after the final outcome and persistence
+	// have been resolved, including failures arriving after Process returned.
+	defer func() {
+		if ts.terminalState == streamTerminalNone || ts.terminalState == streamTerminalCompleted {
+			return
+		}
+		publishRequestFailed(context.WithoutCancel(ctx), ts.state, ts.outcome.deliveryDecision().cause)
+	}()
 
 	log.Debug(ctx, "Closing persistent stream", log.Int("chunk_count", len(ts.responseChunks)), log.Bool("request_completed", ts.state.StreamCompleted))
 
@@ -640,9 +648,13 @@ func (ts *InboundPersistentStream) _persistResponse(ctx context.Context, respons
 	}
 
 	status := ts.terminalState.requestStatus()
-	err := ts.requestService.UpdateRequestFinalized(ctx, ts.request.ID, status, meta.ID, responseBody, latencyMetrics(ts.perf))
+	metrics := latencyMetrics(ts.perf)
+	err := ts.requestService.UpdateRequestFinalized(ctx, ts.request.ID, status, meta.ID, responseBody, metrics)
 	if err != nil {
 		log.Warn(ctx, "Failed to update finalized request", log.Cause(err), log.Any("status", status))
+	}
+	if status == request.StatusCompleted {
+		publishRequestCompleted(ctx, ts.state, meta.Usage, true, metrics)
 	}
 
 	// Save all response chunks at once
