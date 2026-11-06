@@ -267,14 +267,15 @@ func (svc *ChannelService) EnableAPIKey(ctx context.Context, channelID int, key 
 		update.ClearErrorMessage()
 	}
 
-	if _, err := update.Save(ctx); err != nil {
+	updated, err := update.Save(ctx)
+	if err != nil {
 		return fmt.Errorf("failed to enable api key: %w", err)
 	}
 
 	fields := []log.Field{log.Int("channel_id", channelID)}
 	identity := (&Channel{Channel: ch}).APIKeyIdentity(key)
 	log.Info(ctx, "API key enabled", append(fields, apiKeyIdentityLogFields(identity)...)...)
-	svc.publishCredentialEnabled(ctx, ch, []string{key}, newDisabledKeys, credentialTriggerManual)
+	svc.publishCredentialEnabled(ctx, updated, []string{key}, credentialTriggerManual)
 	svc.asyncReloadChannels()
 
 	return nil
@@ -304,7 +305,8 @@ func (svc *ChannelService) EnableAllAPIKeys(ctx context.Context, channelID int) 
 		update.ClearErrorMessage()
 	}
 
-	if _, err := update.Save(ctx); err != nil {
+	updated, err := update.Save(ctx)
+	if err != nil {
 		return fmt.Errorf("failed to enable all api keys: %w", err)
 	}
 
@@ -312,7 +314,7 @@ func (svc *ChannelService) EnableAllAPIKeys(ctx context.Context, channelID int) 
 		log.Int("channel_id", channelID),
 	)
 
-	svc.publishCredentialEnabled(ctx, ch, disabledKeyValues(ch.DisabledAPIKeys), nil, credentialTriggerManual)
+	svc.publishCredentialEnabled(ctx, updated, disabledKeyValues(ch.DisabledAPIKeys), credentialTriggerManual)
 	svc.asyncReloadChannels()
 
 	return nil
@@ -362,7 +364,8 @@ func (svc *ChannelService) EnableSelectedAPIKeys(ctx context.Context, channelID 
 		update.ClearErrorMessage()
 	}
 
-	if _, err := update.Save(ctx); err != nil {
+	updated, err := update.Save(ctx)
+	if err != nil {
 		return fmt.Errorf("failed to enable selected api keys: %w", err)
 	}
 
@@ -372,7 +375,7 @@ func (svc *ChannelService) EnableSelectedAPIKeys(ctx context.Context, channelID 
 		log.Any("api_keys", (&Channel{Channel: ch}).APIKeyIdentities(keys)),
 	)
 
-	svc.publishCredentialEnabled(ctx, ch, enabledKeys, newDisabledKeys, credentialTriggerManual)
+	svc.publishCredentialEnabled(ctx, updated, enabledKeys, credentialTriggerManual)
 	svc.asyncReloadChannels()
 
 	return nil
@@ -671,11 +674,12 @@ func (svc *ChannelService) cleanupChannelExpiredDisabledAPIKeys(ctx context.Cont
 
 	update := entClient.Channel.UpdateOneID(ch.ID).SetDisabledAPIKeys(active)
 	update = applyRecoveredChannelStatus(ctx, update, ch, ch.Credentials, active)
-	if _, err := update.Save(ctx); err != nil {
+	updated, err := update.Save(ctx)
+	if err != nil {
 		return false, 0, fmt.Errorf("failed to update channel: %w", err)
 	}
 
-	svc.publishCredentialEnabled(ctx, ch, disabledKeyValues(expired), active, credentialTriggerExpired)
+	svc.publishCredentialEnabled(ctx, updated, disabledKeyValues(expired), credentialTriggerExpired)
 
 	return true, removed, nil
 }

@@ -102,6 +102,8 @@ The disabled-key icon beside a channel name, the disabled-key menu item, and **K
 
 One list supports importing, testing, copying, disabling, restoring, and deleting keys, alongside aliases, disable reasons, error codes, and recovery countdowns. Restore one, selected, or all disabled credentials; temporary expiry refreshes status. OAuth credentials can be restored but cannot be copied, tested, or deleted as API keys. API key operations retain last-key and Vertex project-binding protections. Entry points and actions still require channel-write permission.
 
+Credential-recovery events delivered to plugins use the saved channel status. They report `enabled` when the channel has recovered and retain `disabled` when it remains manually disabled.
+
 ## Auto-disable policy compatibility
 
 Global rules and the fork's separate channel/API key status-code policies are configured independently in retry settings. Custom channel rules run first, followed by global rules; a matching rule owns the failure even before its threshold is reached. Unmatched failures fall back to the separate status-code policies, with API key rules taking precedence over channel rules. Channel mode **Off** skips all automatic disabling.

@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Reported the saved channel status in plugin credential-recovery events, including recovery from permanent key exhaustion and channels that remain manually disabled.
 - Unified disabled-key actions with Key Management, opening the dialog before details load while retaining disable reasons, recovery countdowns, and bulk restore actions.
 - Applied model-library exchange rates consistently to base, Fast/Ultrafast, and context-bracket prices while preserving existing schedules and cache-write variants.
 - Kept failed keys excluded even when a channel explicitly opts 429 into retry; exhausting keys or the retry budget switches channels.

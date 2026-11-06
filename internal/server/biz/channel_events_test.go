@@ -156,8 +156,51 @@ func TestChannelCredentialEnabledEvent_ManualAndExpired(t *testing.T) {
 	expiredEvent := requireEvent(t, received)
 	require.Equal(t, "expired", expiredEvent.Data["trigger"])
 	require.Equal(t, events.Fingerprint(secret), expiredEvent.Subject.Credential.Fingerprint)
+	require.Equal(t, reloadChannel(t, ctx, client, ch.ID).Status.String(), expiredEvent.Subject.Channel.Status)
 	requireNoSecret(t, expiredEvent, secret)
 	require.Empty(t, reloadChannel(t, ctx, client, ch.ID).DisabledAPIKeys)
+}
+
+func TestChannelCredentialEnabledEvent_ReportsPersistedChannelStatus(t *testing.T) {
+	for _, operation := range []struct {
+		name   string
+		enable func(*ChannelService, context.Context, int, string) error
+	}{
+		{"single", func(s *ChannelService, ctx context.Context, id int, key string) error {
+			return s.EnableAPIKey(ctx, id, key)
+		}},
+		{"selected", func(s *ChannelService, ctx context.Context, id int, key string) error {
+			return s.EnableSelectedAPIKeys(ctx, id, []string{key})
+		}},
+		{"all", func(s *ChannelService, ctx context.Context, id int, _ string) error {
+			return s.EnableAllAPIKeys(ctx, id)
+		}},
+	} {
+		for _, manual := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/manual=%t", operation.name, manual), func(t *testing.T) {
+				const key = "sk-restored-credential"
+				svc, client, ctx, ch := setupChannelEventFixture(t, []string{key})
+				bus := events.NewBus()
+				t.Cleanup(func() { require.NoError(t, bus.Close(context.Background())) })
+				svc.EventBus = bus
+				received := subscribeEvent(t, bus, events.TypeChannelCredentialEnabled)
+				require.NoError(t, svc.DisableAPIKey(ctx, ch.ID, key, 401, "invalid key"))
+				require.Equal(t, channel.StatusDisabled, reloadChannel(t, ctx, client, ch.ID).Status)
+				want := channel.StatusEnabled
+				if manual {
+					want = channel.StatusDisabled
+					_, err := client.Channel.UpdateOneID(ch.ID).SetErrorMessage("manually disabled").Save(ctx)
+					require.NoError(t, err)
+				}
+				require.NoError(t, operation.enable(svc, ctx, ch.ID, key))
+				persisted := reloadChannel(t, ctx, client, ch.ID)
+				require.Equal(t, want, persisted.Status)
+				event := requireEvent(t, received)
+				require.Equal(t, persisted.Status.String(), event.Subject.Channel.Status)
+				requireNoSecret(t, event, key)
+			})
+		}
+	}
 }
 
 func TestChannelAutoEnabledEvent_NilBusNoSubscriberAndDelivery(t *testing.T) {

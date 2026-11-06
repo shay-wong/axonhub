@@ -148,7 +148,7 @@ git show --remerge-diff <merge-commit>
 
 ### U01 API Key/渠道禁用、恢复和状态操作
 
-- 2026-11-06 插件事件整合：凭据禁用/恢复事件接入本地状态机，保留稳定 Key 身份与脱敏日志；临时禁用仍要求未来到期时间。插件 GraphQL 的新增 mutation 清单纳入 `clearChannelTemporaryDisable` 并验证只读权限不能调用；回归：`channel_events_test.go`、`plugin_endpoint_test.go`。
+- 2026-11-06 插件事件整合：凭据禁用/恢复事件接入本地状态机，保留稳定 Key 身份与脱敏日志；临时禁用仍要求未来到期时间。插件 GraphQL 的新增 mutation 清单纳入 `clearChannelTemporaryDisable` 并验证只读权限不能调用；回归：`channel_events_test.go`、`plugin_endpoint_test.go`。独立兼容修复让单个/选中/全部恢复和过期清理事件直接读取 `Save` 返回的实际渠道状态，避免旧前缀推断把已恢复渠道报为 disabled，或把仍手动停用的渠道报为 enabled；回归 `TestChannelCredentialEnabledEvent_ReportsPersistedChannelStatus`；当前变更定位 `git log -S'TestChannelCredentialEnabledEvent_ReportsPersistedChannelStatus' -- internal/server/biz/channel_events_test.go`。
 - 预算高水位仅在显式 `retryPerAPIKey=true` 时启用；未配置或 false 时不再自动增加次数。此为 2026-10-27 维护者确认的新行为，见 F02；旧高水位回归必须显式开启开关。
 - 本次上游整合：`8262e95a` 在同渠道重试前读取持久化凭据状态，停用渠道不再继续重试；这不等价吸收 fork 的错误分类、计数所有权、多 Key 遍历或诊断隔离。独立兼容修复保留当前候选的 Key 重试预算高水位，刷新后可用 Key 减少不能缩短已分配的总预算，切换候选时重新计算。代码及回归：`internal/server/orchestrator/outbound.go`、`internal/server/orchestrator/retry_channel_refresh_fork_test.go`；当前变更定位：`git log -S'retryBudgetCandidate' -- internal/server/orchestrator/outbound.go`。用户文档：`docs/en/guides/load-balance.md`、`docs/zh/guides/load-balance.md`；验证：`go test ./internal/server/orchestrator -run 'RefreshChannelBeforeRetry|RefreshRetry|RetryBudget'`。
 - 已确认采用上游规则计数语义：同一渠道内按 Key 和规则独立累计，其他规则命中或未匹配失败不清零；该 Key 成功时清零自己的规则计数，其他 Key 成功不影响它。保留 `ChannelAPIKeyRuleKeepsIndependentCounters`、`CustomAndGlobalCountersAreIndependent` 回归。

@@ -2,7 +2,6 @@ package biz
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -66,7 +65,6 @@ func (svc *ChannelService) publishCredentialEnabled(
 	ctx context.Context,
 	ch *ent.Channel,
 	keys []string,
-	remaining []objects.DisabledAPIKey,
 	trigger string,
 ) {
 	if svc == nil || svc.EventBus == nil || len(keys) == 0 || !svc.EventBus.HasSubscribers(events.TypeChannelCredentialEnabled) {
@@ -74,7 +72,7 @@ func (svc *ChannelService) publishCredentialEnabled(
 	}
 
 	oauth := channelUsesOAuth(ch)
-	channelRef := entChannelRef(ch, channelStatusAfterCredentialChange(ch, remaining, false))
+	channelRef := entChannelRef(ch, ch.Status)
 	for _, key := range keys {
 		if key == "" && !oauth {
 			continue
@@ -168,22 +166,6 @@ func credentialEventRef(oauth bool, key string) *events.CredentialRef {
 		Fingerprint: events.Fingerprint(key),
 		Masked:      events.Mask(key),
 	}
-}
-
-func channelStatusAfterCredentialChange(ch *ent.Channel, disabledKeys []objects.DisabledAPIKey, forceDisabled bool) channel.Status {
-	if ch == nil {
-		return ""
-	}
-	if forceDisabled {
-		return channel.StatusDisabled
-	}
-	if ch.Status == channel.StatusDisabled && ch.ErrorMessage != nil &&
-		strings.HasPrefix(*ch.ErrorMessage, allKeysDisabledErrorPrefix) &&
-		len(ch.Credentials.GetEnabledCredentialRefs(disabledKeys)) > 0 {
-		return channel.StatusEnabled
-	}
-
-	return ch.Status
 }
 
 func rfc3339OrNil(value *time.Time) any {
