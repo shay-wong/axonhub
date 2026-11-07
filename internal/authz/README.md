@@ -39,7 +39,7 @@ Defined in [scope.go](./scope.go):
 
 - `WithScopeDecision(ctx, scope)` - Inject Allow/Deny decision based on principal scope
 - `RunWithScopeDecision(ctx, scope, fn)` - Closure mode, recommended usage
-- `WithSystemScopeDecision(ctx, scope)` - Inject Allow/Deny using system-level user scopes only
+- `WithSystemScopeDecision(ctx, scope)` - Inject Allow/Deny using system-level scopes only
 - `RunWithSystemScopeDecision(ctx, scope, fn)` - Closure mode for system-level scope decisions
 - `HasScope(ctx, scope)` - Pure scope check without injecting DecisionContext
 - `HasSystemScope(ctx, scope)` - Pure system-level scope check that ignores project scopes
@@ -47,6 +47,7 @@ Defined in [scope.go](./scope.go):
 - `RequireSystemScope(ctx, scope)` - Require a system-level scope, otherwise return error
 - Scope checks support System, User, APIKey, and Plugin principals; internal test principals also receive Allow.
 - Plugin decisions intersect installation grants with user scopes, then behave like a direct user: Allow on success, Deny on failure. Use scope decisions only for controlled internal reads after the check; never hand the Allow context to plugin-supplied callbacks.
+- System-scope checks apply the same intersection for plugins, but never use project membership or project-role scopes to authorize system access.
 
 ## Plugin delegation
 

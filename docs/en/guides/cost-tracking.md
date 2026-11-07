@@ -16,6 +16,8 @@ Analytics supports second-precision selection with inclusive timestamp bounds an
 
 `AnalyticsFilter.startTime`/`endTime` and `analyticsFilterOptions` time arguments now use GraphQL `Time` values in RFC3339 format, such as `2026-10-27T08:30:00+08:00`. `analyticsMetadata.earliestTime` replaces `earliestDate`. Refresh open pages after upgrading; API callers must update old date-only strings and `String` variable declarations.
 
+Analytics requires system-level permissions. Plugins can use only permissions held by their user and granted to the installation; project membership or project-role permissions cannot substitute for system permissions.
+
 ### Token Type Tracking
 
 AxonHub tracks the following token types:

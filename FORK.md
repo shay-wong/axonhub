@@ -338,6 +338,7 @@ git show --remerge-diff <merge-commit>
 
 ### U15 前端交互和权限回归修复
 
+- 2026-11-07 设置页拆分兼容：旧 `/system?tab=…` 书签和登录回跳转到对应新设置页并保留标签；原来隐藏 `/system` 的偏好只迁移一次，三个新设置入口也保持隐藏，之后仍可独立调整或重置。Beta 选择继续放在 tabs 父层。回归：`frontend/src/routes/_authenticated/system/index.test.mjs`、`frontend/src/stores/sidebarPrefsStore.test.mjs`、`update-contract.test.mjs`；当前独立修复定位：`git log -S'HIDDEN_NAV_ITEMS_MIGRATION_VERSION_KEY' -- frontend/src/stores/sidebarPrefsStore.ts`。用户说明：中英 quick-start。
 - 本次独立整合：`bb4e4aae` 升级 i18next 26 后不再支持旧 `interpolation.format`；初始化前通过 formatter service 注册 currency，保留 USD 默认、窄符号、locale 和小数精度。代码/真实运行回归：`frontend/src/lib/i18n.ts`、`i18n.test.mjs`；定位 `git log -S"instance.services.formatter" -- frontend/src/lib/i18n.ts`。用户说明在中英 cost-tracking 指南。
 - 本次上游整合：`4352a73f` 将渠道名左对齐并放在状态图标前；保留 fork 状态图标的操作权限和 tooltip。`177edbfc` 的批量标签管理与 `46687ed6` 的完成后实时预览保留属于 upstream 能力。
 - 本次上游整合：`be347865` 强制隐藏仅用于筛选的 `model` 虚拟列，避免固定表格布局中空列占宽；这是 upstream 修复，不登记为独立 fork 能力。`216c278d` 保留拉取模型后手动添加模型的入口，同时仍须保留本地按可用 Key 发现模型的行为。
@@ -368,6 +369,7 @@ git show --remerge-diff <merge-commit>
 
 ### U17 Analytics 查询正确性和权限隔离
 
+- 2026-11-07 插件兼容：`HasSystemScope` 对 User/Plugin 统一使用 `EffectiveSystemScope`；插件只能使用真实用户系统权限与安装授权的交集，项目成员/角色权限仍不能提升为系统权限，且不授予通用 bypass。回归：`internal/authz/scope_plugin_fork_test.go`、`internal/server/gql/plugin_token_stats_test.go`；当前独立修复定位：`git log -S'TestHasSystemScope_PluginUsesSystemGrantIntersection' -- internal/authz/scope_plugin_fork_test.go`。用户说明：中英 cost-tracking。
 - 秒级范围的跨时区保护：近 12 个月使用 365 个浏览器本地日，为统计时区的 366 日上限预留余量；闰年最后一天的“本年”提示手动缩短范围，不静默裁剪。回归：`frontend/src/features/analytics/utils/date-range.test.mjs` 的真实快捷按钮回调测试。
 - 本次独立整合：`2851a192` 秒级 Time 输入接入本地权限、366 个本地日上限与 DST 分段；筛选选项查询同步 Time，默认/重置为近 30 个本地日 RFC3339，保留近 12 个月快捷项。`dc68318c` 的 PostgreSQL DISTINCT ON 排行继续过滤 production 并按 execution 实际模型统计；不依赖已清理的主请求。回归：`analytics_time_range_test.go`、`qb/throughput_daily_test.go`、`frontend/src/stores/analyticsStore.test.mjs`。当前功能提交定位 `git log -S'startDate.toISOString()' -- frontend/src/stores/analyticsStore.ts`。用户说明：中英 cost-tracking 指南。旧页面发送日期字符串或旧 metadata 字段会被新 schema 拒绝，升级后须刷新；没有持久化筛选状态迁移。
 - 2026-10-27 已确认模型每日性能继续按 execution 的实际模型统计，不采用 upstream 按 request 别名统计的新断言。去重及缓存优化保留，清理主请求后冷缓存查询仍保留模型/渠道性能。回归/当前变更定位：`git log -S'TestModelPerformanceStatsUsesExecutionModelAfterRequestGC' -- internal/server/gql/dashboard_performance_test.go`。

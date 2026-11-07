@@ -8,6 +8,8 @@ Prepare a valid API key from an AI provider such as OpenAI or Anthropic.
 
 Release builds can install updates or roll back to one of the three most recent compatible older releases from **System Settings > About** when the account has `write_settings`, the process is managed by a supervisor such as systemd, and the runtime user can write the executable's directory. Foreground processes are not restarted automatically; Windows builds require manual replacement. **Include Beta versions** persists while switching between System Settings tabs and resets when the page reloads.
 
+Existing `/system?tab=…` bookmarks and sign-in return links open the corresponding page after the settings split. If System Settings was hidden before upgrading, the new settings entries also remain hidden after a one-time preference migration; you can then show or hide each entry independently.
+
 When AxonHub runs behind a reverse proxy, configure `server.trusted_proxies` with the proxy IPs or CIDRs before relying on forwarded client IPs for access controls. It defaults to an empty list, which ignores `X-Forwarded-For` and `X-Real-IP`; see `config.example.yml` for the configuration and environment variable syntax.
 
 ## First Steps

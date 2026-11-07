@@ -11,6 +11,8 @@
 
 ### Fixed
 
+- Preserved granted plugin access to system-level analytics while keeping project permissions isolated from system scopes.
+- Kept legacy System Settings tab links and existing hidden-menu preferences working after settings were split into separate pages.
 - Reported the saved channel status in plugin credential-recovery events, including recovery from permanent key exhaustion and channels that remain manually disabled.
 - Unified disabled-key actions with Key Management, opening the dialog before details load while retaining disable reasons, recovery countdowns, and bulk restore actions.
 - Applied model-library exchange rates consistently to base, Fast/Ultrafast, and context-bracket prices while preserving existing schedules and cache-write variants.

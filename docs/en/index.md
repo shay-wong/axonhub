@@ -8,7 +8,7 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 
 | Document | Description |
 |----------|-------------|
-| [Quick Start Guide](getting-started/quick-start.md) | Configure AxonHub, permission-aware login destinations, fork updates, and proxy boundaries |
+| [Quick Start Guide](getting-started/quick-start.md) | Configure AxonHub, permission-aware login destinations, legacy settings links, fork updates, and proxy boundaries |
 | [Request Processing](getting-started/request-processing.md) | Understand how AxonHub processes API requests |
 
 ### 📖 User Guides
@@ -20,7 +20,7 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 | [API Key Profiles](guides/api-key-profiles.md) | Create and manage API key profiles |
 | [Permissions](guides/permissions.md) | Enterprise RBAC access control configuration |
 | [Load Balancing](guides/load-balance.md) | Smart routing, failover, key retry budgets, and fixed-key diagnostic isolation |
-| [Cost Tracking](guides/cost-tracking.md) | Bounded timestamp analytics, actual-model statistics, Fast/Ultrafast prices, delivery-aware accounting, and key identity visibility |
+| [Cost Tracking](guides/cost-tracking.md) | Bounded timestamp analytics, plugin scope isolation, actual-model statistics, Fast/Ultrafast prices, delivery-aware accounting, and key identity visibility |
 | [Request Tracing](guides/tracing.md) | Complete request traceability |
 | [Request Override](guides/request-override.md) | Dynamically modify request parameters |
 | [Security](guides/security.md) | IP access control, IP blocklist, and API key IP restriction |

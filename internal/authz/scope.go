@@ -116,9 +116,9 @@ func HasSystemScope(ctx context.Context, requiredScope scopes.ScopeSlug) bool {
 	switch p.Type {
 	case PrincipalTypeSystem, PrincipalTypeTest:
 		return true
-	case PrincipalTypeUser:
+	case PrincipalTypeUser, PrincipalTypePlugin:
 		user, exists := contexts.GetUser(ctx)
-		return exists && user != nil && scopes.HasSystemScope(user, requiredScope)
+		return exists && scopes.EffectiveSystemScope(ctx, user, requiredScope)
 	case PrincipalTypeAPIKey, PrincipalTypeUnknown:
 		return false
 	default:

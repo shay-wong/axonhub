@@ -16,6 +16,8 @@ AxonHub 的成本追踪功能帮助您监控和控制跨所有供应商和模型
 
 `AnalyticsFilter.startTime`/`endTime` 与 `analyticsFilterOptions` 时间参数现使用 GraphQL `Time`，格式为 RFC3339，例如 `2026-10-27T08:30:00+08:00`；`analyticsMetadata.earliestTime` 替代 `earliestDate`。升级后请刷新已打开的页面；API 调用方需更新旧的纯日期字符串和 `String` 变量声明。
 
+分析查询要求系统级权限。插件只能使用所属用户具有且安装时获准的权限；项目成员或项目角色权限不能替代系统权限。
+
 ### Token 类型追踪
 
 AxonHub 追踪以下 Token 类型：

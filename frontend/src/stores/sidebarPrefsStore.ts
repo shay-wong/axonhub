@@ -5,20 +5,40 @@ import type { NavModuleId } from '@/config/nav-items';
 // visibility, table sorting, sidebar collapsed state). Items are identified by
 // their route path so translations can change without losing the preference.
 export const HIDDEN_NAV_ITEMS_STORAGE_KEY = 'axonhub_hidden_nav_items';
+export const HIDDEN_NAV_ITEMS_MIGRATION_VERSION_KEY = 'axonhub_hidden_nav_items_migration_version';
+const HIDDEN_NAV_ITEMS_MIGRATION_VERSION = '1';
+const SPLIT_SYSTEM_NAV_ITEMS = ['/system/requests', '/system/integrations', '/system/operations'];
+
+function migrateHiddenNavItems(items: string[]): string[] {
+  if (localStorage.getItem(HIDDEN_NAV_ITEMS_MIGRATION_VERSION_KEY) === HIDDEN_NAV_ITEMS_MIGRATION_VERSION) {
+    return items;
+  }
+
+  const migrated = items.includes('/system') ? [...new Set([...items, ...SPLIT_SYSTEM_NAV_ITEMS])] : items;
+  try {
+    if (migrated !== items) {
+      localStorage.setItem(HIDDEN_NAV_ITEMS_STORAGE_KEY, JSON.stringify(migrated));
+    }
+    localStorage.setItem(HIDDEN_NAV_ITEMS_MIGRATION_VERSION_KEY, HIDDEN_NAV_ITEMS_MIGRATION_VERSION);
+  } catch {
+    // Keep the in-memory migration result when storage is unavailable or full.
+  }
+  return migrated;
+}
 
 export function getHiddenNavItems(): string[] {
   try {
     const raw = localStorage.getItem(HIDDEN_NAV_ITEMS_STORAGE_KEY);
     if (!raw) {
-      return [];
+      return migrateHiddenNavItems([]);
     }
 
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      return [];
+      return migrateHiddenNavItems([]);
     }
 
-    return parsed.filter((item): item is string => typeof item === 'string');
+    return migrateHiddenNavItems(parsed.filter((item): item is string => typeof item === 'string'));
   } catch {
     // localStorage unavailable or corrupt — fall back to showing everything.
     return [];
