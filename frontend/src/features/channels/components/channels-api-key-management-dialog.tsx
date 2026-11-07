@@ -918,7 +918,7 @@ export function ChannelsAPIKeyManagementDialog({
           </div>
         )}
 
-        <DialogFooter className='flex items-center justify-between sm:justify-between'>
+        <DialogFooter align='between' className='items-center'>
           <div className='text-muted-foreground text-xs'>
             {isPending ? t('channels.dialogs.keyManagement.processing') : t('channels.dialogs.keyManagement.footerHint')}
           </div>

@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -91,15 +90,15 @@ func (s *InvitationService) CreateInvitation(ctx context.Context, projectID, rol
 
 	var projectRow *ent.Project
 	var created *ent.Invitation
-	err = authz.RunWithSystemBypassVoid(ctx, "invitation-create", func(ctx context.Context) error {
-		return s.RunInTransaction(ctx, func(ctx context.Context) error {
-			client := s.entFromContext(ctx)
+	_, err = authz.RunAsHost(ctx, s.entFromContext(ctx), "invitation-create", func(hostCtx context.Context) (struct{}, error) {
+		err := s.RunInTransaction(hostCtx, func(txCtx context.Context) error {
+			client := s.entFromContext(txCtx)
 
 			// Serialize with DeleteProject, which marks the project archived before removing invitations.
 			updated, err := client.Project.Update().
 				Where(project.IDEQ(projectID), project.StatusEQ(project.StatusActive)).
 				SetStatus(project.StatusActive).
-				Save(ctx)
+				Save(txCtx)
 			if err != nil {
 				return fmt.Errorf("failed to validate project: %w", err)
 			}
@@ -107,14 +106,14 @@ func (s *InvitationService) CreateInvitation(ctx context.Context, projectID, rol
 				return xerrors.NotFoundError("project")
 			}
 
-			projectRow, err = client.Project.Get(ctx, projectID)
+			projectRow, err = client.Project.Get(txCtx, projectID)
 			if err != nil {
 				return fmt.Errorf("failed to get project: %w", err)
 			}
 
 			projectRole, err := client.Role.Query().
 				Where(role.IDEQ(roleID), role.ProjectIDEQ(projectID)).
-				Only(ctx)
+				Only(txCtx)
 			if err != nil {
 				if ent.IsNotFound(err) {
 					return xerrors.NotFoundError("project role")
@@ -131,13 +130,14 @@ func (s *InvitationService) CreateInvitation(ctx context.Context, projectID, rol
 				SetRoleID(roleID).
 				SetNillableExpiresAt(expiresAt).
 				SetMaxUses(maxUses).
-				Save(ctx)
+				Save(txCtx)
 			if err != nil {
 				return fmt.Errorf("failed to create invitation: %w", err)
 			}
 
 			return nil
 		})
+		return struct{}{}, err
 	})
 	if err != nil {
 		return nil, err
@@ -319,22 +319,9 @@ func (s *InvitationService) canInvite(ctx context.Context, projectID int) error 
 	if !ok || currentUser == nil {
 		return fmt.Errorf("user not found in context")
 	}
-	if currentUser.IsOwner || scopes.UserHasScope(ctx, scopes.ScopeWriteUsers) {
+	if scopes.EffectiveSystemScope(ctx, currentUser, scopes.ScopeWriteUsers) ||
+		scopes.EffectiveProjectScope(ctx, currentUser, projectID, scopes.ScopeWriteUsers) {
 		return nil
-	}
-
-	for _, membership := range currentUser.Edges.ProjectUsers {
-		if membership.ProjectID != projectID {
-			continue
-		}
-		if membership.IsOwner || slices.Contains(membership.Scopes, string(scopes.ScopeWriteUsers)) {
-			return nil
-		}
-		for _, role := range currentUser.Edges.Roles {
-			if role.ProjectID != nil && *role.ProjectID == projectID && slices.Contains(role.Scopes, string(scopes.ScopeWriteUsers)) {
-				return nil
-			}
-		}
 	}
 
 	return xerrors.ForbiddenError("permission denied: project user management access required")

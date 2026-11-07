@@ -38,7 +38,7 @@ import {
   useSaveProxyPreset,
   useUserAgentPassThroughSettings,
 } from '@/features/system/data/system';
-import { antigravityOAuthExchange, antigravityOAuthStart } from '../data/antigravity';
+import { ANTIGRAVITY_BASE_URLS, antigravityOAuthExchange, antigravityOAuthStart } from '../data/antigravity';
 import { formatAPIKeyIdentity, maskAPIKeySuffix } from '../data/api-key-display';
 import { recallAPIKeyStrategy, type APIKeyStrategyValue } from '../data/api-key-strategy';
 import {
@@ -1272,11 +1272,11 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         if (!isEdit) {
           setFetchedModels([]);
           setUseFetchedModels(false);
-          // Set default Base URL only if empty
-          const baseURL = getDefaultBaseURL('antigravity');
-          const currentURL = form.getValues('baseURL');
-          if (baseURL && !isDuplicate && (!currentURL || currentURL === '')) {
-            form.setValue('baseURL', baseURL);
+          if (!isDuplicate) {
+            const baseURL = getDefaultBaseURL('antigravity');
+            if (baseURL) {
+              form.resetField('baseURL', { defaultValue: baseURL });
+            }
           }
         }
         return;
@@ -2881,30 +2881,47 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
                       <FormField
                         control={form.control}
                         name='baseURL'
-                        render={({ field, fieldState }) => (
-                          <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
-                            <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
-                              {t('channels.dialogs.fields.baseURL.label')}
-                            </FormLabel>
-                            <div className='space-y-1 md:col-span-6'>
-                              <Input
-                                placeholder={baseURLPlaceholder}
-                                autoComplete='new-password'
-                                data-form-type='other'
-                                aria-invalid={!!fieldState.error}
-                                data-testid='channel-base-url-input'
-                                disabled={
-                                  (isCodexType && authMode !== 'third-party') ||
-                                  (isClaudeCodeType && authMode === 'official') ||
-                                  isXAISubscriptionType ||
-                                  selectedProvider === 'antigravity'
-                                }
-                                {...field}
-                              />
-                              <FormMessage />
-                            </div>
-                          </FormItem>
-                        )}
+                        render={({ field, fieldState }) => {
+                          const antigravityItems = ANTIGRAVITY_BASE_URLS.some((item) => item.value === field.value)
+                            ? ANTIGRAVITY_BASE_URLS
+                            : field.value
+                              ? [...ANTIGRAVITY_BASE_URLS, { label: field.value, value: field.value }]
+                              : ANTIGRAVITY_BASE_URLS;
+
+                          return (
+                            <FormItem className='grid grid-cols-1 items-start gap-x-6 gap-y-2 md:grid-cols-8'>
+                              <FormLabel className='pt-2 font-medium md:col-span-2 md:text-right'>
+                                {t('channels.dialogs.fields.baseURL.label')}
+                              </FormLabel>
+                              <div className='space-y-1 md:col-span-6'>
+                                {selectedProvider === 'antigravity' ? (
+                                  <SelectDropdown
+                                    defaultValue={field.value || getDefaultBaseURL('antigravity')}
+                                    onValueChange={field.onChange}
+                                    items={antigravityItems}
+                                    isControlled
+                                    data-testid='channel-base-url-select'
+                                  />
+                                ) : (
+                                  <Input
+                                    placeholder={baseURLPlaceholder}
+                                    autoComplete='new-password'
+                                    data-form-type='other'
+                                    aria-invalid={!!fieldState.error}
+                                    data-testid='channel-base-url-input'
+                                    disabled={
+                                      (isCodexType && authMode !== 'third-party') ||
+                                      (isClaudeCodeType && authMode === 'official') ||
+                                      isXAISubscriptionType
+                                    }
+                                    {...field}
+                                  />
+                                )}
+                                <FormMessage />
+                              </div>
+                            </FormItem>
+                          );
+                        }}
                       />
 
                       {isGeminiVertex && (
@@ -4382,7 +4399,7 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
               </div>
             </div>
           </div>
-          <DialogFooter className='flex-shrink-0'>
+          <DialogFooter pinned>
             <Button type='button' variant='outline' onClick={() => onOpenChange(false)}>
               {t('common.buttons.cancel')}
             </Button>

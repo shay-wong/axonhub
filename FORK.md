@@ -7,7 +7,7 @@
 ## 维护契约
 
 1. 只记录当前仍生效且有意保留的行为差异，不记录纯格式化、生成产物噪声、普通 merge commit 或已经完全回滚的改动。
-2. 新增、修改或删除 fork 行为时，必须在同一个提交中更新本文。至少同步更新意图、不变量、代码锚点、验证方式和生命周期。
+2. 新增、修改或删除 fork 行为时，必须在同一逻辑提交或提交集中更新本文。至少同步更新意图、不变量、代码锚点、验证方式和生命周期。常规冲突解决留在 merge commit；需要新增实现才能保持不变量的兼容修复应紧接 merge 独立提交，连同测试和相关文档一起记录。
 3. 合并 upstream 时，以本文的“不变量”为审核标准。不能仅按文件冲突选择 ours/theirs，也不能因为 upstream 出现同名字段就认定已经等价。
 4. `长期保留` 表示这是 fork 的产品、运维或兼容性契约；除非明确改变本地策略，否则合并时必须保留。
 5. `等待上游吸收` 表示这是通用修复或时效性数据；upstream 具备等价行为和回归测试后，删除本地实现和本文条目。
@@ -19,11 +19,11 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`3a94aeedc2df07d8bb4c166b5392e04a63a88263`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`ce0e132513f078528d9b422ad04a3fcf4531353d`
-- 本次 merge base：`8a9df52283d9d9c3909c839267ce890a2913231e`
-- 审计范围：`git diff ce0e1325..HEAD`
-- 2026-11-06 合入 27 个上游提交：插件系统与网关事件、请求持久化性能、真实用量终态、匹配条件函数、Codex 图片模型与额度恢复、CI 按改动范围检查及依赖更新。`klauspost/compress` 升至 `v1.20.3`，修复 `GO-2026-6865`。生成代码按合并后的源 schema 重新生成；保留本地分析权限、Key 身份与禁用规则、终态错误、模型别名和工具参数精度，没有整项 fork 能力等价吸收。
+- 本次 upstream merge 的 fork parent：`9a489139fe0709c252a0d5435d9a94f88a54a696`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`47c8323d3767f00a909ea0b9084c37cb167eeb8a`
+- 本次 merge base：`ce0e132513f078528d9b422ad04a3fcf4531353d`
+- 审计范围：`git diff 47c8323d..HEAD`
+- 2026-11-07 合入 9 个上游提交：插件独立身份、授权网络请求和 UI 样式、系统设置与导航分组、统一弹窗布局、Antigravity Google 地址选择、OIDC 邮箱验证及非流式 Responses 终态映射。按合并后的源 schema 重新生成代码；保留统一密钥弹窗、Beta 更新偏好、系统级权限、邀请生命周期和终态错误不变量，没有整项 fork 能力等价吸收。
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -51,7 +51,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含已发布 tag `v1.0.0-beta12`（`2b1a0f9321a4f783a4cceb2b4eb3a8303074487e`），但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta12-fork.1`；upstream 发布基线仍为 `v1.0.0-beta12`，因此下一个规范化 fork 版本为 `v1.0.0-beta12-fork.2`，发布前仍须重新确认该 tag 未被占用。2026-11-06 已核对远端 tags；本次不修改版本文件、不发布。
+- 最近已发布 fork tag 为 `v1.0.0-beta12-fork.2`；upstream 发布基线仍为 `v1.0.0-beta12`，因此下一个规范化 fork 版本为 `v1.0.0-beta12-fork.3`，发布前仍须重新确认该 tag 未被占用。2026-11-07 已核对双方 Release 和远端 tag；本次不修改版本文件、不发布。
 
 ## 长期保留
 
@@ -195,6 +195,7 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- 2026-11-07 整合 `479f700c` 的非流式 `content_filter`/取消映射；保留本地 `TerminalOutcome` 优先级、`canceled` 标准化、错误详情与仅成功时补空输出，后续成功 choice 不能覆盖已确认失败或不完整终态。回归：`TestInboundTransformer_TransformResponse_FinishReasonStatus` 与既有异常终态测试。
 - 交付生命周期整合：按维护者选择采用上游交付确认，区分 provider 终态、客户端写出结果与最终计费证据；这替代旧版“provider 完成即主 request 成功”的判断。fork 终态错误 wrapper 须透传交付/收尾能力；原样转发须先发布转换验证结果，再由交付 wrapper 关闭 producer，适配失败先显式停止 producer 再等待 drain，避免死锁。保留原始响应身份、整数精度和 usage.cost；`response.canceled` 与 `response.cancelled` 都进入最终用量判定。独立兼容回归：`internal/server/orchestrator/pass_through_delivery_compat_test.go`、`llm/pipeline/delivery_fork_compat_test.go`；定位：`git log --all -- internal/server/orchestrator/pass_through_delivery_compat_test.go`。
 - 本次上游整合：`1c695ac3` 保留 WebSocket 失效连接的错误传播、不在 executor 内重放不确定已执行的请求，并修复阻塞读写取消与关闭后的错误覆盖；不改变上层配置的重试策略。继续保留 fork 的终态、费用和 canonical session 不变量。验证：`cd llm && go test -race ./transformer/openai/responses ./transformer/openai/codex -run 'WebSocket|ResponsesFailedAfterInlineToolResultForkCompatibility'`。
 - Responses 协议整合：采用 `36364049` 的内容输出前 structured failure 重试与 `94cd05b1` 的终态后立即结束，避免继续等待尾流；保留失败 snapshot 的 ID/model/usage/tier/request ID，refusal 和 `InlineToolResults` 必须计为已输出内容，后续失败不能再判成空响应。Transformer 与 pipeline 的内容判定须一致；保留已有完整终态后的费用语义。当前独立变更定位：`git log -S'TestResponsesFailedAfterInlineToolResultForkCompatibility' -- llm/transformer/openai/responses/outbound_stream_fork_compat_test.go`。
@@ -352,6 +353,7 @@ git show --remerge-diff <merge-commit>
 
 ### U16 多项目权限和邀请生命周期安全
 
+- 2026-11-07 整合 `6c5cfe6e` 的插件身份隔离：邀请创建用原调用者检查项目管理及角色授予权限，固定数据库操作使用 `RunAsHost`，保留 active project 行锁和事务；不能在 host context 上校验调用者权限。回归：`internal/server/biz/invitation_plugin_test.go` 与既有邀请生命周期测试。
 - 本次独立整合修复：JWT 续期后的登录 return-to URL 除同源检查外，还须通过当前项目的路由权限；不借用其他项目 scope，失败回退原安全落点。密码和 OIDC 使用同一 `getAuthenticatedLanding`；定位：`git log -S'returnPath?: string' -- frontend/src/features/auth/data/auth-redirect.ts`。
 - 本次独立兼容修复：上游 `3bc6075e` 的隐藏菜单回退必须通过所选项目的权限检查；密码和 OIDC 登录均复用同一落点函数，无可见且有权限的候选时保留原安全落点。代码、测试与文档在 merge 后独立提交，可用 `git log -S'navigation?: { hiddenItems: string[]; candidates: string[] }' -- frontend/src/features/auth/data/auth-redirect.ts` 定位。用户文档：`docs/en/getting-started/quick-start.md`、`docs/zh/getting-started/quick-start.md`。
 - 本次上游整合：`dfb17549` 将 `8c5f0ab1` 的登录/退出时清空项目改为按账号隔离 membership 查询缓存，并在选中项目验证完成前阻止项目查询；仍保留本地 `getAuthenticatedLanding` 对可访问项目和落地页权限的检查。
