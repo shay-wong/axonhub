@@ -11,6 +11,8 @@
 
 ### Fixed
 
+- Preserved validated Responses terminal outcomes, protocol-adapter errors, and original failure status, headers, and chunks through synchronous stream forwarding and finalization.
+- Kept model and price schedule calendars compatible with DayPicker 10, including focus and selected-day styling.
 - Preserved granted plugin access to system-level analytics while keeping project permissions isolated from system scopes.
 - Kept legacy System Settings tab links and existing hidden-menu preferences working after settings were split into separate pages.
 - Reported the saved channel status in plugin credential-recovery events, including recovery from permanent key exhaustion and channels that remain manually disabled.

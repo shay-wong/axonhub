@@ -292,6 +292,11 @@ func (m *persistRequestExecutionMiddleware) OnOutboundRawError(ctx context.Conte
 	if isPluginOverloaded(err) {
 		return
 	}
+	// Finish the rejected attempt before its terminal accounting can overwrite
+	// the pipeline error recorded below.
+	if owner := streamLifecycleFromContext(ctx); owner != nil {
+		owner.closeAttempt()
+	}
 	// Update request execution with the real error message when request fails
 	state := m.outbound.state
 	if state == nil || state.RequestExec == nil {
@@ -325,15 +330,29 @@ func (m *persistRequestExecutionMiddleware) OnOutboundRawError(ctx context.Conte
 
 	failure := ClassifyUpstreamTransportError(err)
 
-	updateErr := persistRequestExecutionFailure(
-		persistCtx,
-		state.RequestService,
-		state.RequestExec,
-		failure,
-		latencyMetrics(state.Perf),
-		modelname.FromResponse(m.rawResponse, llm.APIFormat(state.RequestExec.Format)),
-		state.executionResponseHeaders(state.RequestExec.ID),
-	)
+	var updateErr error
+	if responseBody, ok := extractErrorResponseBody(m.rawResponse, failure); ok {
+		updateErr = state.RequestService.UpdateRequestExecutionTerminated(
+			persistCtx,
+			state.RequestExec,
+			errorForExecutionPersistence(m.rawResponse, failure),
+			terminalResponseID(responseBody),
+			responseBody,
+			latencyMetrics(state.Perf),
+			modelname.FromResponse(m.rawResponse, llm.APIFormat(state.RequestExec.Format)),
+			state.executionResponseHeaders(state.RequestExec.ID),
+		)
+	} else {
+		updateErr = persistRequestExecutionFailure(
+			persistCtx,
+			state.RequestService,
+			state.RequestExec,
+			failure,
+			latencyMetrics(state.Perf),
+			modelname.FromResponse(m.rawResponse, llm.APIFormat(state.RequestExec.Format)),
+			state.executionResponseHeaders(state.RequestExec.ID),
+		)
+	}
 	if updateErr != nil {
 		log.Warn(persistCtx, "Failed to update request execution status to failed", log.Cause(updateErr))
 	}

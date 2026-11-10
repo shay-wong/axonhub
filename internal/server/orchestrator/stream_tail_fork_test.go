@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -38,11 +39,13 @@ func TestStreamTailForkPreservesTerminalEvidenceAndTier(t *testing.T) {
 			require.NoError(t, systemService.SetStoragePolicy(ctx, &biz.StoragePolicy{StoreChunks: true, StoreResponseBody: true}))
 			req, execution, state := newTask5Execution(t, ctx, client, llm.APIFormatOpenAIResponse.String())
 			state.RequestedServiceTier = "priority"
+			state.ExecutionHeaders = &executionHeaderObserver{executionID: execution.ID}
+			state.ExecutionHeaders.observe(ctx, http.Header{"X-Request-Id": {"upstream-tail"}})
 			outbound, err := responses.NewOutboundTransformer("https://example.test", "synthetic-key")
 			require.NoError(t, err)
 			stream := NewOutboundPersistentStream(ctx, streams.SliceStream([]*httpclient.StreamEvent{}), req, execution, requestService, usageService, outbound, nil, state)
 			body := []byte(`{"type":"` + test.typeName + `","response":{"id":"resp_tail","model":"gpt-5","status":"` + test.status + `","service_tier":"ultrafast","output":[],"usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15}` + test.detail + `}}`)
-			require.NoError(t, stream.consumeTailEvent(&httpclient.StreamEvent{Type: test.typeName, Data: body}))
+			require.NoError(t, stream.consumeTailEvent(&httpclient.StreamEvent{Type: test.typeName, Data: body, StatusCode: http.StatusTooManyRequests}))
 			stream.sourceEnd = llm.SourceEndCanceled
 			require.NoError(t, stream.Close())
 
@@ -52,6 +55,11 @@ func TestStreamTailForkPreservesTerminalEvidenceAndTier(t *testing.T) {
 			require.Contains(t, saved.ErrorMessage, test.wantError)
 			require.Contains(t, string(saved.ResponseBody), "resp_tail")
 			require.NotEmpty(t, saved.ResponseChunks)
+			require.JSONEq(t, `{"X-Request-Id":["upstream-tail"]}`, string(saved.ResponseHeaders))
+			if test.typeName == "response.failed" {
+				require.NotNil(t, saved.ResponseStatusCode)
+				require.Equal(t, http.StatusTooManyRequests, *saved.ResponseStatusCode)
+			}
 			require.Error(t, state.StreamTerminalError)
 			require.JSONEq(t, string(body), string(state.StreamTerminalBody))
 			require.True(t, state.AccountingFinal)

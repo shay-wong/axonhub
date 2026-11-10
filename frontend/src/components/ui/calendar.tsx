@@ -36,7 +36,6 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: R
             : 'aria-selected:rounded-md [&[aria-selected="true"]>button]:hover:bg-foreground [&[aria-selected="true"]>button]:hover:text-background/85'
         ),
         day_button: cn(buttonVariants({ variant: 'ghost' }), 'size-8 p-0 font-normal aria-selected:opacity-100'),
-        day_selected: 'opacity-100 bg-yellow-500',
         range_start: 'day-range-start aria-selected:bg-primary aria-selected:text-primary-foreground',
         range_end: 'day-range-end aria-selected:bg-primary aria-selected:text-primary-foreground',
         selected:

@@ -70,6 +70,7 @@ git show --remerge-diff <merge-commit>
 
 ### F02 API Key 稳定身份、别名、权重和路由
 
+- 2026-11-10 整合请求配置快照及 402/520 快速换渠道：每个请求沿用开始时读取的重试策略，继续先按本地规则轮换未失败 Key；不能轮换时，402/520 不再遍历同渠道模型别名。429 缺少 Retry-After 时的 20 秒渠道降权是上游路由能力，不修改本地 Key 临时禁用/恢复时间。
 - 2026-11-04 统一密钥弹窗：禁用 Key 图标与菜单复用 `channels-api-key-management-dialog.tsx`，删除独立禁用弹窗；详情未返回前立即显示加载壳，加载失败可重试且禁止凭据修改。保留原因/错误码、临时恢复倒计时、单个/批量/全部恢复、OAuth 恢复但不可复制/测试/删除、Vertex 绑定和最后 Key 保护，不用旧测试结果覆盖已恢复状态。代码：`components/channels-dialogs.tsx`、`components/channels-columns.tsx`（均在 `frontend/src/features/channels/`）；回归：`frontend/src/features/channels/data/key-management-entry.test.mjs`、`api-key-management.test.mjs`、`disabled-api-key-dialog-contract.test.mjs`（后两者同目录）。用户文档：中英 channel-management 的统一密钥管理章节。当前变更定位：`git log -S'loadError' -- frontend/src/features/channels/components/channels-api-key-management-dialog.tsx`。
 - 2026-11-03 整合 `9142eb6a` 的渠道响应超时：`responseTimeout` 与 `retryPerAPIKey` 独立保存、回读和复制；每次选定渠道后解析超时，不改变失败 Key 排除或重试预算。前端全局默认值从既有 `retryPolicy` 响应包装读取。
 - 2026-10-27 已确认：整合 `c31867e0` 时保留请求内失败 Key 排除；渠道显式配置 `retryableStatusCodes: [429]` 仍只轮换未失败 Key，耗尽后换渠道，不重复失败 Key。仅无法进入 Key 轮换的路径沿用上游显式 429 同渠道重试；次数上限与 `retryPerAPIKey` 不变。回归：`TestExplicit429RetriesNeverReuseFailedKeys`，独立提交定位 `git log -S'TestExplicit429RetriesNeverReuseFailedKeys' -- internal/server/orchestrator/retry_per_apikey_test.go`；中英渠道指南与编辑器提示同步。
@@ -179,6 +180,7 @@ git show --remerge-diff <merge-commit>
 
 ### U03 Tool Search 和跨协议工具调用语义
 
+- 2026-11-10 采用 `f17e5aba` 的 Anthropic 普通 `tool_use.id` 规范化，保留结构化 Tool Search 和特殊工具 ID。上游新增测试分别验证完整内容快照恢复与本地结构化工具往返，不能要求每个 `server_tool_use` 都生成完整快照；两条路径均保留大整数精度。
 - 2026-11-03 整合 Anthropic `allowed_callers` 和工具输入修复回写；`DeferLoading` 与 `AllowedCallers` 同时保留。Tool Search 分支随依赖升级改用 `jsonrepair.Repair`，复用上游块指针，避免旧值回写类型冲突。既有 Tool Search 与新增 allowed-callers/aggregation 测试共同验证。
 - 2026-10-27 独立整合：Anthropic `MessageContentBlock.UnmarshalJSON` 统一使用 `tool_blocks_json.go`，保留 ToolSearch 原始 ServerContent，并接入上游 WebSearch raw results；failed/cancelled 在内容已输出时先补最终搜索来源，再发送原始终态错误。回归及定位：`git log -S'final search sources must precede the error' -- llm/transformer/openai/responses/anthropic_web_search_history_test.go`。
 - 本次上游整合：`5659a526` 将工具结果移至发起调用的 assistant 消息之后，并防止重复输出；与本地 reasoning 合并、custom tool、namespace 和 Tool Search helper 组合保留，不视为整项吸收。
@@ -195,11 +197,12 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- 2026-11-10 采用 `4af420ca`/`3be08c28`/`16329952` 的同步 raw recorder 和 Close 收尾，删除旧 fan-out 队列。独立兼容修复在转发 Responses 原始终态前验证转换结果，保留中断时转换器生成的失败终态；已验证完成可忽略尾部断连，但不能吞掉 HTTP/WS 适配器的 `ErrInvalidResponse`/`ErrUnsupportedConversion`。回归：`TestResponsesIdentityStream_PreservesValidatedOutcome`、`TestResponsesIdentityStream_ValidatedTerminalPreservesAdapterError`；当前变更定位：`git log -S'TestResponsesIdentityStream_ValidatedTerminalPreservesAdapterError' -- internal/server/orchestrator/pass_through_test.go`。
 - 2026-11-07 整合 `479f700c` 的非流式 `content_filter`/取消映射；保留本地 `TerminalOutcome` 优先级、`canceled` 标准化、错误详情与仅成功时补空输出，后续成功 choice 不能覆盖已确认失败或不完整终态。回归：`TestInboundTransformer_TransformResponse_FinishReasonStatus` 与既有异常终态测试。
-- 交付生命周期整合：按维护者选择采用上游交付确认，区分 provider 终态、客户端写出结果与最终计费证据；这替代旧版“provider 完成即主 request 成功”的判断。fork 终态错误 wrapper 须透传交付/收尾能力；原样转发须先发布转换验证结果，再由交付 wrapper 关闭 producer，适配失败先显式停止 producer 再等待 drain，避免死锁。保留原始响应身份、整数精度和 usage.cost；`response.canceled` 与 `response.cancelled` 都进入最终用量判定。独立兼容回归：`internal/server/orchestrator/pass_through_delivery_compat_test.go`、`llm/pipeline/delivery_fork_compat_test.go`；定位：`git log --all -- internal/server/orchestrator/pass_through_delivery_compat_test.go`。
+- 交付生命周期整合：按维护者选择采用上游交付确认，区分 provider 终态、客户端写出结果与最终计费证据；这替代旧版“provider 完成即主 request 成功”的判断。fork 终态错误 wrapper 须透传交付/收尾能力；同步原样转发须先完成转换验证，再交付终态，由 Close 统一释放源流，不恢复旧 producer/drain 等待链。保留原始响应身份、整数精度和 usage.cost；`response.canceled` 与 `response.cancelled` 都进入最终用量判定。独立兼容回归：`internal/server/orchestrator/pass_through_delivery_compat_test.go`、`llm/pipeline/delivery_fork_compat_test.go`；定位：`git log --all -- internal/server/orchestrator/pass_through_delivery_compat_test.go`。
 - 本次上游整合：`1c695ac3` 保留 WebSocket 失效连接的错误传播、不在 executor 内重放不确定已执行的请求，并修复阻塞读写取消与关闭后的错误覆盖；不改变上层配置的重试策略。继续保留 fork 的终态、费用和 canonical session 不变量。验证：`cd llm && go test -race ./transformer/openai/responses ./transformer/openai/codex -run 'WebSocket|ResponsesFailedAfterInlineToolResultForkCompatibility'`。
 - Responses 协议整合：采用 `36364049` 的内容输出前 structured failure 重试与 `94cd05b1` 的终态后立即结束，避免继续等待尾流；保留失败 snapshot 的 ID/model/usage/tier/request ID，refusal 和 `InlineToolResults` 必须计为已输出内容，后续失败不能再判成空响应。Transformer 与 pipeline 的内容判定须一致；保留已有完整终态后的费用语义。当前独立变更定位：`git log -S'TestResponsesFailedAfterInlineToolResultForkCompatibility' -- llm/transformer/openai/responses/outbound_stream_fork_compat_test.go`。
-- 原样转发同样必须完成转换流的终态校验和用量持久化：已完成请求不能被尾流错误覆盖，未完成断流须交付失败终态。交付终态前等待转换流校验，保留原始终态快照用于同类型终态补发，避免提前关闭造成 response/item ID 或扩展字段丢失；适配失败须先取消生产者再等待转换流结束。回归覆盖 `orchestrator_streaming_test.go` 的已完成取消/断流及 `pass_through_test.go` 的 HTTP/WS 事件身份与关闭顺序。
+- 原样转发同样必须完成转换流的终态校验和用量持久化：已完成请求不能被尾流错误覆盖，未完成断流须交付失败终态。交付终态前等待转换流校验，保留原始终态快照用于同类型终态补发，避免提前关闭造成 response/item ID 或扩展字段丢失；适配失败直接向调用方报告错误并关闭转换链，不能补发成功。回归覆盖 `orchestrator_streaming_test.go` 的已完成取消/断流及 `pass_through_test.go` 的 HTTP/WS 事件身份与关闭顺序。
 - 本次上游整合：`b6d184a8` 将音频 data/transcript 视为非空内容；仍保留异常终态识别与完成后错误处理，不因仅有 usage 而认定成功。
 - 用量终态整合：采用 `81e519e9` 后再吸收 `0fa12b22`、`e2759aad`，按真实 token 计数识别最终 usage，不再要求独立 usage-only chunk；零占位不覆盖真实计数，usage 之后仍有输出时不据此前用量计费。保留 Responses 最新 usage 赋值、精确异常终态及已完成尾部错误策略。回归 `UsesUsageFromFinalUsageOnlyChunk`、`UsesUsageFromFinishChunk`、`FinalizesOnZeroCompletionUsage` 与既有终态测试。
 - 本次独立整合修复：Chat 输出在收到显式 error/failed/canceled/incomplete 后，即使之前已有内容与 usage，clean EOF 也不得补成功 finish/[DONE]。复用 `Response.TerminalOutcome()` 判定；回归为 `TestInboundTransformer_ProviderTerminalDoesNotSynthesizeSuccess`，提交可用 `git log -S'TestInboundTransformer_ProviderTerminalDoesNotSynthesizeSuccess' -- llm/transformer/openai/inbound_stream_test.go` 定位。用户说明见 `docs/en/guides/cost-tracking.md` 与 `docs/zh/guides/cost-tracking.md`。
@@ -218,6 +221,7 @@ git show --remerge-diff <merge-commit>
 
 ### U05 失败执行响应体和终态诊断持久化
 
+- 2026-11-10 独立兼容修复：新的实体入参和统一终态写入接口同时携带原始错误码、headers 和 chunks；raw error 必须先完成当前 attempt 的 Close，再保存原始错误 body，避免收尾覆盖证据。成功仍清除旧错误，失败仍保留实际状态码；回归：`TestStreamTailForkPreservesTerminalEvidenceAndTier`。当前变更定位：`git log -S'updateRequestExecutionResponse' -- internal/server/biz/request.go`。
 - 生命周期：`等待上游吸收`
 - 原始意图：失败 request/execution 必须保留足够的 provider 证据，避免详情页只能显示 `{}`、`0 items` 或被包装后的空错误。
 - 必须保持：当 `StoreResponseBody` 开启时，普通 HTTP error、流式 terminal event 和可聚合失败响应都保存原始/转换后的 body；当 `StoreChunks` 开启时，失败、取消和不完整流也保留已接收 chunks；外部存储和 inline 存储行为一致；原始 status/code/message 不被后续包装覆盖；进行中的部分响应仍隐藏；重试之间清除陈旧 raw response，避免串到下一次 execution。
@@ -338,6 +342,7 @@ git show --remerge-diff <merge-commit>
 
 ### U15 前端交互和权限回归修复
 
+- 2026-11-10 适配 DayPicker 10：价格计划和模型日期日历使用 `autoFocus`，删除旧通用日历的 `day_selected` 别名并保留 `selected` 样式。仅同步已删除的 API，不改日期含义和选择行为；代码锚点：`frontend/src/components/ui/calendar.tsx`、`frontend/src/components/price-schedule-editor.tsx`、`frontend/src/features/models/components/models-action-dialog.tsx`。完整 TypeScript 检查与合并前基线比较无新增错误，既有错误不在本次范围。
 - 2026-11-07 设置页拆分兼容：旧 `/system?tab=…` 书签和登录回跳转到对应新设置页并保留标签；原来隐藏 `/system` 的偏好只迁移一次，三个新设置入口也保持隐藏，之后仍可独立调整或重置。Beta 选择继续放在 tabs 父层。回归：`frontend/src/routes/_authenticated/system/index.test.mjs`、`frontend/src/stores/sidebarPrefsStore.test.mjs`、`update-contract.test.mjs`；当前独立修复定位：`git log -S'HIDDEN_NAV_ITEMS_MIGRATION_VERSION_KEY' -- frontend/src/stores/sidebarPrefsStore.ts`。用户说明：中英 quick-start。
 - 本次独立整合：`bb4e4aae` 升级 i18next 26 后不再支持旧 `interpolation.format`；初始化前通过 formatter service 注册 currency，保留 USD 默认、窄符号、locale 和小数精度。代码/真实运行回归：`frontend/src/lib/i18n.ts`、`i18n.test.mjs`；定位 `git log -S"instance.services.formatter" -- frontend/src/lib/i18n.ts`。用户说明在中英 cost-tracking 指南。
 - 本次上游整合：`4352a73f` 将渠道名左对齐并放在状态图标前；保留 fork 状态图标的操作权限和 tooltip。`177edbfc` 的批量标签管理与 `46687ed6` 的完成后实时预览保留属于 upstream 能力。
@@ -399,6 +404,7 @@ git show --remerge-diff <merge-commit>
 
 ### U19 内置模型目录 Schema 兼容
 
+- 2026-11-10 采用上游按需加载及 5 分钟编码缓存。独立兼容修复让未过滤的远程/内置目录也移除非法 `experimental` 值，并保留未知字段和大整数；过滤目录继续复用旧归一化和内嵌模型增量。回归：`TestCatalogService_NormalizesExperimentalInBothVariants`；当前变更定位：`git log -S'normalizeCatalogJSONExperimental' -- internal/server/biz/catalog.go`。
 - 生命周期：`等待上游吸收`
 - 原始意图：内置模型目录必须始终符合自身解析 schema，不能因单条上游模型数据格式错误而让整个目录加载失败。
 - 必须保持：兼容上游 `experimental` 的布尔实验标记和结构化模式配置；Fast 等模式及价格只从对象形态读取，布尔形态不能参与价格计算；后端和同步脚本仅丢弃既非布尔也非对象的异常值；同步目录后必须通过后端归一化、前端整表解析和布尔标记价格隔离测试。
@@ -429,7 +435,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`llm/transformer/openai/responses/inbound.go`、`llm/transformer/openai/responses/integration_test.go`。
 - 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：本次修复可用 `git log -S'Codex cron bootstraps' -- llm/transformer/openai/responses/inbound.go` 定位。
-- 合并审核：当前 upstream 基线 `fd4158ef`（含 `a0850956`）仍把该项转换为缺少 `call_id` 的 tool message；`a0850956` 新增的 raw request preservation 和跨格式转换也没有识别该启动项。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
+- 合并审核：当前 upstream 基线 `d2935453` 仍把该项转换为缺少 `call_id` 的 tool message；Anthropic 工具 ID 规范化不处理 Responses 定时任务启动项。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
 - 上游吸收条件：upstream 能识别 Codex 定时任务启动项，并有真实请求形状的 inbound-to-outbound 回归测试。
 - 验证：`cd llm && go test ./transformer/openai/responses -run '^TestTransformRequest_NormalizesCodexAutomationBootstrap$' -count=1`。
 

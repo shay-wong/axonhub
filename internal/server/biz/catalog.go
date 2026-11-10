@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 	"golang.org/x/sync/singleflight"
 
 	_ "embed"
@@ -173,8 +175,8 @@ func (s *CatalogService) load(ctx context.Context, filtered bool) ([]byte, strin
 }
 
 // fetchUpstream returns the upstream catalog body after checking it is a JSON
-// document with a providers object. The body is served verbatim to the admin
-// UI, so it must be valid JSON.
+// document with a providers object. Keep unknown fields while removing invalid
+// experimental values that the admin UI cannot parse.
 func (s *CatalogService) fetchUpstream(ctx context.Context, upstreamURL string) ([]byte, error) {
 	if s.httpClient == nil {
 		return nil, fmt.Errorf("catalog http client is not configured")
@@ -199,7 +201,7 @@ func (s *CatalogService) fetchUpstream(ctx context.Context, upstreamURL string) 
 		return nil, err
 	}
 
-	return resp.Body, nil
+	return normalizeCatalogJSONExperimental(resp.Body)
 }
 
 func validateCatalogJSON(body []byte) error {
@@ -212,6 +214,26 @@ func validateCatalogJSON(body []byte) error {
 	}
 
 	return nil
+}
+
+func normalizeCatalogJSONExperimental(body []byte) ([]byte, error) {
+	var normalizeErr error
+	gjson.GetBytes(body, "providers").ForEach(func(id, provider gjson.Result) bool {
+		provider.Get("models").ForEach(func(index, model gjson.Result) bool {
+			experimental := model.Get("experimental")
+			if !experimental.Exists() || experimental.Type == gjson.Null ||
+				experimental.Type == gjson.True || experimental.Type == gjson.False || experimental.IsObject() {
+				return true
+			}
+
+			providerPath := strings.NewReplacer("\\", "\\\\", ".", "\\.", ":", "\\:").Replace(id.String())
+			path := fmt.Sprintf("providers.%s.models.%d.experimental", providerPath, index.Int())
+			body, normalizeErr = sjson.DeleteBytes(body, path)
+			return normalizeErr == nil
+		})
+		return normalizeErr == nil
+	})
+	return body, normalizeErr
 }
 
 // buildFilteredCatalog decodes a full catalog, applies the developer filters
@@ -243,7 +265,11 @@ func fallbackCatalogJSON() []byte {
 		return []byte(`{"providers":{}}`)
 	}
 
-	return catalogFallbackJSON
+	body, err := normalizeCatalogJSONExperimental(catalogFallbackJSON)
+	if err != nil {
+		return []byte(`{"providers":{}}`)
+	}
+	return body
 }
 
 func snapshotFromPayload(payload *catalogPayload, filtered bool) CatalogSnapshot {

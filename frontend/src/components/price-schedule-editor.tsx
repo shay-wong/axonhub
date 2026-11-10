@@ -748,7 +748,7 @@ const DateRangeSinglePicker = memo(function DateRangeSinglePicker({
                 mode='single'
                 selected={field.value ? new Date(field.value) : undefined}
                 onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
-                initialFocus
+                autoFocus
               />
             </PopoverContent>
           </Popover>

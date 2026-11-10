@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"mime"
 	"net/http"
@@ -577,7 +578,10 @@ func (s *passThroughStream) Next() bool {
 
 		if s.transformed.Next() {
 			// Current drives persistence and terminal tracking of the transformed event.
-			_ = s.transformed.Current()
+			event := s.transformed.Current()
+			if isResponsesTerminal(event) {
+				s.terminal = event
+			}
 		} else {
 			s.done = true
 		}
@@ -590,6 +594,21 @@ func (s *passThroughStream) Next() bool {
 	s.pending = s.pending[1:]
 
 	return true
+}
+
+// validateTerminal finishes conversion before forwarding the provider's terminal event.
+func (s *passThroughStream) validateTerminal() error {
+	if !s.done {
+		for s.transformed.Next() {
+			event := s.transformed.Current()
+			if isResponsesTerminal(event) {
+				s.terminal = event
+			}
+		}
+		s.done = true
+		s.pending = append(s.pending, s.recorder.take()...)
+	}
+	return s.transformed.Err()
 }
 
 func (s *passThroughStream) Current() *httpclient.StreamEvent { return s.current }
@@ -682,10 +701,35 @@ func isResponsesTerminal(event *httpclient.StreamEvent) bool {
 }
 
 func (s *responsesIdentityStream) Next() bool {
-	if !s.stream.Next() {
+	if s.ended {
 		return false
 	}
+	if !s.stream.Next() {
+		s.ended = true
+		s.err = s.stream.Err()
+		if s.validated != nil && s.validated.terminal != nil && s.validated.transformed.Err() == nil &&
+			!errors.Is(s.err, transformer.ErrInvalidResponse) && !errors.Is(s.err, transformer.ErrUnsupportedConversion) {
+			s.err = nil
+		}
+		if s.err == nil && !s.terminal && s.validated != nil && s.validated.terminal != nil {
+			s.current = preserveResponsesStreamEventModel(s.validated.terminal, s.clientModel)
+			s.terminal = true
+			return true
+		}
+		return false
+	}
+
 	s.current = preserveResponsesStreamEventModel(s.stream.Current(), s.clientModel)
+	if isResponsesTerminal(s.current) {
+		if s.validated != nil {
+			if err := s.validated.validateTerminal(); err != nil {
+				s.err = err
+				s.ended = true
+				return false
+			}
+		}
+		s.terminal = true
+	}
 	return true
 }
 
@@ -700,6 +744,12 @@ func (s *responsesIdentityStream) Current() *httpclient.StreamEvent {
 }
 
 func (s *responsesIdentityStream) Err() error {
+	if s.err != nil {
+		return s.err
+	}
+	if s.terminal {
+		return nil
+	}
 	return s.stream.Err()
 }
 

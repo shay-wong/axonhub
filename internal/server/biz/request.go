@@ -1145,7 +1145,7 @@ func (s *RequestService) UpdateRequestExecutionTerminated(
 		status = requestexecution.StatusCanceled
 	}
 
-	return s.UpdateRequestExecutionFinalized(
+	return s.updateRequestExecutionResponse(
 		ctx,
 		execution,
 		status,
@@ -1153,6 +1153,7 @@ func (s *RequestService) UpdateRequestExecutionTerminated(
 		externalId,
 		responseBody,
 		metrics,
+		executionErrorInfoFromError(rawErr),
 		upstreamModelID,
 		responseHeaders,
 		chunks...,
@@ -1197,8 +1198,13 @@ func (s *RequestService) updateRequestExecutionResponse(
 	if upstreamModelID != "" {
 		upd = upd.SetUpstreamModelID(upstreamModelID)
 	}
-	if errorMessage != "" {
+	if status == requestexecution.StatusCompleted {
+		upd = upd.ClearErrorMessage().ClearResponseStatusCode()
+	} else if errorMessage != "" {
 		upd = upd.SetErrorMessage(errorMessage)
+	}
+	if status != requestexecution.StatusCompleted && errorInfo != nil && errorInfo.StatusCode != nil {
+		upd = upd.SetResponseStatusCode(*errorInfo.StatusCode)
 	}
 
 	// Set latency metrics if provided

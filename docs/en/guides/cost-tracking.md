@@ -239,6 +239,8 @@ For Chat Completions, Responses, and Anthropic Messages, partial usage without f
 
 Explicit upstream failures, cancellations, and incomplete outcomes remain unchanged when forwarded as Chat Completions. Ending the connection without a transport error does not append a successful finish or `[DONE]`, even when content and usage have already arrived.
 
+Responses forwarding validates the final event before reporting completion. An invalid HTTP/WebSocket response remains an error even if the upstream has generated a completed result. When response storage is enabled, failed executions retain their original status, response headers, and received chunks according to the configured storage policy.
+
 Execution API key indices, aliases, and suffixes require channel-edit permission. Analytics performance columns retain unattributed usage and attribution through deleted keys, consistent with the usage totals.
 
 ### GraphQL API

@@ -815,7 +815,7 @@ export function ModelsActionDialog() {
                                     field.value ? new Date(field.value.length === 7 ? `${field.value}-01` : field.value) : undefined
                                   }
                                   onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : undefined)}
-                                  initialFocus
+                                  autoFocus
                                 />
                               </PopoverContent>
                             </Popover>
@@ -846,7 +846,7 @@ export function ModelsActionDialog() {
                                   mode='single'
                                   selected={field.value ? new Date(field.value) : undefined}
                                   onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : undefined)}
-                                  initialFocus
+                                  autoFocus
                                 />
                               </PopoverContent>
                             </Popover>
@@ -877,7 +877,7 @@ export function ModelsActionDialog() {
                                   mode='single'
                                   selected={field.value ? new Date(field.value) : undefined}
                                   onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : undefined)}
-                                  initialFocus
+                                  autoFocus
                                 />
                               </PopoverContent>
                             </Popover>

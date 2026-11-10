@@ -521,6 +521,81 @@ func TestApplyPassThroughStream_PreservesIdentityAndBackMapsModel(t *testing.T) 
 	require.False(t, result.Next())
 }
 
+func TestResponsesIdentityStream_PreservesValidatedOutcome(t *testing.T) {
+	completed := &httpclient.StreamEvent{Data: []byte(`{"type":"response.completed","response":{"id":"provider-id","status":"completed"}}`)}
+	failed := &httpclient.StreamEvent{Data: []byte(`{"type":"response.failed","response":{"id":"provider-id","status":"failed"}}`)}
+	transportErr := errors.New("connection reset")
+	conversionErr := errors.New("invalid response item")
+	for _, tc := range []struct {
+		name          string
+		raw           []*httpclient.StreamEvent
+		terminal      *httpclient.StreamEvent
+		validationErr error
+		wantLast      *httpclient.StreamEvent
+		wantErr       error
+	}{
+		{name: "completion beats trailing disconnect", raw: []*httpclient.StreamEvent{completed}, terminal: completed, wantLast: completed},
+		{name: "provider failure stays failure", raw: []*httpclient.StreamEvent{failed}, terminal: failed, wantLast: failed},
+		{name: "interrupted raw stream receives validated failure", terminal: failed, wantLast: failed},
+		{name: "completion does not hide conversion error", raw: []*httpclient.StreamEvent{completed}, validationErr: conversionErr, wantErr: conversionErr},
+		{name: "unvalidated completion does not hide cancellation", raw: []*httpclient.StreamEvent{completed}, validationErr: context.Canceled, wantErr: context.Canceled},
+		{name: "missing terminal keeps transport error", wantErr: transportErr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var converted []*httpclient.StreamEvent
+			if tc.terminal != nil {
+				converted = append(converted, tc.terminal)
+			}
+			forwarded := &passThroughStream{
+				transformed: &errorAfterEventsStream{items: converted, err: tc.validationErr},
+				recorder: &rawEventRecorder{
+					source:  &errorAfterEventsStream{err: transportErr},
+					pending: tc.raw,
+				},
+			}
+			stream := &responsesIdentityStream{stream: forwarded, validated: forwarded}
+			var events []*httpclient.StreamEvent
+			for stream.Next() {
+				events = append(events, stream.Current())
+			}
+			if tc.wantLast == nil {
+				require.Empty(t, events)
+			} else {
+				require.Len(t, events, 1)
+				require.Same(t, tc.wantLast, events[0])
+			}
+			require.ErrorIs(t, stream.Err(), tc.wantErr)
+			require.NoError(t, stream.Close())
+		})
+	}
+}
+
+func TestResponsesIdentityStream_ValidatedTerminalPreservesAdapterError(t *testing.T) {
+	completed := &httpclient.StreamEvent{Data: []byte(`{"type":"response.completed","response":{"id":"provider-id","status":"completed"}}`)}
+	forwarded := &passThroughStream{
+		transformed: &errorAfterEventsStream{items: []*httpclient.StreamEvent{completed}},
+		recorder: &rawEventRecorder{
+			source: &errorAfterEventsStream{},
+			pending: []*httpclient.StreamEvent{
+				{Type: "response.completed", Data: []byte(`{"type":"response.created"}`)},
+				completed,
+			},
+		},
+	}
+	stream := &responsesIdentityStream{
+		stream: &responsesTransportStream{
+			stream: forwarded,
+			source: llm.APIFormatOpenAIResponse,
+			target: llm.APIFormatOpenAIResponseWebSocket,
+		},
+		validated: forwarded,
+	}
+
+	require.False(t, stream.Next(), "adapter rejection must not become a successful terminal event")
+	require.ErrorIs(t, stream.Err(), transformer.ErrInvalidResponse)
+	require.NoError(t, stream.Close())
+}
+
 func TestResponsesIdentityStream_AdapterFailureClosesBackpressuredSource(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -553,6 +628,11 @@ func TestResponsesIdentityStream_AdapterFailureClosesBackpressuredSource(t *test
 	}
 	require.ErrorIs(t, result.Err(), transformer.ErrInvalidResponse)
 	require.NoError(t, result.Close())
+}
+
+type cancelBeforeValidationStream struct {
+	streams.Stream[*httpclient.StreamEvent]
+	cancel context.CancelFunc
 }
 
 func TestResponsesIdentityStream_InconsistentEnvelopeDoesNotWaitForDrain(t *testing.T) {
@@ -593,6 +673,35 @@ func TestResponsesIdentityStream_InconsistentEnvelopeDoesNotWaitForDrain(t *test
 			require.Equal(t, "original", gjson.GetBytes(received[len(received)-1].Data, "response.id").String())
 		})
 	}
+}
+
+func (s *cancelBeforeValidationStream) Next() bool {
+	if s.Stream.Next() {
+		_ = s.Stream.Current()
+		s.cancel()
+	}
+	return false
+}
+
+func (s *cancelBeforeValidationStream) Err() error { return context.Canceled }
+
+func TestResponsesIdentityStream_CancellationBeforeValidationDoesNotPublishCompletion(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	state := &PersistenceState{
+		CurrentCandidate:   &ChannelModelsCandidate{Channel: &biz.Channel{Channel: &ent.Channel{Name: "responses"}}},
+		LlmRequest:         &llm.Request{APIFormat: llm.APIFormatOpenAIResponse},
+		RawProviderRequest: &httpclient.Request{APIFormat: llm.APIFormatOpenAIResponse.String()},
+	}
+	outbound := &PersistentOutboundTransformer{state: state}
+	event := &httpclient.StreamEvent{Data: []byte(`{"type":"response.completed","response":{"id":"original","status":"completed","output":[]}}`)}
+	captured, err := captureRawProviderStream(outbound).OnOutboundRawStream(ctx, testHTTPStream([]*httpclient.StreamEvent{event}))
+	require.NoError(t, err)
+	result, err := applyPassThroughStream(outbound).OnInboundRawStream(ctx, &cancelBeforeValidationStream{Stream: captured, cancel: cancel})
+	require.NoError(t, err)
+	require.False(t, result.Next(), "the raw terminal is not published when validation was canceled")
+	require.ErrorIs(t, result.Err(), context.Canceled)
+	require.NoError(t, result.Close())
 }
 
 func TestApplyPassThroughStream_TransformsPreReadAndLiveEvents(t *testing.T) {

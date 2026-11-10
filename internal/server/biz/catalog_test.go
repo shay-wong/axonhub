@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 
 	"github.com/looplj/axonhub/internal/authz"
 	"github.com/looplj/axonhub/internal/ent"
@@ -215,4 +216,33 @@ func TestCatalogService_CancelledCallerDoesNotCauseFallback(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, catalogSourceUpstream, snapshot.Source)
 	require.Contains(t, string(snapshot.Data), "gpt-hot")
+}
+
+func TestCatalogService_NormalizesExperimentalInBothVariants(t *testing.T) {
+	ctx, system, svc := newCatalogTestService(t)
+	body := `{"providers":{
+		"openai":{"id":"openai","models":[
+			{"id":"boolean","experimental":true},
+			{"id":"structured","experimental":{"modes":{"fast":{"input":2}}}},
+			{"id":"invalid","experimental":"yes"}
+		]},
+		"provider.with:punctuation":{"id":"other","models":[{"id":"invalid","experimental":[]}]}
+	},"metadata":{"revision":9007199254740993}}`
+	useCatalogUpstream(t, ctx, system, svc, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	})
+
+	for _, filtered := range []bool{false, true} {
+		snapshot, err := svc.Snapshot(ctx, filtered)
+		require.NoError(t, err)
+		require.Equal(t, catalogSourceUpstream, snapshot.Source)
+		data := []byte(snapshot.Data)
+		require.True(t, gjson.GetBytes(data, `providers.openai.models.#(id=="boolean").experimental`).Bool())
+		require.True(t, gjson.GetBytes(data, `providers.openai.models.#(id=="structured").experimental`).IsObject())
+		require.False(t, gjson.GetBytes(data, `providers.openai.models.#(id=="invalid").experimental`).Exists())
+		if !filtered {
+			require.False(t, gjson.GetBytes(data, `providers.provider\.with:punctuation.models.0.experimental`).Exists())
+			require.Equal(t, "9007199254740993", gjson.GetBytes(data, "metadata.revision").Raw)
+		}
+	}
 }

@@ -243,6 +243,10 @@ func (ts *OutboundPersistentStream) finalizeClose() error {
 	if ts.outcome.hasFinalEvidence() {
 		ts.terminalState = ts.outcome.finalState()
 	}
+	if ts.state.StreamTerminalError != nil && ts.terminalState != streamTerminalCompleted {
+		ts.persistTerminalResponse(ctx, ts.state.StreamTerminalError, ts.accountingSourceEnd(streamErr, ctxErr))
+		return ts.closeSource()
+	}
 
 	// A terminal event carries the final stream outcome. Persist its structured
 	// response even if a transport or context error arrives afterward.
@@ -442,7 +446,7 @@ func (ts *OutboundPersistentStream) persistTerminalResponse(ctx context.Context,
 			responseBody,
 			latencyMetrics(ts.perf),
 			ts.upstreamModelID,
-			nil,
+			ts.responseHeaders(), ts.responseChunks...,
 		); err != nil {
 			log.Warn(persistCtx, "Failed to persist terminal request execution response", log.Cause(err))
 			ts.persistenceErr = errors.Join(ts.persistenceErr, err)
@@ -458,7 +462,7 @@ func (ts *OutboundPersistentStream) persistTerminalResponse(ctx context.Context,
 				responseBody,
 				latencyMetrics(ts.perf),
 				ts.upstreamModelID,
-				nil,
+				ts.responseHeaders(), ts.responseChunks...,
 			); err != nil {
 				log.Warn(persistCtx, "Failed to persist raw terminal request execution response", log.Cause(err))
 				ts.persistenceErr = errors.Join(ts.persistenceErr, err)
