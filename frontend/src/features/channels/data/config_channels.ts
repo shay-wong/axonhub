@@ -85,7 +85,7 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
   openai: {
     channelType: 'openai',
     baseURL: 'https://api.openai.com/v1',
-    defaultModels: ['gpt-6-astra', 'gpt-4o', 'gpt-4o-mini', 'gpt-5', 'gpt-5.1'],
+    defaultModels: ['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'],
     apiFormat: OPENAI_CHAT_COMPLETIONS,
     color: 'bg-white-100 text-white-800 border-white-200',
     icon: OpenAI,
@@ -126,7 +126,7 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
   openai_responses: {
     channelType: 'openai_responses',
     baseURL: 'https://api.openai.com/v1',
-    defaultModels: ['gpt-6-astra', 'gpt-4o', 'gpt-4o-mini', 'gpt-5', 'gpt-5.1'],
+    defaultModels: ['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'],
     apiFormat: OPENAI_RESPONSES,
     color: 'bg-green-100 text-green-800 border-green-200',
     icon: OpenAI,
@@ -183,7 +183,7 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
   gemini_openai: {
     channelType: 'gemini_openai',
     baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    defaultModels: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+    defaultModels: ['gemini-3.1-pro-preview', 'gemini-3.8-flash'],
     apiFormat: OPENAI_CHAT_COMPLETIONS,
     color: 'bg-green-100 text-green-800 border-green-200',
     icon: Google,
@@ -191,7 +191,7 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
   gemini: {
     channelType: 'gemini',
     baseURL: 'https://generativelanguage.googleapis.com/v1beta',
-    defaultModels: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+    defaultModels: ['gemini-3.1-pro-preview', 'gemini-3.8-flash'],
     apiFormat: GEMINI_CONTENTS,
     color: 'bg-green-100 text-green-800 border-green-200',
     icon: Google,
@@ -199,7 +199,7 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
   gemini_vertex: {
     channelType: 'gemini_vertex',
     baseURL: 'https://aiplatform.googleapis.com/v1',
-    defaultModels: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+    defaultModels: ['gemini-3.1-pro-preview', 'gemini-3.8-flash'],
     apiFormat: GEMINI_CONTENTS,
     color: 'bg-green-100 text-green-800 border-green-200',
     icon: Google,
@@ -303,15 +303,14 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
     baseURL: 'https://openrouter.ai/api/v1',
     defaultModels: [
       // Moonshot
-      'moonshotai/kimi-k2:free',
       'moonshotai/kimi-k2-0905',
 
       // Zai
       'z-ai/glm-4.7',
 
       // Anthropic
-      'anthropic/claude-opus-4',
-      'anthropic/claude-sonnet-4',
+      'anthropic/claude-opus-5.5',
+      'anthropic/claude-sonnet-5.5',
     ],
     apiFormat: OPENAI_CHAT_COMPLETIONS,
     color: 'bg-gray-100 text-gray-800 border-gray-200',
@@ -502,17 +501,16 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
     channelType: 'aihubmix',
     baseURL: 'https://aihubmix.com/v1',
     defaultModels: [
-      'DeepSeek-V3.2-Exp',
-      'DeepSeek-V3.2-Exp-Think',
+      'deepseek-v3.2',
       // Google
-      'gemini-3-flash',
-      'gemini-3-pro',
+      'gemini-3.8-flash',
+      'gemini-3.1-pro-preview',
       // Anthropic
-      'claude-sonnet-4-5',
+      'claude-sonnet-5-5',
       // OpenAI
-      'gpt-4o',
+      'gpt-5.6-sol',
       // Moonshot
-      'Kimi-K2-0905',
+      'kimi-k2.6',
       // Zai/GLM
       'glm-4.7',
     ],
@@ -523,7 +521,7 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
   aihubmix_anthropic: {
     channelType: 'aihubmix_anthropic',
     baseURL: 'https://aihubmix.com',
-    defaultModels: ['DeepSeek-V3.2-Exp', 'claude-sonnet-4-5', 'gpt-4o', 'gemini-3-pro'],
+    defaultModels: ['deepseek-v3.2', 'claude-sonnet-5-5', 'gpt-5.6-sol', 'gemini-3.1-pro-preview'],
     apiFormat: ANTHROPIC_MESSAGES,
     color: 'bg-blue-100 text-blue-800 border-blue-200',
     icon: AiHubMix,
@@ -664,11 +662,9 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
     channelType: 'anthropic_aws',
     baseURL: 'https://bedrock-runtime.us-east-1.amazonaws.com',
     defaultModels: [
-      'anthropic.claude-opus-4-1-20250805-v1:0',
-      'anthropic.claude-opus-4-20250514-v1:0',
-      'anthropic.claude-sonnet-4-20250514-v1:0',
-      'anthropic.claude-3-7-sonnet-20250219-v1:0',
-      'anthropic.claude-3-5-haiku-20241022-v1:0',
+      'anthropic.claude-opus-5-5',
+      'anthropic.claude-sonnet-5-5',
+      'anthropic.claude-haiku-5-5',
     ],
     apiFormat: ANTHROPIC_MESSAGES,
     color: 'bg-orange-100 text-orange-800 border-orange-200',
@@ -678,11 +674,9 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
     channelType: 'anthropic_gcp',
     baseURL: 'https://us-east5-aiplatform.googleapis.com',
     defaultModels: [
-      'claude-opus-4-1@20250805',
-      'claude-opus-4@20250514',
-      'claude-sonnet-4@20250514',
-      'claude-3-7-sonnet@20250219',
-      'claude-3-5-haiku@20241022',
+      'claude-opus-5-5',
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
     ],
     apiFormat: ANTHROPIC_MESSAGES,
     color: 'bg-orange-100 text-orange-800 border-orange-200',
@@ -885,7 +879,7 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
   zenmux: {
     channelType: 'zenmux',
     baseURL: 'https://zenmux.ai/api/v1',
-    defaultModels: ['openai/gpt-5', 'anthropic/claude-sonnet-4.5'],
+    defaultModels: ['openai/gpt-5.6-sol', 'anthropic/claude-sonnet-5.5'],
     apiFormat: OPENAI_CHAT_COMPLETIONS,
     color: 'bg-gray-100 text-gray-800 border-gray-200',
     icon: ZenMux,
@@ -893,7 +887,7 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
   zenmux_responses: {
     channelType: 'zenmux_responses',
     baseURL: 'https://zenmux.ai/api/v1',
-    defaultModels: ['openai/gpt-5'],
+    defaultModels: ['openai/gpt-5.6-sol'],
     apiFormat: OPENAI_RESPONSES,
     color: 'bg-gray-100 text-gray-800 border-gray-200',
     icon: ZenMux,
@@ -901,7 +895,7 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
   zenmux_anthropic: {
     channelType: 'zenmux_anthropic',
     baseURL: 'https://zenmux.ai/api/anthropic',
-    defaultModels: ['anthropic/claude-sonnet-4.5'],
+    defaultModels: ['anthropic/claude-sonnet-5.5'],
     apiFormat: ANTHROPIC_MESSAGES,
     color: 'bg-gray-100 text-gray-800 border-gray-200',
     icon: ZenMux,
@@ -909,7 +903,7 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
   zenmux_gemini: {
     channelType: 'zenmux_gemini',
     baseURL: 'https://zenmux.ai/api/vertex-ai',
-    defaultModels: ['google/gemini-2.5-pro'],
+    defaultModels: ['google/gemini-3.1-pro-preview'],
     apiFormat: GEMINI_CONTENTS,
     color: 'bg-gray-100 text-gray-800 border-gray-200',
     icon: ZenMux,

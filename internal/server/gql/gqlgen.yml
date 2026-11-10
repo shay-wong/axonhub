@@ -847,6 +847,15 @@ models:
   Plugin:
     model:
       - github.com/looplj/axonhub/internal/server/plugin.InstalledPlugin
+  PluginManifestHooks:
+    model:
+      - github.com/looplj/axonhub/internal/server/plugin.ManifestHooks
+  PluginManifestRequestHook:
+    model:
+      - github.com/looplj/axonhub/internal/server/plugin.ManifestRequestHook
+  PluginManifestAttemptHook:
+    model:
+      - github.com/looplj/axonhub/internal/server/plugin.ManifestAttemptHook
   PluginConfigField:
     model:
       - github.com/looplj/axonhub/internal/server/plugin.ConfigField
@@ -859,6 +868,9 @@ models:
   PluginInstallResult:
     model:
       - github.com/looplj/axonhub/internal/server/plugin.InstallView
+  PluginMarketEntry:
+    model:
+      - github.com/looplj/axonhub/internal/server/plugin.MarketEntry
   PluginKVPage:
     model:
       - github.com/looplj/axonhub/internal/server/plugin.KVPage
@@ -868,6 +880,12 @@ models:
   PluginUIPage:
     model:
       - github.com/looplj/axonhub/internal/server/plugin.UIPage
+  PluginUIAction:
+    model:
+      - github.com/looplj/axonhub/internal/server/plugin.UIAction
+  PluginUIActionEffect:
+    model:
+      - github.com/looplj/axonhub/internal/objects.PluginUIActionEffect
   PluginUIEntries:
     model:
       - github.com/looplj/axonhub/internal/server/plugin.UIEntries

@@ -172,7 +172,7 @@ func (m *performanceRecording) OnOutboundRawError(ctx context.Context, err error
 }
 
 func recordPerformanceError(ctx context.Context, state *PersistenceState, err error) bool {
-	if state == nil || state.Perf == nil || state.Perf.RequestCompleted {
+	if state == nil || state.Perf == nil || state.Perf.RequestCompleted || isLocalAdmissionError(err) {
 		return false
 	}
 

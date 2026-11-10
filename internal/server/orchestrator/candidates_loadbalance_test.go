@@ -69,13 +69,13 @@ func TestLoadBalancedSelector_Select_CountsDistinctChannelsAcrossPriorities(t *t
 	channelB := stickyTestCandidate(2, 0)
 	channelB.Models = []biz.ChannelModelEntry{{ActualModel: "model-b"}}
 
-	policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
+	policy := &biz.RetryPolicy{
 		Enabled:           true,
 		MaxChannelRetries: 1,
-	}}
+	}
 	selector := WithLoadBalancedSelector(
 		&staticChannelSelector{candidates: []*ChannelModelsCandidate{channelA, channelAFallback, channelB}},
-		NewLoadBalancer(policy, nil),
+		NewLoadBalancer(nil, nil),
 		policy,
 	)
 
@@ -96,14 +96,14 @@ func TestLoadBalancedSelector_Select_TracksOnlyFinalSelectionAcrossPriorities(t 
 		stickyTestCandidate(3, 1),
 		stickyTestCandidate(4, 1),
 	}
-	policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
+	policy := &biz.RetryPolicy{
 		Enabled:           true,
 		MaxChannelRetries: 2,
-	}}
+	}
 	tracker := &mockSelectionTracker{}
 	selector := WithLoadBalancedSelector(
 		&staticChannelSelector{candidates: candidates},
-		NewLoadBalancer(policy, tracker).WithoutWeightTieBreaker(),
+		NewLoadBalancer(nil, tracker).WithoutWeightTieBreaker(),
 		policy,
 	)
 
@@ -122,13 +122,13 @@ func TestLoadBalancedSelector_Select_CountsDistinctChannelsWithinPriority(t *tes
 	channelB := stickyTestCandidate(2, 0)
 	channelB.Models = []biz.ChannelModelEntry{{ActualModel: "model-b"}}
 
-	policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
+	policy := &biz.RetryPolicy{
 		Enabled:           true,
 		MaxChannelRetries: 1,
-	}}
+	}
 	selector := WithLoadBalancedSelector(
 		&staticChannelSelector{candidates: []*ChannelModelsCandidate{channelA, channelADuplicate, channelB}},
-		NewLoadBalancer(policy, nil),
+		NewLoadBalancer(nil, nil),
 		policy,
 	)
 
@@ -152,13 +152,13 @@ func TestLoadBalancedSelector_Select_DoesNotMergeModelsAcrossAPIFormats(t *testi
 	channelB := stickyTestCandidate(2, 0)
 	channelB.Models = []biz.ChannelModelEntry{{ActualModel: "model-b"}}
 
-	policy := &mockRetryPolicyProvider{policy: &biz.RetryPolicy{
+	policy := &biz.RetryPolicy{
 		Enabled:           true,
 		MaxChannelRetries: 1,
-	}}
+	}
 	selector := WithLoadBalancedSelector(
 		&staticChannelSelector{candidates: []*ChannelModelsCandidate{channelA, channelAResponses, channelB}},
-		NewLoadBalancer(policy, nil),
+		NewLoadBalancer(nil, nil),
 		policy,
 	)
 
@@ -207,7 +207,7 @@ func TestDefaultChannelSelector_Select_WithTraceContext(t *testing.T) {
 	channelService := newTestChannelServiceForChannels(client)
 	systemService := newTestSystemService(client)
 	requestService := newTestRequestServiceForChannels(client, systemService)
-	require.NoError(t, requestService.UpdateRequestChannelID(ctx, stickyRequest.ID, channels[1].ID))
+	requestService.AssignRequestChannel(ctx, stickyRequest, channels[1].ID)
 
 	selector := newTestLoadBalancedSelector(channelService, client, systemService, requestService)
 
@@ -538,15 +538,15 @@ func TestLoadBalancedSelector_Select(t *testing.T) {
 	systemService := newTestSystemService(client)
 
 	strategies := []LoadBalanceStrategy{
-		NewErrorAwareStrategy(channelService),
-		NewWeightRoundRobinStrategy(channelService),
-		NewLatencyAwareStrategy(channelService),
+		NewErrorAwareStrategy(),
+		NewWeightRoundRobinStrategy(),
+		NewLatencyAwareStrategy(),
 	}
-	loadBalancer := NewLoadBalancer(systemService, nil, strategies...)
+	loadBalancer := NewLoadBalancer(channelService, nil, strategies...)
 
 	modelService := newTestModelService(client)
 	baseSelector := NewDefaultSelector(channelService, modelService, systemService)
-	selector := WithLoadBalancedSelector(baseSelector, loadBalancer, systemService)
+	selector := WithLoadBalancedSelector(baseSelector, loadBalancer, systemService.RetryPolicyOrDefault(ctx))
 
 	req := &llm.Request{
 		Model: "gpt-4",
@@ -588,11 +588,11 @@ func TestLoadBalancedSelector_Select_SingleChannel(t *testing.T) {
 
 	channelService := newTestChannelServiceForChannels(client)
 	systemService := newTestSystemService(client)
-	loadBalancer := NewLoadBalancer(systemService, nil)
+	loadBalancer := NewLoadBalancer(nil, nil)
 
 	modelService := newTestModelService(client)
 	baseSelector := NewDefaultSelector(channelService, modelService, systemService)
-	selector := WithLoadBalancedSelector(baseSelector, loadBalancer, systemService)
+	selector := WithLoadBalancedSelector(baseSelector, loadBalancer, systemService.RetryPolicyOrDefault(ctx))
 
 	req := &llm.Request{
 		Model: "gpt-4",

@@ -425,10 +425,11 @@ func (ts *InboundPersistentStream) Close() error {
 	ts.closeMu.Unlock()
 	defer close(ts.closeDone)
 
-	// Close the lifecycle first to quiesce the drain goroutine before reading shared state
+	// The lifecycle finalizes the upstream attempt before the chain is closed:
+	// closing the chain may cancel the attempt's transport before its tail is read.
 	if ts.lifecycle != nil {
-		_ = ts.stream.Close()
 		ts.lifecycle.Close()
+		_ = ts.stream.Close()
 	}
 
 	ts.stateMu.Lock()
@@ -514,10 +515,9 @@ func (ts *InboundPersistentStream) Close() error {
 
 	if decision.state != streamTerminalCompleted && (streamErr != nil || ctxErr != nil) {
 		persistCtx := context.WithoutCancel(ctx)
-		ts.persistFailureChunks(persistCtx)
 
 		if ts.request != nil {
-			if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request.ID, decision.cause); err != nil {
+			if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request, decision.cause, ts.responseChunks...); err != nil {
 				log.Warn(persistCtx, "Failed to update request status from error", log.Cause(err))
 			}
 		}
@@ -533,11 +533,9 @@ func (ts *InboundPersistentStream) Close() error {
 		log.Debug(ctx, "Stream ended without terminal event or completed response, treating as incomplete")
 
 		persistCtx := context.WithoutCancel(ctx)
-		// Persist partial chunks for debugging; do not mark the request completed.
-		ts.persistFailureChunks(persistCtx)
-
+		// Persist partial chunks with the failed status for debugging.
 		if ts.request != nil {
-			if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request.ID, decision.cause); err != nil {
+			if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request, decision.cause, ts.responseChunks...); err != nil {
 				log.Warn(persistCtx, "Failed to update request status from error", log.Cause(err))
 			}
 		}
@@ -608,36 +606,21 @@ func (ts *InboundPersistentStream) persistTerminalResponse(ctx context.Context, 
 		status = request.StatusCanceled
 	}
 	if len(responseBody) > 0 {
-		if err := ts.requestService.UpdateRequestStatusExternalIDAndResponseBody(
+		if err := ts.requestService.UpdateRequestFinalized(
 			persistCtx,
-			ts.request.ID,
+			ts.request,
 			status,
 			externalID,
 			responseBody,
 			latencyMetrics(ts.perf),
+			ts.responseChunks...,
 		); err != nil {
 			log.Warn(persistCtx, "Failed to persist terminal request response", log.Cause(err))
 		}
-	} else if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request.ID, terminalErr); err != nil {
+	} else if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request, terminalErr, ts.responseChunks...); err != nil {
 		log.Warn(persistCtx, "Failed to update terminal request status", log.Cause(err))
 	}
 
-	if err := ts.requestService.SaveRequestChunks(persistCtx, ts.request.ID, ts.responseChunks); err != nil {
-		log.Warn(persistCtx, "Failed to save terminal request chunks", log.Cause(err))
-	}
-}
-
-// persistFailureChunks stores buffered SSE chunks for a failed/incomplete stream
-// without marking the request completed. Used so truncated upstream responses remain
-// inspectable when store_chunks is enabled.
-func (ts *InboundPersistentStream) persistFailureChunks(ctx context.Context) {
-	if ts.request == nil || len(ts.responseChunks) == 0 {
-		return
-	}
-
-	if err := ts.requestService.SaveRequestChunks(ctx, ts.request.ID, ts.responseChunks); err != nil {
-		log.Warn(ctx, "Failed to save request chunks after stream failure", log.Cause(err))
-	}
 }
 
 // _persistResponse performs the actual persistence with pre-aggregated data.
@@ -649,17 +632,12 @@ func (ts *InboundPersistentStream) _persistResponse(ctx context.Context, respons
 
 	status := ts.terminalState.requestStatus()
 	metrics := latencyMetrics(ts.perf)
-	err := ts.requestService.UpdateRequestFinalized(ctx, ts.request.ID, status, meta.ID, responseBody, metrics)
+	err := ts.requestService.UpdateRequestFinalized(ctx, ts.request, status, meta.ID, responseBody, metrics, ts.responseChunks...)
 	if err != nil {
 		log.Warn(ctx, "Failed to update finalized request", log.Cause(err), log.Any("status", status))
 	}
 	if status == request.StatusCompleted {
 		publishRequestCompleted(ctx, ts.state, meta.Usage, true, metrics)
-	}
-
-	// Save all response chunks at once
-	if err := ts.requestService.SaveRequestChunks(ctx, ts.request.ID, ts.responseChunks); err != nil {
-		log.Warn(ctx, "Failed to save request chunks", log.Cause(err))
 	}
 }
 

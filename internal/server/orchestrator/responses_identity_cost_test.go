@@ -13,6 +13,7 @@ import (
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
+	"github.com/looplj/axonhub/llm/streams"
 	responsestransformer "github.com/looplj/axonhub/llm/transformer/openai/responses"
 )
 
@@ -58,9 +59,9 @@ func TestResponsesIdentityPreservesInjectedCost(t *testing.T) {
 				if tt.noPrice {
 					state.RequestExec.ModelID = "unpriced-model"
 				}
-				require.NoError(t, state.SystemService.SetInjectUsageCostEnabled(ctx, !tt.disabled))
+				state.Settings = &RequestSettings{InjectUsageCost: !tt.disabled}
 				outbound := &PersistentOutboundTransformer{state: state}
-				require.Equal(t, tt.passThrough, outbound.isPassThroughEnabled(ctx, state.SystemService))
+				require.Equal(t, tt.passThrough, outbound.isPassThroughEnabled())
 
 				usage := &llm.Usage{PromptTokens: 100, CompletionTokens: 200, TotalTokens: 300, Cost: lo.ToPtr(9.99)}
 				if tt.noUsage {
@@ -88,10 +89,10 @@ func TestResponsesIdentityPreservesInjectedCost(t *testing.T) {
 						require.NoError(t, err)
 						return &httpclient.StreamEvent{Type: "response.completed", Data: data}
 					}
-					state.RawStreamCh = make(chan *httpclient.StreamEvent, 1)
-					state.RawStreamCh <- terminal(raw)
-					close(state.RawStreamCh)
-					result, err := applyPassThroughStream(outbound, state.SystemService).OnInboundRawStream(ctx, testHTTPStream([]*httpclient.StreamEvent{terminal(transformed.Body)}))
+					captured, err := captureRawProviderStream(outbound).OnOutboundRawStream(ctx, testHTTPStream([]*httpclient.StreamEvent{terminal(raw)}))
+					require.NoError(t, err)
+					converted := streams.Map(captured, func(*httpclient.StreamEvent) *httpclient.StreamEvent { return terminal(transformed.Body) })
+					result, err := applyPassThroughStream(outbound).OnInboundRawStream(ctx, converted)
 					require.NoError(t, err)
 					t.Cleanup(func() { _ = result.Close() })
 					require.True(t, result.Next())
@@ -102,7 +103,7 @@ func TestResponsesIdentityPreservesInjectedCost(t *testing.T) {
 					prefix = "response."
 				} else {
 					state.RawProviderResponse = &httpclient.Response{Body: raw}
-					result, err := applyPassThroughResponse(outbound, state.SystemService).OnInboundRawResponse(ctx, transformed)
+					result, err := applyPassThroughResponse(outbound).OnInboundRawResponse(ctx, transformed)
 					require.NoError(t, err)
 					wire = result.Body
 				}
@@ -135,7 +136,8 @@ func TestResponsesCostInjectorKeepsIndependentTierHistory(t *testing.T) {
 	state.RequestedServiceTier = "ultrafast"
 	state.RequestPricingOverride = "ultrafast"
 	state.RequestPricingOverridePolicy = biz.RequestPricingOverrideWhenAppliedDefault
-	inject := newResponsesCostInjector(ctx, &PersistentOutboundTransformer{state: state}, state.SystemService)
+	state.Settings = &RequestSettings{InjectUsageCost: true}
+	inject := newResponsesCostInjector(ctx, &PersistentOutboundTransformer{state: state})
 	require.NotNil(t, inject)
 	created := []byte(`{"type":"response.created","response":{"id":"resp-1","service_tier":"priority"}}`)
 	require.Equal(t, created, inject(created))

@@ -1,7 +1,6 @@
 package orchestrator
 
 import (
-	"context"
 	"sync"
 
 	"github.com/looplj/axonhub/internal/ent"
@@ -16,17 +15,16 @@ import (
 type PersistenceState struct {
 	APIKey *ent.APIKey
 
-	RequestService      *biz.RequestService
-	UsageLogService     *biz.UsageLogService
-	SystemService       *biz.SystemService
-	ChannelService      *biz.ChannelService
-	PromptProvider      PromptProvider
-	PromptProtecter     PromptProtecter
-	RetryPolicyProvider RetryPolicyProvider
-	RetryPolicy         *biz.RetryPolicy
-	CandidateSelector   CandidateSelector
-	LoadBalancers       map[string]*LoadBalancer
-	RoutingPolicy       EffectiveRoutingPolicy
+	RequestService    *biz.RequestService
+	UsageLogService   *biz.UsageLogService
+	ChannelService    *biz.ChannelService
+	PromptProvider    PromptProvider
+	PromptProtecter   PromptProtecter
+	CandidateSelector CandidateSelector
+	LoadBalancers     map[string]*LoadBalancer
+	RoutingPolicy     EffectiveRoutingPolicy
+	// Settings is the system settings snapshot taken when the request started.
+	Settings *RequestSettings
 
 	// Request state
 	ModelMapper *ModelMapper
@@ -55,6 +53,9 @@ type PersistenceState struct {
 	// Persistence state
 	Request     *ent.Request
 	RequestExec *ent.RequestExecution
+	// ExecutionHeaders holds the upstream response headers of the latest execution
+	// until that execution's terminal update writes them.
+	ExecutionHeaders *executionHeaderObserver
 
 	// ChannelModelsCandidates is the primary state for channel selection
 	ChannelModelsCandidates []*ChannelModelsCandidate
@@ -133,34 +134,16 @@ type PersistenceState struct {
 	// streaming attempt as the request response.
 	UsageLogEligible bool
 
-	// RawStreamCh receives raw provider stream events for stream response pass-through
-	// once the pass-through consumer is attached; earlier events are held on
-	// RawStreamBacklog.
-	RawStreamCh chan *httpclient.StreamEvent
-
-	// RawStreamQueue owns aggregate count and byte accounting for raw events
-	// retained after the pass-through consumer attaches.
-	RawStreamQueue *rawStreamQueue
-
-	// RawStreamBacklog holds the current attempt's raw provider stream events until
-	// applyPassThroughStream attaches the pass-through consumer, so the pipeline can
-	// pre-read the attempt without the fan-out goroutine blocking on RawStreamCh.
-	RawStreamBacklog *rawStreamBacklog
-
-	// RawStreamErrRef points to the current attempt's local error variable used by the
-	// captureRawProviderStream fan-out goroutine. Using a per-attempt pointer (instead of
-	// a single shared field) prevents data races when retries spawn a new goroutine before
-	// the previous one has exited.
-	RawStreamErrRef *error
-
-	// RawStreamCancel cancels the current attempt's fan-out goroutine started by
-	// captureRawProviderStream. Must be called in PrepareForRetry and NextChannel so the
-	// abandoned goroutine exits promptly and releases its upstream HTTP connection.
-	RawStreamCancel context.CancelFunc
-	RawStreamDetach context.CancelFunc
+	// PassThroughRecorder retains the current attempt's raw provider stream events for
+	// stream response pass-through. It is replaced by every attempt that records.
+	PassThroughRecorder *rawEventRecorder
 
 	// PassThroughApplied records whether the inbound request body was substituted during pass-through.
 	PassThroughApplied bool
+
+	// PluginOverloaded is set when an onAttempt hook cannot borrow a runtime.
+	// HasMoreChannels returns false while it is set, so the pipeline does not switch channels.
+	PluginOverloaded bool
 
 	// EventBus publishes plugin events for this request. Nil skips publication.
 	// It is copied from the orchestrator; it is not stored on context.Context.

@@ -19,11 +19,11 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`9a489139fe0709c252a0d5435d9a94f88a54a696`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`47c8323d3767f00a909ea0b9084c37cb167eeb8a`
-- 本次 merge base：`ce0e132513f078528d9b422ad04a3fcf4531353d`
-- 审计范围：`git diff 47c8323d..HEAD`
-- 2026-11-07 合入 9 个上游提交：插件独立身份、授权网络请求和 UI 样式、系统设置与导航分组、统一弹窗布局、Antigravity Google 地址选择、OIDC 邮箱验证及非流式 Responses 终态映射。按合并后的源 schema 重新生成代码；保留统一密钥弹窗、Beta 更新偏好、系统级权限、邀请生命周期和终态错误不变量，没有整项 fork 能力等价吸收。
+- 本次 upstream merge 的 fork parent：`5664c98bc23c97d84f822a82d049a216f19de5ce`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`d2935453d23cb1886350a3d1b15f777038af3230`
+- 本次 merge base：`47c8323d3767f00a909ea0b9084c37cb167eeb8a`
+- 审计范围：`git diff d2935453..HEAD`
+- 2026-11-10 合入 32 个上游提交：插件市场和请求钩子、同步流式透传与持久化重构、请求配置快照和渠道指标复用、429 无 Retry-After 时的路由降权、按需模型目录、Trace 最近请求排序、Anthropic 工具 ID 和协议兼容修复、前端权限查询及依赖更新。保留失败 Key 排除、档位计费、终态错误、系统级权限与内嵌模型增量；生成文件以合并后的 schema 为准，没有整项 fork 能力等价吸收。
 
 本文记录固定的 merge 输入，不要求 merge commit 在自身内容中记录自身 SHA。`upstream/unstable` 后续移动不改变本文基线；尚未合入的新 upstream commit 不应被反向记录为 fork 功能。
 
@@ -47,11 +47,11 @@ git show --remerge-diff <merge-commit>
 
 ## Fork 发布版本
 
-- Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；当前最高 beta tag 为 `v1.0.0-beta12`。
-- 本次 upstream parent 包含已发布 tag `v1.0.0-beta12`（`2b1a0f9321a4f783a4cceb2b4eb3a8303074487e`），但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
+- Upstream 发布版本来源：`.github/workflows/stable-fork-release.yml` 从 upstream 的已发布 Git tag 中选择当前通道的最高版本；beta 通道同时接受 beta 和 rc，当前最高 tag 为 `v1.0.0-rc1`。
+- 本次 upstream parent 对应已发布 tag `v1.0.0-rc1`，但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-beta12-fork.2`；upstream 发布基线仍为 `v1.0.0-beta12`，因此下一个规范化 fork 版本为 `v1.0.0-beta12-fork.3`，发布前仍须重新确认该 tag 未被占用。2026-11-07 已核对双方 Release 和远端 tag；本次不修改版本文件、不发布。
+- 最近已发布 fork tag 为 `v1.0.0-beta12-fork.3`；upstream 发布基线变为 `v1.0.0-rc1`，因此下一个规范化 fork 版本为 `v1.0.0-rc1-fork.1`，发布前仍须重新确认该 tag 未被占用。2026-11-10 已核对双方 Release 和远端 tag；本次不修改版本文件、不发布。
 
 ## 长期保留
 

@@ -50,7 +50,7 @@ func TestRefreshChannelBeforeRetry_PreservesKeyRotationBudget(t *testing.T) {
 			client.Channel.UpdateOneID(entity.ID).SetSettings(&objects.ChannelSettings{RetryPerAPIKey: lo.ToPtr(true)}).SaveX(ctx)
 			snapshot := retryGuardSnapshot(t, ctx, svc, entity.ID)
 			outbound := newRetryGuardTransformer(svc, snapshot, "")
-			outbound.state.RetryPolicy = &biz.RetryPolicy{Enabled: true}
+			outbound.state.Settings = &RequestSettings{RetryPolicy: biz.RetryPolicy{Enabled: true}}
 			outbound.state.ChannelModelsCandidates = []*ChannelModelsCandidate{outbound.state.CurrentCandidate}
 			var attempts []string
 			var disabled []objects.DisabledAPIKey
@@ -100,7 +100,7 @@ func TestRefreshChannelBeforeRetry_PreservesDisabledDiagnosticKey(t *testing.T) 
 			snapshot, err := svc.GetChannelWithKey(ctx, entity.ID, "disabled-key")
 			require.NoError(t, err)
 			outbound := newRetryGuardTransformer(svc, snapshot, "")
-			outbound.state.RetryPolicy = &biz.RetryPolicy{Enabled: true}
+			outbound.state.Settings = &RequestSettings{RetryPolicy: biz.RetryPolicy{Enabled: true}}
 			outbound.state.ChannelModelsCandidates = []*ChannelModelsCandidate{outbound.state.CurrentCandidate}
 			switch source {
 			case "context":

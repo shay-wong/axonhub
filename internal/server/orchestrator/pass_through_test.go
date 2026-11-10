@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -63,7 +62,7 @@ func TestCaptureRawProviderResponse_StoresResponse(t *testing.T) {
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
 
-	mw := captureRawProviderResponse(outbound, nil)
+	mw := captureRawProviderResponse(outbound)
 	resp := &httpclient.Response{StatusCode: 200, Body: []byte("ok")}
 
 	result, err := mw.OnOutboundRawResponse(ctx, resp)
@@ -87,7 +86,7 @@ func TestApplyPassThroughResponse_Disabled(t *testing.T) {
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
 
-	mw := applyPassThroughResponse(outbound, nil)
+	mw := applyPassThroughResponse(outbound)
 	transformed := &httpclient.Response{StatusCode: 200, Body: []byte("transformed")}
 	state.RawProviderResponse = &httpclient.Response{StatusCode: 200, Body: []byte("raw")}
 
@@ -126,7 +125,7 @@ func TestApplyPassThroughResponse_Enabled_ReturnsRaw(t *testing.T) {
 		state:   state,
 	}
 
-	mw := applyPassThroughResponse(outbound, nil)
+	mw := applyPassThroughResponse(outbound)
 	transformed := &httpclient.Response{StatusCode: 200, Body: []byte("transformed")}
 	rawResp := &httpclient.Response{
 		StatusCode: 200,
@@ -190,7 +189,7 @@ func TestApplyPassThroughResponse_ResponsePolicy(t *testing.T) {
 			}
 
 			transformed := &httpclient.Response{StatusCode: http.StatusOK, Body: []byte("transformed")}
-			result, err := applyPassThroughResponse(outbound, nil).OnInboundRawResponse(ctx, transformed)
+			result, err := applyPassThroughResponse(outbound).OnInboundRawResponse(ctx, transformed)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectBody, string(result.Body))
 			assert.Same(t, llmReq, policy.gotLlmReq)
@@ -222,7 +221,7 @@ func TestApplyPassThroughResponse_MismatchedAPIFormat(t *testing.T) {
 		state:   state,
 	}
 
-	mw := applyPassThroughResponse(outbound, nil)
+	mw := applyPassThroughResponse(outbound)
 	transformed := &httpclient.Response{StatusCode: 200, Body: []byte("transformed")}
 	rawResp := &httpclient.Response{
 		StatusCode: 200,
@@ -251,7 +250,7 @@ func TestApplyPassThroughResponse_NilLlmRequest(t *testing.T) {
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
 
-	mw := applyPassThroughResponse(outbound, nil)
+	mw := applyPassThroughResponse(outbound)
 	transformed := &httpclient.Response{StatusCode: 200, Body: []byte("transformed")}
 	state.RawProviderResponse = &httpclient.Response{
 		StatusCode: 200,
@@ -293,7 +292,7 @@ func TestApplyPassThroughResponse_UsesRawProviderRequestAPIFormat(t *testing.T) 
 		state:   state,
 	}
 
-	mw := applyPassThroughResponse(outbound, nil)
+	mw := applyPassThroughResponse(outbound)
 	transformed := &httpclient.Response{StatusCode: 200, Body: []byte("transformed")}
 	rawResp := &httpclient.Response{
 		StatusCode: 200,
@@ -340,7 +339,7 @@ func TestResponsesCrossTransportBodyPreservation(t *testing.T) {
 
 			body, err := applyPassThroughRequestBody(outbound, nil).OnOutboundRawRequest(context.Background(), request)
 			require.NoError(t, err)
-			adapted, err := applyResponsesTransportRequestBody(outbound, nil).OnOutboundRawRequest(context.Background(), body)
+			adapted, err := applyResponsesTransportRequestBody(outbound).OnOutboundRawRequest(context.Background(), body)
 			require.NoError(t, err)
 			expectedBody := `{"model":"mapped-model","input":[{"type":"function_call_output","call_id":"call_provider","output":"tool-value","item_id":"item_provider"}],"provider_canary":"keep"}`
 			if tt.source != tt.target && tt.target == llm.APIFormatOpenAIResponseWebSocket {
@@ -350,9 +349,9 @@ func TestResponsesCrossTransportBodyPreservation(t *testing.T) {
 				string(adapted.Body))
 
 			providerResponse := &httpclient.Response{Body: []byte(`{"id":"resp_provider","status":"completed","output":[{"id":"item_provider","type":"message","provider_canary":"keep"}]}`)}
-			_, err = captureRawProviderResponse(outbound, nil).OnOutboundRawResponse(context.Background(), providerResponse)
+			_, err = captureRawProviderResponse(outbound).OnOutboundRawResponse(context.Background(), providerResponse)
 			require.NoError(t, err)
-			clientResponse, err := applyPassThroughResponse(outbound, nil).OnInboundRawResponse(context.Background(), &httpclient.Response{Body: []byte(`{"id":"converted"}`)})
+			clientResponse, err := applyPassThroughResponse(outbound).OnInboundRawResponse(context.Background(), &httpclient.Response{Body: []byte(`{"id":"converted"}`)})
 			require.NoError(t, err)
 			require.JSONEq(t, string(providerResponse.Body), string(clientResponse.Body))
 		})
@@ -379,7 +378,7 @@ func TestResponsesCrossTransportBodySkipsCodexBlockedPassThroughFields(t *testin
 	outbound := &PersistentOutboundTransformer{state: state, wrapped: codexOutbound}
 	request := &httpclient.Request{APIFormat: llm.APIFormatOpenAIResponse.String(), Body: []byte(`{"model":"mapped-model","input":"hello"}`)}
 
-	result, err := applyResponsesTransportRequestBody(outbound, nil).OnOutboundRawRequest(context.Background(), request)
+	result, err := applyResponsesTransportRequestBody(outbound).OnOutboundRawRequest(context.Background(), request)
 	require.NoError(t, err)
 	require.Same(t, request, result)
 	require.JSONEq(t, `{"model":"mapped-model","input":"hello"}`, string(result.Body))
@@ -421,7 +420,7 @@ func TestApplyPassThroughResponse_PreservesIdentityAndBackMapsModel(t *testing.T
 	providerResponse := &httpclient.Response{Body: []byte(`{"id":"provider-response","model":"mapped-model","status":"completed","vendor_unknown":{"keep":true}}`)}
 	state.RawProviderResponse = providerResponse
 
-	result, err := applyPassThroughResponse(outbound, nil).OnInboundRawResponse(
+	result, err := applyPassThroughResponse(outbound).OnInboundRawResponse(
 		context.Background(),
 		&httpclient.Response{Body: []byte(`{"id":"converted"}`)},
 	)
@@ -451,7 +450,7 @@ func TestApplyPassThroughResponse_CrossFormatBackMapsModel(t *testing.T) {
 	outbound := &PersistentOutboundTransformer{state: state}
 	state.RawProviderResponse = &httpclient.Response{Body: []byte(`{"id":"provider-response","model":"mapped-model","status":"completed","vendor_unknown":{"keep":true}}`)}
 
-	result, err := applyPassThroughResponse(outbound, nil).OnInboundRawResponse(
+	result, err := applyPassThroughResponse(outbound).OnInboundRawResponse(
 		context.Background(),
 		&httpclient.Response{Body: []byte(`{"id":"converted"}`)},
 	)
@@ -481,7 +480,7 @@ func TestApplyPassThroughResponse_RestoresModelFromJSONBody(t *testing.T) {
 	outbound := &PersistentOutboundTransformer{state: state}
 	state.RawProviderResponse = &httpclient.Response{Body: []byte(`{"id":"provider-response","model":"mapped-model","status":"completed"}`)}
 
-	result, err := applyPassThroughResponse(outbound, nil).OnInboundRawResponse(
+	result, err := applyPassThroughResponse(outbound).OnInboundRawResponse(
 		context.Background(),
 		&httpclient.Response{Body: []byte(`{"id":"converted"}`)},
 	)
@@ -496,12 +495,9 @@ func TestApplyPassThroughStream_PreservesIdentityAndBackMapsModel(t *testing.T) 
 		Name:     "responses",
 		Settings: &objects.ChannelSettings{PassThroughBody: lo.ToPtr(true)},
 	}}
-	rawCh := make(chan *httpclient.StreamEvent, 1)
-	rawCh <- &httpclient.StreamEvent{Data: []byte(`{"type":"response.completed","response":{"id":"provider-response","model":"mapped-model","vendor_unknown":{"keep":true}}}`)}
-	close(rawCh)
+	event := &httpclient.StreamEvent{Data: []byte(`{"type":"response.completed","response":{"id":"provider-response","model":"mapped-model","vendor_unknown":{"keep":true}}}`)}
 	state := &PersistenceState{
 		CurrentCandidate:      &ChannelModelsCandidate{Channel: channel},
-		RawStreamCh:           rawCh,
 		OriginalRequestStream: lo.ToPtr(true),
 		LlmRequest: &llm.Request{
 			APIFormat: llm.APIFormatOpenAIResponse,
@@ -516,53 +512,13 @@ func TestApplyPassThroughStream_PreservesIdentityAndBackMapsModel(t *testing.T) 
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
 
-	result, err := applyPassThroughStream(outbound, nil).OnInboundRawStream(context.Background(), testHTTPStream(nil))
+	captured, err := captureRawProviderStream(outbound).OnOutboundRawStream(context.Background(), testHTTPStream([]*httpclient.StreamEvent{event}))
+	require.NoError(t, err)
+	result, err := applyPassThroughStream(outbound).OnInboundRawStream(context.Background(), captured)
 	require.NoError(t, err)
 	require.True(t, result.Next())
 	require.JSONEq(t, `{"type":"response.completed","response":{"id":"provider-response","model":"client-model","vendor_unknown":{"keep":true}}}`, string(result.Current().Data))
 	require.False(t, result.Next())
-}
-
-func TestResponsesIdentityStream_PreservesValidatedOutcome(t *testing.T) {
-	completed := &httpclient.StreamEvent{Data: []byte(`{"type":"response.completed","response":{"id":"provider-id","status":"completed"}}`)}
-	failed := &httpclient.StreamEvent{Data: []byte(`{"type":"response.failed","response":{"id":"provider-id","status":"failed"}}`)}
-	transportErr := errors.New("connection reset")
-	conversionErr := errors.New("invalid response item")
-	for _, tc := range []struct {
-		name     string
-		raw      []*httpclient.StreamEvent
-		drained  responsesDrainResult
-		wantLast *httpclient.StreamEvent
-		wantErr  error
-	}{
-		{name: "completion beats trailing disconnect", raw: []*httpclient.StreamEvent{completed}, drained: responsesDrainResult{terminal: completed}, wantLast: completed},
-		{name: "provider failure stays failure", raw: []*httpclient.StreamEvent{failed}, drained: responsesDrainResult{terminal: failed}, wantLast: failed},
-		{name: "interrupted raw stream receives validated failure", drained: responsesDrainResult{terminal: failed}, wantLast: failed},
-		{name: "completion does not hide conversion error", raw: []*httpclient.StreamEvent{completed}, drained: responsesDrainResult{err: conversionErr}, wantErr: conversionErr},
-		{name: "unvalidated completion does not hide cancellation", raw: []*httpclient.StreamEvent{completed}, drained: responsesDrainResult{err: context.Canceled}, wantErr: context.Canceled},
-		{name: "missing terminal keeps transport error", wantErr: transportErr},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			drained := make(chan responsesDrainResult, 1)
-			drained <- tc.drained
-			stream := &responsesIdentityStream{
-				stream:  &errorAfterEventsStream{items: tc.raw, err: transportErr},
-				drained: drained,
-			}
-			var events []*httpclient.StreamEvent
-			for stream.Next() {
-				events = append(events, stream.Current())
-			}
-			if tc.wantLast == nil {
-				require.Empty(t, events)
-			} else {
-				require.Len(t, events, 1)
-				require.Same(t, tc.wantLast, events[0])
-			}
-			require.ErrorIs(t, stream.Err(), tc.wantErr)
-			require.NoError(t, stream.Close())
-		})
-	}
 }
 
 func TestResponsesIdentityStream_AdapterFailureClosesBackpressuredSource(t *testing.T) {
@@ -576,18 +532,15 @@ func TestResponsesIdentityStream_AdapterFailureClosesBackpressuredSource(t *test
 		},
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
-	release := make(chan struct{})
 	events := make([]*httpclient.StreamEvent, 130)
 	events[0] = &httpclient.StreamEvent{Data: []byte(`not-json`)}
 	for i := 1; i < len(events); i++ {
 		events[i] = &httpclient.StreamEvent{Data: []byte(`{"type":"response.output_text.delta","delta":"x"}`)}
 	}
-	captured, err := captureRawProviderStream(outbound, nil).OnOutboundRawStream(ctx, &gatedStream{events: events, gateAt: 0, release: release})
+	captured, err := captureRawProviderStream(outbound).OnOutboundRawStream(ctx, testHTTPStream(events))
 	require.NoError(t, err)
-	result, err := applyPassThroughStream(outbound, nil).OnInboundRawStream(ctx, captured)
+	result, err := applyPassThroughStream(outbound).OnInboundRawStream(ctx, captured)
 	require.NoError(t, err)
-	close(release)
-	require.Eventually(t, func() bool { return len(state.RawStreamCh) == cap(state.RawStreamCh) }, time.Second, time.Millisecond)
 	finished := make(chan bool, 1)
 	go func() { finished <- result.Next() }()
 	select {
@@ -600,11 +553,6 @@ func TestResponsesIdentityStream_AdapterFailureClosesBackpressuredSource(t *test
 	}
 	require.ErrorIs(t, result.Err(), transformer.ErrInvalidResponse)
 	require.NoError(t, result.Close())
-}
-
-type cancelBeforeValidationStream struct {
-	streams.Stream[*httpclient.StreamEvent]
-	cancel context.CancelFunc
 }
 
 func TestResponsesIdentityStream_InconsistentEnvelopeDoesNotWaitForDrain(t *testing.T) {
@@ -623,8 +571,7 @@ func TestResponsesIdentityStream_InconsistentEnvelopeDoesNotWaitForDrain(t *test
 				events = append(events, &httpclient.StreamEvent{Type: "response.output_text.delta", Data: []byte(`{"type":"response.output_text.delta","delta":"x"}`)})
 			}
 			events = append(events, &httpclient.StreamEvent{Type: "response.completed", Data: []byte(`{"type":"response.completed","response":{"id":"original","status":"completed","output":[]}}`)})
-			release := make(chan struct{})
-			captured, err := captureRawProviderStream(outbound, nil).OnOutboundRawStream(ctx, &gatedStream{events: events, gateAt: 0, release: release})
+			captured, err := captureRawProviderStream(outbound).OnOutboundRawStream(ctx, testHTTPStream(events))
 			require.NoError(t, err)
 			converter, err := responsestransformer.NewOutboundTransformer("https://example.invalid", "test")
 			require.NoError(t, err)
@@ -632,9 +579,8 @@ func TestResponsesIdentityStream_InconsistentEnvelopeDoesNotWaitForDrain(t *test
 			require.NoError(t, err)
 			converted, err := responsestransformer.NewInboundTransformer().TransformStream(ctx, llmStream)
 			require.NoError(t, err)
-			result, err := applyPassThroughStream(outbound, nil).OnInboundRawStream(ctx, converted)
+			result, err := applyPassThroughStream(outbound).OnInboundRawStream(ctx, converted)
 			require.NoError(t, err)
-			close(release)
 			var received []*httpclient.StreamEvent
 			for result.Next() {
 				received = append(received, result.Current())
@@ -649,53 +595,7 @@ func TestResponsesIdentityStream_InconsistentEnvelopeDoesNotWaitForDrain(t *test
 	}
 }
 
-func (s *cancelBeforeValidationStream) Next() bool {
-	if s.Stream.Next() {
-		_ = s.Stream.Current()
-		s.cancel()
-	}
-	return false
-}
-
-func (s *cancelBeforeValidationStream) Err() error { return context.Canceled }
-
-func TestResponsesIdentityStream_CancellationBeforeValidationDoesNotPublishCompletion(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	state := &PersistenceState{
-		CurrentCandidate:   &ChannelModelsCandidate{Channel: &biz.Channel{Channel: &ent.Channel{Name: "responses"}}},
-		LlmRequest:         &llm.Request{APIFormat: llm.APIFormatOpenAIResponse},
-		RawProviderRequest: &httpclient.Request{APIFormat: llm.APIFormatOpenAIResponse.String()},
-	}
-	outbound := &PersistentOutboundTransformer{state: state}
-	release := make(chan struct{})
-	event := &httpclient.StreamEvent{Data: []byte(`{"type":"response.completed","response":{"id":"original","status":"completed","output":[]}}`)}
-	captured, err := captureRawProviderStream(outbound, nil).OnOutboundRawStream(ctx, &gatedStream{events: []*httpclient.StreamEvent{event}, gateAt: 0, release: release})
-	require.NoError(t, err)
-	result, err := applyPassThroughStream(outbound, nil).OnInboundRawStream(ctx, &cancelBeforeValidationStream{Stream: captured, cancel: cancel})
-	require.NoError(t, err)
-	close(release)
-	require.False(t, result.Next(), "the raw terminal is not published when validation was canceled")
-	require.ErrorIs(t, result.Err(), context.Canceled)
-	require.NoError(t, result.Close())
-}
-
-type closeOnResponsesTerminalStream struct {
-	streams.Stream[*httpclient.StreamEvent]
-	closed chan struct{}
-}
-
-func (s *closeOnResponsesTerminalStream) Current() *httpclient.StreamEvent {
-	event := s.Stream.Current()
-	if isResponsesTerminal(event) {
-		_ = s.Stream.Close()
-		close(s.closed)
-		return &httpclient.StreamEvent{Data: []byte(`{"type":"response.completed","response":{"id":"converted-id","status":"completed","output":[]}}`)}
-	}
-	return event
-}
-
-func TestApplyPassThroughStream_QueueTransformsHeldAndAttachedEvents(t *testing.T) {
+func TestApplyPassThroughStream_TransformsPreReadAndLiveEvents(t *testing.T) {
 	for _, tt := range []struct {
 		name       string
 		source     llm.APIFormat
@@ -763,10 +663,6 @@ func TestApplyPassThroughStream_QueueTransformsHeldAndAttachedEvents(t *testing.
 				RawProviderRequest: &httpclient.Request{APIFormat: tt.target.String()},
 			}
 			outbound := &PersistentOutboundTransformer{state: state}
-			release := make(chan struct{})
-			var releaseOnce sync.Once
-			unblock := func() { releaseOnce.Do(func() { close(release) }) }
-			t.Cleanup(unblock)
 			events := []*httpclient.StreamEvent{
 				{Data: []byte(tt.provider), LastEventID: "held-id"},
 				{Data: []byte(`{"type":"response.completed","response":{"id":"attached","model":"mapped-model","status":"completed","output":[{"id":"provider-item","vendor_unknown":{"keep":true}}]},"vendor_unknown":{"keep":true}}`), LastEventID: "attached-id"},
@@ -776,35 +672,25 @@ func TestApplyPassThroughStream_QueueTransformsHeldAndAttachedEvents(t *testing.
 					event.Type = tt.wantTypes[i]
 				}
 			}
-			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
-			defer cancel()
-			captured, err := captureRawProviderStream(outbound, nil).OnOutboundRawStream(
-				ctx,
-				&gatedStream{events: events, gateAt: 1, release: release},
-			)
+			ctx := t.Context()
+			captured, err := captureRawProviderStream(outbound).OnOutboundRawStream(ctx, testHTTPStream(events))
 			require.NoError(t, err)
-			t.Cleanup(func() { require.NoError(t, captured.Close()) })
-			require.NotNil(t, state.RawStreamQueue)
+			recorder := state.PassThroughRecorder
+			require.NotNil(t, recorder)
+
+			// The pipeline pre-reads the first event before the consumer exists.
 			require.True(t, captured.Next())
-			require.Same(t, events[0], captured.Current())
-			state.RawStreamBacklog.mu.Lock()
-			heldCount := len(state.RawStreamBacklog.events)
-			heldBytes := state.RawStreamBacklog.bytes
-			state.RawStreamBacklog.mu.Unlock()
+			preRead := captured.Current()
+			require.Same(t, events[0], preRead)
+			recorder.mu.Lock()
+			heldCount, heldBytes := len(recorder.pending), recorder.bytes
+			recorder.mu.Unlock()
 			require.Equal(t, 1, heldCount)
 			require.Equal(t, rawStreamEventSize(events[0]), heldBytes)
 
-			// A transformer may stop as soon as it consumes the terminal event.
-			drain := &closeOnResponsesTerminalStream{Stream: captured, closed: make(chan struct{})}
-			result, err := applyPassThroughStream(outbound, nil).OnInboundRawStream(ctx, drain)
+			result, err := applyPassThroughStream(outbound).OnInboundRawStream(ctx, streams.PrependStream(captured, preRead))
 			require.NoError(t, err)
-			unblock()
 			defer result.Close()
-			select {
-			case <-drain.closed:
-			case <-ctx.Done():
-				t.Fatal("transformed stream did not receive terminal event")
-			}
 
 			for i := range tt.wantTypes {
 				require.True(t, result.Next())
@@ -823,9 +709,9 @@ func TestApplyPassThroughStream_QueueTransformsHeldAndAttachedEvents(t *testing.
 			}
 			require.False(t, result.Next())
 			require.NoError(t, result.Err())
-			state.RawStreamBacklog.mu.Lock()
-			retainedBytes, retainedCount := state.RawStreamBacklog.bytes, state.RawStreamBacklog.count
-			state.RawStreamBacklog.mu.Unlock()
+			recorder.mu.Lock()
+			retainedBytes, retainedCount := recorder.bytes, len(recorder.pending)
+			recorder.mu.Unlock()
 			require.Zero(t, retainedBytes)
 			require.Zero(t, retainedCount)
 		})
@@ -833,7 +719,6 @@ func TestApplyPassThroughStream_QueueTransformsHeldAndAttachedEvents(t *testing.
 }
 
 func TestIsPassThroughEnabled_DisablesWhenSupportedStreamParameterChanges(t *testing.T) {
-	ctx := context.Background()
 	channel := &biz.Channel{
 		Channel: &ent.Channel{
 			ID:   1,
@@ -859,11 +744,10 @@ func TestIsPassThroughEnabled_DisablesWhenSupportedStreamParameterChanges(t *tes
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
 
-	assert.False(t, outbound.isPassThroughEnabled(ctx, nil))
+	assert.False(t, outbound.isPassThroughEnabled())
 }
 
 func TestIsPassThroughEnabled_DisablesWhenSupportedStreamParameterMissingButStreamingRequested(t *testing.T) {
-	ctx := context.Background()
 	channel := &biz.Channel{
 		Channel: &ent.Channel{
 			ID:   1,
@@ -889,11 +773,10 @@ func TestIsPassThroughEnabled_DisablesWhenSupportedStreamParameterMissingButStre
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
 
-	assert.False(t, outbound.isPassThroughEnabled(ctx, nil))
+	assert.False(t, outbound.isPassThroughEnabled())
 }
 
 func TestIsPassThroughEnabled_AllowsNilAndFalseStreamToAlign(t *testing.T) {
-	ctx := context.Background()
 	channel := &biz.Channel{
 		Channel: &ent.Channel{
 			ID:   1,
@@ -920,11 +803,10 @@ func TestIsPassThroughEnabled_AllowsNilAndFalseStreamToAlign(t *testing.T) {
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
 
-	assert.True(t, outbound.isPassThroughEnabled(ctx, nil))
+	assert.True(t, outbound.isPassThroughEnabled())
 }
 
 func TestIsPassThroughEnabled_DisablesWhenRequestStreamSemanticsDoNotMatchCurrentRequirement(t *testing.T) {
-	ctx := context.Background()
 	channel := &biz.Channel{
 		Channel: &ent.Channel{
 			ID:   1,
@@ -950,11 +832,10 @@ func TestIsPassThroughEnabled_DisablesWhenRequestStreamSemanticsDoNotMatchCurren
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
 
-	assert.False(t, outbound.isPassThroughEnabled(ctx, nil))
+	assert.False(t, outbound.isPassThroughEnabled())
 }
 
 func TestIsPassThroughEnabled_DisablesWhenOriginalRequestWasNonStreamingButExecutionIsForcedStreaming(t *testing.T) {
-	ctx := context.Background()
 	channel := &biz.Channel{
 		Channel: &ent.Channel{
 			ID:   1,
@@ -981,7 +862,7 @@ func TestIsPassThroughEnabled_DisablesWhenOriginalRequestWasNonStreamingButExecu
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
 
-	assert.False(t, outbound.isPassThroughEnabled(ctx, nil))
+	assert.False(t, outbound.isPassThroughEnabled())
 }
 
 func TestApplyPassThroughResponse_NilSettings(t *testing.T) {
@@ -998,7 +879,7 @@ func TestApplyPassThroughResponse_NilSettings(t *testing.T) {
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
 
-	mw := applyPassThroughResponse(outbound, nil)
+	mw := applyPassThroughResponse(outbound)
 	transformed := &httpclient.Response{StatusCode: 200, Body: []byte("transformed")}
 
 	result, err := mw.OnInboundRawResponse(ctx, transformed)
@@ -1018,7 +899,7 @@ func TestCaptureRawProviderStream_Disabled(t *testing.T) {
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
 
-	mw := captureRawProviderStream(outbound, nil)
+	mw := captureRawProviderStream(outbound)
 	original := testHTTPStream(nil)
 
 	result, err := mw.OnOutboundRawStream(ctx, original)
@@ -1045,7 +926,7 @@ func TestCaptureRawProviderStream_NilLlmRequest(t *testing.T) {
 		state:   state,
 	}
 
-	mw := captureRawProviderStream(outbound, nil)
+	mw := captureRawProviderStream(outbound)
 	original := testHTTPStream(nil)
 
 	result, err := mw.OnOutboundRawStream(ctx, original)
@@ -1053,12 +934,8 @@ func TestCaptureRawProviderStream_NilLlmRequest(t *testing.T) {
 	assert.Equal(t, original, result)
 }
 
-func TestCaptureRawProviderStream_FansOut(t *testing.T) {
-	// Nothing drains RawStreamCh before the pass-through consumer attaches, so a fan-out
-	// that blocks on it stalls the pipeline reads below; the deadline turns that into a
-	// failed assertion instead of a hung test.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+func TestCaptureRawProviderStream_RecordsPreReadAndLiveEvents(t *testing.T) {
+	ctx := context.Background()
 
 	channel := &biz.Channel{
 		Channel: &ent.Channel{
@@ -1089,42 +966,39 @@ func TestCaptureRawProviderStream_FansOut(t *testing.T) {
 		state:   state,
 	}
 
-	// The pipeline pre-reads more events than RawStreamCh buffers before the pass-through
-	// consumer attaches; the rest of the stream is produced after it attached.
+	// The pipeline pre-reads part of the attempt before the pass-through consumer
+	// exists; the rest of the stream is read while the consumer pulls it.
 	const preReadCount = 100
 	events := make([]*httpclient.StreamEvent, preReadCount+3)
 	for i := range events {
 		events[i] = &httpclient.StreamEvent{Data: fmt.Appendf(nil, `{"id":"evt%d"}`, i+1)}
 	}
-	release := make(chan struct{})
-	src := &gatedStream{events: events, gateAt: preReadCount, release: release}
 
-	mw := captureRawProviderStream(outbound, nil)
-	result, err := mw.OnOutboundRawStream(ctx, src)
+	captured, err := captureRawProviderStream(outbound).OnOutboundRawStream(ctx, testHTTPStream(events))
 	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.NotNil(t, state.RawStreamCh)
+	require.NotNil(t, state.PassThroughRecorder)
+
+	var preRead []*httpclient.StreamEvent
+	for range preReadCount {
+		require.True(t, captured.Next())
+		preRead = append(preRead, captured.Current())
+	}
 
 	var pipelineEvents []*httpclient.StreamEvent
-	for range preReadCount {
-		require.True(t, result.Next())
-		pipelineEvents = append(pipelineEvents, result.Current())
-	}
+	transformed := streams.Map(streams.PrependStream(captured, preRead...), func(event *httpclient.StreamEvent) *httpclient.StreamEvent {
+		pipelineEvents = append(pipelineEvents, event)
+		return event
+	})
 
-	passThrough, err := applyPassThroughStream(outbound, nil).OnInboundRawStream(ctx, testHTTPStream(nil))
+	passThrough, err := applyPassThroughStream(outbound).OnInboundRawStream(ctx, transformed)
 	require.NoError(t, err)
-
-	close(release)
-
-	for result.Next() {
-		pipelineEvents = append(pipelineEvents, result.Current())
-	}
 
 	var passthroughEvents []*httpclient.StreamEvent
 	for passThrough.Next() {
 		passthroughEvents = append(passthroughEvents, passThrough.Current())
 	}
 
+	require.NoError(t, passThrough.Err())
 	assert.Equal(t, events, pipelineEvents)
 	assert.Equal(t, events, passthroughEvents)
 }
@@ -1163,21 +1037,18 @@ func TestCaptureRawProviderStream_PropagatesError(t *testing.T) {
 	errTest := errors.New("stream error")
 	src := &errorStream{err: errTest}
 
-	mw := captureRawProviderStream(outbound, nil)
+	mw := captureRawProviderStream(outbound)
 	result, err := mw.OnOutboundRawStream(ctx, src)
 	require.NoError(t, err)
 
-	// Drain the stream until the producer goroutine closes the channel.
-	// The channel close is the happens-before barrier that makes the
-	// goroutine's write to rawStreamErr visible to Err() / RawStreamErrRef.
 	for result.Next() { //nolint:revive // intentional drain
 	}
 
 	assert.Equal(t, errTest, result.Err())
-	assert.Equal(t, errTest, *state.RawStreamErrRef)
+	assert.Equal(t, errTest, state.PassThroughRecorder.Err())
 }
 
-func TestCaptureRawProviderStream_CloseStopsBlockedUpstream(t *testing.T) {
+func TestCaptureRawProviderStream_ResetReleasesUpstream(t *testing.T) {
 	ctx := context.Background()
 	channel := &biz.Channel{
 		Channel: &ent.Channel{
@@ -1201,29 +1072,19 @@ func TestCaptureRawProviderStream_CloseStopsBlockedUpstream(t *testing.T) {
 	}
 
 	src := newBlockingStream()
-	mw := captureRawProviderStream(outbound, nil)
-	result, err := mw.OnOutboundRawStream(ctx, src)
+	_, err := captureRawProviderStream(outbound).OnOutboundRawStream(ctx, src)
 	require.NoError(t, err)
+	require.NotNil(t, state.PassThroughRecorder)
 
-	select {
-	case <-src.started:
-	case <-time.After(time.Second):
-		t.Fatal("upstream stream was not read")
-	}
-
-	require.NoError(t, result.Close())
+	// A retry abandons the attempt: resetting the pass-through state must release
+	// the upstream stream even though nothing reads it any more.
+	outbound.resetPassThroughStreamState()
+	assert.Nil(t, state.PassThroughRecorder)
 
 	select {
 	case <-src.closed:
 	case <-time.After(time.Second):
 		t.Fatal("upstream stream was not closed")
-	}
-
-	select {
-	case _, ok := <-state.RawStreamCh:
-		require.False(t, ok)
-	case <-time.After(time.Second):
-		t.Fatal("pass-through channel was not closed")
 	}
 }
 
@@ -1258,14 +1119,14 @@ func TestCaptureRawProviderStream_UsesRawProviderRequestAPIFormat(t *testing.T) 
 		state:   state,
 	}
 
-	mw := captureRawProviderStream(outbound, nil)
+	mw := captureRawProviderStream(outbound)
 	original := testHTTPStream(nil)
 
 	result, err := mw.OnOutboundRawStream(ctx, original)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.NotEqual(t, original, result)
-	assert.NotNil(t, state.RawStreamCh)
+	assert.NotNil(t, state.PassThroughRecorder)
 }
 
 type errorStream struct {
@@ -1310,33 +1171,6 @@ func (s *blockingStream) Close() error {
 	return nil
 }
 
-// gatedStream yields events up to gateAt, then waits for release before yielding the
-// rest, so a test can order pipeline steps around upstream progress.
-type gatedStream struct {
-	events  []*httpclient.StreamEvent
-	gateAt  int
-	release <-chan struct{}
-	next    int
-}
-
-func (s *gatedStream) Next() bool {
-	if s.next == s.gateAt {
-		<-s.release
-	}
-
-	if s.next >= len(s.events) {
-		return false
-	}
-
-	s.next++
-
-	return true
-}
-
-func (s *gatedStream) Current() *httpclient.StreamEvent { return s.events[s.next-1] }
-func (s *gatedStream) Err() error                       { return nil }
-func (s *gatedStream) Close() error                     { return nil }
-
 // === applyPassThroughStream tests ===
 
 func TestApplyPassThroughStream_Disabled(t *testing.T) {
@@ -1349,7 +1183,7 @@ func TestApplyPassThroughStream_Disabled(t *testing.T) {
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
 
-	mw := applyPassThroughStream(outbound, nil)
+	mw := applyPassThroughStream(outbound)
 	transformed := testHTTPStream(nil)
 
 	result, err := mw.OnInboundRawStream(ctx, transformed)
@@ -1357,7 +1191,7 @@ func TestApplyPassThroughStream_Disabled(t *testing.T) {
 	assert.Equal(t, transformed, result)
 }
 
-func TestApplyPassThroughStream_NoRawChannel(t *testing.T) {
+func TestApplyPassThroughStream_NoRecorder(t *testing.T) {
 	ctx := context.Background()
 	channel := &biz.Channel{
 		Channel: &ent.Channel{
@@ -1373,7 +1207,7 @@ func TestApplyPassThroughStream_NoRawChannel(t *testing.T) {
 	}
 	outbound := &PersistentOutboundTransformer{state: state}
 
-	mw := applyPassThroughStream(outbound, nil)
+	mw := applyPassThroughStream(outbound)
 	transformed := testHTTPStream(nil)
 
 	result, err := mw.OnInboundRawStream(ctx, transformed)
@@ -1381,8 +1215,7 @@ func TestApplyPassThroughStream_NoRawChannel(t *testing.T) {
 	assert.Equal(t, transformed, result)
 }
 
-func TestApplyPassThroughStream_ReturnsRawEvents(t *testing.T) {
-	ctx := context.Background()
+func passThroughChatState() *PersistenceState {
 	channel := &biz.Channel{
 		Channel: &ent.Channel{
 			ID:   1,
@@ -1392,10 +1225,9 @@ func TestApplyPassThroughStream_ReturnsRawEvents(t *testing.T) {
 			},
 		},
 	}
-	rawCh := make(chan *httpclient.StreamEvent, 8)
-	state := &PersistenceState{
+
+	return &PersistenceState{
 		CurrentCandidate:      &ChannelModelsCandidate{Channel: channel},
-		RawStreamCh:           rawCh,
 		OriginalRequestStream: lo.ToPtr(true),
 		LlmRequest: &llm.Request{
 			APIFormat: llm.APIFormatOpenAIChatCompletion,
@@ -1409,28 +1241,28 @@ func TestApplyPassThroughStream_ReturnsRawEvents(t *testing.T) {
 			APIFormat: string(llm.APIFormatOpenAIChatCompletion),
 		},
 	}
-	outbound := &PersistentOutboundTransformer{state: state}
+}
 
-	transformed := testHTTPStream([]*httpclient.StreamEvent{
-		{Data: json.RawMessage(`{"id":"t1"}`)},
-		{Data: json.RawMessage(`{"id":"t2"}`)},
+// reencode stands in for the transform chain: it re-encodes every raw event it reads.
+func reencode(stream streams.Stream[*httpclient.StreamEvent]) streams.Stream[*httpclient.StreamEvent] {
+	return streams.Map(stream, func(event *httpclient.StreamEvent) *httpclient.StreamEvent {
+		return &httpclient.StreamEvent{Data: append([]byte("transformed:"), event.Data...)}
 	})
+}
+
+func TestApplyPassThroughStream_ReturnsRawEvents(t *testing.T) {
+	ctx := context.Background()
+	state := passThroughChatState()
+	outbound := &PersistentOutboundTransformer{state: state}
 
 	rawEvents := []*httpclient.StreamEvent{
 		{Data: json.RawMessage(`{"id":"r1"}`)},
 		{Data: json.RawMessage(`{"id":"r2"}`)},
 	}
+	captured, err := captureRawProviderStream(outbound).OnOutboundRawStream(ctx, testHTTPStream(rawEvents))
+	require.NoError(t, err)
 
-	go func() {
-		for _, ev := range rawEvents {
-			rawCh <- ev
-		}
-
-		close(rawCh)
-	}()
-
-	mw := applyPassThroughStream(outbound, nil)
-	result, err := mw.OnInboundRawStream(ctx, transformed)
+	result, err := applyPassThroughStream(outbound).OnInboundRawStream(ctx, reencode(captured))
 	require.NoError(t, err)
 
 	var passthroughEvents []*httpclient.StreamEvent
@@ -1438,55 +1270,24 @@ func TestApplyPassThroughStream_ReturnsRawEvents(t *testing.T) {
 		passthroughEvents = append(passthroughEvents, result.Current())
 	}
 
-	assert.Len(t, passthroughEvents, 2)
+	require.NoError(t, result.Err())
 	assert.Equal(t, rawEvents, passthroughEvents)
 }
 
-func TestApplyPassThroughStream_DrainsInner(t *testing.T) {
+func TestApplyPassThroughStream_DrainsTransformed(t *testing.T) {
 	ctx := context.Background()
-	channel := &biz.Channel{
-		Channel: &ent.Channel{
-			ID:   1,
-			Name: "test",
-			Settings: &objects.ChannelSettings{
-				PassThroughBody: lo.ToPtr(true),
-			},
-		},
-	}
-	rawCh := make(chan *httpclient.StreamEvent, 8)
-	state := &PersistenceState{
-		CurrentCandidate:      &ChannelModelsCandidate{Channel: channel},
-		RawStreamCh:           rawCh,
-		OriginalRequestStream: lo.ToPtr(true),
-		LlmRequest: &llm.Request{
-			APIFormat: llm.APIFormatOpenAIChatCompletion,
-			Stream:    lo.ToPtr(true),
-			RawRequest: &httpclient.Request{
-				APIFormat: string(llm.APIFormatOpenAIChatCompletion),
-				Body:      []byte(`{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hi"}]}`),
-			},
-		},
-		RawProviderRequest: &httpclient.Request{
-			APIFormat: string(llm.APIFormatOpenAIChatCompletion),
-		},
-	}
+	state := passThroughChatState()
 	outbound := &PersistentOutboundTransformer{state: state}
 
+	captured, err := captureRawProviderStream(outbound).OnOutboundRawStream(ctx, testHTTPStream([]*httpclient.StreamEvent{
+		{Data: json.RawMessage(`{"id":"r1"}`)},
+	}))
+	require.NoError(t, err)
+
 	drained := make(chan struct{})
-	transformed := &doneStream{
-		stream: testHTTPStream([]*httpclient.StreamEvent{
-			{Data: json.RawMessage(`{"id":"t1"}`)},
-		}),
-		done: drained,
-	}
+	transformed := &doneStream{stream: reencode(captured), done: drained}
 
-	go func() {
-		rawCh <- &httpclient.StreamEvent{Data: json.RawMessage(`{"id":"r1"}`)}
-		close(rawCh)
-	}()
-
-	mw := applyPassThroughStream(outbound, nil)
-	result, err := mw.OnInboundRawStream(ctx, transformed)
+	result, err := applyPassThroughStream(outbound).OnInboundRawStream(ctx, transformed)
 	require.NoError(t, err)
 
 	for result.Next() {
@@ -1494,119 +1295,73 @@ func TestApplyPassThroughStream_DrainsInner(t *testing.T) {
 
 	select {
 	case <-drained:
-	case <-time.After(2 * time.Second):
-		t.Fatal("drain goroutine did not complete")
+	default:
+		t.Fatal("transformed stream was not drained")
 	}
 }
 
-func TestPassThroughChannelStream_DrainsBufferedEventsAfterCancel(t *testing.T) {
-	// Reproduce the production race: client disconnect cancels the request context
-	// while the terminal event is already buffered for the pipeline drain path.
-	// Next() must prefer draining the buffer so InboundPersistentStream can see [DONE]
-	// and mark the request completed instead of canceled.
-	ctx, cancel := context.WithCancel(context.Background())
-	ch := make(chan *httpclient.StreamEvent, 2)
-	ch <- &httpclient.StreamEvent{Data: json.RawMessage(`{"id":"chunk"}`)}
-	ch <- &httpclient.StreamEvent{Data: []byte("[DONE]")}
-	close(ch)
-	cancel()
+func TestApplyPassThroughStream_ForwardsDroppedRawEventsInOrder(t *testing.T) {
+	ctx := context.Background()
+	state := passThroughChatState()
+	outbound := &PersistentOutboundTransformer{state: state}
 
-	stream := &passThroughChannelStream{ctx: ctx, ch: ch}
+	rawEvents := []*httpclient.StreamEvent{
+		{Type: "ping", Data: json.RawMessage(`{"type":"ping"}`)},
+		{Data: json.RawMessage(`{"id":"r1"}`)},
+		{Type: "ping", Data: json.RawMessage(`{"type":"ping"}`)},
+		{Data: json.RawMessage(`{"id":"r2"}`)},
+		{Type: "ping", Data: json.RawMessage(`{"type":"ping"}`)},
+	}
+	captured, err := captureRawProviderStream(outbound).OnOutboundRawStream(ctx, testHTTPStream(rawEvents))
+	require.NoError(t, err)
 
-	var events []*httpclient.StreamEvent
-	for stream.Next() {
-		events = append(events, stream.Current())
+	// The transform drops pings, so they reach the client with the next transformed
+	// event, and trailing ones once the transformed stream ends.
+	transformed := reencode(streams.Filter(captured, func(event *httpclient.StreamEvent) bool {
+		return event.Type != "ping"
+	}))
+	result, err := applyPassThroughStream(outbound).OnInboundRawStream(ctx, transformed)
+	require.NoError(t, err)
+
+	var passthroughEvents []*httpclient.StreamEvent
+	for result.Next() {
+		passthroughEvents = append(passthroughEvents, result.Current())
 	}
 
-	require.Len(t, events, 2)
-	assert.Equal(t, []byte("[DONE]"), events[1].Data)
-	assert.True(t, IsTerminalStreamEvent(events[1]))
+	require.NoError(t, result.Err())
+	assert.Equal(t, rawEvents, passthroughEvents)
 }
 
-func TestPassThroughChannelStream_NextWithNilContext_doesNotDeadlock(t *testing.T) {
-	// Given
-	event := &httpclient.StreamEvent{Data: json.RawMessage(`{"id":"chunk"}`)}
-	ch := make(chan *httpclient.StreamEvent, 1)
-	ch <- event
-	stream := &passThroughChannelStream{ch: ch}
-	done := make(chan bool, 1)
+func TestApplyPassThroughStream_TransformErrorAfterRawEvents(t *testing.T) {
+	ctx := context.Background()
+	state := passThroughChatState()
+	outbound := &PersistentOutboundTransformer{state: state}
 
-	// When
-	go func() {
-		done <- stream.Next()
-	}()
-
-	// Then
-	select {
-	case ok := <-done:
-		require.True(t, ok)
-		require.Same(t, event, stream.Current())
-	case <-time.After(time.Second):
-		t.Fatal("Next deadlocked with a nil context")
+	rawEvents := []*httpclient.StreamEvent{
+		{Data: json.RawMessage(`{"id":"r1"}`)},
+		{Type: "error", Data: json.RawMessage(`{"type":"error","error":{"type":"overloaded_error"}}`)},
 	}
-}
+	captured, err := captureRawProviderStream(outbound).OnOutboundRawStream(ctx, testHTTPStream(rawEvents))
+	require.NoError(t, err)
 
-func TestPassThroughChannelStream_NextBuffered_waitsForCurrentLock(t *testing.T) {
-	// Given
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	ch := make(chan *httpclient.StreamEvent, 1)
-	event := &httpclient.StreamEvent{Data: json.RawMessage(`{"id":"chunk"}`)}
-	ch <- event
-	stream := &passThroughChannelStream{ctx: ctx, ch: ch}
-	stream.currentMu.Lock()
-	done := make(chan bool, 1)
+	errOverloaded := errors.New("overloaded")
+	transformed := streams.MapErr(captured, func(event *httpclient.StreamEvent) (*httpclient.StreamEvent, error) {
+		if event.Type == "error" {
+			return nil, errOverloaded
+		}
+		return event, nil
+	})
+	result, err := applyPassThroughStream(outbound).OnInboundRawStream(ctx, transformed)
+	require.NoError(t, err)
 
-	// When
-	go func() {
-		done <- stream.Next()
-	}()
-
-	// Then
-	select {
-	case <-done:
-		t.Fatal("nextBuffered wrote current without currentMu")
-	case <-time.After(50 * time.Millisecond):
-	}
-	stream.currentMu.Unlock()
-
-	select {
-	case ok := <-done:
-		require.True(t, ok)
-		require.Same(t, event, stream.Current())
-	case <-time.After(time.Second):
-		t.Fatal("nextBuffered did not finish after currentMu was released")
-	}
-}
-
-func TestPassThroughChannelStream_StopsAtEmptyBufferAfterCancel(t *testing.T) {
-	// After cancellation Next() must never block waiting for the producer: it drains
-	// buffered events, then detaches the client branch at the first empty-buffer
-	// moment even though the fan-out's raw reader remains active.
-	ctx, cancel := context.WithCancel(context.Background())
-	ch := make(chan *httpclient.StreamEvent, 2)
-	ch <- &httpclient.StreamEvent{Data: json.RawMessage(`{"id":"chunk"}`)}
-	cancel()
-
-	clientDetached := false
-	rawOwnerCanceled := false
-	stream := &passThroughChannelStream{
-		ctx: ctx,
-		ch:  ch,
-		cancel: func() {
-			rawOwnerCanceled = true
-		},
-		detach: func() {
-			clientDetached = true
-		},
+	var passthroughEvents []*httpclient.StreamEvent
+	for result.Next() {
+		passthroughEvents = append(passthroughEvents, result.Current())
 	}
 
-	require.True(t, stream.Next())
-	assert.Equal(t, []byte(`{"id":"chunk"}`), stream.Current().Data)
-
-	require.False(t, stream.Next())
-	assert.True(t, clientDetached)
-	assert.False(t, rawOwnerCanceled)
+	// The raw error event still reaches the client before the transform error.
+	assert.Equal(t, rawEvents, passthroughEvents)
+	require.ErrorIs(t, result.Err(), errOverloaded)
 }
 
 type doneStream struct {
@@ -1815,10 +1570,10 @@ func TestPassThroughStream_LLMMiddlewareRuns(t *testing.T) {
 	}
 	srcStream := testHTTPStream(rawEvents)
 
-	capMw := captureRawProviderStream(outbound, nil)
+	capMw := captureRawProviderStream(outbound)
 	pipelineStream, err := capMw.OnOutboundRawStream(ctx, srcStream)
 	require.NoError(t, err)
-	require.NotNil(t, state.RawStreamCh)
+	require.NotNil(t, state.PassThroughRecorder)
 
 	llmStream, err := outbound.wrapped.TransformStream(ctx, nil, pipelineStream)
 	require.NoError(t, err)
@@ -1831,7 +1586,7 @@ func TestPassThroughStream_LLMMiddlewareRuns(t *testing.T) {
 	inboundStream, err := inbound.TransformStream(ctx, trackedLLM)
 	require.NoError(t, err)
 
-	applyMw := applyPassThroughStream(outbound, nil)
+	applyMw := applyPassThroughStream(outbound)
 	result, err := applyMw.OnInboundRawStream(ctx, inboundStream)
 	require.NoError(t, err)
 
@@ -1842,12 +1597,7 @@ func TestPassThroughStream_LLMMiddlewareRuns(t *testing.T) {
 
 	require.Len(t, passthroughEvents, 2)
 	assert.Equal(t, rawEvents, passthroughEvents)
-
-	// Wait for the applyPassThroughStream drain goroutine to finish processing.
-	// Polling under the tracker mutex avoids racing with trackingWrapper.Next.
-	require.Eventually(t, func() bool {
-		return tracker.eventCount() == 2
-	}, time.Second, 10*time.Millisecond, "tracking middleware should process 2 events")
+	assert.Equal(t, 2, tracker.eventCount(), "tracking middleware should process 2 events")
 }
 
 // TestPassThroughResponsesStream_DeepSeekReasoningDoesNotDeadlock verifies that
@@ -1890,9 +1640,9 @@ func TestPassThroughResponsesStream_DeepSeekReasoningDoesNotDeadlock(t *testing.
 		outbound,
 		pipeline.WithEmptyResponseDetection(),
 		pipeline.WithMiddlewares(
-			applyPassThroughStream(outbound, nil),
+			applyPassThroughStream(outbound),
 			applyPassThroughRequestBody(outbound, nil),
-			captureRawProviderStream(outbound, nil),
+			captureRawProviderStream(outbound),
 		),
 	)
 
@@ -1924,7 +1674,7 @@ func TestPassThroughResponsesStream_DeepSeekReasoningDoesNotDeadlock(t *testing.
 }
 
 // processPassThroughStream runs a streaming pass-through pipeline and drains its
-// event stream within a deadline, so a blocked raw-stream fan-out fails the test
+// event stream within a deadline, so a blocked pass-through stream fails the test
 // instead of hanging it.
 func processPassThroughStream(
 	t *testing.T,
@@ -2024,9 +1774,9 @@ func TestPassThroughAnthropicStream_RetryPreReadDoesNotDeadlock(t *testing.T) {
 		outbound,
 		pipeline.WithRetry(0, 1, 0),
 		pipeline.WithMiddlewares(
-			applyPassThroughStream(outbound, nil),
+			applyPassThroughStream(outbound),
 			applyPassThroughRequestBody(outbound, nil),
-			captureRawProviderStream(outbound, nil),
+			captureRawProviderStream(outbound),
 		),
 	)
 
@@ -2155,18 +1905,15 @@ func TestPassThroughStream_ErrorPropagates(t *testing.T) {
 	errTest := errors.New("stream error")
 	src := &errorStream{err: errTest}
 
-	capMw := captureRawProviderStream(outbound, nil)
+	capMw := captureRawProviderStream(outbound)
 	result, err := capMw.OnOutboundRawStream(ctx, src)
 	require.NoError(t, err)
 
-	// Drain the stream until the producer goroutine closes the channel.
-	// The channel close is the happens-before barrier for the goroutine's
-	// write to rawStreamErr.
 	for result.Next() { //nolint:revive // intentional drain
 	}
 
 	assert.Equal(t, errTest, result.Err())
-	assert.Equal(t, errTest, *state.RawStreamErrRef)
+	assert.Equal(t, errTest, state.PassThroughRecorder.Err())
 }
 
 func TestApplyPassThroughBodyPreservesMappedModel(t *testing.T) {
@@ -2328,7 +2075,7 @@ func TestOpenAIResponseBodyRoutingContracts(t *testing.T) {
 			}}
 			transformed := &httpclient.Response{StatusCode: http.StatusOK, Body: []byte(`{"transformed":true}`)}
 
-			processed, err := applyPassThroughResponse(outbound, nil).OnInboundRawResponse(t.Context(), transformed)
+			processed, err := applyPassThroughResponse(outbound).OnInboundRawResponse(t.Context(), transformed)
 			require.NoError(t, err)
 			require.Equal(t, raw, processed)
 		})
@@ -2352,7 +2099,7 @@ func TestOpenAIResponseBodyRoutingContracts(t *testing.T) {
 			}}
 			transformed := &httpclient.Response{StatusCode: http.StatusOK, Body: []byte(`{"transformed":true}`)}
 
-			processed, err := applyPassThroughResponse(outbound, nil).OnInboundRawResponse(t.Context(), transformed)
+			processed, err := applyPassThroughResponse(outbound).OnInboundRawResponse(t.Context(), transformed)
 			require.NoError(t, err)
 			require.Equal(t, transformed, processed)
 		})
@@ -2862,14 +2609,7 @@ func TestApplyUserAgentPassThrough(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, client := setupTest(t)
-
-			// Create real system service with test database
-			systemService := newTestSystemService(client)
-
-			// Set global User-Agent pass-through setting
-			err := systemService.SetUserAgentPassThrough(ctx, tt.globalUAEnabled)
-			require.NoError(t, err)
+			ctx := context.Background()
 
 			// Create mock channel with optional pass-through setting
 			channelSettings := &objects.ChannelSettings{}
@@ -2905,11 +2645,12 @@ func TestApplyUserAgentPassThrough(t *testing.T) {
 				state: &PersistenceState{
 					CurrentCandidate: &ChannelModelsCandidate{Channel: channel},
 					LlmRequest:       llmRequest,
+					Settings:         &RequestSettings{UserAgentPassThrough: tt.globalUAEnabled},
 				},
 			}
 
 			// Create middleware
-			middleware := applyUserAgentPassThrough(outbound, systemService)
+			middleware := applyUserAgentPassThrough(outbound)
 
 			// Execute middleware
 			rawRequest := &httpclient.Request{
@@ -2936,19 +2677,16 @@ func TestApplyUserAgentPassThrough(t *testing.T) {
 
 // TestApplyUserAgentPassThrough_NoChannel tests the middleware when no channel is selected.
 func TestApplyUserAgentPassThrough_NoChannel(t *testing.T) {
-	ctx, client := setupTest(t)
+	ctx := context.Background()
 
-	// Create real system service with test database
-	systemService := newTestSystemService(client)
-
-	// Create outbound without a channel
+	// Create outbound without a channel or settings snapshot
 	outbound := &PersistentOutboundTransformer{
 		wrapped: &mockTransformer{},
 		state:   &PersistenceState{},
 	}
 
 	// Create middleware
-	middleware := applyUserAgentPassThrough(outbound, systemService)
+	middleware := applyUserAgentPassThrough(outbound)
 
 	// Execute middleware
 	rawRequest := &httpclient.Request{
@@ -3174,36 +2912,20 @@ func (o *closeOrderObserver) AcknowledgeDelivery() { o.acknowledged = true }
 
 func (o *closeOrderObserver) DeliveryAcknowledged() bool { return o.acknowledged }
 
-func TestPassThroughDeliveryStream_CloseStopsProducerBeforeWaitingForDrain(t *testing.T) {
-	// A failed downstream write stops the pass-through consumer while the request
-	// context is still live, so nothing reads the raw queue and the producer blocks
-	// on it. Only the owner close (fan-out cancel plus upstream Close) unblocks the
-	// producer, which is what lets the pipeline drain finish. Waiting for the drain
-	// before stopping the producer deadlocks, and the bounded tail never starts
-	// because the lifecycle has not been closed.
-	var closeCalls atomic.Int32
-	drained := make(chan struct{})
-	stream := withPassThroughDeliveryGateAndDrain(
-		testHTTPStream(nil),
-		&closeOrderObserver{},
-		func() error {
-			closeCalls.Add(1)
-			// Stopping the producer is what releases the drain.
-			close(drained)
+type acknowledgingStream struct {
+	streams.Stream[*httpclient.StreamEvent]
+	closeOrderObserver
+}
 
-			return nil
-		},
-		drained,
-	)
+func TestWithPassThroughDelivery_AcknowledgesTransformedStream(t *testing.T) {
+	// Persistence of the attempt lives on the transformed stream, so a delivered
+	// terminal raw event must be acknowledged there.
+	transformed := &acknowledgingStream{Stream: testHTTPStream(nil)}
+	stream := withPassThroughDelivery(context.Background(), transformed, testHTTPStream(nil))
 
-	closed := make(chan error, 1)
-	go func() { closed <- stream.Close() }()
-
-	select {
-	case err := <-closed:
-		require.NoError(t, err)
-	case <-time.After(2 * time.Second):
-		t.Fatal("Close waited on the drain before stopping the producer")
-	}
-	require.Equal(t, int32(1), closeCalls.Load())
+	boundary, ok := stream.(streams.DeliveryBoundary)
+	require.True(t, ok)
+	require.NoError(t, boundary.Deliver(context.Background(), func() (bool, error) { return true, nil }))
+	assert.True(t, transformed.acknowledged)
+	assert.True(t, stream.(streams.DeliveryAcknowledger).DeliveryAcknowledged())
 }

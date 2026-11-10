@@ -41,8 +41,8 @@ type fieldGate struct {
 
 var fieldGates = []fieldGate{
 	{name: "events", open: true, message: errEventsNotEnabled},
-	{name: "hooks.request", message: errRequestHooksNotEnabled},
-	{name: "hooks.attempt", message: errRequestHooksNotEnabled},
+	{name: "hooks.request", open: true, message: errRequestHooksNotEnabled},
+	{name: "hooks.attempt", open: true, message: errRequestHooksNotEnabled},
 	{name: "hooks.response", message: errResponseHooksNotEnabled},
 	{name: "hooks.streamChunk", message: errResponseHooksNotEnabled},
 	{name: "ui.panels", message: errUIPanelsNotEnabled},
@@ -81,7 +81,7 @@ var ReservedPluginIDs = map[string]struct{}{
 }
 
 // ManifestDiff is the set of permissions, network rules, events, hooks, and
-// pages the new manifest declares and the old one did not. Name, version,
+// UI contributions the new manifest declares and the old one did not. Name, version,
 // description, axonhubVersion, entry, and title changes are not included.
 type ManifestDiff struct {
 	Permissions []string
@@ -89,12 +89,13 @@ type ManifestDiff struct {
 	Events      []string
 	Hooks       []string
 	Pages       []string
+	Actions     []string
 }
 
 // NeedsPreview reports whether an enabled plugin must ask the owner before upgrade.
 // The enabled check itself belongs to the install transaction.
 func (d ManifestDiff) NeedsPreview() bool {
-	return len(d.Permissions) > 0 || len(d.Network) > 0 || len(d.Events) > 0 || len(d.Hooks) > 0 || len(d.Pages) > 0
+	return len(d.Permissions) > 0 || len(d.Network) > 0 || len(d.Events) > 0 || len(d.Hooks) > 0 || len(d.Pages) > 0 || len(d.Actions) > 0
 }
 
 // UpgradePlan is the pure result of comparing two manifests.
@@ -167,6 +168,7 @@ func DiffManifest(old, next *objects.PluginManifest) ManifestDiff {
 		Events:      addedStrings(next.Events, old.Events),
 		Hooks:       addedHooks(old.Hooks, next.Hooks),
 		Pages:       addedStrings(pageKeys(next.UI), pageKeys(old.UI)),
+		Actions:     addedActions(old.UI, next.UI),
 	}
 }
 
@@ -255,15 +257,13 @@ func MigrateConfig(old map[string]any, schema *objects.PluginConfigSchema) (map[
 		return nil, err
 	}
 	migrated := make(map[string]any, len(schema.Properties))
-	for name, prop := range schema.Properties {
-		value, ok := old[name]
-		if !ok {
-			continue
+	for name := range schema.Properties {
+		if value, ok := old[name]; ok {
+			migrated[name] = value
 		}
-		if err := prop.CheckValue(value); err != nil {
-			return nil, fmt.Errorf("config field %q is not compatible with the new schema: %s", name, err.Error())
-		}
-		migrated[name] = value
+	}
+	if err := validateConfigValues(schema, migrated, false); err != nil {
+		return nil, fmt.Errorf("config is not compatible with the new schema: %w", err)
 	}
 	encoded, err := encodeConfig(migrated)
 	if err != nil {
@@ -321,9 +321,9 @@ func closedFieldPresent(manifest *objects.PluginManifest, name string) bool {
 	case "events":
 		return manifest.EventsPresent
 	case "hooks.request":
-		return manifest.Hooks != nil && manifest.Hooks.Request
+		return manifest.Hooks != nil && manifest.Hooks.Request.IsEnabled()
 	case "hooks.attempt":
-		return manifest.Hooks != nil && manifest.Hooks.Attempt
+		return manifest.Hooks != nil && manifest.Hooks.Attempt.IsEnabled()
 	case "hooks.response":
 		return manifest.Hooks != nil && manifest.Hooks.ResponsePresent
 	case "hooks.streamChunk":
@@ -441,11 +441,11 @@ func addedStrings(next, prev []string) []string {
 
 func addedHooks(old, next *objects.PluginHooksSpec) []string {
 	added := make([]string, 0, 2)
-	if hookEnabled(next, "request") && !hookEnabled(old, "request") {
-		added = append(added, "request")
+	if hookEnabled(next, "request") && (!hookEnabled(old, "request") || len(addedStrings(hookScope(next, "request"), hookScope(old, "request"))) > 0) {
+		added = append(added, "request: "+strings.Join(hookScope(next, "request"), ", "))
 	}
-	if hookEnabled(next, "attempt") && !hookEnabled(old, "attempt") {
-		added = append(added, "attempt")
+	if hookEnabled(next, "attempt") && (!hookEnabled(old, "attempt") || len(addedStrings(hookScope(next, "attempt"), hookScope(old, "attempt"))) > 0) {
+		added = append(added, "attempt: "+strings.Join(hookScope(next, "attempt"), ", "))
 	}
 	if len(added) == 0 {
 		return nil
@@ -459,9 +459,9 @@ func hookEnabled(hooks *objects.PluginHooksSpec, name string) bool {
 	}
 	switch name {
 	case "request":
-		return hooks.Request
+		return hooks.Request.IsEnabled()
 	case "attempt":
-		return hooks.Attempt
+		return hooks.Attempt.IsEnabled()
 	default:
 		return false
 	}
@@ -484,4 +484,42 @@ func encodeConfig(config map[string]any) ([]byte, error) {
 		return nil, fmt.Errorf("config cannot be encoded: %w", err)
 	}
 	return encoded, nil
+}
+
+func hookScope(h *objects.PluginHooksSpec, name string) []string {
+	var out []string
+	if h == nil {
+		return out
+	}
+	if name == "request" && h.Request != nil {
+		for _, v := range h.Request.RequestTypes {
+			out = append(out, string(v))
+		}
+	}
+	if name == "attempt" && h.Attempt != nil {
+		for _, v := range h.Attempt.APIFormats {
+			out = append(out, string(v))
+		}
+	}
+	return out
+}
+
+func addedActions(old, next *objects.PluginUI) []string {
+	var added []string
+	if next == nil {
+		return added
+	}
+	previous := map[string]objects.PluginUIAction{}
+	if old != nil {
+		for _, action := range old.Actions {
+			previous[action.Key] = action
+		}
+	}
+	for _, action := range next.Actions {
+		before, ok := previous[action.Key]
+		if !ok || before.Slot != action.Slot || before.Effect.Type != action.Effect.Type {
+			added = append(added, action.Key)
+		}
+	}
+	return added
 }

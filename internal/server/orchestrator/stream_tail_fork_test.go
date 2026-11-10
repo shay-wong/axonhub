@@ -43,7 +43,8 @@ func TestStreamTailForkPreservesTerminalEvidenceAndTier(t *testing.T) {
 			stream := NewOutboundPersistentStream(ctx, streams.SliceStream([]*httpclient.StreamEvent{}), req, execution, requestService, usageService, outbound, nil, state)
 			body := []byte(`{"type":"` + test.typeName + `","response":{"id":"resp_tail","model":"gpt-5","status":"` + test.status + `","service_tier":"ultrafast","output":[],"usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15}` + test.detail + `}}`)
 			require.NoError(t, stream.consumeTailEvent(&httpclient.StreamEvent{Type: test.typeName, Data: body}))
-			require.NoError(t, stream.FinalizeAccounting(llm.SourceEndCanceled))
+			stream.sourceEnd = llm.SourceEndCanceled
+			require.NoError(t, stream.Close())
 
 			saved, err := client.RequestExecution.Get(context.WithoutCancel(ctx), execution.ID)
 			require.NoError(t, err)

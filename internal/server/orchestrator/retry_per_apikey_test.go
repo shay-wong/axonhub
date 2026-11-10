@@ -42,7 +42,7 @@ func TestRetryPerAPIKeyRespectsOptInAndConfiguredBudget(t *testing.T) {
 				MaxSingleChannelRetries: tc.override,
 			}).SaveX(ctx)
 			outbound := newRetryGuardTransformer(svc, retryGuardSnapshot(t, ctx, svc, entity.ID), "")
-			outbound.state.RetryPolicy = &biz.RetryPolicy{Enabled: true}
+			outbound.state.Settings = &RequestSettings{RetryPolicy: biz.RetryPolicy{Enabled: true}}
 			outbound.state.ChannelModelsCandidates = []*ChannelModelsCandidate{outbound.state.CurrentCandidate}
 			var attempted []string
 			executor := &credentialRefreshExecutor{do: func(ctx context.Context, req *httpclient.Request) (*httpclient.Response, error) {
@@ -87,7 +87,7 @@ func TestExplicit429RetriesNeverReuseFailedKeys(t *testing.T) {
 			}).SaveX(ctx)
 			backup := createRetryGuardChannel(t, ctx, client, "429-backup", objects.ChannelCredentials{APIKey: "backup"})
 			outbound := newRetryGuardTransformer(svc, retryGuardSnapshot(t, ctx, svc, primary.ID), "")
-			outbound.state.RetryPolicy = &biz.RetryPolicy{Enabled: true}
+			outbound.state.Settings = &RequestSettings{RetryPolicy: biz.RetryPolicy{Enabled: true}}
 			outbound.state.ChannelModelsCandidates = []*ChannelModelsCandidate{
 				outbound.state.CurrentCandidate,
 				{Channel: retryGuardSnapshot(t, ctx, svc, backup.ID), Models: []biz.ChannelModelEntry{{ActualModel: "test-model"}}},

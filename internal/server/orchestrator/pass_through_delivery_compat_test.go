@@ -45,14 +45,14 @@ func TestApplyPassThroughStream_LifecycleDefersCloseUntilDelivery(t *testing.T) 
 			state.RequestedServiceTier = "ultrafast"
 			state.RequestPricingOverride = "ultrafast"
 			state.RequestPricingOverridePolicy = biz.RequestPricingOverrideWhenAppliedDefault
-			require.NoError(t, state.SystemService.SetInjectUsageCostEnabled(ctx, true))
+			state.Settings = &RequestSettings{InjectUsageCost: true}
 			raw := &httpclient.StreamEvent{Data: []byte(`{"type":"response.completed","response":{"id":"original-id","model":"mapped-model","status":"completed","service_tier":"default","output":[],"vendor_unknown":9007199254740993,"usage":{"input_tokens":100,"output_tokens":200,"total_tokens":300,"extra":{"keep":true}}}}`)}
-			state.RawStreamCh = make(chan *httpclient.StreamEvent, 1)
-			state.RawStreamCh <- raw
-			close(state.RawStreamCh)
+			outbound := &PersistentOutboundTransformer{state: state}
+			captured, err := captureRawProviderStream(outbound).OnOutboundRawStream(execution, testHTTPStream([]*httpclient.StreamEvent{raw}))
+			require.NoError(t, err)
 			converted := &httpclient.StreamEvent{Data: []byte(`{"type":"response.completed","response":{"id":"converted-id","status":"completed","output":[]}}`)}
-			persistent := NewInboundPersistentStream(execution, testHTTPStream([]*httpclient.StreamEvent{converted}), nil, nil, nil, responsestransformer.NewInboundTransformer(), nil, state)
-			result, err := applyPassThroughStream(&PersistentOutboundTransformer{state: state}, state.SystemService).OnInboundRawStream(execution, persistent)
+			persistent := NewInboundPersistentStream(execution, streams.Map(captured, func(*httpclient.StreamEvent) *httpclient.StreamEvent { return converted }), nil, nil, nil, responsestransformer.NewInboundTransformer(), nil, state)
+			result, err := applyPassThroughStream(outbound).OnInboundRawStream(execution, persistent)
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = result.Close() })
 
@@ -84,7 +84,7 @@ func TestApplyPassThroughStream_LifecycleDefersCloseUntilDelivery(t *testing.T) 
 	}
 }
 
-func TestResponsesIdentityStream_LifecycleStopsBackpressuredSource(t *testing.T) {
+func TestResponsesIdentityStream_LifecycleClosesSource(t *testing.T) {
 	for _, adapterFailure := range []bool{false, true} {
 		name := "explicit-close"
 		if adapterFailure {
@@ -101,7 +101,6 @@ func TestResponsesIdentityStream_LifecycleStopsBackpressuredSource(t *testing.T)
 				RawProviderRequest: &httpclient.Request{APIFormat: llm.APIFormatOpenAIResponse.String()},
 			}
 			outbound := &PersistentOutboundTransformer{state: state}
-			release := make(chan struct{})
 			events := make([]*httpclient.StreamEvent, 130)
 			for i := range events {
 				events[i] = &httpclient.StreamEvent{Data: []byte(`{"type":"response.output_text.delta","delta":"x"}`)}
@@ -109,12 +108,10 @@ func TestResponsesIdentityStream_LifecycleStopsBackpressuredSource(t *testing.T)
 			if adapterFailure {
 				events[0] = &httpclient.StreamEvent{Data: []byte(`not-json`)}
 			}
-			captured, err := captureRawProviderStream(outbound, nil).OnOutboundRawStream(ctx, &gatedStream{events: events, gateAt: 0, release: release})
+			captured, err := captureRawProviderStream(outbound).OnOutboundRawStream(ctx, testHTTPStream(events))
 			require.NoError(t, err)
-			result, err := applyPassThroughStream(outbound, nil).OnInboundRawStream(ctx, captured)
+			result, err := applyPassThroughStream(outbound).OnInboundRawStream(ctx, captured)
 			require.NoError(t, err)
-			close(release)
-			require.Eventually(t, func() bool { return len(state.RawStreamCh) == cap(state.RawStreamCh) }, time.Second, time.Millisecond)
 			finished := make(chan error, 1)
 			go func() {
 				defer func() {
@@ -130,7 +127,7 @@ func TestResponsesIdentityStream_LifecycleStopsBackpressuredSource(t *testing.T)
 					finished <- result.Err()
 					return
 				}
-				// Exercise identity Close directly: raw Close only detaches the consumer.
+				// Exercise identity Close directly with no active reader.
 				finished <- result.(*passThroughDeliveryStream).Stream.Close()
 			}()
 			select {

@@ -205,7 +205,10 @@ func fetchLatestGitHubReleaseFromRepository(ctx context.Context, repository stri
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 	req.Header.Set("User-Agent", "AxonHub-Version-Checker")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	// Short timeout: this call runs on the admin request path and the GitHub
+	// API is unreachable from restricted networks. Failing fast keeps the
+	// About page responsive instead of hanging until a long deadline.
+	client := &http.Client{Timeout: 5 * time.Second}
 
 	resp, err := client.Do(req)
 	if err != nil {

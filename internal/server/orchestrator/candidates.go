@@ -112,7 +112,7 @@ func (s *DefaultSelector) Select(ctx context.Context, req *llm.Request) ([]*Chan
 	if err != nil {
 		if ent.IsNotFound(err) {
 			// Check if fallback to legacy channel selection is allowed
-			settings := s.SystemService.ModelSettingsOrDefault(ctx)
+			settings := s.modelSettings(ctx)
 			if settings.FallbackToChannelsOnModelNotFound {
 				return s.selectChannelCadidates(ctx, req)
 			}
@@ -124,6 +124,16 @@ func (s *DefaultSelector) Select(ctx context.Context, req *llm.Request) ([]*Chan
 	}
 
 	return candidates, nil
+}
+
+// modelSettings prefers the snapshot of the request being served, since the
+// selector is shared across requests.
+func (s *DefaultSelector) modelSettings(ctx context.Context) *biz.SystemModelSettings {
+	if settings := requestSettingsFromContext(ctx); settings != nil {
+		return &settings.ModelSettings
+	}
+
+	return s.SystemService.ModelSettingsOrDefault(ctx)
 }
 
 // selectChannelCadidates performs the original channel selection logic.
@@ -175,7 +185,7 @@ func (s *DefaultSelector) selectModelCandidates(ctx context.Context, req *llm.Re
 		return nil, fmt.Errorf("failed to query AxonHub Model: %w", err)
 	}
 
-	systemSettings := s.SystemService.ModelSettingsOrDefault(ctx)
+	systemSettings := s.modelSettings(ctx)
 	developerAssociationCount, modelAssociationCount, developerInheritanceDisabled := effectiveAssociationSourceCounts(systemSettings, model)
 	associations := biz.EffectiveModelAssociations(systemSettings, model)
 	if log.DebugEnabled(ctx) {
@@ -684,7 +694,7 @@ type LoadBalancedSelector struct {
 	wrapped                 CandidateSelector
 	loadBalancer            *LoadBalancer
 	loadBalancers           map[string]*LoadBalancer
-	policy                  RetryPolicyProvider
+	retryPolicy             *biz.RetryPolicy
 	previousChannelProvider PreviousChannelProvider
 	apiKey                  *ent.APIKey
 	effectiveRoutingPolicy  *EffectiveRoutingPolicy
@@ -692,12 +702,12 @@ type LoadBalancedSelector struct {
 }
 
 // WithLoadBalancedSelector creates a selector that applies load balancing to sort candidates.
-// The policy is used to determine the retry policy for early stopping.
-func WithLoadBalancedSelector(wrapped CandidateSelector, loadBalancer *LoadBalancer, policy RetryPolicyProvider) *LoadBalancedSelector {
+// The retry policy determines the trace sticky mode and how many candidates to keep.
+func WithLoadBalancedSelector(wrapped CandidateSelector, loadBalancer *LoadBalancer, retryPolicy *biz.RetryPolicy) *LoadBalancedSelector {
 	return &LoadBalancedSelector{
 		wrapped:      wrapped,
 		loadBalancer: loadBalancer,
-		policy:       policy,
+		retryPolicy:  retryPolicy,
 	}
 }
 
@@ -707,13 +717,13 @@ func WithLoadBalancedSelector(wrapped CandidateSelector, loadBalancer *LoadBalan
 func WithTraceStickyLoadBalancedSelector(
 	wrapped CandidateSelector,
 	loadBalancer *LoadBalancer,
-	policy RetryPolicyProvider,
+	retryPolicy *biz.RetryPolicy,
 	previousChannelProvider PreviousChannelProvider,
 ) *LoadBalancedSelector {
 	return &LoadBalancedSelector{
 		wrapped:                 wrapped,
 		loadBalancer:            loadBalancer,
-		policy:                  policy,
+		retryPolicy:             retryPolicy,
 		previousChannelProvider: previousChannelProvider,
 	}
 }
@@ -723,7 +733,7 @@ func WithTraceStickyLoadBalancedSelector(
 func WithRoutingPolicyLoadBalancedSelector(
 	wrapped CandidateSelector,
 	loadBalancers map[string]*LoadBalancer,
-	policy RetryPolicyProvider,
+	retryPolicy *biz.RetryPolicy,
 	previousChannelProvider PreviousChannelProvider,
 	apiKey *ent.APIKey,
 	effectiveRoutingPolicy *EffectiveRoutingPolicy,
@@ -732,7 +742,7 @@ func WithRoutingPolicyLoadBalancedSelector(
 	return &LoadBalancedSelector{
 		wrapped:                 wrapped,
 		loadBalancers:           loadBalancers,
-		policy:                  policy,
+		retryPolicy:             retryPolicy,
 		previousChannelProvider: previousChannelProvider,
 		apiKey:                  apiKey,
 		effectiveRoutingPolicy:  effectiveRoutingPolicy,
@@ -751,8 +761,7 @@ func (s *LoadBalancedSelector) Select(ctx context.Context, req *llm.Request) ([]
 		return candidate != nil && candidate.Channel != nil && candidate.Channel.IsSchedulableAt(now)
 	})
 
-	// Get retry policy to determine the required number of candidates
-	retryPolicy := s.policy.RetryPolicyOrDefault(ctx)
+	retryPolicy := s.retryPolicy
 	loadBalancer := s.loadBalancer
 	traceStickyMode := retryPolicy.TraceStickyMode
 	if s.effectiveRoutingPolicy != nil {
@@ -796,7 +805,7 @@ func (s *LoadBalancedSelector) Select(ctx context.Context, req *llm.Request) ([]
 			stickyCandidate.TraceSticky = true
 
 			fallbackCount := max(requiredCount-1, 0)
-			fallbackCandidates := s.sortCandidates(ctx, loadBalancer, remainingCandidates, req, fallbackCount, false)
+			fallbackCandidates := s.sortCandidates(ctx, loadBalancer, remainingCandidates, req, fallbackCount, requiredCount, false)
 			result := append([]*ChannelModelsCandidate{stickyCandidate}, fallbackCandidates...)
 
 			if loadBalancer != nil && !shouldSkipHealthStateTracking(ctx) {
@@ -807,7 +816,7 @@ func (s *LoadBalancedSelector) Select(ctx context.Context, req *llm.Request) ([]
 		}
 	}
 
-	return s.sortCandidates(ctx, loadBalancer, candidates, req, requiredCount, true), nil
+	return s.sortCandidates(ctx, loadBalancer, candidates, req, requiredCount, requiredCount, true), nil
 }
 
 func resolveLoadBalancer(loadBalancers map[string]*LoadBalancer, strategy string) (*LoadBalancer, string) {
@@ -929,6 +938,9 @@ func (s *LoadBalancedSelector) sortCandidates(
 	candidates []*ChannelModelsCandidate,
 	req *llm.Request,
 	requiredCount int,
+	// sortTopK stays the retry-policy size even when fewer candidates are
+	// required: the partial sort orders tied scores differently for each k.
+	sortTopK int,
 	trackSelection bool,
 ) []*ChannelModelsCandidate {
 	if requiredCount <= 0 {
@@ -985,7 +997,7 @@ func (s *LoadBalancedSelector) sortCandidates(
 		if loadBalancer == nil {
 			sortedCandidates = uniqueGroup
 		} else {
-			sortedCandidates = loadBalancer.SortWithoutTracking(ctx, uniqueGroup, req.Model, useStream)
+			sortedCandidates = loadBalancer.SortWithoutTracking(ctx, uniqueGroup, req.Model, useStream, sortTopK)
 		}
 
 		for _, candidate := range sortedCandidates {

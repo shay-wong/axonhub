@@ -3,8 +3,9 @@
 import { useCallback } from 'react';
 import React from 'react';
 import { format } from 'date-fns';
-import { ColumnDef } from '@tanstack/react-table';
+import { ColumnDef, VisibilityState } from '@tanstack/react-table';
 import { IconArchive, IconPin, IconRotate } from '@tabler/icons-react';
+import { z } from 'zod';
 import { zhCN, enUS } from 'date-fns/locale';
 import { FileText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -81,6 +82,15 @@ function TraceActionButtons({ trace }: { trace: Trace }) {
       </AlertDialog>
     </>
   );
+}
+
+export const DEFAULT_TRACES_COLUMN_VISIBILITY: VisibilityState = {};
+
+const tracesColumnVisibilitySchema = z.record(z.string(), z.boolean());
+
+export function parseTracesColumnVisibility(value: unknown): VisibilityState {
+  const parsed = tracesColumnVisibilitySchema.safeParse(value);
+  return parsed.success ? { ...DEFAULT_TRACES_COLUMN_VISIBILITY, ...parsed.data } : DEFAULT_TRACES_COLUMN_VISIBILITY;
 }
 
 export function useTracesColumns(): ColumnDef<Trace>[] {
@@ -207,14 +217,14 @@ export function useTracesColumns(): ColumnDef<Trace>[] {
         return <div className='text-xs'>{format(date, 'yyyy-MM-dd HH:mm:ss', { locale })}</div>;
       },
     },
-    // {
-    //   accessorKey: 'updatedAt',
-    //   header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.columns.updatedAt')} />,
-    //   cell: ({ row }) => {
-    //     const date = new Date(row.getValue('updatedAt'))
-    //     return <div className='text-xs'>{format(date, 'yyyy-MM-dd HH:mm:ss', { locale })}</div>
-    //   },
-    // },
+    {
+      accessorKey: 'lastRequestAt',
+      header: ({ column }) => <DataTableColumnHeader column={column} title={t('traces.columns.lastRequestAt')} />,
+      cell: ({ row }) => {
+        const date = new Date(row.getValue('lastRequestAt'));
+        return <div className='text-xs'>{format(date, 'yyyy-MM-dd HH:mm:ss', { locale })}</div>;
+      },
+    },
     ...(canWrite
       ? [
           {

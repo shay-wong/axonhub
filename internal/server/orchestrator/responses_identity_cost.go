@@ -8,30 +8,20 @@ import (
 	"github.com/tidwall/sjson"
 
 	"github.com/looplj/axonhub/internal/log"
-	"github.com/looplj/axonhub/internal/server/biz"
 	responsestransformer "github.com/looplj/axonhub/llm/transformer/openai/responses"
 )
 
 // Automatic identity preservation must retain cost injection without changing explicit pass-through.
-func newResponsesCostInjector(ctx context.Context, outbound *PersistentOutboundTransformer, systemService *biz.SystemService) func([]byte) []byte {
-	if outbound.isPassThroughEnabled(ctx, systemService) ||
-		(!responsesIdentityPreservationEnabled(outbound) && !responsesTransportAdaptationEnabled(ctx, outbound, systemService)) {
+func newResponsesCostInjector(ctx context.Context, outbound *PersistentOutboundTransformer) func([]byte) []byte {
+	if outbound.isPassThroughEnabled() ||
+		(!responsesIdentityPreservationEnabled(outbound) && !responsesTransportAdaptationEnabled(outbound)) {
 		return nil
 	}
 	state := outbound.state
-	if state.UsageLogService == nil || state.RequestExec == nil || systemService == nil {
-		return nil
-	}
-	enabled, err := systemService.InjectUsageCostEnabled(ctx)
-	if err != nil {
-		log.Warn(ctx, "failed to get inject usage cost setting", log.Cause(err))
-		return nil
-	}
-	if !enabled {
+	if state.UsageLogService == nil || state.RequestExec == nil || !state.settings().InjectUsageCost {
 		return nil
 	}
 
-	// The transformed stream mutates state concurrently; keep this consumer's own tier history.
 	service := state.UsageLogService
 	channelID, modelID := state.RequestExec.ChannelID, state.RequestExec.ModelID
 	requested, override, policy := state.RequestedServiceTier, state.RequestPricingOverride, state.RequestPricingOverridePolicy

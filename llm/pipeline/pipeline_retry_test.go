@@ -213,7 +213,7 @@ func (s *llmErrorAfterStream) Close() error {
 }
 
 type mockMiddleware struct {
-	Middleware
+	DummyMiddleware
 
 	errorCalls int
 }

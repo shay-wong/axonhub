@@ -41,7 +41,7 @@ func TestCodexNativeImagesUserAgentPassThrough(t *testing.T) {
 					Channel: &ent.Channel{Settings: &objects.ChannelSettings{PassThroughUserAgent: &enabled}},
 				}},
 			}}
-			hreq, err = applyUserAgentPassThrough(persistent, nil).OnOutboundRawRequest(t.Context(), hreq)
+			hreq, err = applyUserAgentPassThrough(persistent).OnOutboundRawRequest(t.Context(), hreq)
 			require.NoError(t, err)
 			hreq = httpclient.MergeInboundRequest(hreq, raw)
 			if enabled {
@@ -104,15 +104,15 @@ func TestImagesDoNotUseResponsesBridge(t *testing.T) {
 						state.OriginalRequestStream = req.Stream
 						return req, nil
 					}),
-					applyPassThroughResponse(outbound, nil),
-					applyPassThroughStream(outbound, nil),
+					applyPassThroughResponse(outbound),
+					applyPassThroughStream(outbound),
 					applyPassThroughRequestBody(outbound, nil),
 					pipeline.OnRawRequest("link-test-response", func(_ context.Context, req *httpclient.Request) (*httpclient.Request, error) {
 						executor.response.Request = req
 						return req, nil
 					}),
-					captureRawProviderResponse(outbound, nil),
-					captureRawProviderStream(outbound, nil),
+					captureRawProviderResponse(outbound),
+					captureRawProviderStream(outbound),
 				))
 				result, err := pipe.Process(t.Context(), &httpclient.Request{
 					Method: http.MethodPost, Headers: http.Header{"Content-Type": {"application/json"}},
