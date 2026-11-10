@@ -299,6 +299,8 @@ Codex model discovery supports its complete catalog format while preserving Open
 
 Codex outbound requests honor the channel's User-Agent pass-through switch and preserve original headers for failover while filtering client fingerprints; see [request header rules](docs/en/guides/codex-integration.md#codex-request-headers).
 
+Codex-style formatting preserves the caller's tier without automatically enabling Fast. See [channel transforms](docs/en/guides/channel-management.md#codex-style-responses).
+
 Auto-disable keeps separate channel/key policies and Retry-After alongside global rules; see [policy precedence](docs/en/guides/channel-management.md#auto-disable-policy-compatibility).
 
 See the [documentation index](docs/en/index.md) for configuration details and more API examples.

@@ -94,7 +94,8 @@ git show --remerge-diff <merge-commit>
 
 - 生命周期：`长期保留`
 - 原始意图：运营人员可以只对选定的官方 Codex 或兼容 channel 启用 Codex 风格的 Responses 默认值，而不是全局改变所有 OpenAI-compatible 请求。
-- 必须保持：`TransformOptions.CodexStyleResponses` 是 `codex` 和 `fenno` channel 的显式开关且默认关闭；关闭时保留调用方原始语义；开启时补充 Codex 原生字段和缺失默认值，包括缺失 `service_tier` 时使用 `priority`，但不能覆盖显式值，也不能影响图像请求。
+- 必须保持：`TransformOptions.CodexStyleResponses` 是 `codex` 和 `fenno` channel 的显式开关且默认关闭；关闭时保留调用方原始语义；开启时补充缺失的 prompt cache key、tool choice 和 verbosity，但不再补 `service_tier`。档位未指定时沿用上游默认，显式 Fast/Ultrafast 等值继续保留，也不能影响图像请求。
+- 2026-11-10 清理：维护者确认取消“格式兼容顺带启用 Fast”的默认行为。当前变更定位：`git log -S'TestCodexOutbound_AppliesCodexStyleResponsesDefaultsWhenEnabled' -- llm/transformer/openai/codex/outbound_executor_test.go`。
 - 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel.go`、`internal/server/biz/channel_test.go`、`internal/server/orchestrator/transform_options.go`、`llm/transformer/openai/codex/outbound.go`、`frontend/src/features/channels/components/channels-transform-options-dialog.tsx`、`frontend/src/features/channels/data/config_channels.ts`、`frontend/src/features/channels/data/channel-config.test.mjs`、`frontend/src/features/channels/data/schema.ts`。
 - 用户文档：`docs/en/guides/channel-management.md`、`docs/zh/guides/channel-management.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：`f5cdeb74`；相关 merge resolution：`543e25b7`、`cf45f92e`；本次 Fenno 支持可用 `git log -S'supportsCodexStyleResponses' -- frontend/src/features/channels/data/config_channels.ts` 定位。

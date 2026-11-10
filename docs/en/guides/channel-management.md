@@ -118,7 +118,7 @@ Custom and global rules count failures independently for each key. Other errors 
 
 `codex` and `fenno` channels can opt into **Use Codex-style Responses** under **Settings → Transform Options**. The option is disabled by default.
 
-When enabled, AxonHub fills missing Codex-native Responses defaults, including `service_tier: priority`, while preserving values explicitly sent by the caller. Image requests are not changed. Leave the option disabled when the upstream should receive the caller's original Responses semantics unchanged.
+When enabled, AxonHub fills missing prompt cache key, tool choice, and verbosity values while preserving values explicitly sent by the caller. Image requests are not changed. The caller chooses the service tier: an omitted `service_tier` uses the upstream default instead of automatically enabling Fast. Leave the option disabled when the upstream should receive the caller's original Responses semantics unchanged.
 
 An explicit `service_tier: ultrafast` is preserved whether this option is enabled or disabled. As of 2026-10-13, [OpenAI lists GPT-6 Astra and GPT-6.1 Sol for Ultrafast](https://developers.openai.com/api/docs/guides/ultrafast-mode). Unsupported models or accounts receive the upstream error unchanged. See [service-tier pricing](cost-tracking.md#service-tier-prices) for billing rules and limitations.
 

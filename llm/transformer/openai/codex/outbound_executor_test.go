@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -881,23 +882,28 @@ func TestCodexOutbound_DoesNotInjectCLIInstructions(t *testing.T) {
 	assert.NotContains(t, body, "service_tier")
 }
 
-func TestCodexOutbound_PreservesExplicitServiceTierWithoutStylePreset(t *testing.T) {
-	for _, serviceTier := range []string{"priority", "ultrafast"} {
-		t.Run(serviceTier, func(t *testing.T) {
-			outbound := newTestCodexOutbound(t)
-			hreq, err := outbound.TransformRequest(t.Context(), &llm.Request{
-				Model: "gpt-5.6-sol",
-				Messages: []llm.Message{{
-					Role:    "user",
-					Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
-				}},
-				ServiceTier: &serviceTier,
-			})
-			require.NoError(t, err)
+func TestCodexOutbound_PreservesExplicitServiceTier(t *testing.T) {
+	for _, stylePreset := range []bool{false, true} {
+		for _, serviceTier := range []string{"priority", "ultrafast"} {
+			t.Run(fmt.Sprintf("%s/style=%t", serviceTier, stylePreset), func(t *testing.T) {
+				outbound := newTestCodexOutbound(t)
+				hreq, err := outbound.TransformRequest(t.Context(), &llm.Request{
+					Model: "gpt-5.6-sol",
+					Messages: []llm.Message{{
+						Role:    "user",
+						Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
+					}},
+					ServiceTier: &serviceTier,
+					TransformOptions: llm.TransformOptions{
+						CodexStyleResponses: lo.ToPtr(stylePreset),
+					},
+				})
+				require.NoError(t, err)
 
-			body := decodeCodexRequestBody(t, hreq)
-			assert.Equal(t, serviceTier, body["service_tier"])
-		})
+				body := decodeCodexRequestBody(t, hreq)
+				assert.Equal(t, serviceTier, body["service_tier"])
+			})
+		}
 	}
 }
 
@@ -988,14 +994,14 @@ func TestCodexOutbound_AppliesCodexStyleResponsesDefaultsWhenEnabled(t *testing.
 	assert.Empty(t, hreq.Headers.Get(SessionHeader))
 	assert.Equal(t, hreq.Headers.Get(SessionHeaderHyphen), body["prompt_cache_key"])
 	assert.Equal(t, "auto", body["tool_choice"])
-	assert.Equal(t, "priority", body["service_tier"])
+	assert.NotContains(t, body, "service_tier")
 
 	text, ok := body["text"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "low", text["verbosity"])
 }
 
-func TestCodexOutbound_ReplacesAnthropicTierWithCodexDefault(t *testing.T) {
+func TestCodexOutbound_OmitsUnsupportedAnthropicTierWithStylePreset(t *testing.T) {
 	outbound := newTestCodexOutbound(t)
 	standardOnly := "standard_only"
 
@@ -1014,7 +1020,7 @@ func TestCodexOutbound_ReplacesAnthropicTierWithCodexDefault(t *testing.T) {
 	require.NoError(t, err)
 
 	body := decodeCodexRequestBody(t, hreq)
-	require.Equal(t, "priority", body["service_tier"])
+	require.NotContains(t, body, "service_tier")
 }
 
 func TestCodexOutbound_CodexStyleResponsesPromptCacheKeySessionPrecedence(t *testing.T) {

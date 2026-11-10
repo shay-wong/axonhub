@@ -51,6 +51,7 @@
 
 ### Changed
 
+- Codex-style Responses formatting no longer defaults an omitted service tier to Fast; explicit caller tiers are preserved.
 - Default model lists now follow upstream, removing fork-only quick-add aliases without changing models saved in existing channels.
 - All dialog footers now share `DialogFooter`/`AlertDialogFooter` variants instead of per-dialog flex classes: `pinned` for sticky footers, `divided` for the top border, `gap` for spacing, `layout`/`align` for row/edge placement. Footers stack full width below `sm` (primary action on top) and sit right-aligned above it; the `content` layout keeps source order for footers that lead with explanatory text. This fixes the Model Association dialog's Cancel/Save buttons rendering with no gap.
 - Footer buttons now meet a 44px touch target on phones and keep their normal control height from `sm` up.
