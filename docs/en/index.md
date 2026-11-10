@@ -15,7 +15,7 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 
 | Document | Description |
 |----------|-------------|
-| [Channel Management](guides/channel-management.md) | Unified key-management dialog, recovery events, key strategies, log aliases, 429 key rotation, retry budgets, Vertex key identity, and auto-disable |
+| [Channel Management](guides/channel-management.md) | Unified key-management dialog, recovery events, key strategies, unsaved edit protection, log aliases, 429 key rotation, retry budgets, Vertex key identity, and auto-disable |
 | [Model Management](guides/model-management.md) | Model mapping, associations, and priority configuration |
 | [API Key Profiles](guides/api-key-profiles.md) | Create and manage API key profiles |
 | [Permissions](guides/permissions.md) | Enterprise RBAC access control configuration |

@@ -86,6 +86,8 @@ The channel editor has one strategy selector, stored as `settings.apiKeyStrategy
 
 Only `settings.apiKeyStrategy` is read and saved, matching the upstream field contract. The old `settings.apiKeySelectionStrategy` API field has been removed; old database and backup JSON fields are ignored rather than migrated. A channel with no current field uses `sticky`. If an old channel should keep weighted sticky or failover, select the strategy again and save it; API clients must send `apiKeyStrategy`. All strategies use structured credentials, disabled-key filtering, and request-local failed-key exclusions. Temporary substitutes for fixed/success-based selection do not move the cursor used by subsequent requests.
 
+Switching from the channel editor to model alias settings asks before discarding unsaved key names, weights, or **Retry per API Key** changes. Cancel keeps your edits; confirm discards them, and reopening the editor restores the saved channel values.
+
 ### Retry per API key
 
 Leave **Single-Channel Retries** empty to inherit the global count; 0 disables ordinary same-channel retries. The initial attempt is not a retry: five available keys require at least four retries to have a chance to try each key. With **Retry per API key** off, the editor warns when the budget cannot cover all keys. If the global setting is inaccessible, it reports that the count cannot be determined instead of guessing.

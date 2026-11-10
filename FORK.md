@@ -71,6 +71,7 @@ git show --remerge-diff <merge-commit>
 
 ### F02 API Key 稳定身份、别名、权重和路由
 
+- 2026-11-10 模型别名预览整合：采用上游 `19a0984f` 的分组预览和设置跳转，保留立即加载的统一密钥弹窗。独立修复把 Key 别名/权重及 `retryPerAPIKey` 纳入离开编辑器前的未保存确认，取消保留编辑，确认丢弃后按已保存渠道重新载入。回归：`frontend/src/features/channels/components/channel-model-alias-navigation.test.mjs`；用户说明：中英 channel-management；当前独立修复定位：`git log -S'apiKeyConfigsDirty || Object.keys(dirtyFields).length > 0' -- frontend/src/features/channels/components/channels-action-dialog.tsx`。
 - 2026-11-10 整合请求配置快照及 402/520 快速换渠道：每个请求沿用开始时读取的重试策略，继续先按本地规则轮换未失败 Key；不能轮换时，402/520 不再遍历同渠道模型别名。429 缺少 Retry-After 时的 20 秒渠道降权是上游路由能力，不修改本地 Key 临时禁用/恢复时间。
 - 2026-11-04 统一密钥弹窗：禁用 Key 图标与菜单复用 `channels-api-key-management-dialog.tsx`，删除独立禁用弹窗；详情未返回前立即显示加载壳，加载失败可重试且禁止凭据修改。保留原因/错误码、临时恢复倒计时、单个/批量/全部恢复、OAuth 恢复但不可复制/测试/删除、Vertex 绑定和最后 Key 保护，不用旧测试结果覆盖已恢复状态。代码：`components/channels-dialogs.tsx`、`components/channels-columns.tsx`（均在 `frontend/src/features/channels/`）；回归：`frontend/src/features/channels/data/key-management-entry.test.mjs`、`api-key-management.test.mjs`、`disabled-api-key-dialog-contract.test.mjs`（后两者同目录）。用户文档：中英 channel-management 的统一密钥管理章节。当前变更定位：`git log -S'loadError' -- frontend/src/features/channels/components/channels-api-key-management-dialog.tsx`。
 - 2026-11-03 整合 `9142eb6a` 的渠道响应超时：`responseTimeout` 与 `retryPerAPIKey` 独立保存、回读和复制；每次选定渠道后解析超时，不改变失败 Key 排除或重试预算。前端全局默认值从既有 `retryPolicy` 响应包装读取。

@@ -1109,14 +1109,14 @@ export function ChannelsActionDialog({
             },
   });
   const { dirtyFields } = form.formState;
-  const hasFormChanges = Object.keys(dirtyFields).length > 0;
+  const hasFormChanges = apiKeyConfigsDirty || Object.keys(dirtyFields).length > 0;
 
   // These controls live outside react-hook-form, but navigating away must still
   // warn before discarding their edits.
   const localSettingsSnapshot = JSON.stringify({
     supportedModels, manualModels, proxyType, proxyUrl, proxyUsername, proxyPassword,
     passThroughUserAgent, passThroughBody, quotaRoutingMode, retryableStatusCodesText,
-    retryableErrorPatternsText, maxSingleChannelRetriesText, responseTimeoutMode,
+    retryableErrorPatternsText, maxSingleChannelRetriesText, retryPerAPIKey, responseTimeoutMode,
     streamFirstEventTimeoutText, nonStreamResponseTimeoutText, apiKeyStrategy,
     apiKeyRoundRobinSwitchAfter, authMode, codexAuthJSONText, xaiSSOToken,
     selectedProvider, selectedApiFormat, responsesTransport, codexResponsesWebSocket,

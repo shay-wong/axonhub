@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Switching to model alias settings now confirms before discarding unsaved key aliases, weights, or per-key retry settings. Cancelling preserves those edits.
 - Preserved validated Responses terminal outcomes, protocol-adapter errors, and original failure status, headers, and chunks through synchronous stream forwarding and finalization.
 - Kept model and price schedule calendars compatible with DayPicker 10, including focus and selected-day styling.
 - Preserved granted plugin access to system-level analytics while keeping project permissions isolated from system scopes.
