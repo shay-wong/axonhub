@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import test from 'node:test';
 import ts from 'typescript';
 
@@ -22,6 +23,17 @@ const patch = new Function('derivedChannelType', 'values', `
 const mergeSource = readFileSync(new URL('../utils/merge.ts', import.meta.url), 'utf8');
 const { outputText } = ts.transpileModule(mergeSource, { compilerOptions: { module: ts.ModuleKind.ESNext } });
 const { mergeChannelSettingsForUpdate } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const require = createRequire(import.meta.url);
+function loadSchema(path, imports = {}) {
+  const { outputText } = ts.transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
+  });
+  const exports = {};
+  new Function('exports', 'require', outputText)(exports, (name) => imports[name] ?? require(name));
+  return exports;
+}
+const pagination = loadSchema('../../../gql/pagination.ts');
+const { channelSettingsSchema } = loadSchema('../data/schema.ts', { '@/gql/pagination': pagination });
 
 test('channel create/edit no longer write a per-channel image model override', () => {
   for (const codexImageMainModel of [undefined, null, '', '  ', 'gpt-custom']) {
@@ -29,13 +41,50 @@ test('channel create/edit no longer write a per-channel image model override', (
   }
   const existing = { codexImageMainModel: 'gpt-custom', extraModelPrefix: 'prefix-', proxy: { type: 'environment' } };
   const copied = mergeChannelSettingsForUpdate(existing, patch('codex', { settings: existing }));
-  assert.equal(copied.codexImageMainModel, 'gpt-custom');
+  assert.equal(Object.hasOwn(copied, 'codexImageMainModel'), false);
   const edited = mergeChannelSettingsForUpdate(existing, patch('codex', { settings: { codexImageMainModel: ' new-model ' } }));
-  assert.equal(edited.codexImageMainModel, 'gpt-custom');
+  assert.equal(Object.hasOwn(edited, 'codexImageMainModel'), false);
   assert.equal(edited.extraModelPrefix, existing.extraModelPrefix);
   assert.deepEqual(edited.proxy, existing.proxy);
-  assert.equal(mergeChannelSettingsForUpdate(existing, {}).codexImageMainModel, 'gpt-custom');
+  assert.equal(Object.hasOwn(mergeChannelSettingsForUpdate(existing, {}), 'codexImageMainModel'), false);
+  assert.equal(Object.hasOwn(mergeChannelSettingsForUpdate(existing, { codexImageMainModel: 'new-model' }), 'codexImageMainModel'), false);
+  assert.equal(existing.codexImageMainModel, 'gpt-custom', 'retirement must not mutate the input snapshot');
   assert.equal(Object.hasOwn(patch('openai', {}), 'codexImageMainModel'), false);
   assert.doesNotMatch(source, /name='settings.codexImageMainModel'/);
   assert.equal(source.split('...channelSettingsPatch').length - 1, 2);
+});
+
+test('channel settings parsing strips the retired image model from imported JSON', () => {
+  const parsed = channelSettingsSchema.parse({
+    codexImageMainModel: 'legacy-image-model',
+    extraModelPrefix: 'prefix-',
+    proxy: { type: 'environment' },
+  });
+  assert.equal(Object.hasOwn(parsed, 'codexImageMainModel'), false);
+  assert.equal(parsed.extraModelPrefix, 'prefix-');
+  assert.deepEqual(parsed.proxy, { type: 'environment' });
+});
+
+test('retired key strategy is omitted from parsed, edited, and copied settings', () => {
+  const existing = {
+    apiKeySelectionStrategy: 'failover',
+    apiKeyStrategy: 'weighted_sticky',
+    apiKeyRoundRobinSwitchAfter: 3,
+    extraModelPrefix: 'prefix-',
+  };
+  const parsed = channelSettingsSchema.parse(existing);
+  assert.equal(Object.hasOwn(parsed, 'apiKeySelectionStrategy'), false);
+  assert.equal(parsed.apiKeyStrategy, 'weighted_sticky');
+  for (const settings of [
+    patch('codex', { settings: existing }),
+    mergeChannelSettingsForUpdate(existing, {}),
+    mergeChannelSettingsForUpdate(existing, { apiKeyStrategy: 'failover', apiKeySelectionStrategy: 'trace_sticky' }),
+  ]) {
+    assert.equal(Object.hasOwn(settings, 'apiKeySelectionStrategy'), false);
+  }
+  const edited = mergeChannelSettingsForUpdate(existing, { apiKeyStrategy: 'failover' });
+  assert.equal(edited.apiKeyStrategy, 'failover');
+  assert.equal(edited.apiKeyRoundRobinSwitchAfter, 3);
+  assert.equal(edited.extraModelPrefix, 'prefix-');
+  assert.equal(existing.apiKeySelectionStrategy, 'failover', 'retirement must not mutate the input snapshot');
 });

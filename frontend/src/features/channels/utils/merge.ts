@@ -111,7 +111,6 @@ export function mergeChannelSettingsForUpdate(
   };
 
   return {
-    codexImageMainModel: pick('codexImageMainModel', existing?.codexImageMainModel ?? null),
     extraModelPrefix: pick('extraModelPrefix', existing?.extraModelPrefix ?? ''),
     modelMappings: pick('modelMappings', existing?.modelMappings ?? []),
     autoTrimedModelPrefixes: pick('autoTrimedModelPrefixes', existing?.autoTrimedModelPrefixes ?? []),
@@ -127,7 +126,6 @@ export function mergeChannelSettingsForUpdate(
     rateLimit: pick('rateLimit', existing?.rateLimit ?? null),
     retryableStatusCodes: pick('retryableStatusCodes', existing?.retryableStatusCodes ?? []),
     retryableErrorPatterns: pick('retryableErrorPatterns', existing?.retryableErrorPatterns ?? []),
-    apiKeySelectionStrategy: pick('apiKeySelectionStrategy', existing?.apiKeySelectionStrategy ?? null),
     maxSingleChannelRetries: pick('maxSingleChannelRetries', existing?.maxSingleChannelRetries ?? null),
     retryPerAPIKey: pick('retryPerAPIKey', existing?.retryPerAPIKey ?? false),
     responseTimeout: pick('responseTimeout', existing?.responseTimeout ?? null),

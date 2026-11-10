@@ -13,23 +13,13 @@ import (
 )
 
 // channelAPIKeyStrategy returns the multi-key strategy configured on a channel.
-// Legacy fork strategies are read only when the canonical field is absent.
+// An empty result means the field was never set, which falls back to sticky.
 func channelAPIKeyStrategy(ch *Channel) string {
-	if ch == nil || ch.Settings == nil {
+	if ch == nil || ch.Settings == nil || ch.Settings.APIKeyStrategy == nil {
 		return ""
 	}
-	// 先读统一字段；旧配置只用于兼容，避免遗留权重策略被默认 sticky 覆盖。
-	if ch.Settings.APIKeyStrategy != nil && *ch.Settings.APIKeyStrategy != "" {
-		return *ch.Settings.APIKeyStrategy
-	}
-	switch ch.Settings.APIKeySelectionStrategy {
-	case APIKeySelectionStrategyWeightedSticky, APIKeySelectionStrategyFailover:
-		return ch.Settings.APIKeySelectionStrategy
-	case APIKeySelectionStrategyTraceSticky:
-		return objects.APIKeyStrategySticky
-	default:
-		return ""
-	}
+
+	return *ch.Settings.APIKeyStrategy
 }
 
 // channelAPIKeySwitchAfter returns how many times a key is reused by the two

@@ -42,8 +42,6 @@ type UpdateChannelSettingsInput struct {
 	RateLimit                   *objects.ChannelRateLimit             `json:"rateLimit"`
 	RetryableStatusCodes        []int                                 `json:"retryableStatusCodes"`
 	RetryableErrorPatterns      []objects.RetryableErrorPattern       `json:"retryableErrorPatterns"`
-	APIKeySelectionStrategy     *string                               `json:"apiKeySelectionStrategy"`
-	CodexImageMainModel         *string                               `json:"codexImageMainModel"`
 	RetryPerAPIKey              *bool                                 `json:"retryPerAPIKey"`
 	ModelProtocols              []objects.ModelProtocol               `json:"modelProtocols"`
 	APIKeyStrategy              *string                               `json:"apiKeyStrategy"`
@@ -109,12 +107,6 @@ func (i *UpdateChannelSettingsInput) Apply(base *objects.ChannelSettings) object
 	}
 	if i.RetryableErrorPatterns != nil {
 		merged.RetryableErrorPatterns = i.RetryableErrorPatterns
-	}
-	if i.APIKeySelectionStrategy != nil {
-		merged.APIKeySelectionStrategy = *i.APIKeySelectionStrategy
-	}
-	if i.CodexImageMainModel != nil {
-		merged.CodexImageMainModel = *i.CodexImageMainModel
 	}
 	if i.RetryPerAPIKey != nil {
 		merged.RetryPerAPIKey = i.RetryPerAPIKey

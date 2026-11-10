@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -48,29 +49,45 @@ func TestMultiKeyStrategiesHonorStructuredKeysAndRequestExclusions(t *testing.T)
 	}
 }
 
-func TestUnifiedAPIKeyStrategyPreservesLegacyAndCanonicalPrecedence(t *testing.T) {
+func TestUnifiedAPIKeyStrategyUsesCanonicalField(t *testing.T) {
 	cases := []struct {
 		name      string
-		legacy    string
 		canonical *string
 		want      any
 	}{
-		{"default sticky", "", nil, &sharedStickyKeyProvider{}},
-		{"legacy sticky", APIKeySelectionStrategyTraceSticky, nil, &sharedStickyKeyProvider{}},
-		{"legacy weighted", APIKeySelectionStrategyWeightedSticky, nil, &WeightedTraceStickyKeyProvider{}},
-		{"legacy failover", APIKeySelectionStrategyFailover, nil, &FailoverAPIKeyProvider{}},
-		{"canonical weighted", "", lo.ToPtr(APIKeySelectionStrategyWeightedSticky), &WeightedTraceStickyKeyProvider{}},
-		{"canonical failover", "", lo.ToPtr(APIKeySelectionStrategyFailover), &FailoverAPIKeyProvider{}},
-		{"canonical wins", APIKeySelectionStrategyFailover, lo.ToPtr(objects.APIKeyStrategySticky), &sharedStickyKeyProvider{}},
+		{"default sticky", nil, &sharedStickyKeyProvider{}},
+		{"canonical weighted", lo.ToPtr(APIKeySelectionStrategyWeightedSticky), &WeightedTraceStickyKeyProvider{}},
+		{"canonical failover", lo.ToPtr(APIKeySelectionStrategyFailover), &FailoverAPIKeyProvider{}},
+		{"canonical sticky", lo.ToPtr(objects.APIKeyStrategySticky), &sharedStickyKeyProvider{}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			ch := newKeyChannel(1, []string{"a", "b"})
 			ch.Settings = &objects.ChannelSettings{
-				APIKeyStrategy:          tc.canonical,
-				APIKeySelectionStrategy: tc.legacy,
+				APIKeyStrategy: tc.canonical,
 			}
 			require.IsType(t, tc.want, innerProvider(t, ch))
+		})
+	}
+}
+
+func TestUnifiedAPIKeyStrategyIgnoresRemovedFields(t *testing.T) {
+	for _, tc := range []struct {
+		name, settings string
+		want           any
+	}{
+		{"old weighted setting uses default", `{"apiKeySelectionStrategy":"weighted_sticky"}`, &sharedStickyKeyProvider{}},
+		{"old failover setting uses default", `{"apiKeySelectionStrategy":"failover"}`, &sharedStickyKeyProvider{}},
+		{"canonical setting is preserved", `{"apiKeySelectionStrategy":"weighted_sticky","apiKeyStrategy":"failover","codexImageMainModel":"old-model"}`, &FailoverAPIKeyProvider{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ch := newKeyChannel(1, []string{"a", "b"})
+			require.NoError(t, json.Unmarshal([]byte(tc.settings), &ch.Settings))
+			require.IsType(t, tc.want, innerProvider(t, ch))
+			saved, err := json.Marshal(ch.Settings)
+			require.NoError(t, err)
+			require.NotContains(t, string(saved), "apiKeySelectionStrategy")
+			require.NotContains(t, string(saved), "codexImageMainModel")
 		})
 	}
 }

@@ -243,12 +243,6 @@ type ChannelSettings struct {
 	// case-sensitive substring of the error text.
 	RetryableErrorPatterns []RetryableErrorPattern `json:"retryableErrorPatterns,omitempty"`
 
-	// Deprecated: read for legacy fork configurations when APIKeyStrategy is absent.
-	APIKeySelectionStrategy string `json:"apiKeySelectionStrategy,omitempty"`
-
-	// Deprecated: retained for API compatibility; native Images ignores this field.
-	CodexImageMainModel string `json:"codexImageMainModel,omitempty"`
-
 	// MaxSingleChannelRetries overrides the global "max single channel retries"
 	// for this channel. When nil, the channel inherits the global retry policy.
 	// Pointer so GQL emits null instead of 0 for channels that never set it.

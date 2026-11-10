@@ -84,7 +84,7 @@ The channel editor has one strategy selector, stored as `settings.apiKeyStrategy
 
 `settings.apiKeyRoundRobinSwitchAfter` sets N, with a minimum of 1. Weights only affect `weighted_sticky` and `failover`. Sticky, round-robin, success-based round-robin, and fixed selection state survives channel cache reloads, but not process restarts.
 
-Legacy `settings.apiKeySelectionStrategy` remains readable. Without the new field, `trace_sticky` maps to `sticky`, while the other two legacy strategies keep their meaning. Saving in the editor writes the new field and clears the legacy field. All strategies use structured credentials, disabled-key filtering, and request-local failed-key exclusions. Temporary substitutes for fixed/success-based selection do not move the cursor used by subsequent requests.
+Only `settings.apiKeyStrategy` is read and saved, matching the upstream field contract. The old `settings.apiKeySelectionStrategy` API field has been removed; old database and backup JSON fields are ignored rather than migrated. A channel with no current field uses `sticky`. If an old channel should keep weighted sticky or failover, select the strategy again and save it; API clients must send `apiKeyStrategy`. All strategies use structured credentials, disabled-key filtering, and request-local failed-key exclusions. Temporary substitutes for fixed/success-based selection do not move the cursor used by subsequent requests.
 
 ### Retry per API key
 

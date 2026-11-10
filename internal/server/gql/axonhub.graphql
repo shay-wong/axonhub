@@ -211,8 +211,6 @@ type ChannelSettings {
   rateLimit: ChannelRateLimit
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPattern!]
-  apiKeySelectionStrategy: String
-  codexImageMainModel: String
   maxSingleChannelRetries: Int
   retryPerAPIKey: Boolean
 
@@ -320,8 +318,6 @@ input ChannelSettingsInput {
   rateLimit: ChannelRateLimitInput
   retryableStatusCodes: [Int!]
   retryableErrorPatterns: [RetryableErrorPatternInput!]
-  apiKeySelectionStrategy: String
-  codexImageMainModel: String
   maxSingleChannelRetries: Int
   retryPerAPIKey: Boolean
 
@@ -337,8 +333,6 @@ input ChannelSettingsInput {
 # values; nested objects replace the stored value as a whole. Use this
 # instead of updateChannel's settings input when only some settings change.
 input UpdateChannelSettingsInput {
-  apiKeySelectionStrategy: String
-  codexImageMainModel: String
   retryPerAPIKey: Boolean
   extraModelPrefix: String
   modelMappings: [ModelMappingInput!]

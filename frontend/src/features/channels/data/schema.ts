@@ -369,7 +369,6 @@ export type ChannelResponseTimeout = z.infer<typeof channelResponseTimeoutSchema
 
 // Channel Settings
 export const channelSettingsSchema = z.object({
-  codexImageMainModel: z.string().optional().nullable(),
   extraModelPrefix: z.string().optional(),
   modelMappings: z.array(modelMappingSchema).optional().nullable(),
   autoTrimedModelPrefixes: z.array(z.string()).optional().nullable(),
@@ -385,7 +384,6 @@ export const channelSettingsSchema = z.object({
   rateLimit: channelRateLimitSchema.optional().nullable(),
   retryableStatusCodes: z.array(z.number().int().min(400).max(599)).optional().nullable(),
   retryableErrorPatterns: z.array(retryableErrorPatternSchema).optional().nullable(),
-  apiKeySelectionStrategy: z.string().optional().nullable(),
   // The server persists this as a plain int and does not clamp it, so reads must
   // tolerate any value an API client could have stored; the editor still bounds
   // user input. A strict upper bound here can reject a whole channel response.
@@ -394,10 +392,9 @@ export const channelSettingsSchema = z.object({
   responseTimeout: channelResponseTimeoutSchema.optional().nullable(),
   modelProtocols: z.array(modelProtocolSchema).optional().nullable(),
   providerQuota: channelProviderQuotaSettingsSchema.optional().nullable(),
-  // 保留空字符串表示未设置，旧渠道才能回读 apiKeySelectionStrategy；
-  // 未知非空策略降级为 sticky，避免整个渠道响应解析失败。
+  // 未知策略降级为 sticky，避免整个渠道响应解析失败。
   apiKeyStrategy: z
-    .enum(['', 'sticky', 'random', 'round_robin', 'round_robin_success', 'priority', 'fixed', 'weighted_sticky', 'failover'])
+    .enum(['sticky', 'random', 'round_robin', 'round_robin_success', 'priority', 'fixed', 'weighted_sticky', 'failover'])
     .catch('sticky')
     .nullable()
     .optional(),

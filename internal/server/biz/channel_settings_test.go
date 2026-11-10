@@ -95,21 +95,17 @@ func TestUpdateChannelSettingsInput_Apply(t *testing.T) {
 		require.True(t, merged.LowercaseModelID)
 	})
 
-	t.Run("fork fields preserve absence and allow explicit replacement", func(t *testing.T) {
+	t.Run("weighted strategies preserve absence and allow explicit replacement", func(t *testing.T) {
 		stored := &objects.ChannelSettings{
-			APIKeySelectionStrategy: APIKeySelectionStrategyWeightedSticky,
-			CodexImageMainModel:     "legacy-image-model",
+			APIKeyStrategy: lo.ToPtr(APIKeySelectionStrategyWeightedSticky),
 		}
 		merged := (&UpdateChannelSettingsInput{HideMappedModels: lo.ToPtr(true)}).Apply(stored)
-		require.Equal(t, stored.APIKeySelectionStrategy, merged.APIKeySelectionStrategy)
-		require.Equal(t, stored.CodexImageMainModel, merged.CodexImageMainModel)
+		require.Equal(t, stored.APIKeyStrategy, merged.APIKeyStrategy)
 		merged = (&UpdateChannelSettingsInput{
-			APIKeySelectionStrategy: lo.ToPtr(APIKeySelectionStrategyFailover),
-			CodexImageMainModel:     lo.ToPtr(""),
+			APIKeyStrategy: lo.ToPtr(APIKeySelectionStrategyFailover),
 		}).Apply(stored)
-		require.Equal(t, APIKeySelectionStrategyFailover, merged.APIKeySelectionStrategy)
-		require.Empty(t, merged.CodexImageMainModel)
-		require.Equal(t, APIKeySelectionStrategyWeightedSticky, stored.APIKeySelectionStrategy)
+		require.Equal(t, APIKeySelectionStrategyFailover, *merged.APIKeyStrategy)
+		require.Equal(t, APIKeySelectionStrategyWeightedSticky, *stored.APIKeyStrategy)
 	})
 
 	t.Run("retry per API key is opt in and patchable", func(t *testing.T) {

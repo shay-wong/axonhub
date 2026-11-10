@@ -75,7 +75,7 @@ git show --remerge-diff <merge-commit>
 - 2026-11-03 整合 `9142eb6a` 的渠道响应超时：`responseTimeout` 与 `retryPerAPIKey` 独立保存、回读和复制；每次选定渠道后解析超时，不改变失败 Key 排除或重试预算。前端全局默认值从既有 `retryPolicy` 响应包装读取。
 - 2026-10-27 已确认：整合 `c31867e0` 时保留请求内失败 Key 排除；渠道显式配置 `retryableStatusCodes: [429]` 仍只轮换未失败 Key，耗尽后换渠道，不重复失败 Key。仅无法进入 Key 轮换的路径沿用上游显式 429 同渠道重试；次数上限与 `retryPerAPIKey` 不变。回归：`TestExplicit429RetriesNeverReuseFailedKeys`，独立提交定位 `git log -S'TestExplicit429RetriesNeverReuseFailedKeys' -- internal/server/orchestrator/retry_per_apikey_test.go`；中英渠道指南与编辑器提示同步。
 - 请求日志别名展示：列表及执行详情优先使用执行时保存的 `channelAPIKeyName`，空白/缺失时回退 `keyN`，详情保留安全尾号；列表仅向拥有 `write_channels` 的用户请求别名，不读取完整凭据或用当前 Key 顺序反查历史。旧记录缺少别名快照不回填。代码/回归：`frontend/src/features/requests/utils/execution-request-headers.ts` 及同名 `.test.mjs`、`data/requests.ts`、`components/requests-columns.tsx`、`components/request-detail-content.tsx`；当前变更定位：`git log -S'formatExecutionAPIKeyLabel' -- frontend/src/features/requests/utils/execution-request-headers.ts`。用户说明在中英文 channel-management 指南。
-- 2026-10-27 已确认统一策略：一个 `apiKeyStrategy` 选择器，支持 upstream 六种策略及 fork `weighted_sticky` / `failover`。新字段为空时兼容旧 `apiKeySelectionStrategy`，`trace_sticky` 映射共享 `sticky`；编辑保存新字段并清空旧字段。所有 provider 读取同一标准化可用 Key 集、遵守请求内失败排除，不回退已禁用 Key；fixed / 成功轮询的临时替补不移动全局游标。共享状态仅跨进程内渠道缓存重载，不跨服务重启。
+- 统一策略：一个 `apiKeyStrategy` 选择器，支持 upstream 六种策略及 fork `weighted_sticky` / `failover`。2026-11-10 按维护者要求采用上游字段契约，删除旧 `apiKeySelectionStrategy` 的对象、GraphQL、前端与调度回退，不新增 JSON 自动转换；旧数据库/备份中的未知字段按标准解码忽略，缺少统一字段时回到 sticky，需要继续加权/故障转移的旧渠道应重新选择并保存。所有 provider 读取同一标准化可用 Key 集、遵守请求内失败排除，不回退已禁用 Key；fixed / 成功轮询的临时替补不移动全局游标。共享状态仅跨进程内渠道缓存重载，不跨服务重启。
 - 2026-10-27 重试决策替代旧自动预算下限：新增 `retryPerAPIKey`，nil/false（包括旧渠道）遵守渠道显式 `maxSingleChannelRetries` 或全局次数；true 时有效预算取配置次数与可用 Key 数减一的较大值。全局禁用始终优先，失败 Key 排除与预算开关分开，Key 耗尽不循环。UI 仅在可确定配置且 `重试次数 + 1 < 可用 Key 数` 时警告，未知全局设置不猜测。升级需显式开启才能恢复旧自动扩展预算。代码：`internal/server/biz/channel_apikey_strategies.go`、`internal/server/biz/channel_apikey_state.go`、`internal/server/biz/channel_settings.go`、`internal/server/orchestrator/outbound.go`、`llm/pipeline/pipeline.go`；真实 pipeline 回归 `internal/server/orchestrator/retry_per_apikey_test.go`。用户文档：`docs/en/guides/channel-management.md`、`docs/zh/guides/channel-management.md`、两语言 load-balance 指南/索引/README 与 `CHANGELOG.md` 同步。当前独立功能提交定位：`git log -S'RetryPerAPIKey' -- internal/objects/channel.go`。
 - Vertex 凭据整合：采用 `ae491d69` 的项目/区域绑定与 `de5f9039` 的第三方 Codex 凭据、目录修复。Vertex Key 必须进入同一结构化 Key 身份集合，编辑/删除/保留最后一把 Key 时保留项目、区域、别名和权重；模型发现逐 Key 匹配绑定，跳过禁用 Key、失败才继续、首成功停止。回归：`internal/objects/channel_test.go`、`internal/server/biz/channel_apikey_test.go`、`internal/server/biz/model_fetcher_test.go`、`frontend/src/features/channels/components/channels-action-dialog-model-discovery.test.mjs`。用户文档：`docs/en/guides/channel-management.md`、`docs/zh/guides/channel-management.md`；独立兼容变更定位：`git log -S'TestChannelCredentialsVertexKeysPreserveStructuredIdentity' -- internal/objects/channel_test.go`。
 - 本次上游整合：`6115ae80` 的模型发现 header overrides、`a416de23` 的 Zhipu/ZAI raw URL 与 `/v1` relay 修复保留；仍按可用 Key 顺序尝试并在首次成功后停止，不恢复全量 Key 探测。
@@ -83,10 +83,10 @@ git show --remerge-diff <merge-commit>
 - 本次上游整合：`65c65807` 在模型同步落库前重读渠道，保留拉取期间新保存的手动模型；此前按可用 Key 顺序发现、首个成功即停止的本地逻辑继续保留。
 - 生命周期：`长期保留`
 - 原始意图：一个 channel 可以管理多个 upstream API Key，并在不泄露完整 secret 的前提下识别、测试和按权重路由每个 Key。
-- 必须保持：优先读取 `apiKeyConfigs`，兼容旧 `apiKey`/`apiKeys`；Key 去重且非正权重归一为 `100`；编辑、导入、删除或重排 Key 时按 Key 身份保留对应别名和权重；支持 `trace_sticky`、`weighted_sticky` 和 `failover`；API-key quota 预检与 checker 使用同一归一化 Key 集合；日志和 UI 只显示别名及安全后缀；失败重试优先排除当前 Key 并轮换同一 channel 的其他可用 Key；模型发现允许选择一个可用 Key，并仅在该 Key 失败时按顺序尝试其他 Key，首个成功后立即停止，自动同步同样跳过已禁用 Key 且不遍历成功后的 Key。
+- 必须保持：优先读取 `apiKeyConfigs`，兼容旧 `apiKey`/`apiKeys`；Key 去重且非正权重归一为 `100`；编辑、导入、删除或重排 Key 时按 Key 身份保留对应别名和权重；支持 `sticky`、`weighted_sticky` 和 `failover`；API-key quota 预检与 checker 使用同一归一化 Key 集合；日志和 UI 只显示别名及安全后缀；失败重试优先排除当前 Key 并轮换同一 channel 的其他可用 Key；模型发现允许选择一个可用 Key，并仅在该 Key 失败时按顺序尝试其他 Key，首个成功后立即停止，自动同步同样跳过已禁用 Key 且不遍历成功后的 Key。
 - 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel_apikey_identity.go`、`internal/server/biz/channel_apikey.go`、`internal/server/biz/channel_apikey_provider.go`、`internal/server/biz/model_fetcher.go`、`internal/server/biz/model_fetcher_test.go`、`internal/server/biz/provider_quota.go`、`internal/server/biz/provider_quota_url_test.go`、`internal/server/orchestrator/retry.go`、`frontend/src/features/channels/data/api-key-display.ts`、`frontend/src/features/channels/data/channel-input.ts`、`frontend/src/features/channels/data/channel-config.test.mjs`、`frontend/src/features/channels/components/channels-action-dialog.tsx`、`frontend/src/features/channels/components/channels-api-key-management-dialog.tsx`。
 - 提交锚点：`d6e092ba`、`2909ddaa`、`88980c6e`、`1a69f0c4`、`31b3ad18`、`d53787b1`。
-- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；`dfbe2259` 增加 `modelProtocols` 和增量 channel settings 更新时，必须让 `apiKeySelectionStrategy` 与协议配置并存并进入 settings patch；`939b2bc0` 将 Key 规范化从输入失焦移到提交/删除边界以保持焦点，合并时必须同时保留按 Key 身份恢复别名与权重的 `apiKeyConfigs` 状态；`6742293a` 新增的 ZenMux `managementApiKey` 只用于服务端配额查询，必须与结构化 inference Key 并存且不能代替或清空别名、权重和选择策略；`d3132241` 和 `644859d0` 分别新增 Command Code、Ollama 的 `providerQuota` 设置时，必须让这些字段与 `apiKeySelectionStrategy` 共用同一增量 settings patch，不能互相覆盖；不得把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
+- 合并审核：区分“Key 路由能力”和下文等待 upstream 吸收的“禁用/恢复修复”；upstream `1823ec34` 的统一密钥管理弹窗必须优先读取 `apiKeyConfigs`，导入或删除 Key 时保留已有别名和权重；`modelProtocols`、`apiKeyStrategy` 与 `providerQuota` 等设置共用增量 settings patch，不能互相覆盖；提交/删除边界规范化 Key 时必须按身份恢复别名与权重；ZenMux `managementApiKey` 只用于服务端配额查询，必须与结构化 inference Key 并存；不恢复已经删除的旧策略字段或双字段回退，不把结构化配置降级回无权重字符串数组，也不得把完整 Key 加入日志或 GraphQL 非敏感字段。
 - 吸收/删除条件：只有 fork 明确放弃多 Key 权重策略，或 upstream 提供等价的稳定身份、路由算法、兼容迁移和脱敏展示时才能删除。
 - 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'APIKey|ProviderQuota|Weighted|Failover|Retry'`；`cd frontend && node --test src/features/channels/data/api-key-display.test.mjs src/features/channels/data/channel-input.test.mjs`。
 
@@ -439,17 +439,6 @@ git show --remerge-diff <merge-commit>
 - 上游吸收条件：上游具备等价的目录格式协商、权限过滤、完整模型元数据及回归覆盖。
 - 验证：`go test ./internal/server/api -run 'TestOpenAIHandlers_(ListModels|RetrieveModel)|TestCodexCatalog' -count=1`。
 
-### U23 旧生图主模型字段的升级兼容
-
-- 生命周期：`等待上游吸收`
-- 原始意图：采用上游 `3cb7e333` 原生 Images 后，移除失效的默认主模型 UI，同时避免缓存旧前端查询字段时触发 GraphQL 错误。
-- 已确认替换：不再保留 Images→Responses 桥接、外层主模型替换或默认 Astra；Images 使用调用方图片模型，普通 Responses 生图工具不变。仅支持 Responses 的中转不再自动获得 Images 能力。
-- 必须保持：旧全局 `systemModelSettings.codexImageMainModel`、更新 input 和渠道字段继续兼容读写，但不参与路由、模型替换或默认值；全局字段标记 deprecated，新 UI/查询/提交不再使用。旧持久化配置无需删除或迁移。
-- 代码锚点：`internal/server/biz/system.go`、`internal/server/gql/system.graphql`、`internal/server/gql/system.resolvers.go`；测试：`internal/server/gql/system_model_settings_compat_test.go`、`internal/server/biz/channel_image_main_model_test.go`。
-- 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`；README、索引与 CHANGELOG 同步。当前独立变更定位：`git log -S'Native Images no longer uses a separate main model.' -- internal/server/gql/system.graphql`。
-- 合并审核/吸收条件：原生 Images 本身为 upstream 能力，不恢复桥接或生图主模型 UI；仅在明确允许旧客户端 API 破坏性升级时删除遗留字段。
-- 验证：`go test ./internal/server/biz ./internal/server/gql -run 'NativeImagesIgnoreLegacyMainModel|UpdateSystemModelSettings|ChannelImageMainModelSettingsRoundTrip'`。
-
 
 ## Upstream Merge 审核清单
 
@@ -457,7 +446,6 @@ git show --remerge-diff <merge-commit>
 2. 记录 merge 前本文基线；用路径级 diff 检查每个 `长期保留` 条目。
 3. 对 conflict file 先定位所属能力，再选择或重写 resolution；必要时用 `git show --remerge-diff <merge>` 查看历史人工 resolution。
 4. 对 `等待上游吸收` 条目比较行为和测试，不按提交标题或同名字段判断等价。
-- 2026-11-10 维护者确认默认模型列表跟随 upstream，撤销原 U06 的额外 Astra、`gpt-5.6` 和 `claude-opus-5` 默认条目；不修改既有渠道支持模型，不限制手动配置。
 5. schema 变化遵循仓库生成规则；`llm/` 是独立 Go module，相关命令从 `llm/` 目录运行。
 6. 先运行受影响能力列出的最小验证，再按用户授权和 `AGENTS.md` 扩大验证范围。
 7. 更新本文基线、路径、提交锚点和生命周期；删除已吸收条目。
@@ -467,5 +455,8 @@ git show --remerge-diff <merge-commit>
 
 - `cd94f9cf` 仅忽略本地 Codex 工作目录，不是产品能力。
 - `fbb7dd63` 与 `a8c22a5c` 最终净效果为回滚，不作为当前行为差异。
+- 2026-11-10 维护者确认默认模型列表跟随 upstream，撤销原 U06 的额外 Astra、`gpt-5.6` 和 `claude-opus-5` 默认条目；不修改既有渠道支持模型，不限制手动配置。
+- 未使用的 `Channel.APIKeySelectionStrategy()` 方法及旧策略配置字段删除，统一 Key 调度保留。
+- 原 U23 的旧生图主模型字段及兼容接口按上游契约删除；原生 Images 继续直接使用调用方图片模型，不恢复桥接或旧主模型选择。缓存旧前端需要刷新，旧客户端不得再查询/提交已删除字段；旧 JSON 值按标准解码忽略，不执行批量数据库清理。回归：`TestRemovedImageMainModelFieldsNotInSchema`、`TestRemovedAPIKeySelectionFieldNotInSchema`、`TestChannelCodexNativeImagesPreservesRequestedModel`。
 - 纯 upstream merge commit 本身不作为能力；只有人工 merge resolution 引入且当前仍生效的行为才作为锚点记录。
 - 尚未合入当前 upstream 基线的 upstream-only commits 不属于 fork 差异；合并后再更新本文。

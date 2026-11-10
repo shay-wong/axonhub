@@ -229,7 +229,7 @@ You can manually trigger a quota refresh by clicking the refresh icon in the quo
 
 ### Native image generation and editing
 
-Codex Images requests now use native `/images/generations` and `/images/edits` endpoints with the requested image model, such as `gpt-image-2`. No outer text model is selected. The default image main model control has been removed from Models → Settings; old global and channel values remain accepted for API compatibility but have no effect.
+Codex Images requests now use native `/images/generations` and `/images/edits` endpoints with the requested image model, such as `gpt-image-2`. No outer text model is selected. The default image main model control and the old global/channel `codexImageMainModel` API fields have been removed, matching upstream. Refresh cached pages after upgrading and remove that field from external GraphQL queries and inputs. Old stored JSON values are ignored; no manual database cleanup is required.
 
 Your upstream must support native Images endpoints. A service that only supports Responses image tools can no longer serve Images API requests through the removed bridge. Non-Codex channels require existing native image support or an explicit Images endpoint. Images requests are non-streaming; `stream: true` is rejected. Native `/responses` requests with `image_generation` tools keep their existing behavior. See [Images API](../api-reference/image-generation.md) for parameters and endpoint configuration.
 

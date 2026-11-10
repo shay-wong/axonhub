@@ -1728,8 +1728,6 @@ export function ChannelsActionDialog({ currentRow, duplicateFromRow, open, onOpe
         passThroughUserAgent,
         passThroughBody,
         retryableStatusCodes,
-        // 保存统一策略时清除旧字段，后续复制或编辑不再恢复旧选择。
-        apiKeySelectionStrategy: '',
       };
       // The Command Code / Ollama quota cookie is a browser-session credential
       // that only belongs on its own channel type. Never let a

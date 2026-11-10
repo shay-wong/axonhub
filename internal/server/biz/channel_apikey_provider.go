@@ -20,7 +20,6 @@ import (
 const traceStickyLRUSize = 1024
 
 const (
-	APIKeySelectionStrategyTraceSticky    = "trace_sticky"
 	APIKeySelectionStrategyWeightedSticky = "weighted_sticky"
 	APIKeySelectionStrategyFailover       = "failover"
 )

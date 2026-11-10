@@ -175,7 +175,7 @@ AxonHub 的模型配置文件支持将请求模型映射到具体提供商模型
 
 ### 原生图片生成与编辑
 
-Codex Images 请求现在直接使用原生 `/images/generations` 和 `/images/edits` 端点，保留请求的图片模型（如 `gpt-image-2`），不再选择外层文本主模型。“模型 → 设置”中的默认生图主模型控件已移除；旧的全局和渠道字段仅保留 API 兼容，保存值不再影响生图。
+Codex Images 请求现在直接使用原生 `/images/generations` 和 `/images/edits` 端点，保留请求的图片模型（如 `gpt-image-2`），不再选择外层文本主模型。默认生图主模型控件及全局/渠道 `codexImageMainModel` API 字段均已按上游契约删除。升级后请刷新缓存页面，并从外部 GraphQL 查询和输入中移除旧字段。旧持久化 JSON 值直接忽略，无需手工清理数据库。
 
 上游必须支持原生 Images 端点。仅支持 Responses 生图工具的中转不能再通过已移除的桥接承接 Images API 请求；非 Codex 渠道需已有原生生图支持或显式配置 Images 端点。Images 只支持非流式请求，`stream: true` 会被拒绝。原生 `/responses` 请求中的 `image_generation` 工具继续沿用原有行为。参数和端点配置见[Images API](../api-reference/image-generation.md)。
 

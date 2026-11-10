@@ -604,11 +604,9 @@ type ComplexityRoot struct {
 
 	ChannelSettings struct {
 		APIKeyRoundRobinSwitchAfter func(childComplexity int) int
-		APIKeySelectionStrategy     func(childComplexity int) int
 		APIKeyStrategy              func(childComplexity int) int
 		AutoTrimedModelPrefixes     func(childComplexity int) int
 		BodyOverrideOperations      func(childComplexity int) int
-		CodexImageMainModel         func(childComplexity int) int
 		ExtraModelPrefix            func(childComplexity int) int
 		HeaderOverrideOperations    func(childComplexity int) int
 		HideMappedModels            func(childComplexity int) int
@@ -2059,7 +2057,6 @@ type ComplexityRoot struct {
 
 	SystemModelSettings struct {
 		AutoReasoningEffort               func(childComplexity int) int
-		CodexImageMainModel               func(childComplexity int) int
 		DefaultModelAPIIncludeAll         func(childComplexity int) int
 		DeveloperSettings                 func(childComplexity int) int
 		FallbackToChannelsOnModelNotFound func(childComplexity int) int
@@ -4826,12 +4823,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelSettings.APIKeyRoundRobinSwitchAfter(childComplexity), true
-	case "ChannelSettings.apiKeySelectionStrategy":
-		if e.complexity.ChannelSettings.APIKeySelectionStrategy == nil {
-			break
-		}
-
-		return e.complexity.ChannelSettings.APIKeySelectionStrategy(childComplexity), true
 	case "ChannelSettings.apiKeyStrategy":
 		if e.complexity.ChannelSettings.APIKeyStrategy == nil {
 			break
@@ -4850,12 +4841,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelSettings.BodyOverrideOperations(childComplexity), true
-	case "ChannelSettings.codexImageMainModel":
-		if e.complexity.ChannelSettings.CodexImageMainModel == nil {
-			break
-		}
-
-		return e.complexity.ChannelSettings.CodexImageMainModel(childComplexity), true
 	case "ChannelSettings.extraModelPrefix":
 		if e.complexity.ChannelSettings.ExtraModelPrefix == nil {
 			break
@@ -11747,12 +11732,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.SystemModelSettings.AutoReasoningEffort(childComplexity), true
-	case "SystemModelSettings.codexImageMainModel":
-		if e.complexity.SystemModelSettings.CodexImageMainModel == nil {
-			break
-		}
-
-		return e.complexity.SystemModelSettings.CodexImageMainModel(childComplexity), true
 	case "SystemModelSettings.defaultModelAPIIncludeAll":
 		if e.complexity.SystemModelSettings.DefaultModelAPIIncludeAll == nil {
 			break
@@ -23224,10 +23203,6 @@ func (ec *executionContext) fieldContext_Channel_settings(_ context.Context, fie
 				return ec.fieldContext_ChannelSettings_retryableStatusCodes(ctx, field)
 			case "retryableErrorPatterns":
 				return ec.fieldContext_ChannelSettings_retryableErrorPatterns(ctx, field)
-			case "apiKeySelectionStrategy":
-				return ec.fieldContext_ChannelSettings_apiKeySelectionStrategy(ctx, field)
-			case "codexImageMainModel":
-				return ec.fieldContext_ChannelSettings_codexImageMainModel(ctx, field)
 			case "maxSingleChannelRetries":
 				return ec.fieldContext_ChannelSettings_maxSingleChannelRetries(ctx, field)
 			case "retryPerAPIKey":
@@ -28388,64 +28363,6 @@ func (ec *executionContext) fieldContext_ChannelSettings_retryableErrorPatterns(
 				return ec.fieldContext_RetryableErrorPattern_regex(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type RetryableErrorPattern", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _ChannelSettings_apiKeySelectionStrategy(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelSettings) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_ChannelSettings_apiKeySelectionStrategy,
-		func(ctx context.Context) (any, error) {
-			return obj.APIKeySelectionStrategy, nil
-		},
-		nil,
-		ec.marshalOString2string,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_ChannelSettings_apiKeySelectionStrategy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "ChannelSettings",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _ChannelSettings_codexImageMainModel(ctx context.Context, field graphql.CollectedField, obj *objects.ChannelSettings) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_ChannelSettings_codexImageMainModel,
-		func(ctx context.Context) (any, error) {
-			return obj.CodexImageMainModel, nil
-		},
-		nil,
-		ec.marshalOString2string,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_ChannelSettings_codexImageMainModel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "ChannelSettings",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -54544,8 +54461,6 @@ func (ec *executionContext) fieldContext_Query_systemModelSettings(_ context.Con
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "codexImageMainModel":
-				return ec.fieldContext_SystemModelSettings_codexImageMainModel(ctx, field)
 			case "fallbackToChannelsOnModelNotFound":
 				return ec.fieldContext_SystemModelSettings_fallbackToChannelsOnModelNotFound(ctx, field)
 			case "queryAllChannelModels":
@@ -63263,35 +63178,6 @@ func (ec *executionContext) fieldContext_SystemModelSettingOnboarding_completedA
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Time does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SystemModelSettings_codexImageMainModel(ctx context.Context, field graphql.CollectedField, obj *biz.SystemModelSettings) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SystemModelSettings_codexImageMainModel,
-		func(ctx context.Context) (any, error) {
-			return obj.CodexImageMainModel, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SystemModelSettings_codexImageMainModel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SystemModelSettings",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -78257,7 +78143,7 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "retryableStatusCodes", "retryableErrorPatterns", "apiKeySelectionStrategy", "codexImageMainModel", "maxSingleChannelRetries", "retryPerAPIKey", "responseTimeout", "modelProtocols", "apiKeyStrategy", "apiKeyRoundRobinSwitchAfter", "providerQuota", "quotaRoutingMode"}
+	fieldsInOrder := [...]string{"extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "retryableStatusCodes", "retryableErrorPatterns", "maxSingleChannelRetries", "retryPerAPIKey", "responseTimeout", "modelProtocols", "apiKeyStrategy", "apiKeyRoundRobinSwitchAfter", "providerQuota", "quotaRoutingMode"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -78369,20 +78255,6 @@ func (ec *executionContext) unmarshalInputChannelSettingsInput(ctx context.Conte
 				return it, err
 			}
 			it.RetryableErrorPatterns = data
-		case "apiKeySelectionStrategy":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("apiKeySelectionStrategy"))
-			data, err := ec.unmarshalOString2string(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.APIKeySelectionStrategy = data
-		case "codexImageMainModel":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("codexImageMainModel"))
-			data, err := ec.unmarshalOString2string(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.CodexImageMainModel = data
 		case "maxSingleChannelRetries":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("maxSingleChannelRetries"))
 			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
@@ -95737,27 +95609,13 @@ func (ec *executionContext) unmarshalInputUpdateChannelSettingsInput(ctx context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"apiKeySelectionStrategy", "codexImageMainModel", "retryPerAPIKey", "extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "retryableStatusCodes", "retryableErrorPatterns", "modelProtocols", "apiKeyStrategy", "apiKeyRoundRobinSwitchAfter", "providerQuota", "quotaRoutingMode"}
+	fieldsInOrder := [...]string{"retryPerAPIKey", "extraModelPrefix", "modelMappings", "autoTrimedModelPrefixes", "hideOriginalModels", "hideMappedModels", "lowercaseModelId", "proxy", "transformOptions", "headerOverrideOperations", "bodyOverrideOperations", "passThroughUserAgent", "passThroughBody", "rateLimit", "retryableStatusCodes", "retryableErrorPatterns", "modelProtocols", "apiKeyStrategy", "apiKeyRoundRobinSwitchAfter", "providerQuota", "quotaRoutingMode"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
-		case "apiKeySelectionStrategy":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("apiKeySelectionStrategy"))
-			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.APIKeySelectionStrategy = data
-		case "codexImageMainModel":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("codexImageMainModel"))
-			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.CodexImageMainModel = data
 		case "retryPerAPIKey":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("retryPerAPIKey"))
 			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
@@ -97381,20 +97239,13 @@ func (ec *executionContext) unmarshalInputUpdateSystemModelSettingsInput(ctx con
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"codexImageMainModel", "fallbackToChannelsOnModelNotFound", "queryAllChannelModels", "defaultModelAPIIncludeAll", "autoReasoningEffort", "modelBlacklistRegex", "hideUnroutableModelsInList", "developerSettings"}
+	fieldsInOrder := [...]string{"fallbackToChannelsOnModelNotFound", "queryAllChannelModels", "defaultModelAPIIncludeAll", "autoReasoningEffort", "modelBlacklistRegex", "hideUnroutableModelsInList", "developerSettings"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
-		case "codexImageMainModel":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("codexImageMainModel"))
-			data, err := ec.unmarshalOString2string(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.CodexImageMainModel = data
 		case "fallbackToChannelsOnModelNotFound":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fallbackToChannelsOnModelNotFound"))
 			data, err := ec.unmarshalOBoolean2bool(ctx, v)
@@ -106704,10 +106555,6 @@ func (ec *executionContext) _ChannelSettings(ctx context.Context, sel ast.Select
 			out.Values[i] = ec._ChannelSettings_retryableStatusCodes(ctx, field, obj)
 		case "retryableErrorPatterns":
 			out.Values[i] = ec._ChannelSettings_retryableErrorPatterns(ctx, field, obj)
-		case "apiKeySelectionStrategy":
-			out.Values[i] = ec._ChannelSettings_apiKeySelectionStrategy(ctx, field, obj)
-		case "codexImageMainModel":
-			out.Values[i] = ec._ChannelSettings_codexImageMainModel(ctx, field, obj)
 		case "maxSingleChannelRetries":
 			out.Values[i] = ec._ChannelSettings_maxSingleChannelRetries(ctx, field, obj)
 		case "retryPerAPIKey":
@@ -120404,11 +120251,6 @@ func (ec *executionContext) _SystemModelSettings(ctx context.Context, sel ast.Se
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("SystemModelSettings")
-		case "codexImageMainModel":
-			out.Values[i] = ec._SystemModelSettings_codexImageMainModel(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "fallbackToChannelsOnModelNotFound":
 			out.Values[i] = ec._SystemModelSettings_fallbackToChannelsOnModelNotFound(ctx, field, obj)
 			if out.Values[i] == graphql.Null {

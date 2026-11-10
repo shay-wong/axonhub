@@ -82,7 +82,7 @@
 
 轮询次数由 `settings.apiKeyRoundRobinSwitchAfter` 配置，最小为 1。权重只影响 `weighted_sticky` 和 `failover`。上游粘性、轮询、成功轮询和固定策略的状态跨渠道缓存重载保留，但不跨服务重启。
 
-旧 `settings.apiKeySelectionStrategy` 仍可读取；没有新字段时，`trace_sticky` 对应 `sticky`，其余两个旧策略保持原意。编辑保存后使用新字段并清空旧字段。所有策略共用结构化 Key、禁用过滤及请求内失败 Key 排除；固定/成功轮询的临时替补不改变其持久到下次请求的游标。
+按上游字段契约，只读取和保存 `settings.apiKeyStrategy`。旧 `settings.apiKeySelectionStrategy` API 字段已删除；旧数据库和备份 JSON 中的同名字段直接忽略，不自动迁移。没有统一字段的渠道使用 `sticky`。旧渠道如需继续使用加权粘性或故障转移，请重新选择策略并保存；API 调用方需改用 `apiKeyStrategy`。所有策略共用结构化 Key、禁用过滤及请求内失败 Key 排除；固定/成功轮询的临时替补不改变其持久到下次请求的游标。
 
 ### 按 Key 重试
 

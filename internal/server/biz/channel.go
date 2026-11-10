@@ -1513,19 +1513,6 @@ func (c *Channel) IsTemporaryDisabledAt(now time.Time) bool {
 	return c != nil && c.TemporaryDisabledUntil != nil && c.TemporaryDisabledUntil.After(now)
 }
 
-func (c *Channel) APIKeySelectionStrategy() string {
-	if c == nil || c.Settings == nil || c.Settings.APIKeySelectionStrategy == "" {
-		return APIKeySelectionStrategyTraceSticky
-	}
-
-	switch c.Settings.APIKeySelectionStrategy {
-	case APIKeySelectionStrategyTraceSticky, APIKeySelectionStrategyWeightedSticky, APIKeySelectionStrategyFailover:
-		return c.Settings.APIKeySelectionStrategy
-	default:
-		return APIKeySelectionStrategyTraceSticky
-	}
-}
-
 func (c *Channel) IsSchedulableAt(now time.Time) bool {
 	if c == nil {
 		return false

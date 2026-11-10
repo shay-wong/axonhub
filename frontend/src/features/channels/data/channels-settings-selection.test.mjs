@@ -50,15 +50,16 @@ test('every settings selection block in channels.ts requests quotaRoutingMode', 
   );
 });
 
-test('every channel settings selection includes the image main model for edit and copy', () => {
-  assert.deepEqual(
-    extractSettingsBlocks().filter(({ body }) => !/\bcodexImageMainModel\b/.test(body)).map(({ name }) => name),
-    []
-  );
+test('channel settings selections no longer request the retired image main model', () => {
+  assert.equal(/\bcodexImageMainModel\b/.test(source), false);
 });
 
-test('channel settings round trips both key policies and per-channel retry limits', () => {
-  for (const field of ['apiKeySelectionStrategy', 'apiKeyStrategy', 'apiKeyRoundRobinSwitchAfter', 'maxSingleChannelRetries', 'retryPerAPIKey']) {
+test('channel settings selections no longer request the retired key strategy', () => {
+  assert.equal(/\bapiKeySelectionStrategy\b/.test(source), false);
+});
+
+test('channel settings round trips the canonical key policy and per-channel retry limits', () => {
+  for (const field of ['apiKeyStrategy', 'apiKeyRoundRobinSwitchAfter', 'maxSingleChannelRetries', 'retryPerAPIKey']) {
     const missing = extractSettingsBlocks()
       .filter(({ body }) => /\bretryableStatusCodes\b/.test(body))
       .filter(({ body }) => !new RegExp(`\\b${field}\\b`).test(body));
