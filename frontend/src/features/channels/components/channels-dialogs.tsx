@@ -45,6 +45,13 @@ export function ChannelsDialogs() {
     }
   }, [detailsQuery.data, partialCurrentRow, setCurrentRow]);
 
+  useEffect(() => {
+    if (open || !partialCurrentRow) return;
+    // Cancel delayed cleanup if a row dialog reopens during its close animation.
+    const timeout = setTimeout(() => setCurrentRow(null), 500);
+    return () => clearTimeout(timeout);
+  }, [open, partialCurrentRow, setCurrentRow]);
+
   // List rows intentionally contain only fields required by visible columns.
   // Delay row-scoped dialogs until the full snapshot has been loaded so hiding
   // a column never removes data from edit/configuration dialogs.
@@ -110,15 +117,13 @@ export function ChannelsDialogs() {
         <>
           <ChannelsActionDialog
             key={`channel-edit-${currentRow.id}`}
+            onOpenModelMapping={() => setOpen('modelMapping')}
             open={open === 'edit'}
             onOpenChange={(isOpen) => {
               if (isOpen) {
                 setOpen('edit');
               } else {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             currentRow={currentRow}
@@ -132,9 +137,6 @@ export function ChannelsDialogs() {
                 setOpen('duplicate');
               } else {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             duplicateFromRow={currentRow}
@@ -142,15 +144,13 @@ export function ChannelsDialogs() {
 
           <ChannelsActionDialog
             key={`channel-view-models-${currentRow.id}`}
+            onOpenModelMapping={() => setOpen('modelMapping')}
             open={open === 'viewModels'}
             onOpenChange={(isOpen) => {
               if (isOpen) {
                 setOpen('viewModels');
               } else {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             currentRow={currentRow}
@@ -163,9 +163,6 @@ export function ChannelsDialogs() {
             onOpenChange={(isOpen) => {
               if (!isOpen) {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             currentRow={currentRow}
@@ -176,9 +173,6 @@ export function ChannelsDialogs() {
             open={open === 'settings'}
             onOpenChange={() => {
               setOpen('settings')
-              setTimeout(() => {
-                setCurrentRow(null)
-              }, 500)
             }}
             currentRow={currentRow}
           /> */}
@@ -191,9 +185,6 @@ export function ChannelsDialogs() {
                 setOpen('modelMapping');
               } else {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             currentRow={currentRow}
@@ -207,9 +198,6 @@ export function ChannelsDialogs() {
             onOpenChange={(isOpen) => {
               if (!isOpen) {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             currentRow={currentRow}
@@ -221,9 +209,6 @@ export function ChannelsDialogs() {
             onOpenChange={(isOpen) => {
               if (!isOpen) {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             currentRow={currentRow}
@@ -237,9 +222,6 @@ export function ChannelsDialogs() {
                 setOpen('status');
               } else {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             currentRow={currentRow}
@@ -253,9 +235,6 @@ export function ChannelsDialogs() {
                 setOpen('archive');
               } else {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             currentRow={currentRow}
@@ -269,9 +248,6 @@ export function ChannelsDialogs() {
                 setOpen('test');
               } else {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             channel={currentRow}
@@ -285,9 +261,6 @@ export function ChannelsDialogs() {
                 setOpen('testHistory');
               } else {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             channel={currentRow}
@@ -299,9 +272,6 @@ export function ChannelsDialogs() {
             onOpenChange={(isOpen) => {
               if (!isOpen) {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
           />
@@ -312,9 +282,6 @@ export function ChannelsDialogs() {
             onOpenChange={(isOpen) => {
               if (!isOpen) {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             currentRow={currentRow}
@@ -326,9 +293,6 @@ export function ChannelsDialogs() {
             onOpenChange={(isOpen) => {
               if (!isOpen) {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             currentRow={currentRow}
@@ -340,9 +304,6 @@ export function ChannelsDialogs() {
             onOpenChange={(isOpen) => {
               if (!isOpen) {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             channel={currentRow}
@@ -354,9 +315,6 @@ export function ChannelsDialogs() {
             onOpenChange={(isOpen) => {
               if (!isOpen) {
                 setOpen(null);
-                setTimeout(() => {
-                  setCurrentRow(null);
-                }, 500);
               }
             }}
             currentRow={currentRow}

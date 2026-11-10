@@ -480,6 +480,7 @@ func convertToolMessageWithTypeWithError(msg llm.Message, itemType string) (Item
 		ID:     msg.ID,
 		Type:   itemType,
 		CallID: lo.FromPtr(msg.ToolCallID),
+		Name:   lo.FromPtr(msg.ToolCallName),
 		Output: &output,
 	}, nil
 }
