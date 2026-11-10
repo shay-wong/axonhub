@@ -60,6 +60,9 @@ func (s *UsageLogService) computeUsageCost(
 
 	if modelPrice, ok := ch.cachedModelPrices[modelID]; ok {
 		items, total := ComputeUsageCostForServiceTier(usage, modelPrice.Price, modelID, serviceTier, time.Now())
+		if items == nil {
+			return nil, nil, ""
+		}
 
 		totalCost := total.InexactFloat64()
 		if log.DebugEnabled(ctx) {
@@ -82,6 +85,9 @@ func (s *UsageLogService) computeUsageCost(
 	// when the model library price was added after the channel was created.
 	if price, ok := s.ChannelService.resolveModelLibraryPrice(ctx, modelID); ok {
 		items, total := ComputeUsageCostForServiceTier(usage, *price, modelID, serviceTier, time.Now())
+		if items == nil {
+			return nil, nil, ""
+		}
 		totalCost := total.InexactFloat64()
 
 		if log.DebugEnabled(ctx) {

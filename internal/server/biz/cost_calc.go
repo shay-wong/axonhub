@@ -150,7 +150,7 @@ func ComputeUsageCost(usage *llm.Usage, price objects.ModelPrice, now time.Time)
 }
 
 // ComputeUsageCostForServiceTier uses explicit prices first, then published model-specific
-// tier ratios. Unlisted models retain the legacy Ultrafast fallback of twice Fast/base.
+// tier ratios. An unpriced Ultrafast request returns nil items and zero total.
 // modelID is the actual channel model, not the client's pre-routing alias.
 func ComputeUsageCostForServiceTier(usage *llm.Usage, price objects.ModelPrice, modelID, serviceTier string, now ...time.Time) ([]objects.CostItem, decimal.Decimal) {
 	effectiveItems := effectivePriceItems(price, resolveCostTime(now...))
@@ -167,7 +167,7 @@ func ComputeUsageCostForServiceTier(usage *llm.Usage, price objects.ModelPrice, 
 	// Ratios verified against https://developers.openai.com/api/docs/pricing on
 	// 2026-10-13. Restrict them to published model IDs; never infer future models.
 	var fastMultiplier int64 = 1
-	var ultrafastMultiplier int64 = 2
+	var ultrafastMultiplier int64
 	switch modelID {
 	case "gpt-6-astra", "gpt-6.1-sol":
 		fastMultiplier = 2
@@ -181,9 +181,12 @@ func ComputeUsageCostForServiceTier(usage *llm.Usage, price objects.ModelPrice, 
 	case llm.ServiceTierPriority:
 		multiplier = decimal.NewFromInt(fastMultiplier)
 	case llm.ServiceTierUltrafast:
+		if ultrafastMultiplier == 0 {
+			return nil, decimal.Zero
+		}
 		if hasTierPrice(llm.ServiceTierPriority) {
 			effectiveItems = price.ItemsForServiceTierFromItems(llm.ServiceTierPriority, effectiveItems)
-		} else if ultrafastMultiplier == 3 {
+		} else {
 			// Only models with published Ultrafast pricing infer Fast from Standard.
 			ultrafastMultiplier *= fastMultiplier
 		}

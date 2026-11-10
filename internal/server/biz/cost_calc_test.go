@@ -1001,16 +1001,15 @@ func TestComputeUsageCostForServiceTier(t *testing.T) {
 
 	require.True(t, decimal.NewFromInt(35).Equal(standardTotal))
 	require.True(t, decimal.NewFromInt(40).Equal(priorityTotal))
-	require.True(t, decimal.NewFromInt(80).Equal(ultrafastTotal))
-	require.True(t, decimal.NewFromInt(20).Equal(ultrafastItems[0].Subtotal))
-	require.True(t, decimal.NewFromInt(60).Equal(ultrafastItems[1].Subtotal))
-	require.True(t, decimal.NewFromInt(60).Equal(ultrafastItems[1].TierBreakdown[0].Subtotal))
+	require.Nil(t, ultrafastItems)
+	require.True(t, ultrafastTotal.IsZero())
 	require.True(t, standardTotal.Equal(unknownTotal))
 
 	withoutFastPrice := price
 	withoutFastPrice.ServiceTierPrices = nil
-	_, ultrafastWithoutFastTotal := ComputeUsageCostForServiceTier(usage, withoutFastPrice, "custom-model", "ultrafast")
-	require.True(t, decimal.NewFromInt(70).Equal(ultrafastWithoutFastTotal))
+	ultrafastWithoutFastItems, ultrafastWithoutFastTotal := ComputeUsageCostForServiceTier(usage, withoutFastPrice, "custom-model", "ultrafast")
+	require.Nil(t, ultrafastWithoutFastItems)
+	require.True(t, ultrafastWithoutFastTotal.IsZero())
 
 	price.ServiceTierPrices = append(price.ServiceTierPrices, objects.ServiceTierPrice{
 		ServiceTier: "ultrafast",
@@ -1082,11 +1081,12 @@ func TestComputeUsageCostForServiceTierWithSchedule(t *testing.T) {
 
 	_, standardTotal := ComputeUsageCostForServiceTier(usage, price, "custom-model", "", now)
 	_, priorityTotal := ComputeUsageCostForServiceTier(usage, price, "custom-model", "priority", now)
-	_, ultrafastTotal := ComputeUsageCostForServiceTier(usage, price, "custom-model", "ultrafast", now)
+	ultrafastItems, ultrafastTotal := ComputeUsageCostForServiceTier(usage, price, "custom-model", "ultrafast", now)
 
 	require.True(t, decimal.NewFromInt(5).Equal(standardTotal))
 	require.True(t, decimal.NewFromInt(13).Equal(priorityTotal))
-	require.True(t, decimal.NewFromInt(26).Equal(ultrafastTotal))
+	require.Nil(t, ultrafastItems)
+	require.True(t, ultrafastTotal.IsZero())
 
 	_, officialUltrafast := ComputeUsageCostForServiceTier(usage, price, "gpt-6-astra", "ultrafast", now)
 	require.True(t, decimal.NewFromInt(39).Equal(officialUltrafast))
@@ -1122,14 +1122,19 @@ func TestComputeUsageCostForServiceTierOfficialRatios(t *testing.T) {
 		{"gpt-5.6-sol", "fast", "13.35"},
 		{"gpt-5.6-terra", "fast", "13.35"},
 		{"gpt-5.6-luna", "fast", "13.35"},
-		{"gpt-5.6-sol", "ultrafast", "13.35"}, // legacy estimate, not published support
+		{"gpt-5.6-sol", "ultrafast", ""},
 		{"gpt-6-astra", "flex", "6.675"},
 		{"custom-model", "fast", "6.675"},
-		{"custom-model", "ultrafast", "13.35"},
+		{"custom-model", "ultrafast", ""},
 		{"gpt-6-future", "fast", "6.675"},
 	} {
 		t.Run(tt.model+"/"+tt.tier, func(t *testing.T) {
 			items, total := ComputeUsageCostForServiceTier(usage, price, tt.model, tt.tier)
+			if tt.total == "" {
+				require.Nil(t, items)
+				require.True(t, total.IsZero())
+				return
+			}
 			require.Equal(t, tt.total, total.String())
 			sum := decimal.Zero
 			for _, item := range items {

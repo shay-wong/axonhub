@@ -20,7 +20,7 @@
 | [API Key 配置文件](guides/api-key-profiles.md) | 创建和管理 API Key 配置文件 |
 | [权限管理](guides/permissions.md) | 企业级 RBAC 访问控制配置 |
 | [负载均衡](guides/load-balance.md) | 智能路由、故障转移、Key 重试预算与指定 Key 诊断隔离 |
-| [成本追踪](guides/cost-tracking.md) | 有界精确时间分析、插件权限隔离、实际模型统计、Fast/Ultrafast 价格、交付状态与最终用量计费、Key 身份可见性 |
+| [成本追踪](guides/cost-tracking.md) | 有界精确时间分析、插件权限隔离、实际模型统计、Fast/Ultrafast 价格与未定价用量、交付状态与最终用量计费、Key 身份可见性 |
 | [请求追踪](guides/tracing.md) | 完整的请求链路追踪 |
 | [请求覆盖](guides/request-override.md) | 动态修改请求参数 |
 | [安全功能](guides/security.md) | IP 访问控制、IP 黑名单和 API Key IP 限制 |

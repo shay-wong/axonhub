@@ -122,10 +122,12 @@ AxonHub 支持三种定价模式：
 | 渠道实际模型 | 未配置 Fast 价格 | 未配置 Ultrafast 价格 |
 | --- | --- | --- |
 | `gpt-6-astra`、`gpt-6.1-sol` | 当前有效基础价 × 2 | 当前有效 Fast 价 × 3；Fast 也未配置时为基础价 × 6 |
-| `gpt-6-sol`、`gpt-6-luna`、`gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` | 当前有效基础价 × 2 | 保留旧估算：已配置 Fast 价 × 2，否则基础价 × 2 |
-| 其他模型 ID | 当前有效基础价 | 保留旧估算：已配置 Fast 价 × 2，否则基础价 × 2 |
+| `gpt-6-sol`、`gpt-6-luna`、`gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` | 当前有效基础价 × 2 | 需显式配置 Ultrafast 价格 |
+| 其他模型 ID | 当前有效基础价 | 需显式配置 Ultrafast 价格 |
 
-规则精确匹配渠道实际模型 ID，不按请求别名、前缀或未来模型名称推断。基础价包含当前生效的定时价格表，保留自定义价格及渠道价格倍率。其他未配置档位仍使用基础价。旧估算不代表官方支持 Ultrafast：目前官方 [Ultrafast 文档](https://developers.openai.com/api/docs/guides/ultrafast-mode) 仅列出 GPT-6 Astra 和 GPT-6.1 Sol，上游权限控制仍然生效。
+规则精确匹配渠道实际模型 ID，不按请求别名、前缀或未来模型名称推断。基础价包含当前生效的定时价格表，保留自定义价格及渠道价格倍率。其他未配置档位仍使用基础价。官方 [Ultrafast 文档](https://developers.openai.com/api/docs/guides/ultrafast-mode) 仅列出 GPT-6 Astra 和 GPT-6.1 Sol；其他模型不再自动按两倍猜价。若没有显式 Ultrafast 价格，请求继续执行并保存 token 用量，费用留空且不返回 `usage.cost`。显式配置的零价仍记录为零。配置价格后仅影响新请求，历史费用不回填；上游权限控制仍然生效。
+
+未定价的请求不会消耗费用配额，token 配额仍有效。如果依靠费用限额约束这些模型，请先配置明确的 Ultrafast 价格。
 
 GPT-6 Astra 官方短上下文价格如下，单位为美元/百万 token：
 

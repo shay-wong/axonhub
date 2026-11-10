@@ -301,6 +301,8 @@ Codex outbound requests honor the channel's User-Agent pass-through switch and p
 
 Codex-style formatting preserves the caller's tier without automatically enabling Fast. See [channel transforms](docs/en/guides/channel-management.md#codex-style-responses).
 
+Ultrafast models without a verified built-in rate need an explicit price; otherwise only usage is recorded, with cost left unset. See [service-tier pricing](docs/en/guides/cost-tracking.md#service-tier-prices).
+
 Auto-disable keeps separate channel/key policies and Retry-After alongside global rules; see [policy precedence](docs/en/guides/channel-management.md#auto-disable-policy-compatibility).
 
 See the [documentation index](docs/en/index.md) for configuration details and more API examples.

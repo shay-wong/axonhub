@@ -305,6 +305,8 @@ Codex 出站请求按渠道开关透传 User-Agent，过滤客户端指纹时保
 
 Codex 风格转换保留调用方选择的速度档位，不自动开启 Fast，详见[渠道转换](docs/zh/guides/channel-management.md#codex-风格-responses)。
 
+未有已核实费率的 Ultrafast 模型需要显式配置价格，否则只记录用量、费用留空，详见[档位计价](docs/zh/guides/cost-tracking.md#服务档位价格)。
+
 自动禁用保留独立渠道/Key 策略及 Retry-After，并与全局规则协作；优先级见[渠道管理](docs/zh/guides/channel-management.md#自动禁用策略兼容)。
 
 更多配置和 API 示例请查看[完整文档索引](docs/zh/index.md)。

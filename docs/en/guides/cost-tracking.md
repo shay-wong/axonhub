@@ -122,10 +122,12 @@ When a tier price is absent, AxonHub uses these fallback ratios, verified agains
 | Actual channel model | Fast without an override | Ultrafast without an override |
 | --- | --- | --- |
 | `gpt-6-astra`, `gpt-6.1-sol` | Effective base × 2 | Effective Fast × 3; base × 6 if Fast is also unconfigured |
-| `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` | Effective base × 2 | Legacy estimate: configured Fast × 2, otherwise base × 2 |
-| Other model IDs | Effective base | Legacy estimate: configured Fast × 2, otherwise base × 2 |
+| `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` | Effective base × 2 | Requires an explicit Ultrafast price |
+| Other model IDs | Effective base | Requires an explicit Ultrafast price |
 
-These rules match exact actual channel model IDs, not request aliases, prefixes, or future model names. The effective base includes the active time schedule; custom rates and channel price multipliers are preserved. Other unconfigured tiers still use the base price. Legacy estimates do not imply official Ultrafast support: OpenAI currently lists only GPT-6 Astra and GPT-6.1 Sol for [Ultrafast](https://developers.openai.com/api/docs/guides/ultrafast-mode). Upstream access controls still apply.
+These rules match exact actual channel model IDs, not request aliases, prefixes, or future model names. The effective base includes the active time schedule; custom rates and channel price multipliers are preserved. Other unconfigured tiers still use the base price. OpenAI currently lists only GPT-6 Astra and GPT-6.1 Sol for [Ultrafast](https://developers.openai.com/api/docs/guides/ultrafast-mode); other models no longer receive an automatic 2× estimate. Without an explicit Ultrafast price, requests still run and token usage is recorded, but cost remains unset and `usage.cost` is omitted. An explicitly configured zero price is still recorded as zero. Price changes affect new requests only; historical costs are not backfilled. Upstream access controls still apply.
+
+Unpriced requests do not consume a cost-based quota; token quotas still apply. Configure an explicit Ultrafast price before relying on cost limits for these models.
 
 For GPT-6 Astra, official short-context rates per million tokens are:
 
