@@ -30,6 +30,8 @@ In short: **API Key Profile renames → Model Association selects channel → Ch
    - **Base URL**: API address (usually use the default)
    - **API Key**: The key from your provider
 
+Default model lists follow upstream. You can still fetch or enter additional supported models; updates to defaults do not change models already saved in a channel.
+
 ### Configuration Examples
 
 **OpenAI Channel:**

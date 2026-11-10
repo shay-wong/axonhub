@@ -231,20 +231,6 @@ git show --remerge-diff <merge-commit>
 - 上游吸收条件：upstream 覆盖普通 `httpclient.Error.Body` 和流式终态的完整持久化矩阵，并保持 active body 隐藏。
 - 验证：`go test ./internal/server/orchestrator ./internal/server/biz -run 'Terminal|ResponseBody|RequestExecution|Failed'`。
 
-### U06 GPT-5.6、GPT-6 Astra 和 Claude Opus 5 默认模型
-
-- 2026-11-06 采用上游 Claude 5.5 默认模型和完整 Codex image 模型集合；快速添加列表移除即将退休的 Claude 4.5，同时保留 fork 的 `claude-opus-5` 与 `gpt-5.6` 别名。默认项更新不修改既有渠道已保存的模型。
-- 本次上游整合：`d0384f43` 更新 Codex 客户端为 `0.159.0` 并调整默认模型；`e26e52bb` 拉取 OAuth 官方模型目录，但不替代下游 `/v1/models` 的 Codex 格式适配（U22）。保留本地 `gpt-5.6` 别名及 Astra 支持。
-- 本次上游整合：`ca7925ae` 新增 GPT-6 Sol/Luna，Codex 默认客户端版本更新为 `0.156.0`；仍未吸收本条目记录的全部渠道默认模型增量。
-- 生命周期：`等待上游吸收`
-- 原始意图：让 GPT-5.6、GPT-6 Astra 和 Claude Opus 5 不仅出现在 developer catalog，还能被相关渠道和 transformer 作为默认可用模型。
-- 必须保持：OpenAI Chat Completions、OpenAI Responses 和 Codex 渠道的快速添加模型包含 `gpt-6-astra`；Codex transformer default models 包含 `gpt-5.6` 和 `gpt-6-astra`，缺省 `Version` 使用当前上游版本 `0.159.0`；Anthropic 和 Claude Code 渠道默认模型包含 `claude-opus-5`；Claude Code transformer default models 同样包含 `claude-opus-5`。
-- 代码锚点：`frontend/src/features/channels/data/config_channels.ts`、`llm/transformer/openai/codex/constants.go`、`llm/transformer/anthropic/claudecode/constants.go`。
-- 提交锚点：`ab752d4b`、`0e91096d`、`44463a10`、`4eadf589`。
-- 合并审核：upstream `ac70e652` 已吸收 GPT-5.6 等 developer catalog 数据，`067fff2f` 又同步了 GPT-6 Astra 的模型、价格和能力，`96714b42` 已让 Codex 渠道和 transformer 默认支持 Astra 并将客户端版本更新到 `0.153.4`；但 OpenAI Chat Completions/OpenAI Responses 渠道的 Astra 快速添加与 Codex transformer 的通用 `gpt-5.6` 别名仍是 fork 增量，不能删除本条目。
-- 上游吸收条件：upstream 的 Codex、Anthropic channel 和 Claude Code 默认模型全部等价后删除。
-- 验证：`cd llm && go test ./transformer/openai/codex ./transformer/anthropic/claudecode`；`cd frontend && node --test src/features/channels/data/channel-config.test.mjs`。
-
 ### U07 SIGHUP 配置重载和 PID 文件生命周期
 
 - 上游 `19123186` 在 PowerShell 启停脚本验证 PID 对应的进程路径，作为额外保护采用；它没有替代 Unix advisory flock 和 env-only reload。
@@ -469,6 +455,7 @@ git show --remerge-diff <merge-commit>
 2. 记录 merge 前本文基线；用路径级 diff 检查每个 `长期保留` 条目。
 3. 对 conflict file 先定位所属能力，再选择或重写 resolution；必要时用 `git show --remerge-diff <merge>` 查看历史人工 resolution。
 4. 对 `等待上游吸收` 条目比较行为和测试，不按提交标题或同名字段判断等价。
+- 2026-11-10 维护者确认默认模型列表跟随 upstream，撤销原 U06 的额外 Astra、`gpt-5.6` 和 `claude-opus-5` 默认条目；不修改既有渠道支持模型，不限制手动配置。
 5. schema 变化遵循仓库生成规则；`llm/` 是独立 Go module，相关命令从 `llm/` 目录运行。
 6. 先运行受影响能力列出的最小验证，再按用户授权和 `AGENTS.md` 扩大验证范围。
 7. 更新本文基线、路径、提交锚点和生命周期；删除已吸收条目。

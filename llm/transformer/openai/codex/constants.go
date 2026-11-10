@@ -14,7 +14,6 @@ var codexImageModels = []string{
 // CLIProxyAPI keeps a local registry; we mirror that approach to power AxonHub "Fetch Models".
 func DefaultModels() []string {
 	models := []string{
-		"gpt-5.6",
 		"gpt-5.6-sol",
 		"gpt-5.6-terra",
 		"gpt-5.6-luna",

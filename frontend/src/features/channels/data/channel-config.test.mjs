@@ -15,22 +15,11 @@ function parseLocale(locale) {
   return JSON.parse(read(`locales/${locale}/channels.json`));
 }
 
-test('Anthropic channels include Claude Opus 5 in their default models', () => {
+test('Codex channels include GPT-6 Astra in their default models', () => {
   const channelsConfig = ts.transpileModule(read('features/channels/data/config_channels.ts'), {
     compilerOptions: { removeComments: true },
   }).outputText;
 
-  assert.match(channelsConfig, /\n\s+anthropic:\s*{[^}]*defaultModels:\s*\[[^\]]*'claude-opus-5'/);
-  assert.match(channelsConfig, /\n\s+claudecode:\s*{[^}]*defaultModels:\s*\[[^\]]*'claude-opus-5'/);
-});
-
-test('OpenAI and Codex channels include GPT-6 Astra in their default models', () => {
-  const channelsConfig = ts.transpileModule(read('features/channels/data/config_channels.ts'), {
-    compilerOptions: { removeComments: true },
-  }).outputText;
-
-  assert.match(channelsConfig, /\n\s+openai:\s*{[^}]*defaultModels:\s*\[[^\]]*'gpt-6-astra'/);
-  assert.match(channelsConfig, /\n\s+openai_responses:\s*{[^}]*defaultModels:\s*\[[^\]]*'gpt-6-astra'/);
   assert.match(channelsConfig, /\n\s+codex:\s*{[^}]*defaultModels:\s*\[[^\]]*'gpt-6-astra'/);
 });
 

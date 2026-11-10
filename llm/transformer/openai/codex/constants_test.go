@@ -8,7 +8,6 @@ import (
 
 func TestDefaultModelsIncludesGPT56Family(t *testing.T) {
 	require.Subset(t, DefaultModels(), []string{
-		"gpt-5.6",
 		"gpt-5.6-sol",
 		"gpt-5.6-terra",
 		"gpt-5.6-luna",
