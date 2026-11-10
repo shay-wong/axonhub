@@ -293,6 +293,8 @@ print(response.choices[0].message.content)
 
 Fork Release 构建可在**系统设置 > 关于**中安装更新或回滚到最近的兼容版本；需要运行用户能写入可执行文件目录，并由 Docker、systemd 等 supervisor 在进程退出后拉起。
 
+桌面端源码已同步；fork 自动桌面发布需独立配置签名密钥，未配置时不影响服务端发布，详见[桌面发布说明](docs/zh/getting-started/quick-start.md#fork-桌面端发布)。
+
 Fork 还保留[按权限选择登录落点与旧设置链接兼容](docs/zh/getting-started/quick-start.md)、[统一 Key 策略与可选按 Key 重试](docs/zh/guides/channel-management.md#key-选择策略)，以及[指定 Key 诊断隔离与重试计数](docs/zh/guides/load-balance.md)。
 
 [流式计费](docs/zh/guides/cost-tracking.md)区分交付状态与最终用量，在尾部断连后保留已确认费用，并保护执行记录中 Key 身份的可见性；[多 Key 管理](docs/zh/guides/channel-management.md)统一密钥与禁用恢复弹窗，保留 Vertex 项目绑定、别名和权重，请求日志优先显示别名，插件恢复事件反映真实渠道状态。

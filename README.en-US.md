@@ -289,6 +289,8 @@ print(response.choices[0].message.content)
 
 Fork release builds can install updates or roll back to a recent compatible release from **System Settings > About** when the runtime user can write the executable directory and a supervisor such as Docker or systemd restarts the exited process.
 
+Desktop source is included. Fork desktop publishing requires separate signing credentials; server releases continue without them. See [desktop release setup](docs/en/getting-started/quick-start.md#fork-desktop-releases).
+
 Fork safeguards also cover [permission-aware login destinations and legacy settings links](docs/en/getting-started/quick-start.md), [unified key strategies and optional per-key retries](docs/en/guides/channel-management.md#key-selection-strategies), and [fixed-key diagnostic isolation and retry counting](docs/en/guides/load-balance.md).
 
 [Streaming accounting](docs/en/guides/cost-tracking.md) separates delivery from final usage, preserves confirmed costs after trailing disconnects, and protects execution key identity visibility; [multi-key management](docs/en/guides/channel-management.md) unifies key and disabled-credential recovery dialogs while retaining Vertex project bindings, aliases, and weights, with aliases preferred in request logs and recovery events reflecting the saved channel status.

@@ -4,6 +4,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 // Version comes from the same file the server embeds. Release tags are v*,
 // and mygo prefixes that version with tagPrefix when it uploads.
 const version = readFileSync("../../internal/build/VERSION", "utf8").trim().replace(/^v/, "");
+const repository = process.env.AXONHUB_RELEASE_REPOSITORY || "shay-wong/axonhub";
+const publicKey = process.env.MYGO_UPDATER_PUBLIC_KEY?.trim();
 
 mkdirSync("../../tmp", { recursive: true });
 writeFileSync("../../tmp/desktop-release-notes.md", `## ${version}\n\nAxonHub Desktop ${version}.\n`);
@@ -27,10 +29,11 @@ export default {
     dir: "locales",
     source: "en",
   },
-  updates: {
-    publicKey: "LYrEj4DGOQLR67inUsimJ/vVDyieh34+x8nQIros2iU=",
-    github: "looplj/axonhub",
+  // Without a fork signing key, local builds have no update feed.
+  updates: publicKey ? {
+    publicKey,
+    github: repository,
     tagPrefix: "v",
     changelog: "../../tmp/desktop-release-notes.md",
-  },
+  } : undefined,
 };

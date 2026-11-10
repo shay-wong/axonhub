@@ -51,6 +51,7 @@
 
 ### Changed
 
+- Fork desktop publishing requires its own signing credentials and uses the fork update repository. Without a configured public key, local builds have no update feed and automatic desktop publishing is skipped, preserving server and Docker releases.
 - Codex-style Responses formatting no longer defaults an omitted service tier to Fast; explicit caller tiers are preserved.
 - Default model lists now follow upstream, removing fork-only quick-add aliases without changing models saved in existing channels.
 - Ultrafast requests for models without a verified built-in rate require an explicit tier price. Without one, token usage is recorded with no cost estimate or cost-quota consumption; configured zero prices and historical costs are preserved.

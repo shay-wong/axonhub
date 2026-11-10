@@ -88,5 +88,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
+          AXONHUB_RELEASE_REPOSITORY: ${{ github.repository }}
+          VITE_GITHUB_REPOSITORY: ${{ github.repository }}
+          MYGO_UPDATER_PUBLIC_KEY: ${{ vars.MYGO_UPDATER_PUBLIC_KEY }}
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
         run: make build-desktop MYGO_FLAGS="-platform ${{ matrix.platform }} -upload"

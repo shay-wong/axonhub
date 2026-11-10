@@ -8,7 +8,7 @@
 
 | 文档 | 描述 |
 |------|------|
-| [快速入门指南](getting-started/quick-start.md) | 配置 AxonHub、按权限选择登录落点、旧设置链接兼容、fork 更新与代理边界 |
+| [快速入门指南](getting-started/quick-start.md) | 配置 AxonHub、按权限选择登录落点、旧设置链接兼容、fork 更新、桌面签名配置与代理边界 |
 | [请求处理流程](getting-started/request-processing.md) | 了解 AxonHub 如何处理 API 请求 |
 
 ### 📖 使用指南

@@ -12,6 +12,12 @@ Release 构建可由拥有 `write_settings` 权限的用户在**系统设置 > �
 
 AxonHub 部署在反向代理后时，必须先将代理 IP 或 CIDR 配置到 `server.trusted_proxies`，再依赖转发的客户端 IP 执行访问控制。该配置默认是空列表，此时忽略 `X-Forwarded-For` 和 `X-Real-IP`；配置文件和环境变量语法见 `config.example.yml`。
 
+## Fork 桌面端发布
+
+桌面打包与服务端使用同一个 fork 发布 tag。仓库未配置 `MYGO_UPDATER_PUBLIC_KEY` 变量时跳过自动桌面发布；发布还需要匹配的 `MYGO_UPDATER_PRIVATE_KEY` Secret。未配置桌面凭据不影响服务端和 Docker 发布。本 fork 当前尚未配置这对凭据。
+
+本地桌面构建未提供公钥时没有更新源；配置公钥后，检查更新及上传均使用 fork 仓库，构建时可用 `AXONHUB_RELEASE_REPOSITORY` 覆盖。内嵌管理页不会把服务端 ZIP 安装到桌面程序上。本 fork 尚未验证签名桌面制品和自动更新安装。
+
 ## 第一步
 
 重新登录后的返回地址除了同源校验，还须通过所选项目的权限检查；无权访问时回退到安全落地页。

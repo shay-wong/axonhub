@@ -57,6 +57,7 @@ git show --remerge-diff <merge-commit>
 
 ### F01 Fork 发布、更新和外部资产归属
 
+- 2026-11-10 桌面端整合：采用 `16084817` 的独立模块和打包 workflow。Fork 通过 workflow_call 传递完整发布 tag；桌面更新及上传仓库读取 `AXONHUB_RELEASE_REPOSITORY`，缺省为本 fork，公钥只读取 `MYGO_UPDATER_PUBLIC_KEY`，不使用 upstream 的公钥。无公钥时省略整个 updates 配置并跳过自动桌面发布，不阻断原服务端/Docker 发布；启用发布还需配置匹配的 `MYGO_UPDATER_PRIVATE_KEY` Secret。当前未配置这对凭据，未发布或验证签名桌面制品。代码/回归：`.github/workflows/release.yml`、`.github/workflows/desktop-release.yml`、`cmd/axonhub-desktop/mygo.config.ts`、`frontend/src/config/external-urls.test.mjs`；用户说明：中英 quick-start。当前独立修复定位：`git log -S'vars.MYGO_UPDATER_PUBLIC_KEY' -- .github/workflows/release.yml`。不注入 server `BuildTime`，避免内嵌管理页把桌面程序当作 server ZIP 更新目标。
 - 2026-10-27 独立整合：采用 upstream `docker-build.yml` 复用与分架构缓存，同时保留自定义 Docker Hub、fork 更新仓库/通道、beta checkout、manifest_only 幂等；PR 目标为 beta 且不传凭据或推送镜像。当前变更定位：`git log -S'dockerhub_image:' -- .github/workflows/docker-build.yml`；回归 `frontend/src/config/external-urls.test.mjs`。
 - 生命周期：`长期保留`
 - 原始意图：fork 的 release、Docker/Helm 制品、更新检查、问题链接和 fork 自有模型目录增量必须属于当前 fork，不能静默回落到 `looplj/axonhub` 的版本、镜像或额外模型数据。

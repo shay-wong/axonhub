@@ -12,6 +12,12 @@ Existing `/system?tab=…` bookmarks and sign-in return links open the correspon
 
 When AxonHub runs behind a reverse proxy, configure `server.trusted_proxies` with the proxy IPs or CIDRs before relying on forwarded client IPs for access controls. It defaults to an empty list, which ignores `X-Forwarded-For` and `X-Real-IP`; see `config.example.yml` for the configuration and environment variable syntax.
 
+## Fork desktop releases
+
+Desktop packaging uses the same fork release tag as the server. Automatic desktop publishing is skipped until the repository variable `MYGO_UPDATER_PUBLIC_KEY` is configured; publishing also requires the matching `MYGO_UPDATER_PRIVATE_KEY` Secret. Server and Docker releases continue without these desktop credentials. This fork has not configured them yet.
+
+Local desktop builds without a public key have no update feed. With a configured key, update checks and uploads use the fork repository, overridable at build time with `AXONHUB_RELEASE_REPOSITORY`. The embedded web admin does not install server ZIP updates over the desktop app. Signed desktop packages and automatic update installation have not been validated for this fork.
+
 ## First Steps
 
 After signing in again, return URLs must pass the selected project's permissions as well as same-origin validation. Unauthorized destinations fall back to a safe landing page.
