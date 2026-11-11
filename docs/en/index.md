@@ -8,14 +8,14 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 
 | Document | Description |
 |----------|-------------|
-| [Quick Start Guide](getting-started/quick-start.md) | Configure AxonHub, permission-aware login destinations, legacy settings links, fork updates, desktop signing setup, and proxy boundaries |
+| [Quick Start Guide](getting-started/quick-start.md) | Configure AxonHub, permission-aware login destinations, legacy settings links, fork updates, release downloads, desktop signing setup, and proxy boundaries |
 | [Request Processing](getting-started/request-processing.md) | Understand how AxonHub processes API requests |
 
 ### 📖 User Guides
 
 | Document | Description |
 |----------|-------------|
-| [Channel Management](guides/channel-management.md) | Unified key-management dialog, recovery events, key strategies, unsaved edit protection, log aliases, 429 key rotation, retry budgets, Vertex key identity, and auto-disable |
+| [Channel Management](guides/channel-management.md) | Unified key management, key strategies, unsaved edit protection, log aliases, 429 key rotation, retry budgets, quota fallback deduplication, Vertex key identity, and auto-disable |
 | [Model Management](guides/model-management.md) | Model mapping, associations, and priority configuration |
 | [API Key Profiles](guides/api-key-profiles.md) | Create and manage API key profiles |
 | [Permissions](guides/permissions.md) | Enterprise RBAC access control configuration |

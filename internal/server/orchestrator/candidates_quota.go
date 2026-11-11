@@ -258,9 +258,5 @@ func (s *QuotaRoutingSelector) Select(ctx context.Context, req *llm.Request) ([]
 
 	// This selector has no retry policy to bound the appended candidates; the
 	// pipeline stops switching at the configured channel retry budget anyway.
-	result := make([]*ChannelModelsCandidate, 0, len(preferred)+len(lastResort))
-	result = append(result, preferred...)
-	result = append(result, lastResort...)
-
-	return result, nil
+	return append(preferred, quotaFallbackCandidates(lastResort, preferred, len(lastResort))...), nil
 }

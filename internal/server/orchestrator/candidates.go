@@ -797,11 +797,9 @@ func (s *LoadBalancedSelector) Select(ctx context.Context, req *llm.Request) ([]
 		stickyID, stickyOK = s.resolveStickyChannelID(ctx, req, candidates)
 	}
 
-	var quotaFallback []*ChannelModelsCandidate
+	var lastResort []*ChannelModelsCandidate
 	if s.quotaGate != nil {
-		var lastResort []*ChannelModelsCandidate
 		candidates, lastResort = s.quotaGate.Filter(ctx, candidates, req, stickyID)
-		quotaFallback = quotaFallbackCandidates(lastResort, quotaFallbackLimit(retryPolicy))
 	}
 
 	if stickyOK {
@@ -810,10 +808,10 @@ func (s *LoadBalancedSelector) Select(ctx context.Context, req *llm.Request) ([]
 
 			fallbackCount := max(requiredCount-1, 0)
 			fallbackCandidates := s.sortCandidates(ctx, loadBalancer, remainingCandidates, req, fallbackCount, requiredCount, false)
-			result := make([]*ChannelModelsCandidate, 0, 1+len(fallbackCandidates)+len(quotaFallback))
+			result := make([]*ChannelModelsCandidate, 0, 1+len(fallbackCandidates))
 			result = append(result, stickyCandidate)
 			result = append(result, fallbackCandidates...)
-			result = append(result, quotaFallback...)
+			result = append(result, quotaFallbackCandidates(lastResort, result, quotaFallbackLimit(retryPolicy))...)
 
 			if loadBalancer != nil && !shouldSkipHealthStateTracking(ctx) {
 				loadBalancer.TrackSelection(stickyCandidate)
@@ -824,15 +822,7 @@ func (s *LoadBalancedSelector) Select(ctx context.Context, req *llm.Request) ([]
 	}
 
 	preferred := s.sortCandidates(ctx, loadBalancer, candidates, req, requiredCount, requiredCount, true)
-	if len(quotaFallback) == 0 {
-		return preferred, nil
-	}
-
-	result := make([]*ChannelModelsCandidate, 0, len(preferred)+len(quotaFallback))
-	result = append(result, preferred...)
-	result = append(result, quotaFallback...)
-
-	return result, nil
+	return append(preferred, quotaFallbackCandidates(lastResort, preferred, quotaFallbackLimit(retryPolicy))...), nil
 }
 
 func resolveLoadBalancer(loadBalancers map[string]*LoadBalancer, strategy string) (*LoadBalancer, string) {
@@ -1075,11 +1065,22 @@ func appendCandidateModels(target, source *ChannelModelsCandidate) {
 		return
 	}
 
-	for _, entry := range source.Models {
+	trackFormats := len(target.modelAPIFormats) > 0 && len(target.modelAPIFormats) == len(target.Models)
+	if trackFormats {
+		target.modelAPIFormats = slices.Clone(target.modelAPIFormats)
+	}
+	for i, entry := range source.Models {
 		if slices.ContainsFunc(target.Models, func(existing biz.ChannelModelEntry) bool {
 			return existing.ActualModel == entry.ActualModel
 		}) {
 			continue
+		}
+		if trackFormats {
+			format := source.APIFormat
+			if len(source.modelAPIFormats) == len(source.Models) {
+				format = source.modelAPIFormats[i]
+			}
+			target.modelAPIFormats = append(target.modelAPIFormats, format)
 		}
 		target.Models = append(target.Models, entry)
 	}
@@ -1099,28 +1100,40 @@ func quotaFallbackLimit(policy *biz.RetryPolicy) int {
 // quotaFallbackCandidates returns the pressured candidates that the quota gate
 // kept out of the preferred list, appended after every preferred candidate so
 // only a request that exhausted them can reach these channels. The routing
-// priority order is preserved and each channel appears once, so the limited
-// retry budget is not spent on duplicate candidates of the same channel.
-func quotaFallbackCandidates(candidates []*ChannelModelsCandidate, limit int) []*ChannelModelsCandidate {
+// priority order is preserved and each channel appears once across both queues.
+// Models from a pressured candidate cannot bypass backpressure by joining a
+// preferred candidate of the same channel.
+func quotaFallbackCandidates(candidates, preferred []*ChannelModelsCandidate, limit int) []*ChannelModelsCandidate {
 	if len(candidates) == 0 || limit <= 0 {
 		return nil
 	}
 
 	ordered := orderCandidatesByPriority(candidates)
 	fallback := make([]*ChannelModelsCandidate, 0, min(len(ordered), limit))
-	seenChannels := make(map[int]struct{}, len(ordered))
+	seenChannels := make(map[int]*ChannelModelsCandidate, len(preferred)+len(ordered))
+	for _, candidate := range preferred {
+		if candidate != nil && candidate.Channel != nil {
+			seenChannels[candidate.Channel.ID] = nil // Already receives its retry budget in the preferred queue.
+		}
+	}
 
 	for _, candidate := range ordered {
-		if len(fallback) >= limit {
-			break
+		if candidate.Channel == nil {
+			continue
 		}
-
-		if _, ok := seenChannels[candidate.Channel.ID]; ok {
+		if selected, ok := seenChannels[candidate.Channel.ID]; ok {
+			appendCandidateModels(selected, candidate)
+			continue
+		}
+		if len(fallback) >= limit {
 			continue
 		}
 
-		seenChannels[candidate.Channel.ID] = struct{}{}
-		fallback = append(fallback, candidate)
+		candidateClone := *candidate
+		candidateClone.Models = slices.Clone(candidate.Models)
+		candidateClone.modelAPIFormats = slices.Clone(candidate.modelAPIFormats)
+		seenChannels[candidate.Channel.ID] = &candidateClone
+		fallback = append(fallback, &candidateClone)
 	}
 
 	return fallback

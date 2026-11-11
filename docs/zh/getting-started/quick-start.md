@@ -16,6 +16,8 @@ AxonHub 部署在反向代理后时，必须先将代理 IP 或 CIDR 配置到 `
 
 桌面打包与服务端使用同一个 fork 发布 tag。仓库未配置 `MYGO_UPDATER_PUBLIC_KEY` 变量时跳过自动桌面发布；发布还需要匹配的 `MYGO_UPDATER_PRIVATE_KEY` Secret。未配置桌面凭据不影响服务端和 Docker 发布。本 fork 当前尚未配置这对凭据。
 
+GitHub Release 的下载表按实际资产列出服务端压缩包和可用的桌面安装包；跳过桌面发布时，仍提供服务端下载链接。Docker Hub 链接跟随配置的镜像仓库，fork 发布不指向上游 Homebrew tap。更新下载表会保留其他发布说明。
+
 本地桌面构建未提供公钥时没有更新源；配置公钥后，检查更新及上传均使用 fork 仓库，构建时可用 `AXONHUB_RELEASE_REPOSITORY` 覆盖。内嵌管理页不会把服务端 ZIP 安装到桌面程序上。本 fork 尚未验证签名桌面制品和自动更新安装。
 
 ## 第一步

@@ -243,8 +243,9 @@ func TestQuotaRoutingGate_ChannelExhaustedOverridesPerLimitAvailable(t *testing.
 				},
 			}}, biz.QuotaRoutingSettings{DefaultMode: mode})
 			// Even a sticky channel must not bypass its overall exhausted status.
-			got := gate.Filter(context.Background(), []*ChannelModelsCandidate{quotaRoutingCandidate(1, "")}, &llm.Request{}, 1)
+			got, reserved := gate.Filter(context.Background(), []*ChannelModelsCandidate{quotaRoutingCandidate(1, "")}, &llm.Request{}, 1)
 			require.Empty(t, got)
+			require.Empty(t, reserved)
 			require.Equal(t, 1, gate.DroppedCount())
 		})
 	}
@@ -654,14 +655,14 @@ func TestQuotaFallbackCandidates_orders_by_priority_and_skips_duplicate_channels
 	second.Priority = 1
 
 	// When
-	got := quotaFallbackCandidates([]*ChannelModelsCandidate{highPriority, first, lowPriority, second}, 3)
+	got := quotaFallbackCandidates([]*ChannelModelsCandidate{highPriority, first, lowPriority, second}, nil, 3)
 
 	// Then priority order wins and the duplicate channel keeps its best entry.
 	require.Equal(t, []int{1, 2, 3}, quotaRoutingIDs(got))
-	require.Same(t, lowPriority, got[0])
+	require.Equal(t, lowPriority, got[0])
 
 	// And the retry budget caps the appended candidates.
-	require.Equal(t, []int{1}, quotaRoutingIDs(quotaFallbackCandidates([]*ChannelModelsCandidate{first, lowPriority}, 1)))
+	require.Equal(t, []int{1}, quotaRoutingIDs(quotaFallbackCandidates([]*ChannelModelsCandidate{first, lowPriority}, nil, 1)))
 }
 
 func quotaRoutingIDs(candidates []*ChannelModelsCandidate) []int {

@@ -16,6 +16,8 @@ When AxonHub runs behind a reverse proxy, configure `server.trusted_proxies` wit
 
 Desktop packaging uses the same fork release tag as the server. Automatic desktop publishing is skipped until the repository variable `MYGO_UPDATER_PUBLIC_KEY` is configured; publishing also requires the matching `MYGO_UPDATER_PRIVATE_KEY` Secret. Server and Docker releases continue without these desktop credentials. This fork has not configured them yet.
 
+The GitHub Release download table lists the server archives and available desktop installers. Server download links remain available when desktop publishing is skipped. Its Docker Hub link follows the configured image repository; fork releases do not link to the upstream Homebrew tap. Updating the table preserves the rest of the release notes.
+
 Local desktop builds without a public key have no update feed. With a configured key, update checks and uploads use the fork repository, overridable at build time with `AXONHUB_RELEASE_REPOSITORY`. The embedded web admin does not install server ZIP updates over the desktop app. Signed desktop packages and automatic update installation have not been validated for this fork.
 
 ## First Steps

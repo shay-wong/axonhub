@@ -58,6 +58,7 @@ git show --remerge-diff <merge-commit>
 
 ### F01 Fork 发布、更新和外部资产归属
 
+- 2026-11-11 整合 `7def6e43` 的共享前端构建和下载表：前端构建固定到完整 release tag，保留 fork 仓库外链和去重 gate；`stable-fork-release.yml` 允许被调用的 artifact job 使用 `actions: write`。父发布等待服务端及可选桌面上传后统一更新下载表，独立桌面发布仍可自行更新；两入口按仓库/tag 串行化，保留原正文且重复运行不重复插入。没有桌面公钥时也提供 Server 下载表，Docker Hub 链接跟随实际镜像配置，fork 不展示 upstream Homebrew。代码/回归：`.github/workflows/release.yml`、`.github/workflows/desktop-release.yml`、`.github/workflows/stable-fork-release.yml`、`scripts/release-download-notes.py`、`scripts/release_download_notes_test.py`、`frontend/src/config/external-urls.test.mjs`；用户说明：中英 quick-start；独立修复定位：`git log -S'write-download-notes: false' -- .github/workflows/release.yml`。验证：`python3 scripts/release_download_notes_test.py`；`cd frontend && node --test src/config/external-urls.test.mjs`。未新增 GHCR 发布任务，不能仅根据旧通知文本认定镜像已发布。
 - 2026-11-10 桌面端整合：采用 `16084817` 的独立模块和打包 workflow。Fork 通过 workflow_call 传递完整发布 tag；桌面更新及上传仓库读取 `AXONHUB_RELEASE_REPOSITORY`，缺省为本 fork，公钥只读取 `MYGO_UPDATER_PUBLIC_KEY`，不使用 upstream 的公钥。无公钥时省略整个 updates 配置并跳过自动桌面发布，不阻断原服务端/Docker 发布；启用发布还需配置匹配的 `MYGO_UPDATER_PRIVATE_KEY` Secret。当前未配置这对凭据，未发布或验证签名桌面制品。代码/回归：`.github/workflows/release.yml`、`.github/workflows/desktop-release.yml`、`cmd/axonhub-desktop/mygo.config.ts`、`frontend/src/config/external-urls.test.mjs`；用户说明：中英 quick-start。当前独立修复定位：`git log -S'vars.MYGO_UPDATER_PUBLIC_KEY' -- .github/workflows/release.yml`。不注入 server `BuildTime`，避免内嵌管理页把桌面程序当作 server ZIP 更新目标。
 - 2026-10-27 独立整合：采用 upstream `docker-build.yml` 复用与分架构缓存，同时保留自定义 Docker Hub、fork 更新仓库/通道、beta checkout、manifest_only 幂等；PR 目标为 beta 且不传凭据或推送镜像。当前变更定位：`git log -S'dockerhub_image:' -- .github/workflows/docker-build.yml`；回归 `frontend/src/config/external-urls.test.mjs`。
 - 生命周期：`长期保留`
@@ -383,6 +384,8 @@ git show --remerge-diff <merge-commit>
 
 ### U18 渠道候选去重和重试预算语义
 
+- 2026-11-11 整合 `8529df6a` 的配额备用队列：先尝试首选渠道，失败且仍有换渠道预算时才进入未耗尽的背压渠道；备用队列排除首选队列中的渠道，不能借重复渠道获得第二份重试预算。备用渠道内部按优先级合并同协议模型，即使已达到渠道数上限也保留已选渠道的模型回退和每模型协议元数据；不能把背压模型提前合入首选队列。普通、sticky 和无负载均衡入口共用此约束。独立修复定位：`git log -S'TestQuotaFallbackDoesNotRevisitPreferredChannel' -- internal/server/orchestrator/candidates_quota_fork_test.go`；用户说明：中英 channel-management；回归：`TestQuotaFallbackDoesNotRevisitPreferredChannel`、`TestQuotaFallbackRetainsModelsAfterChannelLimit`。
+- 2026-11-11 采用 `d8455a8d` 的 HTTP/2 `INTERNAL_ERROR`、`REFUSED_STREAM` 和 `GOAWAY` 分类；内容输出前仍直接换渠道，预算为零则失败，输出后不重试。该分类不包含 `PROTOCOL_ERROR`，不能概括为处理所有 HTTP/2 错误。
 - 本次上游整合：`f552c44a` 统一 reset/broken pipe 分类；保留 fork `CanRetryContext` 的 transport failure 直接换渠道策略，不能因分类器扩展而改成同渠道或换 Key 重试。此策略独立于 U04 的已完成响应尾部错误处理。
 - 本次上游整合：`40636bbd` 取消 sticky channel 一次失败即跳过的特殊规则，使其遵循普通同渠道重试设置；保留 fork `CanRetryContext` 的多 Key 轮换、本地 admission/transport 错误过滤和不同 channel 预算去重。
 - 生命周期：`等待上游吸收`
@@ -392,7 +395,7 @@ git show --remerge-diff <merge-commit>
 - 提交锚点：merge resolution `94d4f989`。
 - 合并审核：upstream `c095efbf` 已吸收可配置 load-balancer strategy，`b4d1fd04` 修复了 conditional association fallback，但两者都未等价替代 fork 的不同 channel 重试预算和 API format 隔离；不要按 association candidate 数量截断，用“同 channel 同 priority”“同 channel 跨 priority”“同 channel 不同 API format”三个矩阵检查，并同时保留 upstream 的条件 fallback 测试。
 - 上游吸收条件：upstream 提供相同 retry budget 含义和三类回归测试。
-- 验证：`go test ./internal/server/orchestrator -run 'CountsDistinctChannels|DoesNotMergeModelsAcrossAPIFormats'`。
+- 验证：`go test ./internal/server/orchestrator -run 'CountsDistinctChannels|DoesNotMergeModelsAcrossAPIFormats|TestQuotaFallback|TestRetryTransportPipeline'`。
 
 ### U19 内置模型目录 Schema 兼容
 

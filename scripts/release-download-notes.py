@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 import re
 import subprocess
 import sys
@@ -105,7 +106,18 @@ def table(repo: str, tag: str, rows: dict[str, list[tuple]], extra: list[tuple[s
     return "\n".join(body)
 
 
-def download_section(repo: str, tag: str, names: list[str]) -> str:
+def dockerhub_repository(repo: str, image: str = "", username: str = "") -> str:
+    owner = repo.split("/", 1)[0]
+    image = image or f"{username or owner}/axonhub"
+    image = image.removeprefix("docker.io/").removesuffix("/") or f"{owner}/axonhub"
+    if ":" in image or re.search(r"\s", image):
+        raise ValueError("Docker Hub image must be a namespace or repository path without a tag")
+    if "/" not in image:
+        image += "/axonhub"
+    return image.lower()
+
+
+def download_section(repo: str, tag: str, names: list[str], dockerhub_image: str = "") -> str:
     owner, name = repo.split("/", 1)
     count = (
         f"https://img.shields.io/github/downloads/{owner}/{name}/"
@@ -114,19 +126,18 @@ def download_section(repo: str, tag: str, names: list[str]) -> str:
     desktop = classify(names, DESKTOP)
     server = classify(names, SERVER)
     docker = badge(
-        "Docker",
+        "Docker Hub",
         "amd64 / arm64",
         "2496ED",
         "docker",
-        f"https://hub.docker.com/r/{repo}",
+        f"https://hub.docker.com/r/{dockerhub_image or dockerhub_repository(repo)}",
     )
-    brew = badge(
-        "Homebrew",
-        "macOS",
-        "FBB040",
-        "homebrew",
-        "https://github.com/looplj/homebrew-axonhub",
-    )
+    server_extra = [("Docker Hub", docker)]
+    if repo.lower() == "looplj/axonhub":
+        server_extra.append((
+            "Homebrew",
+            badge("Homebrew", "macOS", "FBB040", "homebrew", "https://github.com/looplj/homebrew-axonhub"),
+        ))
     parts = [
         "## 按系统下载 | Download",
         "",
@@ -150,7 +161,7 @@ def download_section(repo: str, tag: str, names: list[str]) -> str:
         [
             "### Server",
             "",
-            table(repo, tag, server, [("Docker", docker), ("Homebrew", brew)]),
+            table(repo, tag, server, server_extra),
             "",
         ]
     )
@@ -193,11 +204,22 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag", required=True)
     parser.add_argument("--repo", default="looplj/axonhub")
+    parser.add_argument(
+        "--dockerhub-image",
+        default=os.environ.get("DOCKERHUB_IMAGE", ""),
+        help="Docker Hub namespace or repository; defaults to DOCKERHUB_IMAGE or the publisher's namespace",
+    )
     parser.add_argument("--assets-file", type=Path, help="Release JSON, for a dry run without gh")
     parser.add_argument("--print", action="store_true", dest="print_notes", help="Write the notes to stdout")
     args = parser.parse_args()
     if args.repo.count("/") != 1:
         print(f"--repo must be owner/name, got {args.repo}", file=sys.stderr)
+        return 2
+
+    try:
+        dockerhub_image = dockerhub_repository(args.repo, args.dockerhub_image, os.environ.get("DOCKERHUB_USERNAME", ""))
+    except ValueError as error:
+        print(error, file=sys.stderr)
         return 2
 
     if args.assets_file:
@@ -213,7 +235,7 @@ def main() -> int:
         names = [item["name"] for item in data["assets"]]
         body = data.get("body") or ""
 
-    notes = splice(body, download_section(args.repo, args.tag, names))
+    notes = splice(body, download_section(args.repo, args.tag, names, dockerhub_image))
     if args.print_notes or args.assets_file:
         sys.stdout.write(notes)
         return 0

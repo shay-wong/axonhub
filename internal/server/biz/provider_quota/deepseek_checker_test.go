@@ -182,7 +182,10 @@ func TestDeepSeek_CheckQuota_SkipsDisabledKeys(t *testing.T) {
 	quota, err := checker.CheckQuota(context.Background(), &ent.Channel{
 		Type: channel.TypeDeepseek,
 		Credentials: objects.ChannelCredentials{
-			APIKeys: []string{"disabled-0001", "serving-0002"},
+			APIKeyConfigs: []objects.ChannelAPIKeyConfig{
+				{Key: "disabled-0001", Name: "disabled", Weight: 100},
+				{Key: "serving-0002", Name: "serving", Weight: 200},
+			},
 		},
 		DisabledAPIKeys: []objects.DisabledAPIKey{{Key: "disabled-0001"}},
 	})

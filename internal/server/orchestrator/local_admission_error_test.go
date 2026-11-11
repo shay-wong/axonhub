@@ -55,9 +55,10 @@ func TestLocalAdmissionDoesNotPenalizeHealthOrOverwritePerformance(t *testing.T)
 			previous := biz.PerformanceRecord{ChannelID: 7, Success: true, RequestCompleted: true, CompletionTokens: 12}
 			perf := previous
 			candidate := &ChannelModelsCandidate{Channel: &biz.Channel{Channel: &ent.Channel{ID: 42, Name: "next"}}}
+			nextCandidate := &ChannelModelsCandidate{Channel: &biz.Channel{Channel: &ent.Channel{ID: 43, Name: "fallback"}}}
 			state := &PersistenceState{
 				Perf: &perf, OriginalModel: "m", CurrentCandidate: candidate,
-				ChannelModelsCandidates: []*ChannelModelsCandidate{candidate, {}},
+				ChannelModelsCandidates: []*ChannelModelsCandidate{candidate, {}, nextCandidate},
 				RoutingPolicy:           EffectiveRoutingPolicy{LoadBalancerStrategy: biz.LoadBalancerStrategyCircuitBreaker},
 			}
 			outbound := &PersistentOutboundTransformer{state: state}

@@ -21,6 +21,7 @@ jobs:
   # Uploading the artifact is the only step that needs actions: write.
   frontend:
     name: Frontend
+    if: ${{ inputs.tag != '' || !contains(github.ref_name, '-fork.') }}
     permissions:
       contents: read
       actions: write
@@ -28,6 +29,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -47,6 +50,8 @@ jobs:
         working-directory: frontend
 
       - name: Build frontend
+        env:
+          VITE_GITHUB_REPOSITORY: ${{ github.repository }}
         run: make build-frontend
 
       - name: Check the frontend build
@@ -128,7 +133,6 @@ jobs:
           AXONHUB_RELEASE_REPOSITORY: ${{ github.repository }}
           AXONHUB_UPDATE_REPOSITORY: ${{ vars.UPDATE_REPOSITORY || github.repository }}
           AXONHUB_UPDATE_CHANNEL: ${{ (contains(inputs.tag || github.ref_name, 'beta') || contains(inputs.tag || github.ref_name, 'rc')) && 'beta' || 'stable' }}
-          VITE_GITHUB_REPOSITORY: ${{ github.repository }}
           SKIP_FRONTEND_BUILD: "1"
 
   # Same tag as the server release above. Desktop waits so its installers
@@ -142,3 +146,30 @@ jobs:
     with:
       tag: ${{ inputs.tag || github.ref_name }}
       frontend-artifact: frontend-dist
+      write-download-notes: false
+
+  notes:
+    name: Download table
+    needs: [goreleaser, desktop]
+    if: ${{ always() && needs.goreleaser.result == 'success' && (needs.desktop.result == 'success' || needs.desktop.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-download-notes-${{ github.repository }}-${{ inputs.tag || github.ref_name }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - name: Write the download table
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || vars.DOCKERHUB_NAME || vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_IMAGE || secrets.DOCKERHUB_NAME || secrets.DOCKERHUB_NAMESPACE }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
+        run: python3 scripts/release-download-notes.py --tag "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY"

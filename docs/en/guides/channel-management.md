@@ -98,6 +98,8 @@ Both modes exclude keys that failed within the current request and stop on succe
 
 Manually adding `429` to a channel's **Retryable Status Codes** does not reuse a key that already failed in the current request: other available keys are tried first, then the request switches channels when keys or retry budget run out. Explicit `429` enables ordinary same-channel retries only on paths where key rotation cannot handle the failure.
 
+With quota backpressure enabled, channels near their quota can be reserved until the preferred channels fail, while channel retry budget remains. Exhausted channels are excluded. A channel already in the preferred queue is not tried again as a reserved channel. Reserved channels retain their model fallbacks for the same API format; pressured models do not move ahead of preferred channels.
+
 Gemini Vertex credentials pair each API key with a project and region. Editing or reordering a key preserves its existing alias and weight; keeping the last key when deleting disabled keys also keeps its project binding. Model discovery skips disabled keys, tries the next key only after failure, and stops after the first success. Project-bound discovery uses the matching key's project and region; the provider's public catalog may be used first.
 
 ### Unified key management

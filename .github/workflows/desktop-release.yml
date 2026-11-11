@@ -25,12 +25,22 @@ on:
         required: false
         type: string
         default: ""
+      write-download-notes:
+        description: Update the download table after uploading. The parent release workflow writes it when false.
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
     inputs:
       tag:
         description: Release tag, such as v1.2.3
         required: true
         type: string
+      write-download-notes:
+        description: Update the download table after uploading.
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -119,16 +129,19 @@ jobs:
           SKIP_FRONTEND_BUILD: ${{ inputs.frontend-artifact && '1' || '' }}
         run: make build-desktop MYGO_FLAGS="-platform ${{ matrix.platform }} -upload"
 
-  # After every platform has uploaded, replace the release notes' download
-  # section with links to the installers. Updater archives stay in Assets.
+  # The parent release writes notes after this job; standalone runs write them here.
   notes:
     name: Download table
     needs: build
     runs-on: ubuntu-latest
+    concurrency:
+      group: release-download-notes-${{ github.repository }}-${{ inputs.tag || github.ref_name }}
+      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
 
       - name: Upload desktop screenshots
@@ -142,7 +155,11 @@ jobs:
           fi
 
       - name: Write the download table
+        if: inputs.write-download-notes
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-        run: python3 scripts/release-download-notes.py --tag "$RELEASE_TAG" --repo "${{ github.repository }}"
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || vars.DOCKERHUB_NAME || vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_IMAGE || secrets.DOCKERHUB_NAME || secrets.DOCKERHUB_NAMESPACE }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
+        run: python3 scripts/release-download-notes.py --tag "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY"

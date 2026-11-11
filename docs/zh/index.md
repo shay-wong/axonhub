@@ -8,14 +8,14 @@
 
 | 文档 | 描述 |
 |------|------|
-| [快速入门指南](getting-started/quick-start.md) | 配置 AxonHub、按权限选择登录落点、旧设置链接兼容、fork 更新、桌面签名配置与代理边界 |
+| [快速入门指南](getting-started/quick-start.md) | 配置 AxonHub、按权限选择登录落点、旧设置链接兼容、fork 更新、发布下载表、桌面签名配置与代理边界 |
 | [请求处理流程](getting-started/request-processing.md) | 了解 AxonHub 如何处理 API 请求 |
 
 ### 📖 使用指南
 
 | 文档 | 描述 |
 |------|------|
-| [渠道管理](guides/channel-management.md) | 统一密钥管理弹窗、恢复事件、Key 策略、未保存编辑保护、日志别名、429 换 Key、重试预算、Vertex Key 身份与自动禁用 |
+| [渠道管理](guides/channel-management.md) | 统一密钥管理、Key 策略、未保存编辑保护、日志别名、429 换 Key、重试预算、配额备用渠道去重、Vertex Key 身份与自动禁用 |
 | [模型管理](guides/model-management.md) | 模型映射、关联和优先级配置 |
 | [API Key 配置文件](guides/api-key-profiles.md) | 创建和管理 API Key 配置文件 |
 | [权限管理](guides/permissions.md) | 企业级 RBAC 访问控制配置 |

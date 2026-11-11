@@ -17,6 +17,7 @@ const unstableDockerWorkflow = await readFile(new URL('../../../.github/workflow
 const sharedDockerWorkflow = await readFile(new URL('../../../.github/workflows/docker-build.yml', import.meta.url), 'utf8');
 const releaseWorkflow = await readFile(new URL('../../../.github/workflows/release.yml', import.meta.url), 'utf8');
 const desktopWorkflow = await readFile(new URL('../../../.github/workflows/desktop-release.yml', import.meta.url), 'utf8');
+const forkReleaseWorkflow = await readFile(new URL('../../../.github/workflows/stable-fork-release.yml', import.meta.url), 'utf8');
 const desktopConfig = await readFile(new URL('../../../cmd/axonhub-desktop/mygo.config.ts', import.meta.url), 'utf8');
 
 test('defaults repository-owned URLs to the fork', () => {
@@ -37,7 +38,13 @@ test('derives repository URLs from the build repository', () => {
 test('release builds use the artifact repository and exact release tag', () => {
   assert.ok(dockerPublishWorkflow.includes('uses: ./.github/workflows/docker-build.yml'));
   assert.ok(dockerPublishWorkflow.includes('mode: release'));
-  assert.ok(dockerPublishWorkflow.includes('ref: ${{ inputs.tag || github.ref }}'));
+  const refExpression = dockerPublishWorkflow.match(/^\s+ref: \$\{\{ (.+) \}\}$/m)?.[1];
+  assert.ok(refExpression);
+  const resolveRef = new Function('github', 'inputs', `return (${refExpression});`);
+  assert.equal(resolveRef({ event_name: 'workflow_dispatch', ref: 'refs/heads/beta' }, { branch: 'branch-to-build', tag: 'v1.0.0-rc.3-fork.1' }), 'branch-to-build');
+  assert.equal(resolveRef({ event_name: 'push', ref: 'refs/heads/beta' }, { tag: 'v1.0.0-rc.3-fork.1' }), 'v1.0.0-rc.3-fork.1');
+  assert.equal(resolveRef({ event_name: 'push', ref: 'refs/tags/v1.0.0-rc.3' }, {}), 'refs/tags/v1.0.0-rc.3');
+  assert.ok(dockerPublishWorkflow.includes('default: beta'));
   assert.ok(dockerPublishWorkflow.includes('tag: ${{ inputs.tag || github.ref_name }}'));
   assert.ok(sharedDockerWorkflow.includes('AXONHUB_UPDATE_REPOSITORY=${{ vars.UPDATE_REPOSITORY || github.repository }}'));
   assert.ok(sharedDockerWorkflow.includes('VITE_GITHUB_REPOSITORY=${{ github.repository }}'));
@@ -46,6 +53,39 @@ test('release builds use the artifact repository and exact release tag', () => {
   assert.equal(sharedDockerWorkflow.includes('looplj/axonhub'), false);
   assert.ok(releaseWorkflow.includes('AXONHUB_RELEASE_REPOSITORY: ${{ github.repository }}'));
   assert.ok(releaseWorkflow.includes('AXONHUB_UPDATE_REPOSITORY: ${{ vars.UPDATE_REPOSITORY || github.repository }}'));
+});
+
+test('shared frontend is built from the release tag with fork links and upload permission', () => {
+  const frontendJob = releaseWorkflow.slice(releaseWorkflow.indexOf('\n  frontend:'), releaseWorkflow.indexOf('\n  goreleaser:'));
+  const publishJob = forkReleaseWorkflow.slice(forkReleaseWorkflow.indexOf('\n  publish-binaries:'), forkReleaseWorkflow.indexOf('\n  publish-release:'));
+  assert.ok(frontendJob.includes("if: ${{ inputs.tag != '' || !contains(github.ref_name, '-fork.') }}"));
+  assert.ok(frontendJob.includes('ref: ${{ inputs.tag || github.ref }}'));
+  assert.ok(frontendJob.includes('VITE_GITHUB_REPOSITORY: ${{ github.repository }}'));
+  assert.ok(frontendJob.includes('actions: write'));
+  assert.ok(publishJob.includes('actions: write'));
+});
+
+test('download notes have one writer per release and work when desktop signing is unconfigured', () => {
+  const notesJob = releaseWorkflow.slice(releaseWorkflow.indexOf('\n  notes:'));
+  const condition = notesJob.match(/^\s+if: \$\{\{ (.+) \}\}$/m)?.[1];
+  assert.ok(condition);
+  const shouldWriteNotes = new Function('always', 'needs', `return (${condition});`);
+  for (const [goreleaser, desktop, expected] of [
+    ['success', 'skipped', true],
+    ['success', 'success', true],
+    ['skipped', 'skipped', false],
+    ['failure', 'success', false],
+    ['success', 'failure', false],
+  ]) {
+    assert.equal(shouldWriteNotes(() => true, { goreleaser: { result: goreleaser }, desktop: { result: desktop } }), expected);
+  }
+  assert.ok(releaseWorkflow.includes('write-download-notes: false'));
+  assert.ok(desktopWorkflow.includes('if: inputs.write-download-notes'));
+  assert.match(desktopWorkflow, /write-download-notes:[\s\S]*?default: true/);
+  const concurrencyGroup = 'group: release-download-notes-${{ github.repository }}-${{ inputs.tag || github.ref_name }}';
+  assert.ok(notesJob.includes(concurrencyGroup));
+  assert.ok(desktopWorkflow.includes(concurrencyGroup));
+  assert.ok(notesJob.includes('DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || vars.DOCKERHUB_NAME || vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_IMAGE || secrets.DOCKERHUB_NAME || secrets.DOCKERHUB_NAMESPACE }}'));
 });
 
 test('unstable Docker builds use the fork beta branch and artifact owner', () => {
