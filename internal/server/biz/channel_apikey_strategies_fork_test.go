@@ -97,7 +97,8 @@ func TestUnifiedAPIKeyStrategyKeepsWeightBasedFailover(t *testing.T) {
 	ch.Credentials.APIKeyConfigs = []objects.ChannelAPIKeyConfig{
 		{Key: "first", Weight: 1}, {Key: "higher-weight", Weight: 100},
 	}
-	provider := getAPIKeyProvider(ch)
+	provider, err := getAPIKeyProvider(ch)
+	require.NoError(t, err)
 	ctx := contexts.EnsureContainer(context.Background())
 	require.Equal(t, "higher-weight", provider.Get(ctx))
 	contexts.ExcludeChannelAPIKey(ctx, ch.ID, "higher-weight")

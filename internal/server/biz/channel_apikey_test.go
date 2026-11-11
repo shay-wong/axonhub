@@ -72,7 +72,8 @@ func TestRecordingAPIKeyProvider_RecordsSingleKey(t *testing.T) {
 		cachedAPIKeyConfigs: apiKeyConfigs([]string{"single-key"}),
 	}
 
-	provider := getAPIKeyProvider(ch)
+	provider, err := getAPIKeyProvider(ch)
+	require.NoError(t, err)
 	ctx := contexts.EnsureContainer(context.Background())
 
 	key := provider.Get(ctx)
@@ -150,10 +151,10 @@ func TestTraceStickyKeyProvider_EmptyEnabledKeys_Panics(t *testing.T) {
 	})
 }
 
-func TestGetAPIKeyProvider_NilChannel_PanicsWithoutNilDereference(t *testing.T) {
-	require.PanicsWithValue(t, "no enabled api key configured", func() {
-		getAPIKeyProvider(nil)
-	})
+func TestGetAPIKeyProvider_NilChannel_ReturnsError(t *testing.T) {
+	provider, err := getAPIKeyProvider(nil)
+	require.Nil(t, provider)
+	require.EqualError(t, err, "no enabled api key configured")
 }
 
 func TestTraceStickyKeyProvider_AddKey_MinimalRemapping(t *testing.T) {

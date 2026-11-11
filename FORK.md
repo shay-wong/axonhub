@@ -19,10 +19,11 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`b26705faa1ae4c8c77bc160e33686e26dfaa8512`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`20970e0c94b258e0106d5d1102eb9ebf343e6c3e`
-- 本次 merge base：`c42d57de8af2835598d71121607706f0ea4da208`
-- 审计范围：`git diff 20970e0c..HEAD`
+- 本次 upstream merge 的 fork parent：`620d898ef135a75946fb7a8487d20d70b2738c69`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`37dc356f827b9bc73f8543b9d1315676ad7e52d6`
+- 本次 merge base：`20970e0c94b258e0106d5d1102eb9ebf343e6c3e`
+- 审计范围：`git diff 37dc356f..HEAD`
+- 2026-11-12 合入 4 个上游提交：共享模型查询缓存、Claude 指定重置额度、无可用 API Key 时返回错误，以及每日用量卡插件注册。保留统一 Key 选择和身份记录、模型库回退的档位计费，以及请求正文分块去重；无整项 fork 能力等价吸收。
 - 2026-11-11 继续合入 `20970e0c`：请求列表新增指标颜色设置和包含首字延迟的总吞吐量显示。保留 Fast/Ultrafast 标记、Key 别名与权限、流式/非流式说明；本次没有修改计费或请求路由。
 - 2026-11-11 合入 11 个上游提交：桌面端 Key/渠道/模型管理、DeepSeek 余额配额、配额背压备用渠道、HTTP/2 reset/GOAWAY 分类、Gemini 工具提示用量、OIDC 回调、插件页面权限和请求身份缓存，以及共享前端构建、发布下载表和 Go 1.27.4。保留工具结果 namespace、统一密钥身份和重试规则、邀请限流及 fork 发布归属；配额备用队列与发布链的进一步衔接按维护契约独立提交。
 - 2026-11-10 合入 12 个上游提交：独立桌面端、渠道模型别名预览及别名设置入口、无 call_id 的普通工具结果名称保留、Gemini 工具结果 JSON Schema 引用保护、插件解包去除 fsync 和依赖更新。保留统一密钥管理、Key 身份及重试配置、automation_update 特例和已完成的旧字段清理；生成文件以合并后的 schema 为准，没有整项 fork 能力等价吸收。规则目录采用上游 `.agents/rules/`，Fork Workflow 约束继续保留。
@@ -53,7 +54,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含已发布 tag `v1.0.0-rc.3`（`e70fb2a2`），但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-rc2-fork.1`；upstream 发布基线变为 `v1.0.0-rc.3`，因此下一个规范化 fork 版本为 `v1.0.0-rc.3-fork.1`，发布前仍须重新确认该 tag 未被占用。2026-11-11 已核对双方 Release；本次不修改版本文件、不发布。
+- 最近已发布 fork tag 为 `v1.0.0-rc.3-fork.1`；upstream 发布基线仍为 `v1.0.0-rc.3`，因此下一个规范化 fork 版本为 `v1.0.0-rc.3-fork.2`，发布前仍须重新确认该 tag 未被占用。2026-11-12 已核对 fork Release；本次不修改版本文件、不发布。
 
 ## 长期保留
 
@@ -445,7 +446,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`llm/transformer/openai/responses/inbound.go`、`llm/transformer/openai/responses/integration_test.go`。
 - 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：本次修复可用 `git log -S'Codex cron bootstraps' -- llm/transformer/openai/responses/inbound.go` 定位。
-- 合并审核：当前 upstream 基线 `20970e0c` 仍把该项转换为缺少 `call_id` 的 tool message；`f544bbd5` 仅为普通 function/custom tool output 补回 `name`，不生成 call_id、不改变 HTTP/WS 选择，因此未吸收本特例。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
+- 合并审核：当前 upstream 基线 `37dc356f` 仍把该项转换为缺少 `call_id` 的 tool message；`f544bbd5` 仅为普通 function/custom tool output 补回 `name`，不生成 call_id、不改变 HTTP/WS 选择，因此未吸收本特例。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
 - 上游吸收条件：upstream 能识别 Codex 定时任务启动项，并有真实请求形状的 inbound-to-outbound 回归测试。
 - 验证：`cd llm && go test ./transformer/openai/responses -run '^TestTransformRequest_NormalizesCodexAutomationBootstrap$' -count=1`。
 
