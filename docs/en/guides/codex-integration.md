@@ -14,6 +14,12 @@ AxonHub can act as a drop-in replacement for OpenAI endpoints, letting Codex con
 
 Codex Responses, native Images, and alpha-search requests use AxonHub's default Codex User-Agent unless the channel's User-Agent pass-through switch is enabled. Client attribution headers (`Http-Referer`, `X-Title`, `X-Platform`, `X-Zcode-*`, and `X-Os-*`) are excluded from these outbound requests. The original headers remain available if a retry switches to a different provider that consumes them. Explicit Responses Lite selection and session identity are preserved. Native Images keeps its JSON protocol while normalizing the final session header.
 
+### Page context and tool-result namespaces
+
+Some Codex versions send page context as `function_call_output` items named `codex_apps_open_page` or `codex_apps_selected_page_part_N_of_M`, with `namespace: "agent"` and no `call_id`. AxonHub preserves the namespace, name, output, and call ID state when forwarding through Responses or Codex over HTTP or WebSocket. No additional setting is needed. Other `function_call_output` and `custom_tool_call_output` namespaces are preserved as well.
+
+The upstream still needs to support this page-context format or provide the corresponding compatibility handling, such as Sub2API PR #8622. Preserving the namespace lets that handler recognize the item; it does not guarantee that every Responses provider accepts tool results without a call ID.
+
 ### Choose an entrypoint
 
 HTTP and WebSocket Responses requests preserve explicit Fast/Ultrafast tiers for forwarding, request logs, and billing. WebSocket connection isolation does not replace the canonical Codex session header. Before any content is produced, structured upstream failures can enter the configured retry flow; refusals and tool-search results count as content. A completed response ends without waiting for the upstream connection to close, retaining its final usage.

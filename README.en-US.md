@@ -301,6 +301,8 @@ Switching to model alias settings confirms before discarding unsaved key aliases
 
 Codex model discovery supports its complete catalog format while preserving OpenAI compatibility; see the [Codex integration guide](docs/en/guides/codex-integration.md#model-catalog-refresh) for refresh conditions and context defaults.
 
+Responses forwarding preserves tool-result namespaces in Codex page context so upstream compatibility handlers can recognize them. See [page context](docs/en/guides/codex-integration.md#page-context-and-tool-result-namespaces).
+
 Codex outbound requests honor the channel's User-Agent pass-through switch and preserve original headers for failover while filtering client fingerprints; see [request header rules](docs/en/guides/codex-integration.md#codex-request-headers).
 
 Codex-style formatting preserves the caller's tier without automatically enabling Fast. See [channel transforms](docs/en/guides/channel-management.md#codex-style-responses).

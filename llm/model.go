@@ -390,6 +390,8 @@ type Message struct {
 	// The name of the tool call.
 	// Is is a help field, will not be sent to the llm service.
 	ToolCallName *string `json:"tool_call_name,omitempty"`
+	// The original tool result namespace, preserved by namespace-aware protocols.
+	ToolCallNamespace string `json:"tool_call_namespace,omitempty"`
 	// This field is a help field, will not be sent to the llm service.
 	ToolCallIsError *bool      `json:"tool_call_is_error,omitempty"`
 	ToolCalls       []ToolCall `json:"tool_calls,omitempty"`

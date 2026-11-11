@@ -742,10 +742,11 @@ func convertItemToMessage(item *Item) (*llm.Message, error) {
 		}
 		// Function call output - convert to tool message
 		msg := &llm.Message{
-			ID:         item.ID,
-			Role:       "tool",
-			ToolCallID: lo.ToPtr(item.CallID),
-			Content:    convertToMessageContent(*item.Output),
+			ID:                item.ID,
+			Role:              "tool",
+			ToolCallID:        lo.ToPtr(item.CallID),
+			ToolCallNamespace: item.Namespace,
+			Content:           convertToMessageContent(*item.Output),
 		}
 		if item.Name != "" {
 			msg.ToolCallName = lo.ToPtr(item.Name)
@@ -759,10 +760,11 @@ func convertItemToMessage(item *Item) (*llm.Message, error) {
 		}
 		// Custom tool call output - convert to tool message
 		msg := &llm.Message{
-			ID:         item.ID,
-			Role:       "tool",
-			ToolCallID: lo.ToPtr(item.CallID),
-			Content:    convertToMessageContent(*item.Output),
+			ID:                item.ID,
+			Role:              "tool",
+			ToolCallID:        lo.ToPtr(item.CallID),
+			ToolCallNamespace: item.Namespace,
+			Content:           convertToMessageContent(*item.Output),
 		}
 		if item.Name != "" {
 			msg.ToolCallName = lo.ToPtr(item.Name)

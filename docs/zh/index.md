@@ -31,7 +31,7 @@
 | 文档 | 描述 |
 |------|------|
 | [Claude Code 集成](guides/claude-code-integration.md) | 配置 Claude Code 使用 AxonHub |
-| [Codex 集成](guides/codex-integration.md) | 配置 Codex、请求头、模型目录刷新、上下文信息和原生 Images 兼容性 |
+| [Codex 集成](guides/codex-integration.md) | 配置 Codex、请求头、页面上下文命名空间、模型目录刷新、上下文信息和原生 Images 兼容性 |
 | [OpenCode 集成](guides/opencode-integration.md) | 配置 OpenCode 使用 AxonHub |
 
 ### 🔌 API 参考

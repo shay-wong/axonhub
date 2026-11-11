@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Preserved tool-result namespaces through Responses and Codex forwarding, including Codex page context items without a call ID, so upstream compatibility handlers can recognize them.
 - Switching to model alias settings now confirms before discarding unsaved key aliases, weights, or per-key retry settings. Cancelling preserves those edits.
 - Preserved validated Responses terminal outcomes, protocol-adapter errors, and original failure status, headers, and chunks through synchronous stream forwarding and finalization.
 - Kept model and price schedule calendars compatible with DayPicker 10, including focus and selected-day styling.

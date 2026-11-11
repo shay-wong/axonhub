@@ -477,11 +477,12 @@ func convertToolMessageWithTypeWithError(msg llm.Message, itemType string) (Item
 	}
 
 	return Item{
-		ID:     msg.ID,
-		Type:   itemType,
-		CallID: lo.FromPtr(msg.ToolCallID),
-		Name:   lo.FromPtr(msg.ToolCallName),
-		Output: &output,
+		ID:        msg.ID,
+		Type:      itemType,
+		CallID:    lo.FromPtr(msg.ToolCallID),
+		Name:      lo.FromPtr(msg.ToolCallName),
+		Namespace: msg.ToolCallNamespace,
+		Output:    &output,
 	}, nil
 }
 

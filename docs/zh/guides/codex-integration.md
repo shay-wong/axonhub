@@ -14,6 +14,12 @@ AxonHub 可以作为 OpenAI 接口的直接替代方案，使 Codex 能够通过
 
 Codex Responses、原生 Images 和 alpha-search 请求默认使用 AxonHub 的 Codex User-Agent，只有开启渠道的 User-Agent 透传开关时才使用客户端值。这些出站请求会过滤客户端归属字段（`Http-Referer`、`X-Title`、`X-Platform`、`X-Zcode-*`、`X-Os-*`），但保留原始请求头，供重试切换到需要这些字段的其他提供商时使用。调用方显式选择的 Responses Lite 和会话身份保持不变。原生 Images 在最终规范化会话头时仍保持 JSON 协议。
 
+### 页面上下文与工具结果命名空间
+
+部分 Codex 版本将页面上下文作为 `function_call_output` 发送，名称为 `codex_apps_open_page` 或 `codex_apps_selected_page_part_N_of_M`，带有 `namespace: "agent"` 且没有 `call_id`。AxonHub 经 Responses 或 Codex 的 HTTP/WebSocket 转发时，会保留 namespace、name、output 和原有 call ID 状态，无需额外设置。其他 `function_call_output`、`custom_tool_call_output` 的命名空间也会保留。
+
+上游仍需支持这种页面上下文格式，或具备相应兼容处理，例如 Sub2API PR #8622。保留 namespace 能让该处理识别页面上下文，但不代表所有 Responses 服务都接受没有 call ID 的工具结果。
+
 ### 选择接入方式
 
 HTTP 和 WebSocket Responses 请求都会保留显式 Fast/Ultrafast 档位，用于转发、请求日志和计费。WebSocket 连接隔离不会替换规范化的 Codex 会话头。输出内容前，上游结构化错误可以进入已配置的重试流程；拒绝内容和工具搜索结果也视为有效输出。响应完成后立即结束，不等待上游连接关闭，并保留最终用量。

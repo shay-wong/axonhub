@@ -305,6 +305,8 @@ Fork 还保留[按权限选择登录落点与旧设置链接兼容](docs/zh/gett
 
 Codex 模型发现支持完整目录格式，同时保留普通 OpenAI 接口兼容性；刷新条件与上下文默认值见 [Codex 集成指南](docs/zh/guides/codex-integration.md#模型目录刷新)。
 
+Codex 页面上下文中的工具结果命名空间会在 Responses 转发时保留，供上游兼容处理识别，详见[页面上下文](docs/zh/guides/codex-integration.md#页面上下文与工具结果命名空间)。
+
 Codex 出站请求按渠道开关透传 User-Agent，过滤客户端指纹时保留换渠道所需的原始请求头；见[请求头规则](docs/zh/guides/codex-integration.md#codex-请求头)。
 
 Codex 风格转换保留调用方选择的速度档位，不自动开启 Fast，详见[渠道转换](docs/zh/guides/channel-management.md#codex-风格-responses)。
