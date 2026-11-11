@@ -21,7 +21,7 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 | [Permissions](guides/permissions.md) | Enterprise RBAC access control configuration |
 | [Load Balancing](guides/load-balance.md) | Smart routing, failover, key retry budgets, and fixed-key diagnostic isolation |
 | [Cost Tracking](guides/cost-tracking.md) | Bounded timestamp analytics, plugin scope isolation, actual-model statistics, Fast/Ultrafast prices and unpriced usage, delivery-aware accounting, and key identity visibility |
-| [Request Tracing](guides/tracing.md) | Complete request traceability |
+| [Request Tracing](guides/tracing.md) | Complete request traceability, shared request body storage, retention, and backup compatibility |
 | [Request Override](guides/request-override.md) | Dynamically modify request parameters |
 | [Security](guides/security.md) | IP access control, IP blocklist, and API key IP restriction |
 | [Prompt Protection Rules](guides/prompt-protection-rules.md) | Sensitive information filtering and protection |

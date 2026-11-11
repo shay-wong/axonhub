@@ -83,7 +83,7 @@ func NewInboundPersistentStream(
 		closed:          false,
 		closeDone:       make(chan struct{}),
 		state:           state,
-		terminalTracker: NewStreamTerminalTrackerForRequest(request),
+		terminalTracker: NewStreamTerminalTrackerForRequest(request, state),
 		lifecycle:       streamLifecycleFromContext(ctx),
 	}
 

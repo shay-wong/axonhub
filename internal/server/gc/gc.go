@@ -240,6 +240,10 @@ func (w *Worker) runCleanup(ctx context.Context, manual bool, manualDays map[str
 			log.Int("cleanup_days", 3))
 	}
 
+	if err := w.cleanupRequestBodyChunks(ctx); err != nil {
+		log.Error(ctx, "Failed to cleanup unreferenced request body chunks", log.Cause(err))
+	}
+
 	if w.Config.VacuumEnabled {
 		if err := w.runVacuum(ctx); err != nil {
 			log.Error(ctx, "Failed to run VACUUM after cleanup",
@@ -248,6 +252,18 @@ func (w *Worker) runCleanup(ctx context.Context, manual bool, manualDays map[str
 	}
 
 	log.Info(ctx, "Cleanup process completed")
+}
+
+func (w *Worker) cleanupRequestBodyChunks(ctx context.Context) error {
+	deleted, err := w.deleteInBatches(ctx, func() (int, error) {
+		return biz.DeleteUnreferencedRequestBodyChunks(ctx, w.Ent, w.getBatchSize())
+	})
+	if err != nil {
+		return err
+	}
+
+	log.Debug(ctx, "Deleted unreferenced request body chunks", log.Int("deleted_chunks", deleted))
+	return nil
 }
 
 // cleanupRequests deletes requests older than the specified number of days.
@@ -318,18 +334,22 @@ func (w *Worker) cleanupOldRequestExecutions(ctx context.Context, cutoffTime tim
 			w.cleanupExecutionExternalStorage(ctx, exec, cache)
 		}
 
-		if _, err := w.Ent.RequestExecution.Delete().
-			Where(requestexecution.IDIn(ids...)).
-			Exec(ctx); err != nil {
+		deleted, err := w.Ent.RequestExecution.Delete().
+			Where(
+				requestexecution.IDIn(ids...),
+				requestexecution.Not(requestexecution.HasRequestWith(request.HasTraceWith(retainedTracePredicate()))),
+			).
+			Exec(ctx)
+		if err != nil {
 			return totalDeleted, fmt.Errorf("failed to delete request executions batch: %w", err)
 		}
 
 		log.Debug(ctx, "Deleted old request executions batch",
-			log.Int("deleted_executions_count", len(ids)),
+			log.Int("deleted_executions_count", deleted),
 			log.Time("cutoff_time", cutoffTime),
 		)
 
-		totalDeleted += len(ids)
+		totalDeleted += deleted
 	}
 
 	return totalDeleted, nil
@@ -368,13 +388,14 @@ func (w *Worker) cleanupOldRequestsRecords(ctx context.Context, cutoffTime time.
 			w.cleanupRequestExternalStorage(ctx, req, cache)
 		}
 
-		if _, err := w.Ent.Request.Delete().
-			Where(request.IDIn(ids...)).
-			Exec(ctx); err != nil {
+		deleted, err := w.Ent.Request.Delete().
+			Where(request.IDIn(ids...), request.Not(request.HasTraceWith(retainedTracePredicate()))).
+			Exec(ctx)
+		if err != nil {
 			return totalDeleted, fmt.Errorf("failed to delete requests batch: %w", err)
 		}
 
-		totalDeleted += len(ids)
+		totalDeleted += deleted
 	}
 
 	return totalDeleted, nil

@@ -98,7 +98,7 @@ func NewOutboundPersistentStream(
 		requestedServiceTier:         state.RequestedServiceTier,
 		requestPricingOverride:       state.RequestPricingOverride,
 		requestPricingOverridePolicy: state.RequestPricingOverridePolicy,
-		terminalTracker:              NewStreamTerminalTrackerForRequest(request),
+		terminalTracker:              NewStreamTerminalTrackerForRequest(request, state),
 		lifecycle:                    streamLifecycleFromContext(ctx),
 	}
 	if s.lifecycle != nil {

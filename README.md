@@ -300,6 +300,8 @@ Fork 还保留[按权限选择登录落点与旧设置链接兼容](docs/zh/gett
 
 [配额备用渠道](docs/zh/guides/channel-management.md#按-key-重试)在首选渠道失败后使用，不重复尝试同一渠道，并保留同协议模型回退。
 
+[请求正文存储](docs/zh/guides/tracing.md#请求正文存储)在同一项目内共享重复内容，减少长会话的重复存储，同时保留完整详情及备份兼容性。
+
 切换到模型别名设置前会确认未保存的 Key 别名、权重和重试修改，取消后保留编辑，详见[渠道管理](docs/zh/guides/channel-management.md#key-选择策略)。
 
 [流式计费](docs/zh/guides/cost-tracking.md)区分交付状态与最终用量，在尾部断连后保留已确认费用，并保护执行记录中 Key 身份的可见性；[多 Key 管理](docs/zh/guides/channel-management.md)统一密钥与禁用恢复弹窗，保留 Vertex 项目绑定、别名和权重，请求日志优先显示别名，插件恢复事件反映真实渠道状态。

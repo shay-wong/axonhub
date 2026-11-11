@@ -743,7 +743,13 @@ func (svc *BackupService) hydrateBackupUsageRequest(ctx context.Context, req *en
 	}
 
 	var err error
-	if req.RequestBody, err = svc.loadBackupJSON(ctx, dataStorage, biz.GenerateRequestBodyKey(req.ProjectID, req.ID), req.RequestBody); err != nil {
+	if req.RequestBodyChunked {
+		req.RequestBody, err = biz.LoadChunkedRequestBody(ctx, svc.db, req.ProjectID, req.ID, 0, req.RequestBody)
+		req.RequestBodyChunked = false
+	} else {
+		req.RequestBody, err = svc.loadBackupJSON(ctx, dataStorage, biz.GenerateRequestBodyKey(req.ProjectID, req.ID), req.RequestBody)
+	}
+	if err != nil {
 		return fmt.Errorf("hydrate request body %d: %w", req.ID, err)
 	}
 	if req.ResponseBody, err = svc.loadBackupJSON(ctx, dataStorage, biz.GenerateResponseBodyKey(req.ProjectID, req.ID), req.ResponseBody); err != nil {
@@ -762,7 +768,13 @@ func (svc *BackupService) hydrateBackupRequestExecution(ctx context.Context, exe
 	}
 
 	var err error
-	if execution.RequestBody, err = svc.loadBackupJSON(ctx, dataStorage, biz.GenerateExecutionRequestBodyKey(execution.ProjectID, execution.RequestID, execution.ID), execution.RequestBody); err != nil {
+	if execution.RequestBodyChunked {
+		execution.RequestBody, err = biz.LoadChunkedRequestBody(ctx, svc.db, execution.ProjectID, 0, execution.ID, execution.RequestBody)
+		execution.RequestBodyChunked = false
+	} else {
+		execution.RequestBody, err = svc.loadBackupJSON(ctx, dataStorage, biz.GenerateExecutionRequestBodyKey(execution.ProjectID, execution.RequestID, execution.ID), execution.RequestBody)
+	}
+	if err != nil {
 		return fmt.Errorf("hydrate request execution body %d: %w", execution.ID, err)
 	}
 	if execution.ResponseBody, err = svc.loadBackupJSON(ctx, dataStorage, biz.GenerateExecutionResponseBodyKey(execution.ProjectID, execution.RequestID, execution.ID), execution.ResponseBody); err != nil {

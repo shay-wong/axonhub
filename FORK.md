@@ -154,6 +154,20 @@ git show --remerge-diff <merge-commit>
 
 ## 等待 Upstream 吸收
 
+### U23 数据库请求正文分块去重
+
+- 生命周期：`等待上游吸收`
+- 原始意图：长会话在 requests 与每次 request_executions 中重复保存完整上下文，短期保留仍可能写满磁盘；在保留完整内容的同时复用相同片段。
+- 必须保持：仅数据库中至少 32 KiB、属于有效项目的新请求正文按内容边界分块；同一 project 内按 SHA-256 去重，有序引用可精确还原字节、数字与未知字段。小正文、无项目的渠道测试、旧数据及外部存储继续原格式；响应正文/流式块不变。所有者、块与引用同事务提交；新增隐藏标记明确区分普通 JSON 与清单，不接受用户 JSON 冒充引用。读取校验项目、连续顺序、块数、长度及 SHA，缺块不能静默变成空请求。
+- 读取与回收：详情、追踪、Responses 续链必须展开正文，流式完成判断使用运行中的原始请求。GraphQL 字段裁剪后仍要加载隐藏标记。只清正文时事务内解除引用并清标记；删除所有者后 GC 清理孤立引用，再回收无引用块，retained thread/trace 继续保护。写入按 hash 顺序锁块，GC 在独立事务中逐块加写锁、重新检查引用后删除；不能依赖生产已关闭的外键。
+- 备份与迁移：完整备份保持 1.5 展开 JSON，恢复到目标项目内重新去重；恢复指纹规范化 JSON 但保留数字精度，重复恢复不新增 execution。仅统计备份不读取正文。升级只添加表/标记，不回填旧正文；旧程序不能解读新格式，降级前须导出完整备份并恢复到独立旧版库，不可直接回退二进制。
+- 代码锚点：`internal/ent/schema/request_body_chunk.go`、`request_body_chunk_ref.go`、`request.go`、`request_execution.go`；`internal/server/biz/request_body_chunks.go`、`request.go`；`internal/server/gc/gc.go`、`gc_bodies.go`；`internal/server/backup/backup_ops.go`、`restore.go`；`internal/server/gql/ent.resolvers.go`；`internal/server/orchestrator/terminal_tracker.go`。
+- 用户文档：`docs/en/guides/tracing.md`、`docs/zh/guides/tracing.md` 及双语索引/README；发布说明：`CHANGELOG.md` 的 `Unreleased`。
+- 当前变更定位：`git log -S'PrepareChunkedRequestBody' -- internal/server/biz/request_body_chunks.go`。
+- 合并审核：不能把清单直接返回给调用方，不能跨项目复用或因删除一个请求而破坏共享正文；检查所有直接访问 RequestBody 的路径及备份指纹。生成输出以 Ent schema 为准；不修改运行中的生产库或外部存储默认值。
+- 上游吸收条件：等价内容去重、完整还原、并发写入/回收、旧数据与备份恢复回归覆盖。
+- 验证：`go test ./internal/server/biz ./internal/server/gc ./internal/server/backup ./internal/server/gql ./internal/server/orchestrator -run 'Chunk|TestRequestServiceChunk|TestGraphQLChunked|TestStreamTerminalTracker'`；PostgreSQL 并发测试需专用 `AXONHUB_TEST_PAYLOAD_PG_DSN`，不得指向生产库。
+
 ### U01 API Key/渠道禁用、恢复和状态操作
 
 - 2026-11-06 插件事件整合：凭据禁用/恢复事件接入本地状态机，保留稳定 Key 身份与脱敏日志；临时禁用仍要求未来到期时间。插件 GraphQL 的新增 mutation 清单纳入 `clearChannelTemporaryDisable` 并验证只读权限不能调用；回归：`channel_events_test.go`、`plugin_endpoint_test.go`。独立兼容修复让单个/选中/全部恢复和过期清理事件直接读取 `Save` 返回的实际渠道状态，避免旧前缀推断把已恢复渠道报为 disabled，或把仍手动停用的渠道报为 enabled；回归 `TestChannelCredentialEnabledEvent_ReportsPersistedChannelStatus`；当前变更定位 `git log -S'TestChannelCredentialEnabledEvent_ReportsPersistedChannelStatus' -- internal/server/biz/channel_events_test.go`。

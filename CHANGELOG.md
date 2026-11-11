@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Deduplicated large database request bodies across calls and execution attempts without losing the original JSON. Preserved legacy reads, full backups, Responses continuation, and retention-safe cleanup; old binaries require an expanded backup before downgrade.
 - Kept fork release download tables available without desktop signing, linked Docker Hub to the configured image repository, and preserved existing release notes.
 - Kept quota fallback channels distinct from preferred channels while preserving compatible model fallbacks and the existing channel retry budget.
 - Preserved tool-result namespaces through Responses and Codex forwarding, including Codex page context items without a call ID, so upstream compatibility handlers can recognize them.

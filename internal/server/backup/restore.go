@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -1460,6 +1461,11 @@ func (svc *BackupService) restoreUsageRequests(
 			continue
 		}
 
+		requestBody := reqData.RequestBody
+		bodyPlan := biz.PrepareChunkedRequestBody(requestBody)
+		if bodyPlan != nil {
+			requestBody = bodyPlan.Manifest
+		}
 		created, err := db.Request.Create().
 			SetCreatedAt(reqData.CreatedAt).
 			SetUpdatedAt(reqData.UpdatedAt).
@@ -1467,7 +1473,8 @@ func (svc *BackupService) restoreUsageRequests(
 			SetSource(reqData.Source).
 			SetModelID(reqData.ModelID).
 			SetFormat(reqData.Format).
-			SetRequestBody(reqData.RequestBody).
+			SetRequestBody(requestBody).
+			SetRequestBodyChunked(bodyPlan != nil).
 			SetStatus(reqData.Status).
 			SetStream(reqData.Stream).
 			SetClientIP(reqData.ClientIP).
@@ -1485,6 +1492,11 @@ func (svc *BackupService) restoreUsageRequests(
 			Save(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to restore usage request %d: %w", oldID, err)
+		}
+		if bodyPlan != nil {
+			if err := bodyPlan.Save(ctx, db, projectID, created.ID, 0); err != nil {
+				return nil, fmt.Errorf("failed to restore usage request body %d: %w", oldID, err)
+			}
 		}
 
 		idMap[oldID] = created.ID
@@ -1788,6 +1800,7 @@ func sameUsageRequestMetadata(existing *ent.Request, backup *BackupUsageRequest,
 
 type requestExecutionRestorePlan struct {
 	data                      *BackupRequestExecution
+	bodyPlan                  *biz.ChunkedRequestBody
 	requestID                 int
 	projectID                 int
 	channelID                 int
@@ -1835,7 +1848,7 @@ func (svc *BackupService) restoreRequestExecutions(
 		}
 
 		channelID, _ := resolver.resolveChannelID(execution.ChannelID, execution.ChannelName, execution.ChannelDeletedAt)
-		// Restored execution payloads are stored inline. Matching a same-name storage
+		// Restored execution payloads are stored in the database. Matching a same-name storage
 		// does not prove its blobs exist under the new request/execution IDs.
 		targetDataStorageID := 0
 		targetFingerprint := requestExecutionFingerprint(execution, requestID, projectID, channelID, targetDataStorageID, includeContent)
@@ -1881,12 +1894,22 @@ func (svc *BackupService) restoreRequestExecutions(
 			return nil
 		}
 
-		created, err := db.RequestExecution.CreateBulk(builders...).Save(ctx)
+		_, err := db.RequestExecution.CreateBulk(builders...).Save(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to restore request executions: %w", err)
 		}
-		for i, execution := range created {
-			resolved[pendingPlans[i].data.ID] = execution.ID
+		for i, builder := range builders {
+			executionID, ok := builder.Mutation().ID()
+			if !ok {
+				return fmt.Errorf("restored request execution %d has no ID", pendingPlans[i].data.ID)
+			}
+			plan := pendingPlans[i]
+			if plan.bodyPlan != nil {
+				if err := plan.bodyPlan.Save(ctx, db, plan.projectID, 0, executionID); err != nil {
+					return fmt.Errorf("failed to restore request execution body %d: %w", plan.data.ID, err)
+				}
+			}
+			resolved[plan.data.ID] = executionID
 		}
 		pendingPlans = pendingPlans[:0]
 		builders = builders[:0]
@@ -1924,6 +1947,7 @@ func (svc *BackupService) restoreRequestExecutions(
 			continue
 		}
 
+		plan.bodyPlan = biz.PrepareChunkedRequestBody(plan.data.RequestBody)
 		pendingPlans = append(pendingPlans, plan)
 		builders = append(builders, newRequestExecutionRestoreBuilder(db, plan))
 		if len(builders) >= usageBackupBatchSize {
@@ -2008,6 +2032,14 @@ func loadExistingRequestExecutions(
 
 	result := make([]*ent.RequestExecution, 0, len(existingByID))
 	for _, execution := range existingByID {
+		if includeContent && execution.RequestBodyChunked {
+			body, err := biz.LoadChunkedRequestBody(ctx, db, execution.ProjectID, 0, execution.ID, execution.RequestBody)
+			if err != nil {
+				return nil, fmt.Errorf("load request execution body %d for restore matching: %w", execution.ID, err)
+			}
+			execution.RequestBody = body
+			execution.RequestBodyChunked = false
+		}
 		result = append(result, execution)
 	}
 	return result, nil
@@ -2046,6 +2078,9 @@ func newRequestExecutionRestoreBuilder(db *ent.Client, plan requestExecutionRest
 	if len(requestBody) == 0 {
 		requestBody = objects.JSONRawMessage("{}")
 	}
+	if plan.bodyPlan != nil {
+		requestBody = plan.bodyPlan.Manifest
+	}
 
 	builder := db.RequestExecution.Create().
 		SetCreatedAt(data.CreatedAt).
@@ -2062,6 +2097,7 @@ func newRequestExecutionRestoreBuilder(db *ent.Client, plan requestExecutionRest
 		SetNillableChannelAPIKeyName(nilIfEmpty(data.ChannelAPIKeyName)).
 		SetNillableChannelAPIKeySuffix(nilIfEmpty(data.ChannelAPIKeySuffix)).
 		SetRequestBody(requestBody).
+		SetRequestBodyChunked(plan.bodyPlan != nil).
 		SetNillableErrorMessage(nilIfEmpty(data.ErrorMessage)).
 		SetNillableResponseStatusCode(data.ResponseStatusCode).
 		SetStatus(data.Status).
@@ -2134,17 +2170,32 @@ func requestExecutionFingerprint(
 	writeRequestExecutionFingerprintField(h, fmt.Sprintf("%t", execution.PassThroughApplied))
 	if includeContent {
 		writeRequestExecutionFingerprintField(h, execution.ExternalID)
-		writeRequestExecutionFingerprintField(h, string(execution.RequestBody))
-		writeRequestExecutionFingerprintField(h, string(execution.ResponseBody))
+		writeRequestExecutionFingerprintField(h, requestExecutionJSONFingerprint(execution.RequestBody))
+		writeRequestExecutionFingerprintField(h, requestExecutionJSONFingerprint(execution.ResponseBody))
 		writeRequestExecutionFingerprintField(h, fmt.Sprintf("%d", len(execution.ResponseChunks)))
 		for _, chunk := range execution.ResponseChunks {
-			writeRequestExecutionFingerprintField(h, string(chunk))
+			writeRequestExecutionFingerprintField(h, requestExecutionJSONFingerprint(chunk))
 		}
 		writeRequestExecutionFingerprintField(h, execution.ErrorMessage)
-		writeRequestExecutionFingerprintField(h, string(execution.RequestHeaders))
+		writeRequestExecutionFingerprintField(h, requestExecutionJSONFingerprint(execution.RequestHeaders))
 		writeRequestExecutionFingerprintField(h, execution.RequestURL)
 	}
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// JSONB and backup encoding may change object order or whitespace without changing content.
+func requestExecutionJSONFingerprint(value []byte) string {
+	decoder := json.NewDecoder(bytes.NewReader(value))
+	decoder.UseNumber()
+	var decoded any
+	if !json.Valid(value) || decoder.Decode(&decoded) != nil {
+		return string(value)
+	}
+	canonical, err := json.Marshal(decoded)
+	if err != nil {
+		return string(value)
+	}
+	return string(canonical)
 }
 
 func writeRequestExecutionFingerprintField(h hash.Hash, value string) {

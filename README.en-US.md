@@ -296,6 +296,8 @@ Fork safeguards also cover [permission-aware login destinations and legacy setti
 
 [Quota fallback](docs/en/guides/channel-management.md#retry-per-api-key) keeps reserved channels after preferred ones, without retrying the same channel twice or losing its compatible model fallbacks.
 
+[Request body storage](docs/en/guides/tracing.md#request-body-storage) shares repeated content within each project while preserving complete request details and backup compatibility.
+
 Switching to model alias settings confirms before discarding unsaved key aliases, weights, and retry settings; cancelling preserves edits. See [channel management](docs/en/guides/channel-management.md#key-selection-strategies).
 
 [Streaming accounting](docs/en/guides/cost-tracking.md) separates delivery from final usage, preserves confirmed costs after trailing disconnects, and protects execution key identity visibility; [multi-key management](docs/en/guides/channel-management.md) unifies key and disabled-credential recovery dialogs while retaining Vertex project bindings, aliases, and weights, with aliases preferred in request logs and recovery events reflecting the saved channel status.
