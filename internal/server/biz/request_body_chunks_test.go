@@ -33,6 +33,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/requestbodychunk"
 	"github.com/looplj/axonhub/internal/ent/requestbodychunkref"
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
+	"github.com/looplj/axonhub/internal/log"
 )
 
 func chunkTestBody() []byte {
@@ -389,6 +390,7 @@ func TestChunkedRequestBodyConcurrentSaveAndCleanupPreservesLiveOwner(t *testing
 	errors := make(chan error, 18)
 	reportPanic := func() {
 		if recovered := recover(); recovered != nil {
+			log.Error(ctx, "Request body test goroutine panicked", log.Any("panic", recovered))
 			errors <- fmt.Errorf("chunk operation panic: %v", recovered)
 		}
 	}
