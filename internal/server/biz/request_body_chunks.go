@@ -7,6 +7,7 @@
 //	internal/server/gc/gc.go
 //
 // 注意事项: 写块、引用和所有者必须在同一事务；只在同一项目内复用内容。
+
 package biz
 
 import (
@@ -152,7 +153,12 @@ func (p *ChunkedRequestBody) Save(ctx context.Context, client *ent.Client, proje
 			if err != nil {
 				return struct{}{}, fmt.Errorf("save request body chunks: %w", err)
 			}
-			stored, err := client.RequestBodyChunk.Query().Where(requestbodychunk.ProjectIDEQ(projectID), requestbodychunk.HashIn(keys...)).All(hostCtx)
+			query := client.RequestBodyChunk.Query().Where(requestbodychunk.ProjectIDEQ(projectID), requestbodychunk.HashIn(keys...))
+			if client.Driver().Dialect() == dialect.MySQL {
+				// Read chunks committed after this transaction's repeatable-read snapshot.
+				query.Modify(func(selector *sql.Selector) { selector.ForUpdate() })
+			}
+			stored, err := query.All(hostCtx)
 			if err != nil {
 				return struct{}{}, fmt.Errorf("load saved request body chunks: %w", err)
 			}

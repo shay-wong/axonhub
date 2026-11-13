@@ -52,6 +52,8 @@ With **System Settings → Storage → Store request body** enabled and the defa
 
 Existing records, channel tests without a project, and external storage keep their previous format; enabling this version does not migrate or shrink historical data automatically. Response bodies and stream chunks still follow their existing storage switches. Repeated content reduces growth, while unique content and reference metadata still consume space, so retention settings remain necessary.
 
+Externally stored execution request bodies remain readable in request details, including existing records, whether or not the GraphQL query selects `requestID`.
+
 Clearing a request body removes its references; after a request or execution is deleted, garbage collection also removes its orphaned references. It reclaims a block only after no request or execution references it; retained traces and threads keep their data. A missing or corrupt block produces a read error instead of a truncated request. Full backups export reconstructed JSON in the existing format, and restores deduplicate it in the destination project. Usage-only backups do not read body content.
 
 Before downgrading to a version without this storage format, export a full backup with this version and restore it into the older version's separate database. Older binaries cannot interpret new block references. Take a database backup before upgrading; the schema change adds two internal tables and storage flags without rewriting old bodies.
