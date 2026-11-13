@@ -54,6 +54,8 @@ Existing records, channel tests without a project, and external storage keep the
 
 Externally stored execution request bodies remain readable in request details, including existing records, whether or not the GraphQL query selects `requestID`.
 
+Responses `input` arrays keep coarse history blocks and split only the unfinished tail at message boundaries to limit repeated data during small appends. Bodies remain byte-exact. See [the replay method and measurements](../development/request-body-replay.md) for storage and latency tradeoffs.
+
 Clearing a request body removes its references; after a request or execution is deleted, garbage collection also removes its orphaned references. It reclaims a block only after no request or execution references it; retained traces and threads keep their data. A missing or corrupt block produces a read error instead of a truncated request. Full backups export reconstructed JSON in the existing format, and restores deduplicate it in the destination project. Usage-only backups do not read body content.
 
 Before downgrading to a version without this storage format, export a full backup with this version and restore it into the older version's separate database. Older binaries cannot interpret new block references. Take a database backup before upgrading; the schema change adds two internal tables and storage flags without rewriting old bodies.

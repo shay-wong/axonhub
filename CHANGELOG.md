@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Reduced repeated request-history tail data during small Responses appends, avoided request-body payload readback on writes, and reused PostgreSQL upsert-returned chunk IDs.
 - Restored externally stored execution request bodies in request details when hidden storage metadata is reloaded.
 - Deduplicated large database request bodies across calls and execution attempts without losing the original JSON. Preserved legacy reads, full backups, Responses continuation, and retention-safe cleanup; old binaries require an expanded backup before downgrade.
 - Kept fork release download tables available without desktop signing, linked Docker Hub to the configured image repository, and preserved existing release notes.
