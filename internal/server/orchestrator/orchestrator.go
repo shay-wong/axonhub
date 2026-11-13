@@ -444,16 +444,18 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 						terminalResponseID(state.StreamTerminalBody),
 						responseBody,
 						latencyMetrics(state.Perf),
+						finalRequestResponseHeaders(persistCtx, state),
 					); updateErr != nil {
 						log.Warn(persistCtx, "Failed to persist pre-read terminal request response", log.Cause(updateErr))
 					}
-				} else if updateErr := processor.RequestService.UpdateRequestStatusFromError(persistCtx, requestRow, terminalErr); updateErr != nil {
+				} else if updateErr := processor.RequestService.UpdateRequestStatusFromError(persistCtx, requestRow, terminalErr, finalRequestResponseHeaders(persistCtx, state)); updateErr != nil {
 					log.Warn(persistCtx, "Failed to update terminal request status from error", log.Cause(updateErr))
 				}
 			} else if updateErr := processor.RequestService.UpdateRequestStatusFromError(
 				persistCtx,
 				requestRow,
 				err,
+				finalRequestResponseHeaders(persistCtx, state),
 			); updateErr != nil {
 				log.Warn(persistCtx, "Failed to update request status from error", log.Cause(updateErr))
 			}

@@ -296,7 +296,10 @@ func TestChatCompletionOrchestrator_Process_NonStreaming(t *testing.T) {
 		response: &httpclient.Response{
 			StatusCode: 200,
 			Body:       mockResp,
-			Headers:    http.Header{"Content-Type": []string{"application/json"}},
+			Headers: http.Header{
+				"Content-Type":  {"application/json"},
+				"Authorization": {"Bearer secret"},
+			},
 		},
 	}
 
@@ -356,6 +359,7 @@ func TestChatCompletionOrchestrator_Process_NonStreaming(t *testing.T) {
 	assert.Equal(t, ch.ID, dbRequest.ChannelID)
 	assert.Equal(t, request.StatusCompleted, dbRequest.Status)
 	assert.Equal(t, "chatcmpl-123", dbRequest.ExternalID)
+	assert.JSONEq(t, `{"Content-Type":["application/json"],"Authorization":["******"]}`, string(dbRequest.ResponseHeaders))
 
 	// Verify request execution was created
 	executions, err := client.RequestExecution.Query().All(ctx)

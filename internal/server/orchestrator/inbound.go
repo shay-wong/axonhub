@@ -517,7 +517,7 @@ func (ts *InboundPersistentStream) Close() error {
 		persistCtx := context.WithoutCancel(ctx)
 
 		if ts.request != nil {
-			if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request, decision.cause, ts.responseChunks...); err != nil {
+			if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request, decision.cause, finalRequestResponseHeaders(persistCtx, ts.state), ts.responseChunks...); err != nil {
 				log.Warn(persistCtx, "Failed to update request status from error", log.Cause(err))
 			}
 		}
@@ -535,7 +535,7 @@ func (ts *InboundPersistentStream) Close() error {
 		persistCtx := context.WithoutCancel(ctx)
 		// Persist partial chunks with the failed status for debugging.
 		if ts.request != nil {
-			if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request, decision.cause, ts.responseChunks...); err != nil {
+			if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request, decision.cause, finalRequestResponseHeaders(persistCtx, ts.state), ts.responseChunks...); err != nil {
 				log.Warn(persistCtx, "Failed to update request status from error", log.Cause(err))
 			}
 		}
@@ -613,11 +613,12 @@ func (ts *InboundPersistentStream) persistTerminalResponse(ctx context.Context, 
 			externalID,
 			responseBody,
 			latencyMetrics(ts.perf),
+			finalRequestResponseHeaders(persistCtx, ts.state),
 			ts.responseChunks...,
 		); err != nil {
 			log.Warn(persistCtx, "Failed to persist terminal request response", log.Cause(err))
 		}
-	} else if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request, terminalErr, ts.responseChunks...); err != nil {
+	} else if err := ts.requestService.UpdateRequestStatusFromError(persistCtx, ts.request, terminalErr, finalRequestResponseHeaders(persistCtx, ts.state), ts.responseChunks...); err != nil {
 		log.Warn(persistCtx, "Failed to update terminal request status", log.Cause(err))
 	}
 
@@ -632,7 +633,7 @@ func (ts *InboundPersistentStream) _persistResponse(ctx context.Context, respons
 
 	status := ts.terminalState.requestStatus()
 	metrics := latencyMetrics(ts.perf)
-	err := ts.requestService.UpdateRequestFinalized(ctx, ts.request, status, meta.ID, responseBody, metrics, ts.responseChunks...)
+	err := ts.requestService.UpdateRequestFinalized(ctx, ts.request, status, meta.ID, responseBody, metrics, finalRequestResponseHeaders(ctx, ts.state), ts.responseChunks...)
 	if err != nil {
 		log.Warn(ctx, "Failed to update finalized request", log.Cause(err), log.Any("status", status))
 	}

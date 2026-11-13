@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
+	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/log"
 	"github.com/looplj/axonhub/internal/pkg/xcontext"
@@ -74,6 +76,28 @@ func persistedRequestAPIFormat(ctx context.Context, format llm.APIFormat) llm.AP
 		return llm.APIFormatOpenAIResponseWebSocket
 	}
 	return format
+}
+
+// finalRequestResponseHeaders combines the final upstream response metadata with
+// AxonHub's correlation IDs so the request terminal update can save them together.
+func finalRequestResponseHeaders(ctx context.Context, state *PersistenceState) http.Header {
+	var headers http.Header
+	if state != nil && state.RequestExec != nil {
+		headers = state.executionResponseHeaders(state.RequestExec.ID).Clone()
+	}
+	if headers == nil {
+		headers = make(http.Header)
+	}
+	if requestID, ok := contexts.GetRequestID(ctx); ok && requestID != "" {
+		headers.Set("Ah-Request-Id", requestID)
+	}
+	if trace, ok := contexts.GetTrace(ctx); ok && trace != nil && trace.TraceID != "" {
+		headers.Set("Ah-Trace-Id", trace.TraceID)
+	}
+	if len(headers) == 0 {
+		return nil
+	}
+	return headers
 }
 
 func (m *persistRequestMiddleware) OnOutboundLlmResponse(ctx context.Context, llmResp *llm.Response) (*llm.Response, error) {
@@ -209,6 +233,8 @@ func (m *persistRequestMiddleware) OnInboundRawResponse(ctx context.Context, htt
 		}
 	}
 
+	responseHeaders := finalRequestResponseHeaders(persistCtx, state)
+
 	if terminalErr := responsePersistenceTerminalError(llmResp); terminalErr != nil {
 		status := request.StatusFailed
 		if errors.Is(terminalErr, context.Canceled) {
@@ -222,6 +248,7 @@ func (m *persistRequestMiddleware) OnInboundRawResponse(ctx context.Context, htt
 			llmResp.ID,
 			httpResp.Body,
 			metrics,
+			responseHeaders,
 		)
 		if err != nil {
 			log.Warn(persistCtx, "Failed to persist terminal request response", log.Cause(err))
@@ -240,6 +267,7 @@ func (m *persistRequestMiddleware) OnInboundRawResponse(ctx context.Context, htt
 			llmResp.ID,
 			httpResp.Body,
 			metrics,
+			responseHeaders,
 		)
 		if err != nil {
 			log.Warn(persistCtx, "Failed to update video request status to processing", log.Cause(err))
@@ -265,6 +293,7 @@ func (m *persistRequestMiddleware) OnInboundRawResponse(ctx context.Context, htt
 			httpResp.Body,
 			filename,
 			metrics,
+			responseHeaders,
 		)
 		if err != nil {
 			log.Warn(persistCtx, "Failed to update speech request status to completed", log.Cause(err))
@@ -277,7 +306,7 @@ func (m *persistRequestMiddleware) OnInboundRawResponse(ctx context.Context, htt
 	// STT text/srt/vtt responses are non-JSON; wrap them so the JSON response_body column accepts them.
 	respBody := audioSafeResponseBody(llmResp.RequestType, httpResp.Headers.Get("Content-Type"), httpResp.Body)
 
-	err = state.RequestService.UpdateRequestFinalized(persistCtx, state.Request, request.StatusCompleted, llmResp.ID, respBody, metrics)
+	err = state.RequestService.UpdateRequestFinalized(persistCtx, state.Request, request.StatusCompleted, llmResp.ID, respBody, metrics, responseHeaders)
 	if err != nil {
 		log.Warn(persistCtx, "Failed to update request status to completed", log.Cause(err))
 	}
