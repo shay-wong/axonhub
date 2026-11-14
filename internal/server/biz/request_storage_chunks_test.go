@@ -22,6 +22,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/channel"
 	"github.com/looplj/axonhub/internal/ent/enttest"
+	"github.com/looplj/axonhub/internal/ent/request"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
@@ -32,6 +33,10 @@ func TestRequestServiceChunkedBodies(t *testing.T) {
 	project, err := client.Project.Create().SetName("chunked-bodies").Save(ctx)
 	require.NoError(t, err)
 	ctx = contexts.WithProjectID(ctx, project.ID)
+	key := client.APIKey.Create().SetKey("chunked-session-owner").SetName("owner").SetProjectID(project.ID).SaveX(ctx)
+	ctx = contexts.WithAPIKey(ctx, key)
+	client.DataStorage.Create().SetName("primary").SetDescription("test storage").SetPrimary(true).SetType("database").
+		SetSettings(&objects.DataStorageSettings{}).SaveX(ctx)
 	channelRow, err := client.Channel.Create().SetName("chunked-bodies").SetType(channel.TypeOpenai).
 		SetBaseURL("https://example.test").SetCredentials(objects.ChannelCredentials{APIKey: "test"}).
 		SetSupportedModels([]string{"test"}).SetDefaultTestModel("test").Save(ctx)
@@ -66,6 +71,17 @@ func TestRequestServiceChunkedBodies(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, body, []byte(stored))
 
+	response := []byte(`{"id":"resp_chunked","status":"completed","output":[]}`)
+	_, err = client.Request.UpdateOneID(req.ID).SetExternalID("resp_chunked").
+		SetStatus(request.StatusCompleted).SetResponseBody(response).Save(ctx)
+	require.NoError(t, err)
+	lookup := contexts.WithAPIKey(ctx, key)
+	sessionBody, sessionResponse, found, err := svc.LoadCompletedResponsesSession(lookup, "resp_chunked")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, body, sessionBody)
+	require.Equal(t, response, sessionResponse)
+
 	policy := defaultStoragePolicy
 	policy.StoreRequestBody = false
 	require.NoError(t, svc.SystemService.SetStoragePolicy(ctx, &policy))
@@ -96,6 +112,17 @@ func TestRequestServiceChunkWriteFailureRollsBackOwner(t *testing.T) {
 	count, err = client.RequestBodyChunk.Query().Count(ctx)
 	require.NoError(t, err)
 	require.Zero(t, count)
+
+	owner := client.Request.Create().SetProjectID(project.ID).SetModelID("test").SetRequestBody([]byte(`{}`)).
+		SetStatus(request.StatusProcessing).SaveX(ctx)
+	channelRow := client.Channel.Create().SetName("execution-rollback").SetType(channel.TypeOpenai).
+		SetBaseURL("https://example.test").SetCredentials(objects.ChannelCredentials{APIKey: "test"}).
+		SetSupportedModels([]string{"test"}).SetDefaultTestModel("test").SaveX(ctx)
+	_, err = svc.CreateRequestExecution(ctx, &Channel{Channel: channelRow}, "test", owner,
+		httpclient.Request{JSONBody: body}, llm.APIFormatOpenAIResponse, "", "", false)
+	require.ErrorIs(t, err, failure)
+	require.Zero(t, client.RequestExecution.Query().CountX(ctx))
+	require.Zero(t, client.RequestBodyChunk.Query().CountX(ctx))
 }
 
 func TestRequestServiceChunkedBodiesWithoutProjectStayInline(t *testing.T) {

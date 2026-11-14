@@ -16,9 +16,9 @@ Codex Responses, native Images, and alpha-search requests use AxonHub's default 
 
 ### Page context and tool-result namespaces
 
-Some Codex versions send page context as `function_call_output` items named `codex_apps_open_page` or `codex_apps_selected_page_part_N_of_M`, with `namespace: "agent"` and no `call_id`. AxonHub preserves the namespace, name, output, and call ID state when forwarding through Responses or Codex over HTTP or WebSocket. No additional setting is needed. Other `function_call_output` and `custom_tool_call_output` namespaces are preserved as well.
+Some Codex versions send page context as `function_call_output` items named `codex_apps_open_page` or `codex_apps_selected_page_part_N_of_M`, with `namespace: "agent"` and no `call_id`. Over HTTP, AxonHub converts these recognized page-context outputs to user input so providers can accept them without a matching tool call. Over WebSocket, it preserves the namespace, name, output, and call ID state. No additional setting is needed. Tool outputs with a call ID, including `custom_tool_call_output`, retain their namespaces on both transports.
 
-The upstream still needs to support this page-context format or provide the corresponding compatibility handling, such as Sub2API PR #8622. Preserving the namespace lets that handler recognize the item; it does not guarantee that every Responses provider accepts tool results without a call ID.
+The WebSocket upstream still needs to support this page-context format or provide corresponding compatibility handling, such as Sub2API PR #8622. Preserving the namespace lets that handler recognize the item; it does not guarantee that every Responses provider accepts tool results without a call ID.
 
 ### Choose an entrypoint
 

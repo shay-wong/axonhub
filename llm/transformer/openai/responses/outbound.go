@@ -300,6 +300,7 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert responses input: %w", err)
 	}
+	input = ensureJSONObjectKeyword(input, llmReq.ResponseFormat)
 
 	payload := Request{
 		Model:                llmReq.Model,

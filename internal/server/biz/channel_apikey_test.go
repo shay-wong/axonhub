@@ -1262,6 +1262,7 @@ func TestCleanupExpiredDisabledAPIKeysReenablesAutoDisabledChannel(t *testing.T)
 		SetDefaultTestModel("gpt-4").
 		SetStatus(channel.StatusDisabled).
 		SetErrorMessage(fmt.Sprintf("%s (last error: 429)", allAPIKeysPermanentlyDisabledMessagePrefix)).
+		SetAutoDisabledAt(time.Now().Add(-time.Hour)).
 		SetDisabledAPIKeys([]objects.DisabledAPIKey{
 			{Key: "only-key", ErrorCode: 429, ExpiresAt: &expiredAt},
 		}).

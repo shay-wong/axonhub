@@ -82,6 +82,9 @@ func saveChunkTestRequest(t *testing.T, client *ent.Client, ctx context.Context,
 
 func TestPrepareChunkedRequestBodyPreservesBytesAndLocalChanges(t *testing.T) {
 	require.Nil(t, PrepareChunkedRequestBody([]byte(`{"message":"small"}`)))
+	require.Nil(t, PrepareChunkedRequestBody(bytes.Repeat([]byte{' '}, requestBodyChunkThreshold-1)))
+	boundary := bytes.Repeat([]byte{' '}, requestBodyChunkThreshold)
+	require.Equal(t, boundary, bytes.Join(PrepareChunkedRequestBody(boundary).chunks, nil))
 	body := chunkTestBody()
 	require.True(t, json.Valid(body))
 	plan := PrepareChunkedRequestBody(body)

@@ -66,6 +66,7 @@ func TestBackupChunkedRequestBodiesRoundTrip(t *testing.T) {
 	require.NotContains(t, string(data), "request_body_chunked")
 	var backup BackupData
 	require.NoError(t, json.Unmarshal(data, &backup))
+	require.Equal(t, BackupVersion, backup.Version)
 	require.Len(t, backup.UsageRequests, 1)
 	require.Len(t, backup.RequestExecutions, 1)
 	var compact bytes.Buffer

@@ -426,6 +426,10 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 
 	err := json.Unmarshal(event.Data, &streamEvent)
 	if err != nil {
+		if errorEvent := newErrorEventResponseError(event.Data, event.Type); errorEvent != nil {
+			return errorEvent
+		}
+
 		return fmt.Errorf("failed to unmarshal responses api stream event: %w", err)
 	}
 	if streamEvent.Type == "" && event.Type == string(StreamEventTypeResponseMetadata) {
@@ -1142,31 +1146,12 @@ func (s *responsesOutboundStream) transformStreamChunk(event *httpclient.StreamE
 		}
 
 	case StreamEventTypeError:
-		upstreamError := &Error{
-			Type:      string(streamEvent.Type),
-			Code:      streamEvent.Code,
-			Message:   streamEvent.Message,
-			Param:     streamEvent.Param,
-			RequestID: streamEvent.RequestID,
+		errorEvent := newErrorEventResponseError(event.Data, event.Type)
+		if errorEvent == nil {
+			return fmt.Errorf("failed to decode websocket error event")
 		}
-		if streamEvent.Error != nil {
-			if streamEvent.Error.Type != "" {
-				upstreamError.Type = streamEvent.Error.Type
-			}
-			if streamEvent.Error.Code != "" {
-				upstreamError.Code = streamEvent.Error.Code
-			}
-			if streamEvent.Error.Message != "" {
-				upstreamError.Message = streamEvent.Error.Message
-			}
-			if streamEvent.Error.Param != nil {
-				upstreamError.Param = streamEvent.Error.Param
-			}
-			if streamEvent.Error.RequestID != "" {
-				upstreamError.RequestID = streamEvent.Error.RequestID
-			}
-		}
-		return newStreamResponseError(streamEvent.StatusCode, upstreamError)
+
+		return errorEvent
 
 	case StreamEventTypeImageGenerationPartialImage,
 		StreamEventTypeImageGenerationGenerating,

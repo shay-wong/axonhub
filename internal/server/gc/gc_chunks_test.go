@@ -27,6 +27,7 @@ import (
 	"github.com/looplj/axonhub/internal/ent/requestexecution"
 	"github.com/looplj/axonhub/internal/ent/schema/schematype"
 	"github.com/looplj/axonhub/internal/ent/thread"
+	"github.com/looplj/axonhub/internal/ent/trace"
 	"github.com/looplj/axonhub/internal/objects"
 	"github.com/looplj/axonhub/internal/pkg/xcache"
 	"github.com/looplj/axonhub/internal/server/biz"
@@ -92,6 +93,29 @@ func TestCleanupRequests_CollectsOrphanChunkRefsWithoutForeignKeys(t *testing.T)
 	require.Zero(t, client.RequestBodyChunk.Query().CountX(ctx))
 }
 
+func TestCleanupBodyChunks_RetainedTraceProtectsReferences(t *testing.T) {
+	worker, ctx, client, proj := setupChunkBodyCleanupWorker(t)
+	tr := client.Trace.Create().SetProjectID(proj.ID).SetTraceID("chunk-retention").SetStatus(trace.StatusRetained).SaveX(ctx)
+	body := chunkGCBody("retained")
+	oldAt := time.Now().AddDate(0, 0, -10)
+	req := createChunkGCRequest(t, worker, ctx, proj.ID, tr.ID, oldAt, body)
+	exec := createChunkGCExecution(t, worker, ctx, req, oldAt, body)
+	refs := client.RequestBodyChunkRef.Query().CountX(ctx)
+
+	require.NoError(t, worker.cleanupRequestBodies(ctx, 7))
+	require.NoError(t, worker.cleanupRequests(ctx, 7, false))
+	// The final clear operation must also honor current retention.
+	require.NoError(t, worker.clearRequestPayloadColumns(ctx, bodyPayloadRequest, []int{req.ID}))
+	require.NoError(t, worker.clearExecutionPayloadColumns(ctx, bodyPayloadRequest, []int{exec.ID}))
+	require.NoError(t, worker.cleanupRequestBodyChunks(ctx))
+	require.Equal(t, refs, client.RequestBodyChunkRef.Query().CountX(ctx))
+	require.True(t, client.Request.GetX(ctx, req.ID).RequestBodyChunked)
+	require.True(t, client.RequestExecution.GetX(ctx, exec.ID).RequestBodyChunked)
+	loaded, err := newBodyTestRequestService(worker).LoadRequestBody(ctx, client.Request.GetX(ctx, req.ID))
+	require.NoError(t, err)
+	require.Equal(t, []byte(body), []byte(loaded))
+}
+
 func TestCleanupBodyChunks_RetainedThreadProtectsReferences(t *testing.T) {
 	worker, ctx, client, proj := setupChunkBodyCleanupWorker(t)
 	parent := client.Thread.Create().SetProjectID(proj.ID).SetThreadID("chunk-retention").SetStatus(thread.StatusRetained).SaveX(ctx)
@@ -117,27 +141,42 @@ func TestCleanupBodyChunks_RetainedThreadProtectsReferences(t *testing.T) {
 }
 
 func TestCleanupRequestBodies_ReferenceFailureRollsBackClear(t *testing.T) {
-	worker, ctx, client, proj := setupChunkBodyCleanupWorker(t)
-	body := chunkGCBody("atomic-clear")
-	req := createChunkGCRequest(t, worker, ctx, proj.ID, 0, time.Now().AddDate(0, 0, -10), body)
-	refs := client.RequestBodyChunkRef.Query().CountX(ctx)
-	client.RequestBodyChunkRef.Use(func(next ent.Mutator) ent.Mutator {
-		return ent.MutateFunc(func(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-			if m.Op().Is(ent.OpDelete | ent.OpDeleteOne) {
-				return nil, errors.New("reference delete failed")
-			}
-			return next.Mutate(ctx, m)
-		})
-	})
+	for _, owner := range []string{"request", "execution"} {
+		t.Run(owner, func(t *testing.T) {
+			worker, ctx, client, proj := setupChunkBodyCleanupWorker(t)
+			body := chunkGCBody("atomic-clear")
+			req := createChunkGCRequest(t, worker, ctx, proj.ID, 0, time.Now().AddDate(0, 0, -10), body)
+			exec := createChunkGCExecution(t, worker, ctx, req, req.CreatedAt, body)
+			refs := client.RequestBodyChunkRef.Query().CountX(ctx)
+			client.RequestBodyChunkRef.Use(func(next ent.Mutator) ent.Mutator {
+				return ent.MutateFunc(func(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+					if m.Op().Is(ent.OpDelete | ent.OpDeleteOne) {
+						return nil, errors.New("reference delete failed")
+					}
+					return next.Mutate(ctx, m)
+				})
+			})
 
-	err := worker.clearRequestPayloadColumns(ctx, bodyPayloadRequest, []int{req.ID})
-	require.ErrorContains(t, err, "reference delete failed")
-	req = client.Request.GetX(ctx, req.ID)
-	require.True(t, req.RequestBodyChunked)
-	require.Equal(t, refs, client.RequestBodyChunkRef.Query().CountX(ctx))
-	loaded, err := newBodyTestRequestService(worker).LoadRequestBody(ctx, req)
-	require.NoError(t, err)
-	require.Equal(t, []byte(body), []byte(loaded))
+			var err error
+			if owner == "request" {
+				err = worker.clearRequestPayloadColumns(ctx, bodyPayloadRequest, []int{req.ID})
+			} else {
+				err = worker.clearExecutionPayloadColumns(ctx, bodyPayloadRequest, []int{exec.ID})
+			}
+			require.ErrorContains(t, err, "reference delete failed")
+			req = client.Request.GetX(ctx, req.ID)
+			exec = client.RequestExecution.GetX(ctx, exec.ID)
+			require.True(t, req.RequestBodyChunked)
+			require.True(t, exec.RequestBodyChunked)
+			require.Equal(t, refs, client.RequestBodyChunkRef.Query().CountX(ctx))
+			loaded, err := newBodyTestRequestService(worker).LoadRequestBody(ctx, req)
+			require.NoError(t, err)
+			require.Equal(t, []byte(body), []byte(loaded))
+			loaded, err = newBodyTestRequestService(worker).LoadRequestExecutionRequestBody(ctx, exec)
+			require.NoError(t, err)
+			require.Equal(t, []byte(body), []byte(loaded))
+		})
+	}
 }
 
 func chunkGCBody(text string) objects.JSONRawMessage {
@@ -146,7 +185,7 @@ func chunkGCBody(text string) objects.JSONRawMessage {
 
 func setupChunkBodyCleanupWorker(t *testing.T) (*Worker, context.Context, *ent.Client, *ent.Project) {
 	t.Helper()
-	client := enttest.Open(t, "sqlite3", "file:"+t.Name()+"?mode=memory&cache=shared&_fk=0",
+	client := enttest.Open(t, "sqlite3", "file:"+strings.ReplaceAll(t.Name(), "/", "-")+"?mode=memory&cache=shared&_fk=0",
 		enttest.WithMigrateOptions(migrate.WithGlobalUniqueID(false), migrate.WithForeignKeys(false)))
 	t.Cleanup(func() { _ = client.Close() })
 	ctx := schematype.SkipSoftDelete(authz.WithTestBypass(ent.NewContext(context.Background(), client)))
@@ -170,7 +209,7 @@ func createChunkGCRequest(t *testing.T, worker *Worker, ctx context.Context, pro
 	require.NoError(t, worker.SystemService.RunInTransaction(ctx, func(txCtx context.Context) error {
 		client := ent.FromContext(txCtx)
 		builder := client.Request.Create().SetProjectID(projectID).SetCreatedAt(createdAt).
-			SetModelID("gpt-6.1-sol").SetStatus(request.StatusCompleted).
+			SetModelID("model").SetStatus(request.StatusCompleted).
 			SetRequestBody(plan.Manifest).SetRequestBodyChunked(true)
 		if traceID != 0 {
 			builder.SetTraceID(traceID)
@@ -194,7 +233,7 @@ func createChunkGCExecution(t *testing.T, worker *Worker, ctx context.Context, r
 		client := ent.FromContext(txCtx)
 		var err error
 		execution, err = client.RequestExecution.Create().SetProjectID(req.ProjectID).SetRequestID(req.ID).
-			SetCreatedAt(createdAt).SetModelID("gpt-6.1-sol").SetStatus(requestexecution.StatusCompleted).
+			SetCreatedAt(createdAt).SetModelID("model").SetStatus(requestexecution.StatusCompleted).
 			SetRequestBody(plan.Manifest).SetRequestBodyChunked(true).Save(txCtx)
 		if err != nil {
 			return err

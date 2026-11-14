@@ -19,10 +19,11 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`7d74f1df6a7d066ee67d36651659cefafbf9239f`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`824427782241086f3a3632c5e451cdfd0d62c819`
-- 本次 merge base：`37dc356f827b9bc73f8543b9d1315676ad7e52d6`
-- 审计范围：`git diff 82442778..HEAD`
+- 本次 upstream merge 的 fork parent：`d00786069b6d86141ab0f3d493b2b5b93032766f`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`a47f4a56b63b957d94aaa15c1381095818ec9d14`
+- 本次 merge base：`824427782241086f3a3632c5e451cdfd0d62c819`
+- 审计范围：`git diff a47f4a56..HEAD`
+- 2026-11-14 合入 11 个上游提交：请求正文去重、逐 Key 配额和耗尽禁用、NeuralWatt 每日额度、System One 兼容端点、Codex HTTP 启动项/页面输出规范化、JSON object 输入提示、WebSocket 错误和非流式终态映射，以及 Gemini 集成测试依赖更新。`7af565b5`（PR #2999）已等价吸收正文分块、尾部复用和写入查询优化，删除 U23；fork 的 1.5 execution 备份及 retained thread 保护分别归入 F05/F06。保留 Key 身份/路由、HTTP 与 WebSocket 工具语义及失败证据。
 - 2026-11-13 合入 6 个上游提交：响应头与请求终态合并持久化、第三方 Codex HTTP 模型目录、HTTP 页面插件随机 ID 修复及赞助商说明。保留正文分块、失败终态原始证据、敏感头脱敏和流式用量计费；fork 额外终态分支同步传递响应头。无整项 fork 能力等价吸收。
 - 2026-11-12 合入 4 个上游提交：共享模型查询缓存、Claude 指定重置额度、无可用 API Key 时返回错误，以及每日用量卡插件注册。保留统一 Key 选择和身份记录、模型库回退的档位计费，以及请求正文分块去重；无整项 fork 能力等价吸收。
 - 2026-11-11 继续合入 `20970e0c`：请求列表新增指标颜色设置和包含首字延迟的总吞吐量显示。保留 Fast/Ultrafast 标记、Key 别名与权限、流式/非流式说明；本次没有修改计费或请求路由。
@@ -55,7 +56,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含已发布 tag `v1.0.0-rc.4`（`82442778`），但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-rc.3-fork.2`；upstream 发布基线变为 `v1.0.0-rc.4`，因此下一个规范化 fork 版本为 `v1.0.0-rc.4-fork.1`，发布前仍须重新确认该 tag 未被占用。2026-11-13 已核对双方 Release；本次不修改版本文件、不发布。
+- 最近已发布 fork tag 为 `v1.0.0-rc.3-fork.2`；upstream 发布基线变为 `v1.0.0-rc.4`，因此下一个规范化 fork 版本为 `v1.0.0-rc.4-fork.1`，发布前仍须重新确认该 tag 未被占用。2026-11-14 已核对双方 Release；本次不修改版本文件、不发布。
 
 ## 长期保留
 
@@ -132,43 +133,31 @@ git show --remerge-diff <merge-commit>
 
 ### F05 历史 fork 备份恢复兼容和事务安全
 
+- 2026-11-14 正文去重已由 `7af565b5` 等价吸收，但上游 1.4 只备份 request，fork 1.5 继续包含 execution。完整备份对两种 owner 展开正文，恢复到目标项目重新去重；指纹规范化保留数字精度，重复恢复不新增 execution，仅统计备份不读取正文。保留 `internal/server/backup/request_body_chunks_test.go` 的跨项目、重复恢复和事务回滚覆盖，不接受上游文档中 execution 不在备份范围的表述。
 - 2026-11-03 整合 `b9415562` 的大备份上传与 `io.Reader` 解码，保留拒绝尾随数据、1.4/1.5 fork 备份、档位/Key 身份快照和事务回滚；本地恢复回归同步使用 reader，不重新引入整文件预读。
 - 本次上游整合：`7ca221d8` 将旧配额执行设置迁移到全局/渠道配额路由设置；新旧备份恢复继续在同一事务中校验配置并重映射渠道 ID，非法旧 JSON、旧 mode 或新 mode 必须回滚，不能因新增迁移路径绕过本地校验。
 - 生命周期：`长期保留`
 - 原始意图：旧 fork 版本导出的备份必须能在当前版本安全恢复，失败时不能留下半套配置，也不能破坏未包含在恢复载荷中的现有关系。
 - 必须保持：旧模型价格 code/variant 可归一化但非法 tier、重复 code 和非递增区间必须拒绝；channel ID 在 model settings、API Key profiles 等引用中正确重映射；未恢复 channel 的关联保留；无效 system config/proxy preset 导致整体回滚；storage policy 优先于旧 `storeChunks`；proxy preset 保存和删除前统一归一化。
-- 代码锚点：`internal/server/backup/restore.go`、`internal/server/backup/restore_test.go`、`internal/server/backup/backup_ops.go`、`internal/server/backup/types.go`、`internal/server/biz/system_proxy.go`。
+- 代码锚点：`internal/server/backup/restore.go`、`internal/server/backup/restore_test.go`、`internal/server/backup/backup_ops.go`、`internal/server/backup/request_body_chunks_test.go`、`internal/server/backup/types.go`、`internal/server/biz/system_proxy.go`。
 - 提交锚点：`41d63f9e`、`a5bac9ac`、`8d4aa21c`；相关 merge resolution：`32d0699e`、`864c15a3`。
 - 合并审核：不要用当前 schema 的理想结构重写 legacy 分支；先保留旧输入解析，再验证归一化、ID 映射、冲突策略和事务回滚。对外部存储和 inline 数据都要检查。
 - 吸收/删除条件：不能仅因 upstream 有新的 backup 实现就删除；必须证明仍在支持期内的历史 fork 备份可恢复，或明确结束对应兼容期。
-- 验证：`go test ./internal/server/backup ./internal/server/biz -run 'Restore|ProxyPreset'`。
+- 验证：`go test ./internal/server/backup ./internal/server/biz -run 'Restore|ProxyPreset|ChunkedRequestBodies|RequestExecutionJSONFingerprintPreservesNumbers'`。
 
 ### F06 Thread 保留、trace 独立状态和 GC 保护
 
+- 2026-11-14 正文去重随上游吸收后，继续使用 fork 的 `retainedTracePredicate()` 保护 retained thread 下仍为 active 的 trace；保留 `gc_chunks_test.go` 中独立的 retained trace 与 retained thread 回归，覆盖请求、执行和共享正文引用。
 - 生命周期：`长期保留`
 - 原始意图：保留 thread 是对整条会话的数据保护，不应覆盖用户对单个 trace 已做出的 archive/retain 选择。
 - 必须保持：`Retain`/`Unretain` 只改变 thread 状态；trace 自身状态保持不变；GC 将“trace retained”或“所属 thread retained”都视为保护条件，并保护相关 request、execution 和 usage log。
-- 代码锚点：`internal/server/biz/thread.go`、`internal/server/biz/thread_test.go`、`internal/server/gc/gc.go`、`internal/server/gc/gc_test.go`、`internal/server/gc/gc_bodies.go`、`internal/server/gc/gc_bodies_test.go`。
+- 代码锚点：`internal/server/biz/thread.go`、`internal/server/biz/thread_test.go`、`internal/server/gc/gc.go`、`internal/server/gc/gc_test.go`、`internal/server/gc/gc_bodies.go`、`internal/server/gc/gc_bodies_test.go`、`internal/server/gc/gc_chunks_test.go`。
 - 提交锚点：merge resolution `3356f5bd`；本次载荷 GC 保护修复可用 `git log -S'PreservesActiveTraceUnderRetainedThread' -- internal/server/gc/gc_bodies_test.go` 定位。
 - 合并审核：upstream 当前的级联状态写入语义与本地策略不同；解决冲突时不能恢复级联 retain/unretain，也不能只保护 trace 表而删除关联 request/usage 数据。请求、响应和 chunks 的独立载荷 GC 也必须复用 `retainedTracePredicate()`，不能剥离 retained thread 下 active trace 的 payload。
 - 吸收/删除条件：只有本地明确改回 upstream 的级联策略，或 upstream 接受相同的父级保护和子级状态独立语义时才能删除。
-- 验证：`go test ./internal/server/biz ./internal/server/gc -run 'TestThreadService_RetainPreservesTraceStatuses|TestWorker_cleanupTracesPreservesActiveTraceUnderRetainedThread|TestCleanupBodyPayloads_PreservesActiveTraceUnderRetainedThread'`。
+- 验证：`go test ./internal/server/biz ./internal/server/gc -run 'TestThreadService_RetainPreservesTraceStatuses|TestWorker_cleanupTracesPreservesActiveTraceUnderRetainedThread|TestCleanupBodyPayloads_PreservesActiveTraceUnderRetainedThread|TestCleanupBodyChunks_Retained'`。
 
 ## 等待 Upstream 吸收
-
-### U23 数据库请求正文分块去重
-
-- 生命周期：`等待上游吸收`
-- 原始意图：长会话在 requests 与每次 request_executions 中重复保存完整上下文，短期保留仍可能写满磁盘；在保留完整内容的同时复用相同片段。
-- 必须保持：仅数据库中至少 32 KiB、属于有效项目的新请求正文按内容边界分块；同一 project 内按 SHA-256 去重，有序引用可精确还原字节、数字与未知字段。小正文、无项目的渠道测试、旧数据及外部存储继续原格式；响应正文/流式块不变。所有者、块与引用同事务提交；新增隐藏标记明确区分普通 JSON 与清单，不接受用户 JSON 冒充引用。读取校验项目、连续顺序、块数、长度及 SHA，缺块不能静默变成空请求。
-- 读取与回收：详情、追踪、Responses 续链必须展开正文，流式完成判断使用运行中的原始请求。Responses input 数组内容与外围字段分离；完整历史块保持粗 CDC，仅在未封口尾部按消息末尾至少 1 KiB 切分，保持字节保真、64 KiB 上限和 version 1 旧块兼容。无效 JSON、重复 input 或非数组输入回落原 CDC。GraphQL 字段裁剪后仍要加载隐藏标记和外部执行正文路径所需的父请求 ID，客户端未选择或已选择 `requestID` 时都须读回正文。只清正文时事务内解除引用并清标记；删除所有者后 GC 清理孤立引用，再回收无引用块，retained thread/trace 继续保护。写入调用者必须先在同一事务新建所属项目的 owner，Save 不重复查询；PostgreSQL 直接使用 Ent upsert RETURNING ID，其他数据库仅回查 ID/hash。写入按 hash 顺序锁块；MySQL upsert 后须用 current read 读取其他事务新提交的块，不能沿用等待前的重复读快照。GC 在独立事务中逐块加写锁、重新检查引用后删除；不能依赖生产已关闭的外键。
-- 备份与迁移：完整备份保持 1.5 展开 JSON，恢复到目标项目内重新去重；恢复指纹规范化 JSON 但保留数字精度，重复恢复不新增 execution。仅统计备份不读取正文。升级只添加表/标记，不回填旧正文；旧程序不能解读新格式，降级前须导出完整备份并恢复到独立旧版库，不可直接回退二进制。
-- 代码锚点：`internal/ent/schema/request_body_chunk.go`、`request_body_chunk_ref.go`、`request.go`、`request_execution.go`；`internal/server/biz/request_body_chunks.go`、`request.go`；`internal/server/gc/gc.go`、`gc_bodies.go`；`internal/server/backup/backup_ops.go`、`restore.go`；`internal/server/gql/ent.resolvers.go`；`internal/server/orchestrator/terminal_tracker.go`。
-- 用户文档：`docs/en/guides/tracing.md`、`docs/zh/guides/tracing.md` 及双语索引/README；发布说明：`CHANGELOG.md` 的 `Unreleased`。
-- 当前变更定位：`git log -S'PrepareChunkedRequestBody' -- internal/server/biz/request_body_chunks.go`；外存字段裁剪及 MySQL 快照回归：`internal/server/gql/request_body_chunks_test.go`、`internal/server/biz/request_body_chunks_mysql_test.go`；尾部及回放回归：`request_body_chunks_tail_test.go`、`request_body_chunks_replay_test.go`；测量：`docs/en/development/request-body-replay.md`、`docs/zh/development/request-body-replay.md`。
-- 合并审核：不能把清单直接返回给调用方，不能跨项目复用或因删除一个请求而破坏共享正文；检查所有直接访问 RequestBody 的路径及备份指纹。生成输出以 Ent schema 为准；不修改运行中的生产库或外部存储默认值。
-- 上游吸收条件：等价内容去重、完整还原、并发写入/回收、旧数据与备份恢复回归覆盖。
-- 验证：`go test ./internal/server/biz ./internal/server/gc ./internal/server/backup ./internal/server/gql ./internal/server/orchestrator -run 'Chunk|TestRequestServiceChunk|TestGraphQLChunked|TestStreamTerminalTracker'`；PostgreSQL 并发测试需专用 `AXONHUB_TEST_PAYLOAD_PG_DSN`；MySQL 快照回归需专用 `AXONHUB_TEST_PAYLOAD_MYSQL_DSN`，仅接受本机 `axonhub_payload_test` 库；均不得指向生产库。
 
 ### U01 API Key/渠道禁用、恢复和状态操作
 
@@ -203,6 +192,7 @@ git show --remerge-diff <merge-commit>
 
 ### U03 Tool Search 和跨协议工具调用语义
 
+- 2026-11-14 采用 `fba2d648`/`77d2f8ff` 的 HTTP bootstrap 规范化：缺少 call ID 的已识别 Codex 页面/启动输出转换成合法 user input；带 call ID 的真实工具结果及 WebSocket 路径继续保留 namespace、name、call ID 和 output。`tool_output_namespace_test.go` 分别覆盖两条 transport，不能再要求 HTTP bootstrap 保持无锚点工具输出形状。
 - 2026-11-11 工具结果 namespace 保真：`function_call_output` 和 `custom_tool_call_output` 的 namespace 通过 `Message.ToolCallNamespace` 保存，Responses/Codex 出站原样还原，内部 JSON 往返与重试不能丢失。覆盖 Codex `codex_apps_open_page`、`codex_apps_selected_page_part_1_of_1` 的 `namespace=agent`/无 call_id 形状，保留 name、call_id、output，不推断或伪造命名空间。其他协议不发送此私有字段；真实 Chat wire 再解码不能恢复其未承载的 namespace。代码：`llm/model.go`、`llm/transformer/openai/responses/inbound.go`、`outbound_convert.go`；回归：`llm/transformer/openai/responses/tool_output_namespace_test.go`（普通 Responses、Codex 官方/中转、HTTP/WebSocket、JSON 往返与换渠道）。上游 `f544bbd5` 只补 name，已合入基线 `59bb6734` 及核对时最新 `c42d57de` 仍缺此路径；上游覆盖等价工具结果回归后可移除此子项。用户文档：中英 codex-integration；当前变更定位：`git log -S'ToolCallNamespace' -- llm/model.go`；验证：`cd llm && go test ./transformer/openai/responses -run '^TestToolOutputNamespace' -count=1`。
 - 2026-11-10 采用 `f17e5aba` 的 Anthropic 普通 `tool_use.id` 规范化，保留结构化 Tool Search 和特殊工具 ID。上游新增测试分别验证完整内容快照恢复与本地结构化工具往返，不能要求每个 `server_tool_use` 都生成完整快照；两条路径均保留大整数精度。
 - 2026-11-03 整合 Anthropic `allowed_callers` 和工具输入修复回写；`DeferLoading` 与 `AllowedCallers` 同时保留。Tool Search 分支随依赖升级改用 `jsonrepair.Repair`，复用上游块指针，避免旧值回写类型冲突。既有 Tool Search 与新增 allowed-callers/aggregation 测试共同验证。
@@ -447,7 +437,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`llm/transformer/openai/responses/inbound.go`、`llm/transformer/openai/responses/integration_test.go`。
 - 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：本次修复可用 `git log -S'Codex cron bootstraps' -- llm/transformer/openai/responses/inbound.go` 定位。
-- 合并审核：当前 upstream 基线 `82442778` 仍把该项转换为缺少 `call_id` 的 tool message；`f544bbd5` 仅为普通 function/custom tool output 补回 `name`，不生成 call_id、不改变 HTTP/WS 选择，因此未吸收本特例。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
+- 合并审核：`fba2d648` 在 HTTP outbound 规范化已识别的无 call ID 启动输出，部分覆盖本场景；fork 的 inbound `automation_update` 特例仍覆盖后续协议转换和 WebSocket，不能仅凭 HTTP 支持删除。审核时必须检查完整 inbound-to-outbound 请求，不能只确认 `id` 或 `name` 被保留；最终上游载荷必须是合法 user message。
 - 上游吸收条件：upstream 能识别 Codex 定时任务启动项，并有真实请求形状的 inbound-to-outbound 回归测试。
 - 验证：`cd llm && go test ./transformer/openai/responses -run '^TestTransformRequest_NormalizesCodexAutomationBootstrap$' -count=1`。
 
@@ -477,6 +467,7 @@ git show --remerge-diff <merge-commit>
 
 ## 明确不记录
 
+- 请求正文分块去重（原 U23）已由 `7af565b5`（PR #2999）等价吸收：保留原始 JSON、同项目共享、尾部复用、并发事务/回收和外存 GraphQL 回归均进入上游基线；不再作为独立 fork 能力。1.5 execution 备份与父 thread 保留规则仍由 F05/F06 维护。
 - `cd94f9cf` 仅忽略本地 Codex 工作目录，不是产品能力。
 - `fbb7dd63` 与 `a8c22a5c` 最终净效果为回滚，不作为当前行为差异。
 - 2026-11-10 维护者确认默认模型列表跟随 upstream，撤销原 U06 的额外 Astra、`gpt-5.6` 和 `claude-opus-5` 默认条目；不修改既有渠道支持模型，不限制手动配置。

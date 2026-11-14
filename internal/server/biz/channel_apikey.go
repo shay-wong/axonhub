@@ -120,11 +120,13 @@ func (svc *ChannelService) ApplyAPIKeyDisableAction(
 	if len(enabledKeys) == 0 && (key == objects.OAuthCredentialRef || allDisabledAPIKeysPermanent(allKeys, newDisabledKeys, now)) {
 		channelDisabled = true
 	}
+	// Do not restamp automatic recovery markers on an operator-disabled channel.
+	autoDisable := channelDisabled && (ch.Status == channel.StatusEnabled || ch.AutoDisabledAt != nil)
 	var (
 		autoDisabledAt     time.Time
 		autoDisabledReason string
 	)
-	if channelDisabled {
+	if autoDisable {
 		autoDisabledAt = time.Now()
 		messagePrefix := allAPIKeysPermanentlyDisabledMessagePrefix
 		if key == objects.OAuthCredentialRef && action == DisableActionTemporary {
@@ -159,7 +161,7 @@ func (svc *ChannelService) ApplyAPIKeyDisableAction(
 	}
 	svc.publishCredentialDisabled(ctx, ch, key, errorCode, reason, disabledKey.ExpiresAt, status)
 
-	if channelDisabled {
+	if autoDisable {
 		svc.asyncNotifyChannelAutoDisabled(ctx, ChannelAutoDisabledEvent{
 			ChannelID:       ch.ID,
 			ChannelName:     ch.Name,

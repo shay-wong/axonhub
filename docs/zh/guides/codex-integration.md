@@ -16,9 +16,9 @@ Codex Responses、原生 Images 和 alpha-search 请求默认使用 AxonHub 的 
 
 ### 页面上下文与工具结果命名空间
 
-部分 Codex 版本将页面上下文作为 `function_call_output` 发送，名称为 `codex_apps_open_page` 或 `codex_apps_selected_page_part_N_of_M`，带有 `namespace: "agent"` 且没有 `call_id`。AxonHub 经 Responses 或 Codex 的 HTTP/WebSocket 转发时，会保留 namespace、name、output 和原有 call ID 状态，无需额外设置。其他 `function_call_output`、`custom_tool_call_output` 的命名空间也会保留。
+部分 Codex 版本将页面上下文作为 `function_call_output` 发送，名称为 `codex_apps_open_page` 或 `codex_apps_selected_page_part_N_of_M`，带有 `namespace: "agent"` 且没有 `call_id`。HTTP 转发会将这些已识别的页面输出转换为普通 user input，让上游无需匹配工具调用即可接收；WebSocket 转发继续保留 namespace、name、output 和原有 call ID 状态。无需额外设置。带 call ID 的真实工具结果（包括 `custom_tool_call_output`）在两种传输中都保留命名空间。
 
-上游仍需支持这种页面上下文格式，或具备相应兼容处理，例如 Sub2API PR #8622。保留 namespace 能让该处理识别页面上下文，但不代表所有 Responses 服务都接受没有 call ID 的工具结果。
+WebSocket 上游仍需支持这种页面上下文格式，或具备相应兼容处理，例如 Sub2API PR #8622。保留 namespace 能让该处理识别页面上下文，但不代表所有 Responses 服务都接受没有 call ID 的工具结果。
 
 ### 选择接入方式
 

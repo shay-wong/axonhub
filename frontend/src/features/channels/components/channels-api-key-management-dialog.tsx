@@ -68,6 +68,7 @@ export function ChannelsAPIKeyManagementDialog({
   const [testingKey, setTestingKey] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, TestAPIKeyResult>>({});
   const [confirmDisableKey, setConfirmDisableKey] = useState<string | null>(null);
+  const [confirmKeepDisabledKey, setConfirmKeepDisabledKey] = useState<string | null>(null);
   const [confirmEnableKey, setConfirmEnableKey] = useState<string | null>(null);
   const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
   const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false);
@@ -170,6 +171,7 @@ export function ChannelsAPIKeyManagementDialog({
       setTestingKey(null);
       setTestResults({});
       setConfirmDisableKey(null);
+      setConfirmKeepDisabledKey(null);
       setConfirmEnableKey(null);
       setConfirmDeleteKey(null);
       setConfirmDeleteSelected(false);
@@ -221,6 +223,7 @@ export function ChannelsAPIKeyManagementDialog({
     setTestingKey(null);
     setTestResults({});
     setConfirmDisableKey(null);
+    setConfirmKeepDisabledKey(null);
     setConfirmEnableKey(null);
     setConfirmDeleteKey(null);
     setConfirmDeleteSelected(false);
@@ -432,6 +435,7 @@ export function ChannelsAPIKeyManagementDialog({
     try {
       await disableAPIKey.mutateAsync({ channelID: currentRow.id, key });
       setConfirmDisableKey(null);
+      setConfirmKeepDisabledKey(null);
     } catch {
       // handled by hooks
     }
@@ -695,6 +699,7 @@ export function ChannelsAPIKeyManagementDialog({
                       rows.map(({ key, disabled: dk }) => {
                         const isTesting = testingKey === key;
                         const isDisabled = Boolean(dk);
+                        const isQuotaDisabled = dk?.quotaDisabled === true;
                         const isOAuth = key === OAUTH_CREDENTIAL_REF;
                         const result = getKeyResult(key);
                         const handleCopy = async () => {
@@ -772,6 +777,11 @@ export function ChannelsAPIKeyManagementDialog({
                                   )}
                                 </div>
                               )}
+                              {isQuotaDisabled && (
+                                <div className='text-muted-foreground mt-1 text-xs'>
+                                  {t('channels.dialogs.keyManagement.quotaDisabled')}
+                                </div>
+                              )}
                               {result?.error && (
                                 <div className='text-destructive mt-1 flex items-start gap-1 text-xs'>
                                   <IconAlertTriangle className='mt-0.5 h-3 w-3 shrink-0' />
@@ -827,26 +837,53 @@ export function ChannelsAPIKeyManagementDialog({
                                 </Tooltip>
 
                                 {isDisabled ? (
-                                  <Popover open={confirmEnableKey === key} onOpenChange={(o) => setConfirmEnableKey(o ? key : null)}>
-                                    <PopoverTrigger asChild>
-                                      <Button size='sm' variant='ghost' className='h-7 w-7 p-0' disabled={isPending}>
-                                        <IconRefresh className='h-4 w-4' />
-                                      </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className='w-64'>
-                                      <div className='flex flex-col gap-3'>
-                                        <p className='text-sm'>{t('channels.dialogs.keyManagement.confirmEnable')}</p>
-                                        <div className='flex justify-end gap-2'>
-                                          <Button size='sm' variant='outline' onClick={() => setConfirmEnableKey(null)}>
-                                            {t('common.buttons.cancel')}
-                                          </Button>
-                                          <Button size='sm' onClick={() => handleToggleEnable(key)} disabled={isPending}>
-                                            {t('common.buttons.confirm')}
-                                          </Button>
+                                  <>
+                                    <Popover open={confirmEnableKey === key} onOpenChange={(o) => setConfirmEnableKey(o ? key : null)}>
+                                      <PopoverTrigger asChild>
+                                        <Button size='sm' variant='ghost' className='h-7 w-7 p-0' disabled={isPending}>
+                                          <IconRefresh className='h-4 w-4' />
+                                        </Button>
+                                      </PopoverTrigger>
+                                      <PopoverContent className='w-64'>
+                                        <div className='flex flex-col gap-3'>
+                                          <p className='text-sm'>{t('channels.dialogs.keyManagement.confirmEnable')}</p>
+                                          <div className='flex justify-end gap-2'>
+                                            <Button size='sm' variant='outline' onClick={() => setConfirmEnableKey(null)}>
+                                              {t('common.buttons.cancel')}
+                                            </Button>
+                                            <Button size='sm' onClick={() => handleToggleEnable(key)} disabled={isPending}>
+                                              {t('common.buttons.confirm')}
+                                            </Button>
+                                          </div>
                                         </div>
-                                      </div>
-                                    </PopoverContent>
-                                  </Popover>
+                                      </PopoverContent>
+                                    </Popover>
+                                    {isQuotaDisabled && (
+                                      <Popover
+                                        open={confirmKeepDisabledKey === key}
+                                        onOpenChange={(o) => setConfirmKeepDisabledKey(o ? key : null)}
+                                      >
+                                        <PopoverTrigger asChild>
+                                          <Button size='sm' variant='outline' className='h-7 px-2' disabled={isPending}>
+                                            {t('channels.dialogs.keyManagement.keepDisabled')}
+                                          </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className='w-72'>
+                                          <div className='flex flex-col gap-3'>
+                                            <p className='text-sm'>{t('channels.dialogs.keyManagement.confirmKeepDisabled')}</p>
+                                            <div className='flex justify-end gap-2'>
+                                              <Button size='sm' variant='outline' onClick={() => setConfirmKeepDisabledKey(null)}>
+                                                {t('common.buttons.cancel')}
+                                              </Button>
+                                              <Button size='sm' onClick={() => handleToggleDisable(key)} disabled={isPending}>
+                                                {t('common.buttons.confirm')}
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </PopoverContent>
+                                      </Popover>
+                                    )}
+                                  </>
                                 ) : (
                                   <Popover open={confirmDisableKey === key} onOpenChange={(o) => setConfirmDisableKey(o ? key : null)}>
                                     <PopoverTrigger asChild>

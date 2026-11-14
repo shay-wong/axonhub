@@ -70,6 +70,14 @@ func TestToolOutputNamespaceRoundTrip(t *testing.T) {
 						require.NoError(t, json.Unmarshal(wire.Body, &result))
 						require.Len(t, result.Input.Items, len(items))
 						for i, want := range items {
+							// HTTP represents call-less companion outputs as user messages.
+							if transport == responses.TransportHTTP && i < 2 {
+								require.Equal(t, responses.Item{
+									Type: "message", Role: "user",
+									Content: &responses.Input{Items: []responses.Item{{Type: "input_text", Text: want.Output.Text}}},
+								}, result.Input.Items[i], "companion output %d", i)
+								continue
+							}
 							if strings.HasSuffix(want.Type, "_output") {
 								require.Equal(t, want, result.Input.Items[i], "tool output %d", i)
 							}

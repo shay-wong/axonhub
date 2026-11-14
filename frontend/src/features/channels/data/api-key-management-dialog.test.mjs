@@ -27,7 +27,7 @@ function render({ disabled = [], keys = ['key-a', 'key-b'], results = {}, oauth 
         return {
           useState(initial) {
             const index = stateIndex++;
-            return [index === 13 ? keys : index === 3 ? results : typeof initial === 'function' ? initial() : initial, () => {}];
+            return [index === 14 ? keys : index === 3 ? results : typeof initial === 'function' ? initial() : initial, () => {}];
           },
           useMemo: (fn) => fn(),
           useRef: () => ({ current: refIndex++ === 0 ? row.id : false }),

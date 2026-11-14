@@ -16,7 +16,7 @@
 - Deduplicated large database request bodies across calls and execution attempts without losing the original JSON. Preserved legacy reads, full backups, Responses continuation, and retention-safe cleanup; old binaries require an expanded backup before downgrade.
 - Kept fork release download tables available without desktop signing, linked Docker Hub to the configured image repository, and preserved existing release notes.
 - Kept quota fallback channels distinct from preferred channels while preserving compatible model fallbacks and the existing channel retry budget.
-- Preserved tool-result namespaces through Responses and Codex forwarding, including Codex page context items without a call ID, so upstream compatibility handlers can recognize them.
+- Preserved tool-result namespaces through Responses and Codex forwarding. Recognized Codex page context without a call ID becomes user input over HTTP; WebSocket keeps the original context for upstream compatibility handlers.
 - Switching to model alias settings now confirms before discarding unsaved key aliases, weights, or per-key retry settings. Cancelling preserves those edits.
 - Preserved validated Responses terminal outcomes, protocol-adapter errors, and original failure status, headers, and chunks through synchronous stream forwarding and finalization.
 - Kept model and price schedule calendars compatible with DayPicker 10, including focus and selected-day styling.
@@ -73,6 +73,7 @@
 - PostgreSQL fastest-model and fastest-channel resolver rankings use `DISTINCT ON` to select each request's latest successful execution before aggregation; SQLite retains the `ROW_NUMBER` path. `modelPerformanceStats` keeps `ROW_NUMBER` because `DISTINCT ON` measured a 5% regression without the covering index (not yet approved).
 - Personal API Key names can be reused by different creators in a project; creating or renaming a key rejects collisions with non-personal keys visible to its creator. Duplicate checks run after create authorization.
 - Synthetic weekly credit amounts that parse to NaN or infinity are now ignored instead of leaking into the period money fields and breaking quota persistence.
+- Chat Completions requests with `response_format: {"type":"json_object"}` no longer fail on Responses-based channels when only the system prompt mentions JSON. The conversion appends a short reminder to the input so the upstream keyword check passes.
 
 ### Removed
 

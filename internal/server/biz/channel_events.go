@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,8 @@ import (
 const (
 	credentialTriggerManual  = "manual"
 	credentialTriggerExpired = "expired"
+	// credentialTriggerQuota marks a proactive provider quota observation.
+	credentialTriggerQuota = "quota"
 )
 
 func (svc *ChannelService) publishChannelAutoEnabled(ctx context.Context, channelID int) {
@@ -166,6 +169,13 @@ func credentialEventRef(oauth bool, key string) *events.CredentialRef {
 		Fingerprint: events.Fingerprint(key),
 		Masked:      events.Mask(key),
 	}
+}
+
+// channelIsAllKeysDisabled reports whether the channel is in the state this
+// package enters when its last usable credential disappears.
+func channelIsAllKeysDisabled(ch *ent.Channel) bool {
+	return ch != nil && ch.Status == channel.StatusDisabled && ch.AutoDisabledAt != nil &&
+		ch.ErrorMessage != nil && strings.HasPrefix(*ch.ErrorMessage, allKeysDisabledErrorPrefix)
 }
 
 func rfc3339OrNil(value *time.Time) any {
