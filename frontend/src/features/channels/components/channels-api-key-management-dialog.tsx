@@ -741,14 +741,16 @@ export function ChannelsAPIKeyManagementDialog({
                               {dk && (
                                 <div className='text-muted-foreground mt-2 space-y-1 text-xs'>
                                   <div className='flex flex-wrap gap-x-2'>
-                                    <span>
-                                      {t(
-                                        dk.disableStatus.kind === 'temporary'
-                                          ? 'channels.dialogs.disabledAPIKeys.temporaryErrorCodeTooltip'
-                                          : 'channels.dialogs.disabledAPIKeys.permanentErrorCodeTooltip',
-                                        { code: dk.errorCode }
-                                      )}
-                                    </span>
+                                    {!isQuotaDisabled && (
+                                      <span>
+                                        {t(
+                                          dk.disableStatus.kind === 'temporary'
+                                            ? 'channels.dialogs.disabledAPIKeys.temporaryErrorCodeTooltip'
+                                            : 'channels.dialogs.disabledAPIKeys.permanentErrorCodeTooltip',
+                                          { code: dk.errorCode }
+                                        )}
+                                      </span>
+                                    )}
                                     <span>
                                       {t('channels.dialogs.disabledAPIKeys.disabledAt', {
                                         time: format(new Date(dk.disabledAt), 'yyyy-MM-dd HH:mm:ss'),
@@ -793,7 +795,7 @@ export function ChannelsAPIKeyManagementDialog({
                               {isDisabled ? (
                                 <Badge variant='secondary'>
                                   {t(
-                                    dk?.disableStatus.kind === 'permanent'
+                                    !isQuotaDisabled && dk?.disableStatus.kind === 'permanent'
                                       ? 'channels.dialogs.disabledAPIKeys.permanent'
                                       : 'channels.dialogs.keyManagement.disabled'
                                   )}

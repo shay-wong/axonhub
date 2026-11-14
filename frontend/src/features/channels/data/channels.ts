@@ -17,6 +17,7 @@ import {
   UpdateChannelInput,
   channelConnectionSchema,
   channelSchema,
+  disabledAPIKeySchema,
   channelEndpointsResponseSchema,
   BulkImportChannelsInput,
   BulkImportChannelsResult,
@@ -2807,7 +2808,7 @@ export function useChannelDisabledAPIKeys(channelId: string, options?: { enabled
             }>;
           };
         }>(GET_CHANNEL_DISABLED_API_KEYS_QUERY, { id: channelId });
-        return data.node?.disabledAPIKeys || [];
+        return z.array(disabledAPIKeySchema).parse(data.node?.disabledAPIKeys || []);
       } catch (error) {
         handleError(error, t('common.errors.internalServerError'));
         throw error;

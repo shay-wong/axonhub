@@ -100,8 +100,6 @@ func CollectAPIKeyQuotas(
 			account.QuotaDisabled = record.QuotaDisabled
 		}
 
-		// The trim only applies to the outbound request: the stored disable
-		// identity stays the configured string.
 		data, err := fetch(ctx, ch, strings.TrimSpace(target.Key))
 		if err != nil {
 			failures++
@@ -389,17 +387,18 @@ func apiKeyQuotaTargets(ch *ent.Channel) []apiKeyQuotaTarget {
 	return targets
 }
 
-// activeDisabledKeys returns the active disable records of the channel, keyed
-// by the configured key. Expired records disable nothing.
+// activeDisabledKeys matches legacy records to the normalized credential keys.
+// Expired records disable nothing.
 func activeDisabledKeys(ch *ent.Channel) map[string]objects.DisabledAPIKey {
 	records := make(map[string]objects.DisabledAPIKey, len(ch.DisabledAPIKeys))
 
 	for _, record := range ch.DisabledAPIKeys {
-		if strings.TrimSpace(record.Key) == "" || record.IsExpired() {
+		key := strings.TrimSpace(record.Key)
+		if key == "" || record.IsExpired() {
 			continue
 		}
 
-		records[record.Key] = record
+		records[key] = record
 	}
 
 	return records

@@ -11,6 +11,8 @@
 
 ### Fixed
 
+- Kept per-key quota recovery compatible with manual and temporary disables, honored legacy disabled-key identities, preserved the saved channel status in recovery events, and prevented key deletion from reentering its own quota reconciliation lock.
+- Preserved upstream request IDs in WebSocket error frames and their HTTP-adapted responses.
 - Reduced repeated request-history tail data during small Responses appends, avoided request-body payload readback on writes, and reused PostgreSQL upsert-returned chunk IDs.
 - Restored externally stored execution request bodies in request details when hidden storage metadata is reloaded.
 - Deduplicated large database request bodies across calls and execution attempts without losing the original JSON. Preserved legacy reads, full backups, Responses continuation, and retention-safe cleanup; old binaries require an expanded backup before downgrade.

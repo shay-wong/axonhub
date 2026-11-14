@@ -15,6 +15,7 @@
 // 注意事项:
 //
 //	只处理 QuotaDisabled 记录；手工、插件和 HTTP 错误规则产生的禁用记录一律不碰。
+//	匹配时沿用凭据去除首尾空白的身份，不改写历史禁用记录。
 //	本文件不得回调 ProviderQuotaService（调用方持有该服务的互斥锁）。
 
 package biz
@@ -24,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/looplj/axonhub/internal/ent"
@@ -212,15 +214,15 @@ func (svc *ChannelService) ReconcileQuotaKeys(
 		return ch, fmt.Errorf("%w (channel %d): the channel changed during reconciliation", errQuotaKeySnapshotStale, ch.ID)
 	}
 
-	eventStatus := ch.Status
-	if autoDisabled {
-		eventStatus = channel.StatusDisabled
+	reloaded, err := entClient.Channel.Get(ctx, ch.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to reload channel after quota key reconciliation: %w", err)
 	}
 
 	for _, key := range result.quotaAdded {
-		svc.publishCredentialDisabled(ctx, ch, key, 0, quotaKeyDisabledReason, nil, eventStatus)
+		svc.publishCredentialDisabled(ctx, reloaded, key, 0, quotaKeyDisabledReason, nil, reloaded.Status)
 	}
-	svc.publishCredentialEnabled(ctx, ch, result.quotaFreed, credentialTriggerQuota)
+	svc.publishCredentialEnabled(ctx, reloaded, result.quotaFreed, credentialTriggerQuota)
 
 	if autoDisabled {
 		reason := fmt.Sprintf("%s (last error: %d)", allKeysDisabledErrorPrefix, 0)
@@ -244,11 +246,6 @@ func (svc *ChannelService) ReconcileQuotaKeys(
 			log.Int("channel_id", ch.ID),
 			log.String("channel_name", ch.Name),
 		)
-	}
-
-	reloaded, err := entClient.Channel.Get(ctx, ch.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to reload channel after quota key reconciliation: %w", err)
 	}
 
 	// The local serving cache must reflect the new eligibility before the next
@@ -275,17 +272,20 @@ func (svc *ChannelService) ReconcileQuotaKeys(
 func refreshAPIKeyQuotaOwnership(ch *ent.Channel, accounts []provider_quota.APIKeyQuota) []provider_quota.APIKeyQuota {
 	records := make(map[string]objects.DisabledAPIKey, len(ch.DisabledAPIKeys))
 	for _, record := range ch.DisabledAPIKeys {
-		if record.Key == "" || record.IsExpired() {
+		key := strings.TrimSpace(record.Key)
+		if key == "" || record.IsExpired() {
 			continue
 		}
 
-		records[record.Key] = record
+		if existing, ok := records[key]; !ok || existing.QuotaDisabled {
+			records[key] = record
+		}
 	}
 
 	refreshed := make([]provider_quota.APIKeyQuota, len(accounts))
 	for i, account := range accounts {
 		clone := account
-		if record, ok := records[account.Key]; ok {
+		if record, ok := records[strings.TrimSpace(account.Key)]; ok {
 			clone.Disabled = true
 			clone.QuotaDisabled = record.QuotaDisabled
 		} else {
@@ -387,67 +387,81 @@ func reconcileQuotaKeyDisables(
 ) quotaKeyReconcileResult {
 	configured := make(map[string]struct{})
 	for _, key := range ch.Credentials.GetAllCredentialRefs() {
-		configured[key] = struct{}{}
+		configured[strings.TrimSpace(key)] = struct{}{}
 	}
 
 	observed := make(map[string]provider_quota.APIKeyQuota, len(accounts))
 	for _, account := range accounts {
-		observed[account.Key] = account
+		observed[strings.TrimSpace(account.Key)] = account
 	}
 
 	result := quotaKeyReconcileResult{
 		keys: make([]objects.DisabledAPIKey, 0, len(ch.DisabledAPIKeys)+1),
 	}
 	kept := make(map[string]struct{}, len(ch.DisabledAPIKeys))
+	manualKeys := make(map[string]struct{}, len(ch.DisabledAPIKeys))
+	for _, record := range ch.DisabledAPIKeys {
+		if !record.QuotaDisabled && !record.IsExpiredAt(now) {
+			manualKeys[strings.TrimSpace(record.Key)] = struct{}{}
+		}
+	}
 
 	for _, record := range ch.DisabledAPIKeys {
+		key := strings.TrimSpace(record.Key)
 		if !record.QuotaDisabled {
 			// A manual, plugin or HTTP-rule disable owns this record for good.
 			// An expired record owns nothing (the expiry cleanup removes it), so
 			// it must not stop quota from parking the same key.
 			result.keys = append(result.keys, record)
 			if !record.IsExpired() {
-				kept[record.Key] = struct{}{}
+				kept[key] = struct{}{}
 			}
 
 			continue
 		}
 
-		if _, ok := configured[record.Key]; !ok {
+		if _, manual := manualKeys[key]; manual {
+			// Remove legacy duplicate quota ownership without reporting the key as enabled.
 			result.changed = true
-			result.quotaFreed = append(result.quotaFreed, record.Key)
+			continue
+		}
+
+		if _, ok := configured[key]; !ok {
+			result.changed = true
+			result.quotaFreed = append(result.quotaFreed, key)
 
 			continue
 		}
 
 		if !collecting {
 			result.changed = true
-			result.quotaFreed = append(result.quotaFreed, record.Key)
+			result.quotaFreed = append(result.quotaFreed, key)
 
 			continue
 		}
 
 		if accounts != nil {
-			account, observedKey := observed[record.Key]
+			account, observedKey := observed[key]
 			unknown := !observedKey || account.ErrorCode != "" ||
 				account.Data.Status == "unknown" || account.Data.Status == ""
 			if !unknown && account.Data.Status != "exhausted" {
 				// Only an observed recovery releases the key: an outage, a
 				// removed observation or a stale row keeps it disabled.
 				result.changed = true
-				result.quotaFreed = append(result.quotaFreed, record.Key)
+				result.quotaFreed = append(result.quotaFreed, key)
 
 				continue
 			}
 		}
 
 		result.keys = append(result.keys, record)
-		kept[record.Key] = struct{}{}
+		kept[key] = struct{}{}
 	}
 
 	if collecting {
 		for _, account := range accounts {
-			if _, ok := kept[account.Key]; ok {
+			key := strings.TrimSpace(account.Key)
+			if _, ok := kept[key]; ok {
 				continue
 			}
 			if account.ErrorCode != "" || account.Data.Status != "exhausted" {
@@ -455,13 +469,14 @@ func reconcileQuotaKeyDisables(
 			}
 
 			result.keys = append(result.keys, objects.DisabledAPIKey{
-				Key:           account.Key,
+				Key:           key,
 				DisabledAt:    now,
 				ErrorCode:     0,
 				Reason:        quotaKeyDisabledReason,
 				QuotaDisabled: true,
 			})
-			result.quotaAdded = append(result.quotaAdded, account.Key)
+			result.quotaAdded = append(result.quotaAdded, key)
+			kept[key] = struct{}{}
 			result.changed = true
 		}
 	}

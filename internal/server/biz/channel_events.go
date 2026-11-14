@@ -175,7 +175,8 @@ func credentialEventRef(oauth bool, key string) *events.CredentialRef {
 // package enters when its last usable credential disappears.
 func channelIsAllKeysDisabled(ch *ent.Channel) bool {
 	return ch != nil && ch.Status == channel.StatusDisabled && ch.AutoDisabledAt != nil &&
-		ch.ErrorMessage != nil && strings.HasPrefix(*ch.ErrorMessage, allKeysDisabledErrorPrefix)
+		ch.ErrorMessage != nil && (strings.HasPrefix(*ch.ErrorMessage, allKeysDisabledErrorPrefix) ||
+		strings.HasPrefix(*ch.ErrorMessage, allAPIKeysPermanentlyDisabledMessagePrefix))
 }
 
 func rfc3339OrNil(value *time.Time) any {

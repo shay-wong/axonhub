@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/samber/lo"
@@ -79,10 +78,9 @@ func (svc *ChannelService) ApplyAPIKeyDisableAction(
 		return dk.Key == key && !dk.IsExpiredAt(now)
 	})
 
-	if disabled && (action != DisableActionPermanent ||
+	if disabled && !ch.DisabledAPIKeys[disabledIndex].QuotaDisabled && (action != DisableActionPermanent ||
 		(ch.DisabledAPIKeys[disabledIndex].DisabledUntil == nil && ch.DisabledAPIKeys[disabledIndex].ExpiresAt == nil)) {
-		// Keep an existing permanent disable, or any active disable when the new
-		// action is not stronger.
+		// Explicit actions take ownership from quota; other records keep the stronger action.
 		return nil
 	}
 
@@ -216,17 +214,6 @@ func allDisabledAPIKeysPermanent(allKeys []string, disabledKeys []objects.Disabl
 	return true
 }
 
-func shouldRestoreChannelAfterAPIKeyEnable(ch *ent.Channel, disabledKeys []objects.DisabledAPIKey) bool {
-	if ch == nil || ch.Status != channel.StatusDisabled || ch.ErrorMessage == nil {
-		return false
-	}
-	if !strings.HasPrefix(*ch.ErrorMessage, allAPIKeysPermanentlyDisabledMessagePrefix) {
-		return false
-	}
-
-	return len(ch.Credentials.GetEnabledAPIKeys(disabledKeys)) > 0
-}
-
 // EnableAPIKey 重新启用指定 key（从 disabled_api_keys 中移除）.
 func (svc *ChannelService) EnableAPIKey(ctx context.Context, channelID int, key string) error {
 	svc.apiKeyOpsLock.Lock()
@@ -264,10 +251,7 @@ func (svc *ChannelService) EnableAPIKey(ctx context.Context, channelID int, key 
 	// 更新 channel
 	update := svc.entFromContext(ctx).Channel.UpdateOneID(channelID).
 		SetDisabledAPIKeys(newDisabledKeys)
-	if shouldRestoreChannelAfterAPIKeyEnable(ch, newDisabledKeys) {
-		update.SetStatus(channel.StatusEnabled)
-		update.ClearErrorMessage()
-	}
+	update = applyRecoveredChannelStatus(ctx, update, ch, ch.Credentials, newDisabledKeys)
 
 	updated, err := update.Save(ctx)
 	if err != nil {
@@ -302,10 +286,7 @@ func (svc *ChannelService) EnableAllAPIKeys(ctx context.Context, channelID int) 
 	// 更新 channel，清空 disabled_api_keys
 	update := svc.entFromContext(ctx).Channel.UpdateOneID(channelID).
 		SetDisabledAPIKeys([]objects.DisabledAPIKey{})
-	if shouldRestoreChannelAfterAPIKeyEnable(ch, []objects.DisabledAPIKey{}) {
-		update.SetStatus(channel.StatusEnabled)
-		update.ClearErrorMessage()
-	}
+	update = applyRecoveredChannelStatus(ctx, update, ch, ch.Credentials, []objects.DisabledAPIKey{})
 
 	updated, err := update.Save(ctx)
 	if err != nil {
@@ -361,10 +342,7 @@ func (svc *ChannelService) EnableSelectedAPIKeys(ctx context.Context, channelID 
 
 	update := svc.entFromContext(ctx).Channel.UpdateOneID(channelID).
 		SetDisabledAPIKeys(newDisabledKeys)
-	if shouldRestoreChannelAfterAPIKeyEnable(ch, newDisabledKeys) {
-		update.SetStatus(channel.StatusEnabled)
-		update.ClearErrorMessage()
-	}
+	update = applyRecoveredChannelStatus(ctx, update, ch, ch.Credentials, newDisabledKeys)
 
 	updated, err := update.Save(ctx)
 	if err != nil {
@@ -396,8 +374,15 @@ func (svc *ChannelService) DeleteDisabledAPIKeys(ctx context.Context, channelID 
 		return &DeleteDisabledAPIKeysResult{Success: true}, nil
 	}
 
+	quotaIdentityChanged := false
 	svc.apiKeyOpsLock.Lock()
-	defer svc.apiKeyOpsLock.Unlock()
+	defer func() {
+		svc.apiKeyOpsLock.Unlock()
+		// The quota callback may reconcile keys and acquire apiKeyOpsLock again.
+		if quotaIdentityChanged {
+			svc.invalidateProviderQuotaAfterCommit(ctx, channelID)
+		}
+	}()
 
 	ch, err := svc.entFromContext(ctx).Channel.Get(ctx, channelID)
 	if err != nil {
@@ -514,9 +499,7 @@ func (svc *ChannelService) DeleteDisabledAPIKeys(ctx context.Context, channelID 
 	if _, err := update.Save(ctx); err != nil {
 		return nil, fmt.Errorf("failed to delete disabled api keys: %w", err)
 	}
-	if !reflect.DeepEqual(ch.Credentials, newCredentials) {
-		svc.invalidateProviderQuotaAfterCommit(ctx, channelID)
-	}
+	quotaIdentityChanged = !reflect.DeepEqual(ch.Credentials, newCredentials)
 
 	log.Info(ctx, "Disabled API keys deleted",
 		log.Int("channel_id", channelID),
@@ -536,9 +519,7 @@ func applyRecoveredChannelStatus(
 	credentials objects.ChannelCredentials,
 	disabledKeys []objects.DisabledAPIKey,
 ) *ent.ChannelUpdateOne {
-	if ch.Status != channel.StatusDisabled || ch.ErrorMessage == nil ||
-		(!strings.HasPrefix(*ch.ErrorMessage, allAPIKeysPermanentlyDisabledMessagePrefix) &&
-			!strings.HasPrefix(*ch.ErrorMessage, allKeysDisabledErrorPrefix)) ||
+	if !channelIsAllKeysDisabled(ch) ||
 		len(credentials.GetEnabledCredentialRefs(disabledKeys)) == 0 {
 		return update
 	}

@@ -1301,7 +1301,10 @@ export function useProviderQuotaStatuses() {
             {
               statusIn: ['disabled'],
               autoDisabledAtNotNil: true,
-              errorMessageHasPrefix: 'All API keys disabled',
+              or: [
+                { errorMessageHasPrefix: 'All API keys disabled' },
+                { errorMessageHasPrefix: 'All API keys permanently disabled' },
+              ],
             },
           ],
         },

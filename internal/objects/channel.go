@@ -667,11 +667,12 @@ func (c *ChannelCredentials) GetEnabledAPIKeyConfigsAt(disabledKeys []DisabledAP
 
 	disabledSet := make(map[string]struct{}, len(disabledKeys))
 	for _, dk := range disabledKeys {
-		if dk.Key == "" || dk.IsExpiredAt(now) {
+		key := strings.TrimSpace(dk.Key)
+		if key == "" || dk.IsExpiredAt(now) {
 			continue
 		}
 
-		disabledSet[dk.Key] = struct{}{}
+		disabledSet[key] = struct{}{}
 	}
 
 	enabled := make([]ChannelAPIKeyConfig, 0, len(allConfigs))
@@ -693,8 +694,8 @@ func filterDisabledAt(candidates []string, disabledKeys []DisabledAPIKey, now ti
 
 	disabledSet := make(map[string]struct{}, len(disabledKeys))
 	for _, disabledKey := range disabledKeys {
-		if disabledKey.Key != "" && !disabledKey.IsExpiredAt(now) {
-			disabledSet[disabledKey.Key] = struct{}{}
+		if key := strings.TrimSpace(disabledKey.Key); key != "" && !disabledKey.IsExpiredAt(now) {
+			disabledSet[key] = struct{}{}
 		}
 	}
 

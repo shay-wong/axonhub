@@ -110,6 +110,10 @@ One list supports importing, testing, copying, disabling, restoring, and deletin
 
 Credential-recovery events delivered to plugins use the saved channel status. They report `enabled` when the channel has recovered and retain `disabled` when it remains manually disabled.
 
+For channels with per-key provider quotas, an exhausted key is disabled until a later quota check confirms recovery. Other usable keys keep serving. A channel with both quota-disabled and manually disabled keys continues checking quota so recovered keys can serve again. A manually disabled channel stays disabled.
+
+In Key Management, **Keep disabled** changes a quota-owned disable into a manual disable. Manual, plugin, and HTTP-error rule disables survive quota recovery, including temporary rules until their expiry. Key aliases and weights are preserved.
+
 ## Auto-disable policy compatibility
 
 Global rules and the fork's separate channel/API key status-code policies are configured independently in retry settings. Custom channel rules run first, followed by global rules; a matching rule owns the failure even before its threshold is reached. Unmatched failures fall back to the separate status-code policies, with API key rules taking precedence over channel rules. Channel mode **Off** skips all automatic disabling.
@@ -321,6 +325,8 @@ available, it selects the first allowed endpoint using the configured endpoint
 order and converts the Responses request, response, or event envelope between
 HTTP and WebSocket. This fallback does not change the channel ranking or make
 an Images or Models request a Responses request.
+
+WebSocket provider errors retain their original `request_id`, including when adapted to an HTTP response, so the ID remains available for diagnostics.
 
 For model protocol overrides, list the exact formats the model may use:
 

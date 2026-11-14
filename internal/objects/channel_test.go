@@ -41,3 +41,24 @@ func TestChannelCredentialsGetAllAPIKeyConfigsPreservesNames(t *testing.T) {
 		{Key: "key-backup", Name: "Backup Key", Weight: 100},
 	}, configs)
 }
+
+func TestChannelCredentialsNormalizedDisableIdentity(t *testing.T) {
+	now := time.Now()
+	expired := now.Add(-time.Minute)
+	credentials := ChannelCredentials{
+		APIKeyConfigs: []ChannelAPIKeyConfig{
+			{Key: " primary ", Name: "Primary", Weight: 200},
+			{Key: "backup", Name: "Backup", Weight: 100},
+		},
+	}
+	disabled := []DisabledAPIKey{
+		{Key: "  primary  "},
+		{Key: " backup ", ExpiresAt: &expired},
+	}
+
+	require.Equal(t, []string{"backup"}, credentials.GetEnabledAPIKeysAt(disabled, now))
+	require.Equal(t, []string{"backup"}, credentials.GetEnabledCredentialRefsAt(disabled, now))
+	require.Equal(t, []ChannelAPIKeyConfig{{Key: "backup", Name: "Backup", Weight: 100}},
+		credentials.GetEnabledAPIKeyConfigsAt(disabled, now))
+	require.Equal(t, "  primary  ", disabled[0].Key, "matching must not rewrite stored records")
+}

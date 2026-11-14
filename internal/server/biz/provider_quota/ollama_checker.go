@@ -61,11 +61,7 @@ func ollamaAPIKey(ch *ent.Channel) string {
 		if trimmed == "" {
 			continue
 		}
-		// Disable records are keyed by the configured string, while the request
-		// needs the trimmed form, so both identities are consulted.
-		_, disabledAsConfigured := disabled[candidate]
-		_, disabledAsTrimmed := disabled[trimmed]
-		if !disabledAsConfigured && !disabledAsTrimmed {
+		if _, isDisabled := disabled[trimmed]; !isDisabled {
 			return trimmed
 		}
 	}

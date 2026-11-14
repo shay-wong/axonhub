@@ -54,6 +54,44 @@ const { buildQueryChannelsQuery } = await import(
 
 const columnsSource = read('features/channels/components/channels-columns.tsx');
 
+test('quota query keeps both automatic-disable prefixes and excludes manual channel disables', async () => {
+  let queryFn;
+  let input;
+  globalThis.__quotaTestUseQuery = (options) => {
+    queryFn = options.queryFn;
+    return {};
+  };
+  globalThis.__quotaTestGraphql = async (_query, variables) => {
+    input = variables.input;
+    return { queryChannels: { edges: [] } };
+  };
+  try {
+    const { useProviderQuotaStatuses } = await loadModule(
+      'features/system/data/quotas.ts',
+      (source) =>
+        'const useQuery = globalThis.__quotaTestUseQuery;\n' +
+        'const useMemo = (factory) => factory();\n' +
+        'const graphqlRequest = globalThis.__quotaTestGraphql;\n' + source
+    );
+    useProviderQuotaStatuses();
+    await queryFn();
+    assert.deepEqual(input.where.or, [
+      { statusIn: ['enabled'] },
+      {
+        statusIn: ['disabled'],
+        autoDisabledAtNotNil: true,
+        or: [
+          { errorMessageHasPrefix: 'All API keys disabled' },
+          { errorMessageHasPrefix: 'All API keys permanently disabled' },
+        ],
+      },
+    ]);
+  } finally {
+    delete globalThis.__quotaTestUseQuery;
+    delete globalThis.__quotaTestGraphql;
+  }
+});
+
 function channelFixture({ type, providerQuotaStatus }) {
   return {
     id: 'channel-1',

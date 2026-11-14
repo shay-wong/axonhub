@@ -49,6 +49,35 @@ func TestResponsesRetryableFailureSnapshotForkCompatibility(t *testing.T) {
 	require.Equal(t, "req_failed", responseErr.Detail.RequestID)
 }
 
+func TestResponsesErrorEventRequestIDForkCompatibility(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		body string
+	}{
+		{
+			name: "top-level request ID",
+			body: `{"type":"error","status":429,"code":"rate_limit","message":"slow down","request_id":"req_error"}`,
+		},
+		{
+			name: "nested request ID takes precedence",
+			body: `{"type":"error","status":"429","request_id":"req_outer","error":{"type":"rate_limit_error","code":429,"message":"slow down","request_id":"req_error"}}`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			stream, err := new(OutboundTransformer).TransformStream(t.Context(), nil, streams.SliceStream([]*httpclient.StreamEvent{
+				{Type: "error", Data: []byte(tt.body)},
+			}))
+			require.NoError(t, err)
+			require.False(t, stream.Next())
+			var responseErr *llm.ResponseError
+			require.ErrorAs(t, stream.Err(), &responseErr)
+			require.Equal(t, 429, responseErr.StatusCode)
+			require.Equal(t, "slow down", responseErr.Detail.Message)
+			require.Equal(t, "req_error", responseErr.Detail.RequestID)
+		})
+	}
+}
+
 func TestResponsesFailedTerminalRefusalForkCompatibility(t *testing.T) {
 	stream, err := new(OutboundTransformer).TransformStream(t.Context(), nil, streams.SliceStream([]*httpclient.StreamEvent{
 		{Data: []byte(`{"type":"response.failed","response":{"id":"resp_refusal","status":"failed","service_tier":"ultrafast","usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12},"error":{"code":"content_filter","message":"filtered"},"output":[{"id":"msg_1","type":"message","role":"assistant","status":"completed","content":[{"type":"refusal","refusal":"I cannot help."}]}]}}`)},

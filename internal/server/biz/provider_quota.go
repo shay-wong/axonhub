@@ -896,11 +896,7 @@ func isQuotaPollableChannel(ch *ent.Channel) bool {
 		return true
 	}
 
-	return ch.Status == channel.StatusDisabled &&
-		ch.AutoDisabledAt != nil &&
-		ch.ErrorMessage != nil &&
-		strings.HasPrefix(*ch.ErrorMessage, allKeysDisabledErrorPrefix) &&
-		hasActiveQuotaOwnedRecord(ch.DisabledAPIKeys)
+	return channelIsAllKeysDisabled(ch) && hasActiveQuotaOwnedRecord(ch.DisabledAPIKeys)
 }
 
 // failureAccountsFor returns the failed keys' rows only when the stored channel

@@ -197,10 +197,11 @@ func newErrorEventResponseError(raw []byte, eventType string) *llm.ResponseError
 	return &llm.ResponseError{
 		StatusCode: status,
 		Detail: llm.ErrorDetail{
-			Message: detail["message"],
-			Type:    detail["type"],
-			Code:    detail["code"],
-			Param:   detail["param"],
+			Message:   detail["message"],
+			Type:      detail["type"],
+			Code:      detail["code"],
+			Param:     detail["param"],
+			RequestID: detail["request_id"],
 		},
 	}
 }
@@ -245,9 +246,10 @@ func webSocketErrorEventDetail(raw []byte) (int, map[string]string) {
 	setWebSocketErrorText(detail, "message", frame["message"])
 	setWebSocketErrorText(detail, "code", frame["code"])
 	setWebSocketErrorText(detail, "param", frame["param"])
+	setWebSocketErrorText(detail, "request_id", frame["request_id"])
 
 	if nested, ok := frame["error"].(map[string]any); ok {
-		for _, key := range []string{"message", "code", "type", "param"} {
+		for _, key := range []string{"message", "code", "type", "param", "request_id"} {
 			setWebSocketErrorText(detail, key, nested[key])
 		}
 
