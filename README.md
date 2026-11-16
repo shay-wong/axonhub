@@ -319,6 +319,8 @@ Fork Release 构建可在**系统设置 > 关于**中安装更新或回滚到最
 桌面端源码已同步；fork 自动桌面发布需独立配置签名密钥，未配置时不影响服务端发布，详见[桌面发布说明](docs/zh/getting-started/quick-start.md#fork-桌面端发布)。
 未配置桌面签名时仍提供发布下载表，并链接到实际配置的 Docker Hub 仓库。
 
+Docker 镜像随版本发布更新，已取消每日 `unstable` 构建；通道选择见 [Docker 发布说明](docs/zh/getting-started/quick-start.md#fork-docker-发布)。
+
 Fork 还保留[按权限选择登录落点与旧设置链接兼容](docs/zh/getting-started/quick-start.md)、[统一 Key 策略与可选按 Key 重试](docs/zh/guides/channel-management.md#key-选择策略)，以及[指定 Key 诊断隔离与重试计数](docs/zh/guides/load-balance.md)。
 
 [配额备用渠道](docs/zh/guides/channel-management.md#按-key-重试)在首选渠道失败后使用，不重复尝试同一渠道，并保留同协议模型回退。

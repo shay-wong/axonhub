@@ -79,6 +79,7 @@
 
 ### Removed
 
+- Removed daily `unstable` Docker image publishing. Existing unstable tags stop updating; versioned images and the `beta`/`latest` release channels remain available.
 - Wafer quota monitor removed — Wafer is PAYG-only. Legacy wafer quota rows are purged at startup before schema migration when automatic migration is enabled.
 
 v0.4.0

@@ -12,6 +12,10 @@ Existing `/system?tab=…` bookmarks and sign-in return links open the correspon
 
 When AxonHub runs behind a reverse proxy, configure `server.trusted_proxies` with the proxy IPs or CIDRs before relying on forwarded client IPs for access controls. It defaults to an empty list, which ignores `X-Forwarded-For` and `X-Real-IP`; see `config.example.yml` for the configuration and environment variable syntax.
 
+## Fork Docker releases
+
+Docker images are published with fork releases using the full version tag and the corresponding `beta` or `latest` tag. Daily `unstable` image publishing has been removed; existing `unstable` and dated unstable tags stop receiving updates. Use a version tag or the appropriate release channel for continued updates.
+
 ## Fork desktop releases
 
 Desktop packaging uses the same fork release tag as the server. Automatic desktop publishing is skipped until the repository variable `MYGO_UPDATER_PUBLIC_KEY` is configured; publishing also requires the matching `MYGO_UPDATER_PRIVATE_KEY` Secret. Server and Docker releases continue without these desktop credentials. This fork has not configured them yet.

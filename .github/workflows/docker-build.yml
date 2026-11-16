@@ -1,6 +1,5 @@
 # Shared reusable Docker build workflow
-# Used by docker-publish.yml (mode: release), docker-unstable.yml
-# (mode: unstable), and docker-pr.yml (mode: test).
+# Used by docker-publish.yml (mode: release) and docker-pr.yml (mode: test).
 # Owns the native-architecture matrix, checkout, VERSION materialization,
 # Docker Buildx setup, optional Docker Hub login/metadata, mode-specific tags,
 # and the single build-push step. Publishing callers inherit credentials and
@@ -15,7 +14,7 @@ on:
   workflow_call:
     inputs:
       mode:
-        description: 'Build mode: release, unstable, or test'
+        description: 'Build mode: release or test'
         required: true
         type: string
       ref:
@@ -24,18 +23,6 @@ on:
         type: string
       tag:
         description: 'Release tag (mode: release)'
-        required: false
-        type: string
-      dockerhub_image:
-        description: 'Resolved Docker Hub repository (optional override)'
-        required: false
-        type: string
-      base_version:
-        description: 'Base version (mode: unstable)'
-        required: false
-        type: string
-      build_date:
-        description: 'Build date (mode: unstable)'
         required: false
         type: string
     secrets:
@@ -110,18 +97,11 @@ jobs:
           echo "$TAG" > internal/build/VERSION
           echo "Building tag: $TAG for ${{ matrix.arch }}"
 
-      - name: Write VERSION
-        if: inputs.mode == 'unstable'
-        env:
-          BASE_VERSION: ${{ inputs.base_version }}
-          BUILD_DATE: ${{ inputs.build_date }}
-        run: printf '%s\n' "${BASE_VERSION}-unstable.${BUILD_DATE}" > internal/build/VERSION
-
       - name: Resolve Docker Hub image
         id: dockerhub
         if: inputs.mode != 'test'
         env:
-          DOCKERHUB_IMAGE: ${{ inputs.dockerhub_image || vars.DOCKERHUB_IMAGE || vars.DOCKERHUB_NAME || vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_IMAGE || secrets.DOCKERHUB_NAME || secrets.DOCKERHUB_NAMESPACE }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || vars.DOCKERHUB_NAME || vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_IMAGE || secrets.DOCKERHUB_NAME || secrets.DOCKERHUB_NAMESPACE }}
           DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           DEFAULT_DOCKERHUB_NAMESPACE: ${{ github.repository_owner }}
@@ -184,7 +164,6 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           FLOATING_TAG: ${{ steps.version.outputs.floating_tag }}
           IMAGE: ${{ steps.dockerhub.outputs.image }}
-          BUILD_DATE: ${{ inputs.build_date }}
           ARCH: ${{ matrix.arch }}
         run: |
           case "$MODE" in
@@ -192,11 +171,6 @@ jobs:
               printf -v TAGS '%s\n%s' \
                 "${IMAGE}:${TAG}-${ARCH}" \
                 "${IMAGE}:${FLOATING_TAG}-${ARCH}"
-              ;;
-            unstable)
-              printf -v TAGS '%s\n%s' \
-                "${IMAGE}:unstable-${ARCH}" \
-                "${IMAGE}:unstable-${BUILD_DATE}-${ARCH}"
               ;;
             *)
               echo "Unknown mode: $MODE" >&2
@@ -216,7 +190,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: ${{ inputs.mode != 'test' }}
           pull: ${{ inputs.mode == 'test' }}
-          # 保留 fork 更新来源；每日构建跟随 beta，正式发布按标签区分渠道。
+          # 保留 fork 更新来源，正式发布按标签区分渠道。
           build-args: |
             AXONHUB_UPDATE_REPOSITORY=${{ vars.UPDATE_REPOSITORY || github.repository }}
             AXONHUB_UPDATE_CHANNEL=${{ steps.version.outputs.channel || 'beta' }}

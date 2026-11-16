@@ -13,7 +13,6 @@ const { outputText } = ts.transpileModule(source, {
 const moduleURL = `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`;
 const { resolveExternalURLs } = await import(moduleURL);
 const dockerPublishWorkflow = await readFile(new URL('../../../.github/workflows/docker-publish.yml', import.meta.url), 'utf8');
-const unstableDockerWorkflow = await readFile(new URL('../../../.github/workflows/docker-unstable.yml', import.meta.url), 'utf8');
 const sharedDockerWorkflow = await readFile(new URL('../../../.github/workflows/docker-build.yml', import.meta.url), 'utf8');
 const releaseWorkflow = await readFile(new URL('../../../.github/workflows/release.yml', import.meta.url), 'utf8');
 const desktopWorkflow = await readFile(new URL('../../../.github/workflows/desktop-release.yml', import.meta.url), 'utf8');
@@ -47,6 +46,7 @@ test('release builds use the artifact repository and exact release tag', () => {
   assert.ok(dockerPublishWorkflow.includes('default: beta'));
   assert.ok(dockerPublishWorkflow.includes('tag: ${{ inputs.tag || github.ref_name }}'));
   assert.ok(sharedDockerWorkflow.includes('AXONHUB_UPDATE_REPOSITORY=${{ vars.UPDATE_REPOSITORY || github.repository }}'));
+  assert.ok(sharedDockerWorkflow.includes("AXONHUB_UPDATE_CHANNEL=${{ steps.version.outputs.channel || 'beta' }}"));
   assert.ok(sharedDockerWorkflow.includes('VITE_GITHUB_REPOSITORY=${{ github.repository }}'));
   assert.ok(dockerPublishWorkflow.includes('DEFAULT_DOCKERHUB_NAMESPACE: ${{ github.repository_owner }}'));
   assert.equal(dockerPublishWorkflow.includes('looplj/axonhub'), false);
@@ -86,18 +86,6 @@ test('download notes have one writer per release and work when desktop signing i
   assert.ok(notesJob.includes(concurrencyGroup));
   assert.ok(desktopWorkflow.includes(concurrencyGroup));
   assert.ok(notesJob.includes('DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || vars.DOCKERHUB_NAME || vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_IMAGE || secrets.DOCKERHUB_NAME || secrets.DOCKERHUB_NAMESPACE }}'));
-});
-
-test('unstable Docker builds use the fork beta branch and artifact owner', () => {
-  assert.ok(unstableDockerWorkflow.includes('ref: beta'));
-  assert.ok(unstableDockerWorkflow.includes('uses: ./.github/workflows/docker-build.yml'));
-  assert.ok(unstableDockerWorkflow.includes('mode: unstable'));
-  assert.ok(unstableDockerWorkflow.includes('dockerhub_image: ${{ needs.prepare.outputs.dockerhub_image }}'));
-  assert.ok(sharedDockerWorkflow.includes('AXONHUB_UPDATE_REPOSITORY=${{ vars.UPDATE_REPOSITORY || github.repository }}'));
-  assert.ok(sharedDockerWorkflow.includes("AXONHUB_UPDATE_CHANNEL=${{ steps.version.outputs.channel || 'beta' }}"));
-  assert.ok(sharedDockerWorkflow.includes('${IMAGE}:unstable-${ARCH}'));
-  assert.equal(unstableDockerWorkflow.includes('ref: unstable'), false);
-  assert.equal(unstableDockerWorkflow.includes('looplj/axonhub'), false);
 });
 
 test('desktop releases receive the fork tag and require a configured signing key', () => {

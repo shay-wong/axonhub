@@ -12,6 +12,10 @@ Release 构建可由拥有 `write_settings` 权限的用户在**系统设置 > �
 
 AxonHub 部署在反向代理后时，必须先将代理 IP 或 CIDR 配置到 `server.trusted_proxies`，再依赖转发的客户端 IP 执行访问控制。该配置默认是空列表，此时忽略 `X-Forwarded-For` 和 `X-Real-IP`；配置文件和环境变量语法见 `config.example.yml`。
 
+## Fork Docker 发布
+
+Docker 镜像随 fork 版本发布，提供完整版本标签及对应的 `beta` 或 `latest` 标签。已移除每日 `unstable` 镜像发布，现有 `unstable` 及其日期标签不再更新；需要持续更新时，请改用版本标签或对应的发布通道。
+
 ## Fork 桌面端发布
 
 桌面打包与服务端使用同一个 fork 发布 tag。仓库未配置 `MYGO_UPDATER_PUBLIC_KEY` 变量时跳过自动桌面发布；发布还需要匹配的 `MYGO_UPDATER_PRIVATE_KEY` Secret。未配置桌面凭据不影响服务端和 Docker 发布。本 fork 当前尚未配置这对凭据。

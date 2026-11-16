@@ -8,7 +8,7 @@ Welcome to the AxonHub documentation center! This index will help you quickly fi
 
 | Document | Description |
 |----------|-------------|
-| [Quick Start Guide](getting-started/quick-start.md) | Configure AxonHub, permission-aware login destinations, legacy settings links, fork updates, release downloads, desktop signing setup, and proxy boundaries |
+| [Quick Start Guide](getting-started/quick-start.md) | Configure AxonHub, permission-aware login destinations, legacy settings links, fork updates, release downloads, Docker release channels, desktop signing setup, and proxy boundaries |
 | [Request Processing](getting-started/request-processing.md) | Understand how AxonHub processes API requests |
 
 ### 📖 User Guides
