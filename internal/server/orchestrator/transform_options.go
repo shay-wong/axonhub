@@ -22,6 +22,7 @@ func applyTransformOptions(req *llm.Request, channelSettings *objects.ChannelSet
 
 	if !transformOptions.ForceArrayInstructions &&
 		!transformOptions.ForceArrayInputs &&
+		!transformOptions.ForceArrayStop &&
 		!transformOptions.ReplaceDeveloperRoleWithSystem &&
 		!transformOptions.CodexStyleResponses {
 		return req
@@ -39,6 +40,18 @@ func applyTransformOptions(req *llm.Request, channelSettings *objects.ChannelSet
 
 	if transformOptions.CodexStyleResponses {
 		newReq.TransformOptions.CodexStyleResponses = lo.ToPtr(true)
+	}
+
+	if transformOptions.ForceArrayStop {
+		newReq.Stop = forceArrayStop(newReq.Stop)
+
+		// Legacy /v1/completions requests keep their stop value in Completion.Stop,
+		// which the outbound completion transformer reads instead of req.Stop.
+		if newReq.Completion != nil {
+			completion := *newReq.Completion
+			completion.Stop = forceArrayStop(completion.Stop)
+			newReq.Completion = &completion
+		}
 	}
 
 	if transformOptions.ReplaceDeveloperRoleWithSystem {
@@ -121,6 +134,17 @@ func applyReasoningEffortMapping(req *llm.Request, channelSettings *objects.Chan
 	}
 
 	return &newReq
+}
+
+// forceArrayStop rewrites a single stop sequence into the array form.
+// OpenAI accepts both forms, but strict OpenAI-compatible upstreams reject the
+// string form with HTTP 400, so such channels can opt into the array form.
+func forceArrayStop(stop *llm.Stop) *llm.Stop {
+	if stop == nil || stop.Stop == nil {
+		return stop
+	}
+
+	return &llm.Stop{MultipleStop: []string{*stop.Stop}}
 }
 
 // replaceDeveloperRoleWithSystem replaces developer role with system in messages.

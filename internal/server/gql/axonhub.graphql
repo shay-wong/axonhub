@@ -60,6 +60,7 @@ type ReasoningEffortMapping {
 type TransformOptions {
   forceArrayInstructions: Boolean!
   forceArrayInputs: Boolean!
+  forceArrayStop: Boolean!
   replaceDeveloperRoleWithSystem: Boolean!
   codexStyleResponses: Boolean!
   reasoningEffortMapping: [ReasoningEffortMapping!]
@@ -79,6 +80,7 @@ input ReasoningEffortMappingInput {
 input TransformOptionsInput {
   forceArrayInstructions: Boolean
   forceArrayInputs: Boolean
+  forceArrayStop: Boolean
   replaceDeveloperRoleWithSystem: Boolean
   codexStyleResponses: Boolean
   reasoningEffortMapping: [ReasoningEffortMappingInput!]

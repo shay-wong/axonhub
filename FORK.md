@@ -19,10 +19,11 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`d00786069b6d86141ab0f3d493b2b5b93032766f`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`a47f4a56b63b957d94aaa15c1381095818ec9d14`
-- 本次 merge base：`824427782241086f3a3632c5e451cdfd0d62c819`
-- 审计范围：`git diff a47f4a56..HEAD`
+- 本次 upstream merge 的 fork parent：`640af8211a896d3d768719c70b72a3512d0fa05c`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`b0deb8226d7efcbc13c09a8bc25ab35e85cf8444`
+- 本次 merge base：`a47f4a56b63b957d94aaa15c1381095818ec9d14`
+- 审计范围：`git diff b0deb822..HEAD`
+- 2026-11-16 合入 15 个上游提交：JSONB 非法 surrogate 修复、OAuth 后台刷新退避与永久错误停刷、Codex 配额 401 分类、Anthropic 搜索工具版本/参数、内容过滤终态、stop 数组转换开关、长列表滚动，以及模型/插件目录和依赖更新。保留 Codex 显式转换、Tool Search、失败终态、1.5 execution 备份和 retained thread 保护；每日 unstable Docker 构建继续保持删除。无整项 fork 能力等价吸收。
 - 2026-11-14 合入 11 个上游提交：请求正文去重、逐 Key 配额和耗尽禁用、NeuralWatt 每日额度、System One 兼容端点、Codex HTTP 启动项/页面输出规范化、JSON object 输入提示、WebSocket 错误和非流式终态映射，以及 Gemini 集成测试依赖更新。`7af565b5`（PR #2999）已等价吸收正文分块、尾部复用和写入查询优化，删除 U23；fork 的 1.5 execution 备份及 retained thread 保护分别归入 F05/F06。保留 Key 身份/路由、HTTP 与 WebSocket 工具语义及失败证据。
 - 2026-11-13 合入 6 个上游提交：响应头与请求终态合并持久化、第三方 Codex HTTP 模型目录、HTTP 页面插件随机 ID 修复及赞助商说明。保留正文分块、失败终态原始证据、敏感头脱敏和流式用量计费；fork 额外终态分支同步传递响应头。无整项 fork 能力等价吸收。
 - 2026-11-12 合入 4 个上游提交：共享模型查询缓存、Claude 指定重置额度、无可用 API Key 时返回错误，以及每日用量卡插件注册。保留统一 Key 选择和身份记录、模型库回退的档位计费，以及请求正文分块去重；无整项 fork 能力等价吸收。
@@ -56,12 +57,13 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含已发布 tag `v1.0.0-rc.4`（`82442778`），但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-rc.3-fork.2`；upstream 发布基线变为 `v1.0.0-rc.4`，因此下一个规范化 fork 版本为 `v1.0.0-rc.4-fork.1`，发布前仍须重新确认该 tag 未被占用。2026-11-14 已核对双方 Release；本次不修改版本文件、不发布。
+- 最近已发布 fork tag 为 `v1.0.0-rc.3-fork.2`；upstream 发布基线变为 `v1.0.0-rc.4`，因此下一个规范化 fork 版本为 `v1.0.0-rc.4-fork.1`，发布前仍须重新确认该 tag 未被占用。2026-11-16 已核对双方 Release；本次不修改版本文件、不发布。
 
 ## 长期保留
 
 ### F01 Fork 发布、更新和外部资产归属
 
+- 2026-11-16 采用 `a17831df`/`42765b69` 的 artifact action 更新：共享前端上传与服务端/桌面下载同步升级，保留完整 fork tag、下载表唯一写入者、签名开关和 fork 仓库归属；不恢复独立每日镜像发布。
 - 2026-11-16 维护者确认移除每日 unstable Docker 构建：删除独立 workflow 及共享构建中的 unstable 模式、日期版本和专属输入；仅保留 release/test 模式。旧 `unstable`/日期镜像标签不再刷新，正式版本及 `beta`/`latest` 镜像继续随发布更新；合并上游时不得恢复定时构建。当前变更定位：`git log --diff-filter=D -- .github/workflows/docker-unstable.yml`；用户说明：中英 quick-start；验证：`cd frontend && node --test src/config/external-urls.test.mjs`。
 - 2026-11-11 整合 `7def6e43` 的共享前端构建和下载表：前端构建固定到完整 release tag，保留 fork 仓库外链和去重 gate；`stable-fork-release.yml` 允许被调用的 artifact job 使用 `actions: write`。父发布等待服务端及可选桌面上传后统一更新下载表，独立桌面发布仍可自行更新；两入口按仓库/tag 串行化，保留原正文且重复运行不重复插入。没有桌面公钥时也提供 Server 下载表，Docker Hub 链接跟随实际镜像配置，fork 不展示 upstream Homebrew。代码/回归：`.github/workflows/release.yml`、`.github/workflows/desktop-release.yml`、`.github/workflows/stable-fork-release.yml`、`scripts/release-download-notes.py`、`scripts/release_download_notes_test.py`、`frontend/src/config/external-urls.test.mjs`；用户说明：中英 quick-start；独立修复定位：`git log -S'write-download-notes: false' -- .github/workflows/release.yml`。验证：`python3 scripts/release_download_notes_test.py`；`cd frontend && node --test src/config/external-urls.test.mjs`。未新增 GHCR 发布任务，不能仅根据旧通知文本认定镜像已发布。
 - 2026-11-10 桌面端整合：采用 `16084817` 的独立模块和打包 workflow。Fork 通过 workflow_call 传递完整发布 tag；桌面更新及上传仓库读取 `AXONHUB_RELEASE_REPOSITORY`，缺省为本 fork，公钥只读取 `MYGO_UPDATER_PUBLIC_KEY`，不使用 upstream 的公钥。无公钥时省略整个 updates 配置并跳过自动桌面发布，不阻断原服务端/Docker 发布；启用发布还需配置匹配的 `MYGO_UPDATER_PRIVATE_KEY` Secret。当前未配置这对凭据，未发布或验证签名桌面制品。代码/回归：`.github/workflows/release.yml`、`.github/workflows/desktop-release.yml`、`cmd/axonhub-desktop/mygo.config.ts`、`frontend/src/config/external-urls.test.mjs`；用户说明：中英 quick-start。当前独立修复定位：`git log -S'vars.MYGO_UPDATER_PUBLIC_KEY' -- .github/workflows/release.yml`。不注入 server `BuildTime`，避免内嵌管理页把桌面程序当作 server ZIP 更新目标。
@@ -101,6 +103,7 @@ git show --remerge-diff <merge-commit>
 
 ### F03 按渠道启用 Codex 风格 Responses 转换
 
+- 2026-11-16 整合 `53d0f0ef` 的 `ForceArrayStop`：与 `CodexStyleResponses` 分别进入转换条件和请求复制逻辑，不能因新增 stop 开关让仅开启 Codex 转换的渠道提前返回；保留两组转换回归，GraphQL 与表单读写链同步生成。
 - 生命周期：`长期保留`
 - 原始意图：运营人员可以只对选定的官方 Codex 或兼容 channel 启用 Codex 风格的 Responses 默认值，而不是全局改变所有 OpenAI-compatible 请求。
 - 必须保持：`TransformOptions.CodexStyleResponses` 是 `codex` 和 `fenno` channel 的显式开关且默认关闭；关闭时保留调用方原始语义；开启时补充缺失的 prompt cache key、tool choice 和 verbosity，但不再补 `service_tier`。档位未指定时沿用上游默认，显式 Fast/Ultrafast 等值继续保留，也不能影响图像请求。
@@ -194,6 +197,7 @@ git show --remerge-diff <merge-commit>
 
 ### U03 Tool Search 和跨协议工具调用语义
 
+- 2026-11-16 采用 `7be600c6` 的原生 `web_search_20260209` 版本和参数保真，保留 `allowed_callers` 与已有搜索版本；未知原生版本不猜测。与 fork `tool_search_tool_regex`/`bm25`、`DeferLoading` 和流式 ServerContent 分支组合，不视为整项 Tool Search 吸收。回归：`llm/transformer/anthropic/web_search_version_test.go`、`web_search_version_behavior_test.go` 及既有 Tool Search 测试。
 - 2026-11-14 采用 `fba2d648`/`77d2f8ff` 的 HTTP bootstrap 规范化：缺少 call ID 的已识别 Codex 页面/启动输出转换成合法 user input；带 call ID 的真实工具结果及 WebSocket 路径继续保留 namespace、name、call ID 和 output。`tool_output_namespace_test.go` 分别覆盖两条 transport，不能再要求 HTTP bootstrap 保持无锚点工具输出形状。
 - 2026-11-11 工具结果 namespace 保真：`function_call_output` 和 `custom_tool_call_output` 的 namespace 通过 `Message.ToolCallNamespace` 保存，Responses/Codex 出站原样还原，内部 JSON 往返与重试不能丢失。覆盖 Codex `codex_apps_open_page`、`codex_apps_selected_page_part_1_of_1` 的 `namespace=agent`/无 call_id 形状，保留 name、call_id、output，不推断或伪造命名空间。其他协议不发送此私有字段；真实 Chat wire 再解码不能恢复其未承载的 namespace。代码：`llm/model.go`、`llm/transformer/openai/responses/inbound.go`、`outbound_convert.go`；回归：`llm/transformer/openai/responses/tool_output_namespace_test.go`（普通 Responses、Codex 官方/中转、HTTP/WebSocket、JSON 往返与换渠道）。上游 `f544bbd5` 只补 name，已合入基线 `59bb6734` 及核对时最新 `c42d57de` 仍缺此路径；上游覆盖等价工具结果回归后可移除此子项。用户文档：中英 codex-integration；当前变更定位：`git log -S'ToolCallNamespace' -- llm/model.go`；验证：`cd llm && go test ./transformer/openai/responses -run '^TestToolOutputNamespace' -count=1`。
 - 2026-11-10 采用 `f17e5aba` 的 Anthropic 普通 `tool_use.id` 规范化，保留结构化 Tool Search 和特殊工具 ID。上游新增测试分别验证完整内容快照恢复与本地结构化工具往返，不能要求每个 `server_tool_use` 都生成完整快照；两条路径均保留大整数精度。
@@ -213,6 +217,7 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- 2026-11-16 采用 `29f3f5f4` 的敏感内容终态处理：`sensitive` 规范化为 `content_filter`，不按空响应重试或换渠道，Anthropic 不生成没有 start 的 stop 块。保留 fork 对 `error`、`length`、`cancelled` 的非空终态语义；新 integration test 的 length 用例同样只调用一次并透出原 finish reason。回归：`llm/pipeline/empty_response_moderation_integration_test.go`、`empty_response_test.go`。
 - 2026-11-14 采用 `451c80ea` 的共享 WebSocket 错误解码器，同时保留顶层和嵌套 `request_id`，确保直接流及 HTTP/WS 适配错误仍携带原始诊断 ID。独立兼容回归及定位：`git log -S'TestResponsesErrorEventRequestIDForkCompatibility' -- llm/transformer/openai/responses/outbound_stream_fork_compat_test.go`。采用 `33f76e3c` 的未知 Anthropic finish reason 回退，但已确认的 error/cancelled 仍返回失败，不能变成成功 `end_turn`。
 - 2026-11-10 采用 `4af420ca`/`3be08c28`/`16329952` 的同步 raw recorder 和 Close 收尾，删除旧 fan-out 队列。独立兼容修复在转发 Responses 原始终态前验证转换结果，保留中断时转换器生成的失败终态；已验证完成可忽略尾部断连，但不能吞掉 HTTP/WS 适配器的 `ErrInvalidResponse`/`ErrUnsupportedConversion`。回归：`TestResponsesIdentityStream_PreservesValidatedOutcome`、`TestResponsesIdentityStream_ValidatedTerminalPreservesAdapterError`；当前变更定位：`git log -S'TestResponsesIdentityStream_ValidatedTerminalPreservesAdapterError' -- internal/server/orchestrator/pass_through_test.go`。
 - 2026-11-07 整合 `479f700c` 的非流式 `content_filter`/取消映射；保留本地 `TerminalOutcome` 优先级、`canceled` 标准化、错误详情与仅成功时补空输出，后续成功 choice 不能覆盖已确认失败或不完整终态。回归：`TestInboundTransformer_TransformResponse_FinishReasonStatus` 与既有异常终态测试。
@@ -238,6 +243,7 @@ git show --remerge-diff <merge-commit>
 
 ### U05 失败执行响应体和终态诊断持久化
 
+- 2026-11-16 整合 `47252799` 的 JSONB 存储净化：fork 共用 execution 写入 helper 同样处理 NUL 与孤立 surrogate，保持失败状态、headers、chunks 和脱离请求取消的保存语义。只净化数据库 JSON 副本；CDC 归档继续只去 NUL，外置载荷和热会话保持原始 surrogate 字节，不能为了 JSONB 改写续链输入。回归：`internal/server/biz/request_json_sanitize_test.go`、`request_storage_boundary_test.go`、`request_body_chunks_replay_test.go` 及 `internal/server/orchestrator/responses_continuation_storage_test.go`。
 - 2026-11-10 独立兼容修复：新的实体入参和统一终态写入接口同时携带原始错误码、headers 和 chunks；raw error 必须先完成当前 attempt 的 Close，再保存原始错误 body，避免收尾覆盖证据。成功仍清除旧错误，失败仍保留实际状态码；回归：`TestStreamTailForkPreservesTerminalEvidenceAndTier`。当前变更定位：`git log -S'updateRequestExecutionResponse' -- internal/server/biz/request.go`。
 - 生命周期：`等待上游吸收`
 - 原始意图：失败 request/execution 必须保留足够的 provider 证据，避免详情页只能显示 `{}`、`0 items` 或被包装后的空错误。
@@ -274,6 +280,7 @@ git show --remerge-diff <merge-commit>
 
 ### U09 凭据可见性、敏感字段和 provider quota 边界
 
+- 2026-11-16 采用 `9829a25a`/`698c37c3` 的后台 OAuth 退避和 Codex usage 401 分类：明确永久 OAuth 错误停后台刷新，显式调用和重新启动仍可恢复；配额 401 清除不可再信的观测，不进入渠道/Key 自动禁用或生产健康计数，错误不保存上游敏感 body。保留 DB/cache 一致性和无错误恢复通知回归：`provider_quota_state_freshness_test.go`、`provider_quota/codex_credentials_test.go`、`llm/oauth/token_provider_autorefresh_test.go`。
 - 2026-11-03 采用 `e5c904ef` 的服务账号 Key scope 授予校验及项目边界、`677166b4` 的配额状态 Webhook；保留个人 Key ownership、结构化上游 Key、事务提交后 quota cache 失效及配置读取权限，不视为整项吸收。
 - 本次独立整合修复：`d72446d1` 新增的 `channelAPIKeyIndex` 继续采用本地 `write_channels` 边界，不能通过序号绕过别名/后缀的读取限制。回归：`TestRequestExecutionResolver_ChannelAPIKeyIndex`。定位：`git log -S'channel readers must not see credential identity snapshots' -- internal/server/gql/request_channel_api_key_index_schema_test.go`。
 - 本次上游整合：`1d3d2831` 已提供请求 execution 的 Key 后缀持久化；合并为唯一字段并保留最多 4 rune 校验，但 fork 的别名/header 快照及 `write_channels` 读取边界仍保留。`d4a34586` 改用 Command Code 账户 API Key 查询配额，不替代结构化 inference Key 身份与 quota cache 失效约束。
