@@ -286,11 +286,6 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	reqCopy.TransformOptions.ArrayInputs = lo.ToPtr(true)
 	reqCopy.ServiceTier = llm.OpenAIServiceTier(reqCopy.APIFormat, reqCopy.ServiceTier)
 
-	sessionID := ""
-	if lo.FromPtr(reqCopy.TransformOptions.CodexStyleResponses) {
-		sessionID = ensureSessionID(ctx, rawSessionID, rawTurnMetadata)
-		applyCodexStyleResponsesDefaults(&reqCopy, sessionID)
-	}
 	// The copied request now targets Responses after normalizing the source protocol's tier.
 	reqCopy.APIFormat = llm.APIFormatOpenAIResponse
 
@@ -338,15 +333,12 @@ func (t *OutboundTransformer) TransformRequest(ctx context.Context, llmReq *llm.
 	}
 
 	if hreq.Headers.Get(SessionHeaderHyphen) == "" {
-		if sessionID == "" {
-			sessionID = ensureSessionID(ctx, rawSessionID, rawTurnMetadata)
-		}
-		hreq.Headers.Set(SessionHeaderHyphen, sessionID)
+		hreq.Headers.Set(SessionHeaderHyphen, ensureSessionID(ctx, rawSessionID, rawTurnMetadata))
 	}
 
 	// Fabricate the remaining Codex identity headers for non-Codex inbound
 	// clients so the upstream always sees a complete Codex session shape.
-	sessionID = hreq.Headers.Get(SessionHeaderHyphen)
+	sessionID := hreq.Headers.Get(SessionHeaderHyphen)
 	windowID := sessionID + ":0"
 	if hreq.Headers.Get(ThreadIDHeader) == "" {
 		// Codex clients send Thread-Id equal to Session-Id (both identify the
@@ -432,40 +424,6 @@ func ensureSessionID(ctx context.Context, rawSessionID string, rawTurnMetadata s
 	}
 
 	return uuid.NewString()
-}
-
-func applyCodexStyleResponsesDefaults(req *llm.Request, sessionID string) {
-	if req == nil {
-		return
-	}
-
-	if lo.FromPtr(req.PromptCacheKey) == "" && sessionID != "" {
-		req.PromptCacheKey = lo.ToPtr(sessionID)
-	}
-
-	if len(req.Tools) > 0 && !hasToolChoiceSemantics(req) {
-		req.ToolChoice = &llm.ToolChoice{ToolChoice: lo.ToPtr("auto")}
-	}
-
-	if lo.FromPtr(req.Verbosity) == "" {
-		req.Verbosity = lo.ToPtr("low")
-	}
-}
-
-func hasToolChoiceSemantics(req *llm.Request) bool {
-	if req == nil {
-		return false
-	}
-
-	if req.ToolChoice != nil {
-		return true
-	}
-
-	if req.ProviderExtensions == nil || req.ProviderExtensions.OpenAIResponses == nil || req.ProviderExtensions.OpenAIResponses.Request == nil {
-		return false
-	}
-
-	return len(req.ProviderExtensions.OpenAIResponses.Request.RawToolChoice) > 0
 }
 
 func (t *OutboundTransformer) TransformResponse(ctx context.Context, httpResp *httpclient.Response) (*llm.Response, error) {

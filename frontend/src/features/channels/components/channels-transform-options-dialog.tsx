@@ -14,7 +14,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Form, FormField, FormItem, FormLabel, FormMessage, FormControl } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useUpdateChannel } from '../data/channels';
-import { CHANNEL_CONFIGS } from '../data/config_channels';
 import { Channel, ReasoningEffortMapping, TransformOptions } from '../data/schema';
 import { mergeChannelSettingsForUpdate } from '../utils/merge';
 
@@ -31,7 +30,6 @@ const transformOptionsFormSchema = z.object({
   forceArrayInputs: z.boolean().optional(),
   forceArrayStop: z.boolean().optional(),
   replaceDeveloperRoleWithSystem: z.boolean().optional(),
-  codexStyleResponses: z.boolean().optional(),
   reasoningEffortMapping: z
     .array(
       z.object({
@@ -56,7 +54,6 @@ const EFFORT_SUGGESTIONS = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
 export function ChannelsTransformOptionsDialog({ open, onOpenChange, currentRow }: Props) {
   const { t } = useTranslation();
   const updateChannel = useUpdateChannel();
-  const supportsCodexStyleResponses = CHANNEL_CONFIGS[currentRow.type].supportsCodexStyleResponses;
 
   const form = useForm<TransformOptionsFormValues>({
     resolver: zodResolver(transformOptionsFormSchema),
@@ -65,7 +62,6 @@ export function ChannelsTransformOptionsDialog({ open, onOpenChange, currentRow 
       forceArrayInputs: currentRow.settings?.transformOptions?.forceArrayInputs || false,
       forceArrayStop: currentRow.settings?.transformOptions?.forceArrayStop || false,
       replaceDeveloperRoleWithSystem: currentRow.settings?.transformOptions?.replaceDeveloperRoleWithSystem || false,
-      codexStyleResponses: currentRow.settings?.transformOptions?.codexStyleResponses || false,
       reasoningEffortMapping: currentRow.settings?.transformOptions?.reasoningEffortMapping || [],
     },
   });
@@ -81,7 +77,6 @@ export function ChannelsTransformOptionsDialog({ open, onOpenChange, currentRow 
         forceArrayInputs: currentRow.settings?.transformOptions?.forceArrayInputs || false,
         forceArrayStop: currentRow.settings?.transformOptions?.forceArrayStop || false,
         replaceDeveloperRoleWithSystem: currentRow.settings?.transformOptions?.replaceDeveloperRoleWithSystem || false,
-        codexStyleResponses: currentRow.settings?.transformOptions?.codexStyleResponses || false,
         reasoningEffortMapping: currentRow.settings?.transformOptions?.reasoningEffortMapping || [],
       });
       setDraft({ from: '', to: '' });
@@ -117,7 +112,6 @@ export function ChannelsTransformOptionsDialog({ open, onOpenChange, currentRow 
         forceArrayInputs: values.forceArrayInputs,
         forceArrayStop: values.forceArrayStop,
         replaceDeveloperRoleWithSystem: values.replaceDeveloperRoleWithSystem,
-        codexStyleResponses: values.codexStyleResponses,
       };
       // Empty list is treated as "clear": send [] so the backend removes the mapping.
       // undefined would mean "don't touch", but the dialog is the sole editor here.
@@ -247,29 +241,6 @@ export function ChannelsTransformOptionsDialog({ open, onOpenChange, currentRow 
                       </FormItem>
                     )}
                   />
-
-                  {supportsCodexStyleResponses && (
-                    <FormField
-                      control={form.control}
-                      name='codexStyleResponses'
-                      render={({ field }) => (
-                        <FormItem className='flex items-center gap-2'>
-                          <FormControl>
-                            <Checkbox checked={field.value || false} onCheckedChange={field.onChange} />
-                          </FormControl>
-                          <div className='space-y-0.5'>
-                            <FormLabel className='cursor-pointer text-sm font-normal'>
-                              {t('channels.dialogs.fields.transformOptions.codexStyleResponses.label')}
-                            </FormLabel>
-                            <p className='text-muted-foreground text-xs'>
-                              {t('channels.dialogs.fields.transformOptions.codexStyleResponses.description')}
-                            </p>
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  )}
 
                   <FormField
                     control={form.control}

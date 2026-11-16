@@ -143,7 +143,6 @@ const CREATE_CHANNEL_MUTATION = `
           forceArrayInputs
           forceArrayStop
           replaceDeveloperRoleWithSystem
-          codexStyleResponses
           reasoningEffortMapping { from to }
         }
         passThroughUserAgent
@@ -263,7 +262,6 @@ const DUPLICATE_CHANNEL_MUTATION = `
           forceArrayInputs
           forceArrayStop
           replaceDeveloperRoleWithSystem
-          codexStyleResponses
           reasoningEffortMapping { from to }
         }
         passThroughUserAgent
@@ -383,7 +381,6 @@ const BULK_CREATE_CHANNELS_MUTATION = `
           forceArrayInputs
           forceArrayStop
           replaceDeveloperRoleWithSystem
-          codexStyleResponses
           reasoningEffortMapping { from to }
         }
         passThroughUserAgent
@@ -502,7 +499,6 @@ const CHANNEL_FIELDS_FRAGMENT = `
           forceArrayInputs
           forceArrayStop
           replaceDeveloperRoleWithSystem
-          codexStyleResponses
           reasoningEffortMapping { from to }
         }
         passThroughUserAgent
@@ -770,7 +766,6 @@ const BULK_IMPORT_CHANNELS_MUTATION = `
             forceArrayInputs
             forceArrayStop
             replaceDeveloperRoleWithSystem
-            codexStyleResponses
             reasoningEffortMapping { from to }
           }
           passThroughUserAgent
@@ -1145,7 +1140,6 @@ const BULK_UPDATE_CHANNEL_ORDERING_MUTATION = `
             forceArrayInputs
             forceArrayStop
             replaceDeveloperRoleWithSystem
-            codexStyleResponses
             reasoningEffortMapping { from to }
           }
           passThroughUserAgent
@@ -1421,7 +1415,6 @@ const CHANNEL_QUERY_FULL_NODE_SELECTION = `
               forceArrayInputs
               forceArrayStop
               replaceDeveloperRoleWithSystem
-              codexStyleResponses
               reasoningEffortMapping { from to }
             }
             passThroughUserAgent

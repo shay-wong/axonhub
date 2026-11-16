@@ -102,20 +102,6 @@ git show --remerge-diff <merge-commit>
 - 吸收/删除条件：只有 fork 明确放弃多 Key 权重策略，或 upstream 提供等价的稳定身份、路由算法、兼容迁移和脱敏展示时才能删除。
 - 验证：`go test ./internal/server/biz ./internal/server/orchestrator -run 'APIKey|ProviderQuota|Weighted|Failover|Retry'`；`cd frontend && node --test src/features/channels/data/api-key-display.test.mjs src/features/channels/data/channel-input.test.mjs`。
 
-### F03 按渠道启用 Codex 风格 Responses 转换
-
-- 2026-11-16 整合 `53d0f0ef` 的 `ForceArrayStop`：与 `CodexStyleResponses` 分别进入转换条件和请求复制逻辑，不能因新增 stop 开关让仅开启 Codex 转换的渠道提前返回；保留两组转换回归，GraphQL 与表单读写链同步生成。
-- 生命周期：`长期保留`
-- 原始意图：运营人员可以只对选定的官方 Codex 或兼容 channel 启用 Codex 风格的 Responses 默认值，而不是全局改变所有 OpenAI-compatible 请求。
-- 必须保持：`TransformOptions.CodexStyleResponses` 是 `codex` 和 `fenno` channel 的显式开关且默认关闭；关闭时保留调用方原始语义；开启时补充缺失的 prompt cache key、tool choice 和 verbosity，但不再补 `service_tier`。档位未指定时沿用上游默认，显式 Fast/Ultrafast 等值继续保留，也不能影响图像请求。
-- 2026-11-10 清理：维护者确认取消“格式兼容顺带启用 Fast”的默认行为。当前变更定位：`git log -S'TestCodexOutbound_AppliesCodexStyleResponsesDefaultsWhenEnabled' -- llm/transformer/openai/codex/outbound_executor_test.go`。
-- 代码锚点：`internal/objects/channel.go`、`internal/server/biz/channel.go`、`internal/server/biz/channel_test.go`、`internal/server/orchestrator/transform_options.go`、`llm/transformer/openai/codex/outbound.go`、`frontend/src/features/channels/components/channels-transform-options-dialog.tsx`、`frontend/src/features/channels/data/config_channels.ts`、`frontend/src/features/channels/data/channel-config.test.mjs`、`frontend/src/features/channels/data/schema.ts`。
-- 用户文档：`docs/en/guides/channel-management.md`、`docs/zh/guides/channel-management.md`；当前用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
-- 提交锚点：`f5cdeb74`；相关 merge resolution：`543e25b7`、`cf45f92e`；本次 Fenno 支持可用 `git log -S'supportsCodexStyleResponses' -- frontend/src/features/channels/data/config_channels.ts` 定位。
-- 合并审核：upstream `9dfd6ac0`、`fc1d27da`、`c0233704` 和 `6f9bfc5f` 已补充 Claude Code cache compatibility、Responses 限制、Codex headers 与缺失 reasoning context 的默认值，`f2f80a9f` 又让 multipart 图像请求跳过 JSON body override 并保留实际图像格式，`dfbe2259` 将 reasoning effort 映射统一到跨客户端和跨协议的 outbound 前处理，但都没有提供按 channel 显式启用的完整 Codex 默认值开关。仍须逐项比较配置粒度、默认字段、显式值优先级、session ID 和图像请求例外。
-- 吸收/删除条件：只有 upstream 提供相同配置粒度和请求语义时，才可用 upstream 实现替换；能力本身长期保留。
-- 验证：`go test ./internal/server/biz -run 'TestChannelService_(Create|Update)ChannelNormalizesCodexStyleResponsesByType'`；`go test ./internal/server/orchestrator -run 'TestApplyTransformOptions_CodexStyleResponses|TestOverrideBodySkipsNonJSONBody'`；`cd llm && go test ./transformer/openai/codex -run CodexStyleResponses`；`cd frontend && node --test src/features/channels/data/channel-config.test.mjs`。
-
 ### F04 Fast/Ultrafast tier 识别、计费、价格表和展示
 
 - 2026-11-03 整合 `03ffac6f` 的模型库填价汇率：复用统一价格 helper，以 `multiplier * exchangeRate` 同时缩放基础、服务档位和上下文价格；保留定时价格与缓存写入变体。汇率默认 `7.14`，每次打开重置，与系统显示币种独立；USD 原价应设为 `1`，已有价格不自动改写。回归：`frontend/src/features/channels/data/model-price-exchange-rate.test.mjs`；用户说明见中英 cost-tracking 指南。
@@ -125,7 +111,7 @@ git show --remerge-diff <merge-commit>
 - 模型库兜底整合：采用 `cc1c7e5d` 的渠道无价格时查询模型库逻辑，但新增分支同样调用 `ComputeUsageCostForServiceTier`，保证 API `usage.cost` 与落库使用相同倍率和 provider tier 优先级。显式渠道价格优先；模型库目前仅提供固定输入/输出/缓存单价，不包含 context 阶梯、schedule 或独立 tier 价格。倍率仍精确匹配实际渠道模型 ID，不因去除推理后缀扩大范围。回归/独立提交定位：`git log -S'TestUsageCost_ModelLibraryFallbackServiceTier' -- internal/server/biz/usage_cost_model_library_tier_test.go`。
 - 生命周期：`长期保留`
 - 原始意图：准确识别 Codex/OpenAI/Anthropic 的 Fast 与 Ultrafast 请求意图和 provider 实际应用的 tier，并用正确价格计费、持久化和展示。
-- 必须保持：request intent、provider-applied tier 和 request-derived pricing override 分开建模；Codex `priority`、`ultrafast` 只在 provider tier 为空或 default 时覆盖计费，且分别使用独立价格 key；OpenAI `fast` 在计费、价格导入和请求展示中等价于 `priority`；明确的非 default provider tier 优先；Anthropic `speed=fast` 使用 Fast price key；显式 `ultrafast` 不被 Codex 风格默认值覆盖；独立档位价格优先，部分覆盖中缺少的项继续继承有效基础价；已接收完整终态响应时，即使客户端随后取消或超时，也必须持久化 usage 和费用，且 completed execution 不得残留取消错误或失败状态码；定时价格表保留 prompt cache variants；请求列表分别展示 Fast 与 Ultrafast，并在移动端默认隐藏高密度列；列偏好迁移保留 v2 拆分列到 v3 合并列的既有语义，再把 v3 `usage` 等价展开为当前 `tokens`、`readCache` 和 `writeCache`。
+- 必须保持：request intent、provider-applied tier 和 request-derived pricing override 分开建模；Codex `priority`、`ultrafast` 只在 provider tier 为空或 default 时覆盖计费，且分别使用独立价格 key；OpenAI `fast` 在计费、价格导入和请求展示中等价于 `priority`；明确的非 default provider tier 优先；Anthropic `speed=fast` 使用 Fast price key；显式 `ultrafast` 原样转发；独立档位价格优先，部分覆盖中缺少的项继续继承有效基础价；已接收完整终态响应时，即使客户端随后取消或超时，也必须持久化 usage 和费用，且 completed execution 不得残留取消错误或失败状态码；定时价格表保留 prompt cache variants；请求列表分别展示 Fast 与 Ultrafast，并在移动端默认隐藏高密度列；列偏好迁移保留 v2 拆分列到 v3 合并列的既有语义，再把 v3 `usage` 等价展开为当前 `tokens`、`readCache` 和 `writeCache`。
 - 官方倍率更新（2026-10-13）：依据 [OpenAI API 价格](https://developers.openai.com/api/docs/pricing)，精确匹配渠道实际模型 ID：`gpt-6-astra`、`gpt-6.1-sol` 缺少 Ultrafast 价格时使用有效 Fast × 3，Fast 也缺少时使用有效基础价 × 6；这两个模型及 `gpt-6-sol`、`gpt-6-luna`、`gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` 缺少 Fast 价格时使用有效基础价 × 2。不对别名、前缀、未来模型泛化。2026-11-10 取消其他模型的 Ultrafast × 2 猜价：没有显式 Ultrafast 价格时仍保存用量，但费用留空且不注入 `usage.cost`，不能伪装为零费用；显式零价仍是有效价格。不得静默覆盖自定义价格或重算历史。定时价格先选基础价，再应用上述规则。当前变更定位：`git log -S'TestComputeUsageCostForServiceTierOfficialRatios' -- internal/server/biz/cost_calc_test.go`。
 - 未定价沿用现有配额语义：token 配额仍累计，费用配额不累计空费用。依赖费用限额的部署需要显式定价；回归：`internal/server/biz/usage_cost_ultrafast_test.go`。
 - 长上下文计价：新增 `usage_context`，复用 `usageTiered.tiers`，以总 `PromptTokens`（含缓存）选择费率，再按该项实际用量整项计价；阈值包含边界，输出量不参与选档，原 `usage_volume`/`usage_tiered` 语义不变。基础、服务档位、schedule 和 cache-write variants 都必须走同一选择逻辑，API usage.cost 与落库费用一致。目录导入优先用明确 `cost.tiers` context 阈值，仅缺少时兼容 `context_over_200k`；Astra 的明确 272000 不能被旧字段误降为 200000。独立档位 context 价格优先，只有上述已核实 Fast 模型及 Astra/6.1 Sol Ultrafast 才可由基础逐项长/短比例补全。已有固定价格保持原样，用户重新导入保存后启用，不自动迁移历史。GraphQL enum、前端 schema/editor、form/JSON 往返、备份校验必须同步支持。代码锚点：`internal/server/gql/price.graphql`、`frontend/src/features/models/data/providers.schema.ts`、`frontend/src/features/channels/data/model-price-catalog.ts`、`frontend/src/components/model-price-editor.tsx`、`internal/server/backup/restore.go`；验证：`go test ./internal/server/biz -run 'TestComputeUsageCost_Context'` 及 catalog/form tests；当前变更定位：`git log -S'PricingModeContext' -- internal/objects/price.go`。
@@ -478,6 +464,7 @@ git show --remerge-diff <merge-commit>
 
 ## 明确不记录
 
+- 2026-11-16 维护者确认移除 Codex 风格 Responses 预设（原 F03）：删除渠道/LLM/GraphQL 字段、前端开关及专用缺省填充，不再作为 fork 能力；后续合并不得恢复。旧数据库及备份中的 `codexStyleResponses` 按未知 JSON 字段忽略，不批量改写历史配置；GraphQL 客户端须移除该字段并刷新旧前端。原有 Codex 必需转换、共享会话缓存策略、session/header 规范化、Images 及显式 Fast/Ultrafast 保留。用户迁移说明在中英 channel-management、README/索引与 `CHANGELOG.md` 的 Unreleased。变更定位：`git log -S'applyCodexStyleResponsesDefaults' -- llm/transformer/openai/codex/outbound.go`；验证：`go test ./internal/objects ./internal/server/gql -run 'RemovedCodexStylePreset'`、`cd llm && go test ./transformer/openai/codex ./transformer/openai/responses`。
 - 请求正文分块去重（原 U23）已由 `7af565b5`（PR #2999）等价吸收：保留原始 JSON、同项目共享、尾部复用、并发事务/回收和外存 GraphQL 回归均进入上游基线；不再作为独立 fork 能力。1.5 execution 备份与父 thread 保留规则仍由 F05/F06 维护。
 - `cd94f9cf` 仅忽略本地 Codex 工作目录，不是产品能力。
 - `fbb7dd63` 与 `a8c22a5c` 最终净效果为回滚，不作为当前行为差异。

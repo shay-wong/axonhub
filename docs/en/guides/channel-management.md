@@ -122,13 +122,13 @@ Upgrading preserves existing temporary durations and the 429 **Retry-After** opt
 
 Custom and global rules count failures independently for each key. Other errors do not reset a rule's count; a successful request on that key clears its counts. Success on another key in the same channel does not affect them.
 
-## Codex-style Responses
+## Codex Responses parameters
 
-`codex` and `fenno` channels can opt into **Use Codex-style Responses** under **Settings → Transform Options**. The option is disabled by default.
+The **Use Codex-style Responses** preset has been removed from `codex` and `fenno` channels. To set optional request parameters, send `prompt_cache_key`, `tool_choice`, and `text.verbosity` explicitly from the client. The usual Codex conversion, session headers, and shared-session cache behavior continue to apply.
 
-When enabled, AxonHub fills missing prompt cache key, tool choice, and verbosity values while preserving values explicitly sent by the caller. Image requests are not changed. The caller chooses the service tier: an omitted `service_tier` uses the upstream default instead of automatically enabling Fast. Leave the option disabled when the upstream should receive the caller's original Responses semantics unchanged.
+Existing database and backup JSON ignores the old `codexStyleResponses` flag. The GraphQL input and output field has been removed: refresh cached pages and remove this field from external GraphQL queries and mutations.
 
-An explicit `service_tier: ultrafast` is preserved whether this option is enabled or disabled. As of 2026-10-13, [OpenAI lists GPT-6 Astra and GPT-6.1 Sol for Ultrafast](https://developers.openai.com/api/docs/guides/ultrafast-mode). Unsupported models or accounts receive the upstream error unchanged. See [service-tier pricing](cost-tracking.md#service-tier-prices) for billing rules and limitations.
+The caller still chooses `service_tier`; an omitted tier uses the upstream default. An explicit `service_tier: ultrafast` is preserved. See [service-tier pricing](cost-tracking.md#service-tier-prices) for billing rules and limitations.
 
 ## Model Renaming
 

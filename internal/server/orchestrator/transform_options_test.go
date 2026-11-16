@@ -95,21 +95,6 @@ func TestApplyTransformOptions_ForceArrayInputs(t *testing.T) {
 	require.Equal(t, lo.ToPtr(true), result.TransformOptions.ArrayInputs)
 }
 
-func TestApplyTransformOptions_CodexStyleResponses(t *testing.T) {
-	req := &llm.Request{Model: "test-model"}
-
-	settings := &objects.ChannelSettings{
-		TransformOptions: objects.TransformOptions{
-			CodexStyleResponses: true,
-		},
-	}
-
-	result := applyTransformOptions(req, settings)
-
-	require.NotSame(t, req, result)
-	require.Equal(t, lo.ToPtr(true), result.TransformOptions.CodexStyleResponses)
-}
-
 func TestApplyModelDefaultMaxTokens(t *testing.T) {
 	candidate := &ChannelModelsCandidate{DefaultMaxTokens: 131072}
 

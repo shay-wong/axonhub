@@ -894,27 +894,22 @@ func TestCodexOutbound_DoesNotInjectCLIInstructions(t *testing.T) {
 }
 
 func TestCodexOutbound_PreservesExplicitServiceTier(t *testing.T) {
-	for _, stylePreset := range []bool{false, true} {
-		for _, serviceTier := range []string{"priority", "ultrafast"} {
-			t.Run(fmt.Sprintf("%s/style=%t", serviceTier, stylePreset), func(t *testing.T) {
-				outbound := newTestCodexOutbound(t)
-				hreq, err := outbound.TransformRequest(t.Context(), &llm.Request{
-					Model: "gpt-5.6-sol",
-					Messages: []llm.Message{{
-						Role:    "user",
-						Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
-					}},
-					ServiceTier: &serviceTier,
-					TransformOptions: llm.TransformOptions{
-						CodexStyleResponses: lo.ToPtr(stylePreset),
-					},
-				})
-				require.NoError(t, err)
-
-				body := decodeCodexRequestBody(t, hreq)
-				assert.Equal(t, serviceTier, body["service_tier"])
+	for _, serviceTier := range []string{"priority", "ultrafast"} {
+		t.Run(serviceTier, func(t *testing.T) {
+			outbound := newTestCodexOutbound(t)
+			hreq, err := outbound.TransformRequest(t.Context(), &llm.Request{
+				Model: "gpt-5.6-sol",
+				Messages: []llm.Message{{
+					Role:    "user",
+					Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
+				}},
+				ServiceTier: &serviceTier,
 			})
-		}
+			require.NoError(t, err)
+
+			body := decodeCodexRequestBody(t, hreq)
+			assert.Equal(t, serviceTier, body["service_tier"])
+		})
 	}
 }
 
@@ -976,43 +971,51 @@ func TestCodexOutbound_PreservesMinimalCompatTransforms(t *testing.T) {
 	assert.NotContains(t, string(hreq.Body), "You are Codex")
 }
 
-func TestCodexOutbound_AppliesCodexStyleResponsesDefaultsWhenEnabled(t *testing.T) {
-	ctx := context.Background()
-	outbound := newTestCodexOutbound(t)
+func TestCodexOutbound_BridgedRequestPreservesOptionalFields(t *testing.T) {
+	for _, explicit := range []bool{false, true} {
+		t.Run(fmt.Sprintf("explicit=%t", explicit), func(t *testing.T) {
+			requestBody := `{"model":"gpt-5-codex","messages":[{"role":"user","content":"Hello"}],"tools":[{"type":"function","function":{"name":"shell","parameters":{"type":"object","properties":{}}}}]`
+			if explicit {
+				requestBody += `,"prompt_cache_key":"caller-cache","tool_choice":"required","verbosity":"high"`
+			}
+			raw := &httpclient.Request{
+				Body: []byte(requestBody + `}`),
+				Headers: http.Header{
+					"Content-Type": []string{"application/json"},
+					SessionHeader:  []string{"caller-session"},
+					"Originator":   []string{"codex_cli_rs"},
+					"User-Agent":   []string{"private-client"},
+				},
+			}
+			request, err := openai.NewInboundTransformer().TransformRequest(t.Context(), raw)
+			require.NoError(t, err)
+			request.RawRequest = raw
+			hreq, err := newTestCodexOutbound(t).TransformRequest(t.Context(), request)
+			require.NoError(t, err)
+			hreq = httpclient.MergeInboundRequest(hreq, raw)
+			body := decodeCodexRequestBody(t, hreq)
 
-	hreq, err := outbound.TransformRequest(ctx, &llm.Request{
-		Model: "gpt-5-codex",
-		Messages: []llm.Message{{
-			Role:    "user",
-			Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
-		}},
-		Tools: []llm.Tool{{
-			Type: "function",
-			Function: llm.Function{
-				Name:       "shell",
-				Parameters: []byte(`{"type":"object","properties":{}}`),
-			},
-		}},
-		TransformOptions: llm.TransformOptions{
-			CodexStyleResponses: lo.ToPtr(true),
-		},
-	})
-	require.NoError(t, err)
-
-	body := decodeCodexRequestBody(t, hreq)
-
-	require.NotEmpty(t, hreq.Headers.Get(SessionHeaderHyphen))
-	assert.Empty(t, hreq.Headers.Get(SessionHeader))
-	assert.Equal(t, hreq.Headers.Get(SessionHeaderHyphen), body["prompt_cache_key"])
-	assert.Equal(t, "auto", body["tool_choice"])
-	assert.NotContains(t, body, "service_tier")
-
-	text, ok := body["text"].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "low", text["verbosity"])
+			if explicit {
+				assert.Equal(t, "caller-cache", body["prompt_cache_key"])
+				assert.Equal(t, "required", body["tool_choice"])
+				assert.Equal(t, "high", gjson.GetBytes(hreq.Body, "text.verbosity").String())
+			} else {
+				assert.NotContains(t, body, "prompt_cache_key")
+				assert.NotContains(t, body, "tool_choice")
+				assert.NotContains(t, body, "text")
+			}
+			assert.Equal(t, true, body["stream"])
+			assert.Equal(t, false, body["store"])
+			assert.Equal(t, "caller-session", hreq.Headers.Get(SessionHeaderHyphen))
+			assert.Empty(t, hreq.Headers.Get(SessionHeader))
+			assert.Equal(t, "caller-session", hreq.Headers.Get(ThreadIDHeader))
+			assert.Equal(t, "codex_cli_rs", hreq.Headers.Get("Originator"))
+			assert.Equal(t, codexDefaultUserAgent, hreq.Headers.Get("User-Agent"))
+		})
+	}
 }
 
-func TestCodexOutbound_OmitsUnsupportedAnthropicTierWithStylePreset(t *testing.T) {
+func TestCodexOutbound_OmitsUnsupportedAnthropicTier(t *testing.T) {
 	outbound := newTestCodexOutbound(t)
 	standardOnly := "standard_only"
 
@@ -1024,9 +1027,6 @@ func TestCodexOutbound_OmitsUnsupportedAnthropicTierWithStylePreset(t *testing.T
 			Role:    "user",
 			Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
 		}},
-		TransformOptions: llm.TransformOptions{
-			CodexStyleResponses: lo.ToPtr(true),
-		},
 	})
 	require.NoError(t, err)
 
@@ -1034,12 +1034,12 @@ func TestCodexOutbound_OmitsUnsupportedAnthropicTierWithStylePreset(t *testing.T
 	require.NotContains(t, body, "service_tier")
 }
 
-func TestCodexOutbound_CodexStyleResponsesPromptCacheKeySessionPrecedence(t *testing.T) {
+func TestCodexOutbound_SessionHeaderPrecedence(t *testing.T) {
 	tests := []struct {
-		name        string
-		ctx         context.Context
-		headers     http.Header
-		wantCacheID string
+		name          string
+		ctx           context.Context
+		headers       http.Header
+		wantSessionID string
 	}{
 		{
 			name: "session header wins over turn metadata and shared session",
@@ -1048,7 +1048,7 @@ func TestCodexOutbound_CodexStyleResponsesPromptCacheKeySessionPrecedence(t *tes
 				SessionHeader:      []string{"header-session"},
 				TurnMetadataHeader: []string{`{"session_id":"turn-session"}`},
 			},
-			wantCacheID: "header-session",
+			wantSessionID: "header-session",
 		},
 		{
 			name: "hyphen session header wins over turn metadata and shared session",
@@ -1057,7 +1057,7 @@ func TestCodexOutbound_CodexStyleResponsesPromptCacheKeySessionPrecedence(t *tes
 				SessionHeaderHyphen: []string{"hyphen-session"},
 				TurnMetadataHeader:  []string{`{"session_id":"turn-session"}`},
 			},
-			wantCacheID: "hyphen-session",
+			wantSessionID: "hyphen-session",
 		},
 		{
 			name: "turn metadata wins over shared session",
@@ -1065,13 +1065,13 @@ func TestCodexOutbound_CodexStyleResponsesPromptCacheKeySessionPrecedence(t *tes
 			headers: http.Header{
 				TurnMetadataHeader: []string{`{"session_id":"turn-session"}`},
 			},
-			wantCacheID: "turn-session",
+			wantSessionID: "turn-session",
 		},
 		{
-			name:        "shared session is fallback",
-			ctx:         shared.WithSessionID(context.Background(), "shared-session"),
-			headers:     http.Header{},
-			wantCacheID: "shared-session",
+			name:          "shared session is fallback",
+			ctx:           shared.WithSessionID(context.Background(), "shared-session"),
+			headers:       http.Header{},
+			wantSessionID: "shared-session",
 		},
 	}
 
@@ -1088,22 +1088,16 @@ func TestCodexOutbound_CodexStyleResponsesPromptCacheKeySessionPrecedence(t *tes
 					Role:    "user",
 					Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
 				}},
-				TransformOptions: llm.TransformOptions{
-					CodexStyleResponses: lo.ToPtr(true),
-				},
 			})
 			require.NoError(t, err)
 
-			body := decodeCodexRequestBody(t, hreq)
-
-			assert.Equal(t, tt.wantCacheID, hreq.Headers.Get(SessionHeaderHyphen))
+			assert.Equal(t, tt.wantSessionID, hreq.Headers.Get(SessionHeaderHyphen))
 			assert.Empty(t, hreq.Headers.Get(SessionHeader))
-			assert.Equal(t, tt.wantCacheID, body["prompt_cache_key"])
 		})
 	}
 }
 
-func TestCodexOutbound_CodexStyleResponsesCanonicalSessionSurvivesInboundMerge(t *testing.T) {
+func TestCodexOutbound_CanonicalSessionSurvivesInboundMerge(t *testing.T) {
 	ctx := shared.WithSessionID(context.Background(), "shared-session")
 	outbound := newTestCodexOutbound(t)
 	rawRequest := &httpclient.Request{
@@ -1121,23 +1115,17 @@ func TestCodexOutbound_CodexStyleResponsesCanonicalSessionSurvivesInboundMerge(t
 			Role:    "user",
 			Content: llm.MessageContent{Content: lo.ToPtr("Hello")},
 		}},
-		TransformOptions: llm.TransformOptions{
-			CodexStyleResponses: lo.ToPtr(true),
-		},
 	})
 	require.NoError(t, err)
 
 	hreq = httpclient.MergeInboundRequest(hreq, rawRequest)
-	body := decodeCodexRequestBody(t, hreq)
-
 	assert.Equal(t, "legacy-session", hreq.Headers.Get(SessionHeaderHyphen))
 	assert.Empty(t, hreq.Headers.Get(SessionHeader))
-	assert.Equal(t, "legacy-session", body["prompt_cache_key"])
 	assert.Equal(t, "legacy-session", rawRequest.Headers.Get(SessionHeader))
 	assert.Equal(t, "modern-session", rawRequest.Headers.Get(SessionHeaderHyphen))
 }
 
-func TestCodexOutbound_CodexStyleResponsesPreservesRawToolChoice(t *testing.T) {
+func TestCodexOutbound_PreservesRawToolChoice(t *testing.T) {
 	ctx := context.Background()
 	outbound := newTestCodexOutbound(t)
 
@@ -1162,9 +1150,6 @@ func TestCodexOutbound_CodexStyleResponsesPreservesRawToolChoice(t *testing.T) {
 				},
 			},
 		},
-		TransformOptions: llm.TransformOptions{
-			CodexStyleResponses: lo.ToPtr(true),
-		},
 	})
 	require.NoError(t, err)
 
@@ -1175,7 +1160,7 @@ func TestCodexOutbound_CodexStyleResponsesPreservesRawToolChoice(t *testing.T) {
 	require.Len(t, toolChoice["tools"], 1)
 }
 
-func TestCodexOutbound_PreservesExplicitCodexStyleResponsesValues(t *testing.T) {
+func TestCodexOutbound_PreservesExplicitResponsesValues(t *testing.T) {
 	ctx := context.Background()
 	outbound := newTestCodexOutbound(t)
 	promptCacheKey := "caller-cache-key"
@@ -1200,9 +1185,6 @@ func TestCodexOutbound_PreservesExplicitCodexStyleResponsesValues(t *testing.T) 
 		ToolChoice:     &llm.ToolChoice{ToolChoice: &toolChoice},
 		Verbosity:      &verbosity,
 		ServiceTier:    &serviceTier,
-		TransformOptions: llm.TransformOptions{
-			CodexStyleResponses: lo.ToPtr(true),
-		},
 	})
 	require.NoError(t, err)
 

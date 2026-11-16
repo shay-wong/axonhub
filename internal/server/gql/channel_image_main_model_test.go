@@ -31,3 +31,15 @@ func TestRemovedAPIKeySelectionFieldNotInSchema(t *testing.T) {
 		})
 	}
 }
+
+func TestRemovedCodexStylePresetNotInSchema(t *testing.T) {
+	schema := NewExecutableSchema(Config{Resolvers: &Resolver{}}).Schema()
+	for _, name := range []string{"TransformOptions", "TransformOptionsInput"} {
+		t.Run(name, func(t *testing.T) {
+			definition := schema.Types[name]
+			require.NotNil(t, definition)
+			require.Nil(t, definition.Fields.ForName("codexStyleResponses"))
+			require.NotNil(t, definition.Fields.ForName("forceArrayStop"))
+		})
+	}
+}

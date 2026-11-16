@@ -7,10 +7,6 @@ type TransformOptions struct {
 	// ArrayInputs specifies whether the inputs is an array.
 	ArrayInputs *bool `json:"array_inputs,omitempty"`
 
-	// CodexStyleResponses makes the Codex transformer emit a fuller native
-	// Codex Responses request shape for bridged requests.
-	CodexStyleResponses *bool `json:"codex_style_responses,omitempty"`
-
 	// DefaultMaxTokens is the fallback max_tokens used by outbound transformers
 	// that require the field (notably Anthropic Messages) when the client did not
 	// set max_tokens or max_completion_tokens. Typically populated from

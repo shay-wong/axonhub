@@ -665,8 +665,6 @@ func (svc *ChannelService) createChannel(ctx context.Context, input ent.CreateCh
 	input.Endpoints = NormalizeEndpoints(input.Endpoints, baseURL)
 
 	if input.Settings != nil {
-		normalizeChannelSettingsForType(input.Type, input.Settings)
-
 		// A new channel may intentionally be created before its model list is
 		// populated (for example by a bulk configuration flow). An empty list is
 		// therefore not evidence that every submitted override is stale. Keep the
@@ -1022,8 +1020,6 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 	quotaCookieCleared := false
 
 	if input.Settings != nil {
-		normalizeChannelSettingsForType(effectiveType, input.Settings)
-
 		if isCommandCodeChannelType(effectiveType) && (input.Settings.ProviderQuota == nil || commandCodeQuotaCookieIsBlank(input.Settings)) {
 			input.Settings = clearCommandCodeQuotaSettings(input.Settings)
 			quotaCookieCleared = true
@@ -1221,25 +1217,16 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 
 		if input.Settings != nil {
 			mut.SetSettings(input.Settings)
-		} else if input.Type != nil {
+		} else if clearStaleQuotaSettings {
 			existing, err := db.Channel.Query().
 				Where(channel.IDEQ(id)).
-				Select(channel.FieldType, channel.FieldSettings).
+				Select(channel.FieldSettings).
 				Only(ctx)
 			if err != nil {
 				return fmt.Errorf("failed to get existing channel settings: %w", err)
 			}
 
-			settings := existing.Settings
-			if existing.Type != *input.Type && existing.Settings != nil && existing.Settings.TransformOptions.CodexStyleResponses &&
-				!supportsCodexStyleResponses(*input.Type) {
-				normalized := *existing.Settings
-				normalized.TransformOptions.CodexStyleResponses = false
-				settings = &normalized
-			}
-			if clearStaleQuotaSettings {
-				settings = clearCommandCodeQuotaSettings(settings)
-			}
+			settings := clearCommandCodeQuotaSettings(existing.Settings)
 			if !reflect.DeepEqual(settings, existing.Settings) {
 				mut.SetSettings(settings)
 			}
@@ -1334,20 +1321,6 @@ func (svc *ChannelService) UpdateChannel(ctx context.Context, id int, input *ent
 	svc.reloadChannelsAfterCommit(ctx)
 
 	return updated, nil
-}
-
-func normalizeChannelSettingsForType(channelType channel.Type, settings *objects.ChannelSettings) {
-	if settings == nil {
-		return
-	}
-
-	if !supportsCodexStyleResponses(channelType) {
-		settings.TransformOptions.CodexStyleResponses = false
-	}
-}
-
-func supportsCodexStyleResponses(channelType channel.Type) bool {
-	return channelType == channel.TypeCodex || channelType == channel.TypeFenno
 }
 
 func isZenmuxChannelType(channelType channel.Type) bool {

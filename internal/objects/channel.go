@@ -121,9 +121,6 @@ type TransformOptions struct {
 	// ReplaceDeveloperRoleWithSystem replaces developer role with system in messages for Bailian compatibility.
 	ReplaceDeveloperRoleWithSystem bool `json:"replaceDeveloperRoleWithSystem"`
 
-	// CodexStyleResponses emits the native Codex Responses shape and defaults a missing service tier to priority.
-	CodexStyleResponses bool `json:"codexStyleResponses"`
-
 	// ReasoningEffortMapping maps inbound reasoning_effort values to outbound ones
 	// for non-standard providers. The first entry whose From matches the effort value
 	// wins; values not in the list pass through unchanged.

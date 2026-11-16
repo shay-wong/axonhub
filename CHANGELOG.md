@@ -6,7 +6,6 @@
 - Added checksum-verified in-app updates, recent version history, and rollback with process-supervisor restart support for supported release and Docker deployments.
 - Added per-channel API key rules with status/keyword matching, configurable error thresholds, temporary auto-recovery, and permanent disable/delete actions.
 - NeuralWatt channels now show the elapsed monthly energy window marker on the kWh bar and an estimated period quota, matching the other windowed providers.
-- Allowed Fenno channels to opt into Codex-style Responses defaults; the option remains disabled by default.
 - Added Codex/OpenAI `ultrafast` service-tier forwarding, request tracking, and display support with independent tier prices.
 
 ### Fixed
@@ -61,7 +60,6 @@
 ### Changed
 
 - Fork desktop publishing requires its own signing credentials and uses the fork update repository. Without a configured public key, local builds have no update feed and automatic desktop publishing is skipped, preserving server and Docker releases.
-- Codex-style Responses formatting no longer defaults an omitted service tier to Fast; explicit caller tiers are preserved.
 - Default model lists now follow upstream, removing fork-only quick-add aliases without changing models saved in existing channels.
 - Ultrafast requests for models without a verified built-in rate require an explicit tier price. Without one, token usage is recorded with no cost estimate or cost-quota consumption; configured zero prices and historical costs are preserved.
 - Removed the obsolete global/channel image main model API fields and the old `apiKeySelectionStrategy` field to match upstream. Refresh cached pages and update external GraphQL clients; channels with only the old strategy field use sticky until a current strategy is saved. Old JSON values are ignored without a database cleanup.
@@ -79,6 +77,7 @@
 
 ### Removed
 
+- Removed the Codex-style Responses preset and its GraphQL field. Codex/Fenno channels use the normal conversion path; callers can send cache keys, tool choice, and verbosity explicitly. Existing JSON settings ignore the old flag; refresh cached pages and remove the field from GraphQL clients.
 - Removed daily `unstable` Docker image publishing. Existing unstable tags stop updating; versioned images and the `beta`/`latest` release channels remain available.
 - Wafer quota monitor removed — Wafer is PAYG-only. Legacy wafer quota rows are purged at startup before schema migration when automatic migration is enabled.
 

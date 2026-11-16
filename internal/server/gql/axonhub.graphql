@@ -62,7 +62,6 @@ type TransformOptions {
   forceArrayInputs: Boolean!
   forceArrayStop: Boolean!
   replaceDeveloperRoleWithSystem: Boolean!
-  codexStyleResponses: Boolean!
   reasoningEffortMapping: [ReasoningEffortMapping!]
 }
 
@@ -82,7 +81,6 @@ input TransformOptionsInput {
   forceArrayInputs: Boolean
   forceArrayStop: Boolean
   replaceDeveloperRoleWithSystem: Boolean
-  codexStyleResponses: Boolean
   reasoningEffortMapping: [ReasoningEffortMappingInput!]
 }
 

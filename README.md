@@ -339,7 +339,7 @@ Codex 页面上下文中的工具结果命名空间会在 Responses 转发时保
 
 Codex 出站请求按渠道开关透传 User-Agent，过滤客户端指纹时保留换渠道所需的原始请求头；见[请求头规则](docs/zh/guides/codex-integration.md#codex-请求头)。
 
-Codex 风格转换保留调用方选择的速度档位，不自动开启 Fast，详见[渠道转换](docs/zh/guides/channel-management.md#codex-风格-responses)。
+Codex/Fenno 已移除可选的 Responses 风格预设；旧配置及客户端迁移见[Codex Responses 参数](docs/zh/guides/channel-management.md#codex-responses-参数)。
 
 未有已核实费率的 Ultrafast 模型需要显式配置价格，否则只记录用量、费用留空，详见[档位计价](docs/zh/guides/cost-tracking.md#服务档位价格)。
 

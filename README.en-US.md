@@ -335,7 +335,7 @@ Responses forwarding preserves tool-result namespaces in Codex page context so u
 
 Codex outbound requests honor the channel's User-Agent pass-through switch and preserve original headers for failover while filtering client fingerprints; see [request header rules](docs/en/guides/codex-integration.md#codex-request-headers).
 
-Codex-style formatting preserves the caller's tier without automatically enabling Fast. See [channel transforms](docs/en/guides/channel-management.md#codex-style-responses).
+The optional Codex/Fenno Responses preset has been removed; see [Codex Responses parameters](docs/en/guides/channel-management.md#codex-responses-parameters) for existing settings and client migration.
 
 Ultrafast models without a verified built-in rate need an explicit price; otherwise only usage is recorded, with cost left unset. See [service-tier pricing](docs/en/guides/cost-tracking.md#service-tier-prices).
 

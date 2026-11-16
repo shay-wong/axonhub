@@ -67,9 +67,6 @@ export interface ChannelConfig {
   /** API protocol format used when calling this channel */
   apiFormat: ApiFormat;
 
-  /** Whether this channel can opt into Codex-style Responses defaults */
-  supportsCodexStyleResponses?: boolean;
-
   /** Badge color classes for the channel type */
   color: string;
 
@@ -119,7 +116,6 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
     baseURL: 'https://api.fenno.ai',
     defaultModels: ['gpt-5.2', 'gpt-5.2-codex'],
     apiFormat: OPENAI_RESPONSES,
-    supportsCodexStyleResponses: true,
     color: 'bg-[#EEF2FF] text-[#3155C6] border-[#C7D2FE]',
     icon: FennoIcon,
   },
@@ -136,7 +132,6 @@ export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
     baseURL: 'https://chatgpt.com/backend-api/codex#',
     defaultModels: ['gpt-6.1-sol', 'gpt-6-luna', 'gpt-6-astra'],
     apiFormat: OPENAI_RESPONSES,
-    supportsCodexStyleResponses: true,
     color: 'bg-[#32746D] text-white border-[#32746D]',
     icon: OpenAI,
   },

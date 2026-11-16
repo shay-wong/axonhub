@@ -1,11 +1,22 @@
 package objects
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestChannelSettingsIgnoresRemovedCodexStylePreset(t *testing.T) {
+	var settings ChannelSettings
+	require.NoError(t, json.Unmarshal([]byte(`{"transformOptions":{"codexStyleResponses":true,"forceArrayStop":true,"forceArrayInputs":true}}`), &settings))
+	require.True(t, settings.TransformOptions.ForceArrayStop)
+	require.True(t, settings.TransformOptions.ForceArrayInputs)
+	encoded, err := json.Marshal(settings)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "codexStyleResponses")
+}
 
 func TestChannelCredentialsVertexKeysPreserveStructuredIdentity(t *testing.T) {
 	credentials := ChannelCredentials{

@@ -120,13 +120,13 @@ Gemini Vertex 凭据将每把 Key 与项目、区域绑定。编辑或重排 Key
 
 渠道自定义规则和全局规则按 Key、按规则独立累计。穿插其他错误不清零，该 Key 自己请求成功后才清零；同渠道其他 Key 成功不会影响它的计数。
 
-## Codex 风格 Responses
+## Codex Responses 参数
 
-`codex` 和 `fenno` 渠道可以在 **设置 → 转换选项** 中显式开启 **使用 Codex 风格 Responses**。该选项默认关闭。
+`codex` 和 `fenno` 渠道已移除**使用 Codex 风格 Responses**预设。需要设置可选参数时，请由客户端显式发送 `prompt_cache_key`、`tool_choice` 和 `text.verbosity`。原有 Codex 转换、会话请求头和共享会话缓存行为继续生效。
 
-开启后，AxonHub 会补齐缺失的 prompt cache key、tool choice 和 verbosity，但不会覆盖调用方已经显式传入的值，也不会改变图像请求。速度档位由调用方选择：没有传入 `service_tier` 时沿用上游默认，不再自动启用 Fast。若上游需要完整保留调用方原始 Responses 语义，请保持关闭。
+已有数据库和备份 JSON 中的 `codexStyleResponses` 字段会被忽略。GraphQL 输入和输出已删除该字段：请刷新缓存页面，并从外部 GraphQL 查询和 mutation 中移除该字段。
 
-无论该选项是否开启，显式传入的 `service_tier: ultrafast` 都会保留。截至 2026-10-13，[OpenAI Ultrafast 文档](https://developers.openai.com/api/docs/guides/ultrafast-mode) 列出的支持模型为 GPT-6 Astra 和 GPT-6.1 Sol；模型或账户不支持时，AxonHub 会原样返回上游错误。计费规则及限制见[成本追踪](cost-tracking.md)。
+速度档位仍由调用方通过 `service_tier` 选择，未指定时沿用上游默认；显式 `service_tier: ultrafast` 继续保留。计费规则及限制见[成本追踪](cost-tracking.md#服务档位价格)。
 
 ## 模型重命名
 
