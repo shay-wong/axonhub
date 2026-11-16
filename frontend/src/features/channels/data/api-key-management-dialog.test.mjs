@@ -11,7 +11,7 @@ import * as disableStatus from './disabled-api-key-status.ts';
 const require = createRequire(import.meta.url);
 const source = readFileSync(new URL('../components/channels-api-key-management-dialog.tsx', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
+  compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022, esModuleInterop: false },
 }).outputText;
 
 function render({ disabled = [], keys = ['key-a', 'key-b'], results = {}, oauth = false, canWrite = true, ...props } = {}) {
