@@ -19,10 +19,11 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`640af8211a896d3d768719c70b72a3512d0fa05c`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`b0deb8226d7efcbc13c09a8bc25ab35e85cf8444`
-- 本次 merge base：`a47f4a56b63b957d94aaa15c1381095818ec9d14`
-- 审计范围：`git diff b0deb822..HEAD`
+- 本次 upstream merge 的 fork parent：`3d895f6263dad359dd21dfd001d1739189f02730`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`fba1a863bc144918e81d10d5b3cba7b271ba9e88`
+- 本次 merge base：`b0deb8226d7efcbc13c09a8bc25ab35e85cf8444`
+- 审计范围：`git diff fba1a863..HEAD`
+- 2026-11-18 合入 8 个上游提交：非流式异常终态优先于工具调用、Copilot 推理签名与 Gemini 回放保真、流分块按推进次数记录、OpenRouter 推理摘要，以及前端/桌面依赖和赞助商文档更新。保留 fork 的终态错误、原始诊断、费用、Lite/session 和工具 namespace；Codex 风格预设及每日 unstable Docker 构建继续保持删除。仅异常终态优先工具调用的子语义与上游等价，无整项 fork 能力吸收。
 - 2026-11-16 合入 15 个上游提交：JSONB 非法 surrogate 修复、OAuth 后台刷新退避与永久错误停刷、Codex 配额 401 分类、Anthropic 搜索工具版本/参数、内容过滤终态、stop 数组转换开关、长列表滚动，以及模型/插件目录和依赖更新。保留 Codex 显式转换、Tool Search、失败终态、1.5 execution 备份和 retained thread 保护；每日 unstable Docker 构建继续保持删除。无整项 fork 能力等价吸收。
 - 2026-11-14 合入 11 个上游提交：请求正文去重、逐 Key 配额和耗尽禁用、NeuralWatt 每日额度、System One 兼容端点、Codex HTTP 启动项/页面输出规范化、JSON object 输入提示、WebSocket 错误和非流式终态映射，以及 Gemini 集成测试依赖更新。`7af565b5`（PR #2999）已等价吸收正文分块、尾部复用和写入查询优化，删除 U23；fork 的 1.5 execution 备份及 retained thread 保护分别归入 F05/F06。保留 Key 身份/路由、HTTP 与 WebSocket 工具语义及失败证据。
 - 2026-11-13 合入 6 个上游提交：响应头与请求终态合并持久化、第三方 Codex HTTP 模型目录、HTTP 页面插件随机 ID 修复及赞助商说明。保留正文分块、失败终态原始证据、敏感头脱敏和流式用量计费；fork 额外终态分支同步传递响应头。无整项 fork 能力等价吸收。
@@ -57,7 +58,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含已发布 tag `v1.0.0-rc.4`（`82442778`），但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-rc.3-fork.2`；upstream 发布基线变为 `v1.0.0-rc.4`，因此下一个规范化 fork 版本为 `v1.0.0-rc.4-fork.1`，发布前仍须重新确认该 tag 未被占用。2026-11-16 已核对双方 Release；本次不修改版本文件、不发布。
+- 最近已发布 fork tag 为 `v1.0.0-rc.4-fork.1`；upstream 发布基线仍为 `v1.0.0-rc.4`，因此下一个规范化 fork 版本为 `v1.0.0-rc.4-fork.2`，发布前仍须重新确认该 tag 未被占用。2026-11-18 已核对双方 Release；本次不修改版本文件、不发布。
 
 ## 长期保留
 
@@ -204,6 +205,7 @@ git show --remerge-diff <merge-commit>
 
 ### U04 流式响应完整性和终态错误保真
 
+- 2026-11-18 采用 `ce2ba49f` 的非流式异常终态优先级，替代同范围的 fork 分支：存在部分工具调用时仍报告 failed/incomplete/canceled，completed 或无终态时才允许 tool_calls。保留 fork 的 `ProviderTerminalOutcome`、原始错误、`ServiceTier` 和输出转换错误传播。回归：`TestOutboundTransformer_TransformResponse_AbnormalStatusWithToolCall` 与 `TestResponsesNonStreamTerminalRoundTrip`；这只吸收一个子语义，不替代本条其他不变量。
 - 2026-11-16 采用 `29f3f5f4` 的敏感内容终态处理：`sensitive` 规范化为 `content_filter`，不按空响应重试或换渠道，Anthropic 不生成没有 start 的 stop 块。保留 fork 对 `error`、`length`、`cancelled` 的非空终态语义；新 integration test 的 length 用例同样只调用一次并透出原 finish reason。回归：`llm/pipeline/empty_response_moderation_integration_test.go`、`empty_response_test.go`。
 - 2026-11-14 采用 `451c80ea` 的共享 WebSocket 错误解码器，同时保留顶层和嵌套 `request_id`，确保直接流及 HTTP/WS 适配错误仍携带原始诊断 ID。独立兼容回归及定位：`git log -S'TestResponsesErrorEventRequestIDForkCompatibility' -- llm/transformer/openai/responses/outbound_stream_fork_compat_test.go`。采用 `33f76e3c` 的未知 Anthropic finish reason 回退，但已确认的 error/cancelled 仍返回失败，不能变成成功 `end_turn`。
 - 2026-11-10 采用 `4af420ca`/`3be08c28`/`16329952` 的同步 raw recorder 和 Close 收尾，删除旧 fan-out 队列。独立兼容修复在转发 Responses 原始终态前验证转换结果，保留中断时转换器生成的失败终态；已验证完成可忽略尾部断连，但不能吞掉 HTTP/WS 适配器的 `ErrInvalidResponse`/`ErrUnsupportedConversion`。回归：`TestResponsesIdentityStream_PreservesValidatedOutcome`、`TestResponsesIdentityStream_ValidatedTerminalPreservesAdapterError`；当前变更定位：`git log -S'TestResponsesIdentityStream_ValidatedTerminalPreservesAdapterError' -- internal/server/orchestrator/pass_through_test.go`。
@@ -230,6 +232,7 @@ git show --remerge-diff <merge-commit>
 
 ### U05 失败执行响应体和终态诊断持久化
 
+- 2026-11-18 采用 `3b829079` 的流记录时机修复：每次成功 `Next()` 记录一次，`Current()` 仅返回缓存；相同内容或复用指针的不同事件仍分别记录。保留 fork 的失败 body/status/headers、尾流收尾、交付确认与最终费用语义。回归：`TestPersistentStreams_RecordOncePerAdvance` 及 `stream_tail_fork_test.go`；验证：`go test ./internal/server/orchestrator`。
 - 2026-11-16 整合 `47252799` 的 JSONB 存储净化：fork 共用 execution 写入 helper 同样处理 NUL 与孤立 surrogate，保持失败状态、headers、chunks 和脱离请求取消的保存语义。只净化数据库 JSON 副本；CDC 归档继续只去 NUL，外置载荷和热会话保持原始 surrogate 字节，不能为了 JSONB 改写续链输入。回归：`internal/server/biz/request_json_sanitize_test.go`、`request_storage_boundary_test.go`、`request_body_chunks_replay_test.go` 及 `internal/server/orchestrator/responses_continuation_storage_test.go`。
 - 2026-11-10 独立兼容修复：新的实体入参和统一终态写入接口同时携带原始错误码、headers 和 chunks；raw error 必须先完成当前 attempt 的 Close，再保存原始错误 body，避免收尾覆盖证据。成功仍清除旧错误，失败仍保留实际状态码；回归：`TestStreamTailForkPreservesTerminalEvidenceAndTier`。当前变更定位：`git log -S'updateRequestExecutionResponse' -- internal/server/biz/request.go`。
 - 生命周期：`等待上游吸收`

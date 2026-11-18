@@ -19,6 +19,8 @@ type candidateAggregator struct {
 	inlineDataParts   []*Blob
 	finishReason      string
 	groundingMetadata *GroundingMetadata
+	originalParts     []*Part
+	hasSignatureOnly  bool
 }
 
 // AggregateStreamChunks aggregates Gemini streaming response chunks into a complete response.
@@ -114,6 +116,8 @@ func AggregateStreamChunks(
 					if part == nil {
 						continue
 					}
+					agg.originalParts = append(agg.originalParts, part)
+					agg.hasSignatureOnly = agg.hasSignatureOnly || part.isSignatureOnly()
 
 					switch {
 					case part.Text != "":
@@ -236,6 +240,11 @@ func buildGeminiResponse(
 			})
 		}
 
+		// Keep standalone signature parts in their original positions, without
+		// merging them into text or moving them onto a tool call.
+		if agg.hasSignatureOnly {
+			parts = agg.originalParts
+		}
 		content.Parts = parts
 
 		// Determine finish reason
