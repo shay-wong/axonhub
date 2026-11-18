@@ -393,6 +393,7 @@ git show --remerge-diff <merge-commit>
 
 ### U18 渠道候选去重和重试预算语义
 
+- 2026-11-18 采用 `5e31b7f4` 的上游流空闲超时：HTTP 请求和解码路径继续携带 fork `TransportError`，超时只取消当前上游 attempt，不能变成客户端取消。内容输出前沿用不同渠道的重试预算，输出后不重试；完整终态后的费用与成功判定仍由 U04/F04 处理。独立回归覆盖裸及包装后的 `ErrStreamIdleTimeout`、无换渠道预算、内容前切换和内容后失败；代码/验证：`internal/server/orchestrator/retry_transport_test.go`，`go test ./internal/server/orchestrator -run '^TestRetryTransport(Classification|Pipeline)$'`。定位：`git log -S'cross channel idle timeout before content' -- internal/server/orchestrator/retry_transport_test.go`。
 - 2026-11-11 整合 `8529df6a` 的配额备用队列：先尝试首选渠道，失败且仍有换渠道预算时才进入未耗尽的背压渠道；备用队列排除首选队列中的渠道，不能借重复渠道获得第二份重试预算。备用渠道内部按优先级合并同协议模型，即使已达到渠道数上限也保留已选渠道的模型回退和每模型协议元数据；不能把背压模型提前合入首选队列。普通、sticky 和无负载均衡入口共用此约束。独立修复定位：`git log -S'TestQuotaFallbackDoesNotRevisitPreferredChannel' -- internal/server/orchestrator/candidates_quota_fork_test.go`；用户说明：中英 channel-management；回归：`TestQuotaFallbackDoesNotRevisitPreferredChannel`、`TestQuotaFallbackRetainsModelsAfterChannelLimit`。
 - 2026-11-11 采用 `d8455a8d` 的 HTTP/2 `INTERNAL_ERROR`、`REFUSED_STREAM` 和 `GOAWAY` 分类；内容输出前仍直接换渠道，预算为零则失败，输出后不重试。该分类不包含 `PROTOCOL_ERROR`，不能概括为处理所有 HTTP/2 错误。
 - 本次上游整合：`f552c44a` 统一 reset/broken pipe 分类；保留 fork `CanRetryContext` 的 transport failure 直接换渠道策略，不能因分类器扩展而改成同渠道或换 Key 重试。此策略独立于 U04 的已完成响应尾部错误处理。
