@@ -19,10 +19,11 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`3d895f6263dad359dd21dfd001d1739189f02730`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`fba1a863bc144918e81d10d5b3cba7b271ba9e88`
-- 本次 merge base：`b0deb8226d7efcbc13c09a8bc25ab35e85cf8444`
-- 审计范围：`git diff fba1a863..HEAD`
+- 本次 upstream merge 的 fork parent：`4c5d0686816ee831596a1fb0eba8f58366528c8c`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`2713462689d87c25a8a6eb73db73e6e5d1031572`
+- 本次 merge base：`fba1a863bc144918e81d10d5b3cba7b271ba9e88`
+- 审计范围：`git diff 27134626..HEAD`
+- 2026-11-18 继续合入 3 个上游提交：Ollama 流按请求选择 NDJSON 解码并透出错误行；新增独立的非流式总时限、流式总时限和上游流空闲时限，支持 HTTP 与 WebSocket。保留 fork 的 transport 错误标记、终态后费用、原始诊断及会话身份；不恢复 Codex 风格预设或每日 unstable Docker 构建。沿用中英 request-processing 的超时迁移说明，无整项 fork 能力吸收。
 - 2026-11-18 合入 8 个上游提交：非流式异常终态优先于工具调用、Copilot 推理签名与 Gemini 回放保真、流分块按推进次数记录、OpenRouter 推理摘要，以及前端/桌面依赖和赞助商文档更新。保留 fork 的终态错误、原始诊断、费用、Lite/session 和工具 namespace；Codex 风格预设及每日 unstable Docker 构建继续保持删除。仅异常终态优先工具调用的子语义与上游等价，无整项 fork 能力吸收。
 - 2026-11-16 合入 15 个上游提交：JSONB 非法 surrogate 修复、OAuth 后台刷新退避与永久错误停刷、Codex 配额 401 分类、Anthropic 搜索工具版本/参数、内容过滤终态、stop 数组转换开关、长列表滚动，以及模型/插件目录和依赖更新。保留 Codex 显式转换、Tool Search、失败终态、1.5 execution 备份和 retained thread 保护；每日 unstable Docker 构建继续保持删除。无整项 fork 能力等价吸收。
 - 2026-11-14 合入 11 个上游提交：请求正文去重、逐 Key 配额和耗尽禁用、NeuralWatt 每日额度、System One 兼容端点、Codex HTTP 启动项/页面输出规范化、JSON object 输入提示、WebSocket 错误和非流式终态映射，以及 Gemini 集成测试依赖更新。`7af565b5`（PR #2999）已等价吸收正文分块、尾部复用和写入查询优化，删除 U23；fork 的 1.5 execution 备份及 retained thread 保护分别归入 F05/F06。保留 Key 身份/路由、HTTP 与 WebSocket 工具语义及失败证据。
