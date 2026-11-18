@@ -64,6 +64,7 @@ git show --remerge-diff <merge-commit>
 
 ### F01 Fork 发布、更新和外部资产归属
 
+- 2026-11-18 i18next 27 类型兼容：时间范围组件保留泛型 period 值，仅把动态翻译键收敛为 `string`；用量卡片的翻译函数参数复用 `TFunction`。不改翻译内容、时间范围或币种格式。代码：`frontend/src/components/time-period-selector.tsx`、`frontend/src/features/dashboard/components/token-stats-card.tsx`；定位：`git log -S'const labelKey: string' -- frontend/src/components/time-period-selector.tsx`；验证：`cd frontend && pnpm exec tsc --noEmit -p tsconfig.app.json` 与原有诊断基线比较无新增，`node --test src/lib/i18n.test.mjs` 验证既有币种格式。
 - 2026-11-16 TypeScript 6 开发兼容：删除 app/root tsconfig 的冗余 `baseUrl`，`@/*` 继续按既有相对 paths 映射；密钥弹窗 VM 测试显式设定 `esModuleInterop: false`，保持原 CommonJS stub 契约。这是维护者配置，不新增用户功能。代码/验证：`frontend/tsconfig.app.json`、`frontend/tsconfig.json`、`frontend/src/features/channels/data/api-key-management-dialog.test.mjs`；定位：`git log -S'esModuleInterop: false' -- frontend/src/features/channels/data/api-key-management-dialog.test.mjs`；`cd frontend && node --test src/features/channels/data/api-key-management-dialog.test.mjs`。
 - 2026-11-16 采用 `a17831df`/`42765b69` 的 artifact action 更新：共享前端上传与服务端/桌面下载同步升级，保留完整 fork tag、下载表唯一写入者、签名开关和 fork 仓库归属；不恢复独立每日镜像发布。
 - 2026-11-16 维护者确认移除每日 unstable Docker 构建：删除独立 workflow 及共享构建中的 unstable 模式、日期版本和专属输入；仅保留 release/test 模式。旧 `unstable`/日期镜像标签不再刷新，正式版本及 `beta`/`latest` 镜像继续随发布更新；合并上游时不得恢复定时构建。当前变更定位：`git log --diff-filter=D -- .github/workflows/docker-unstable.yml`；用户说明：中英 quick-start；验证：`cd frontend && node --test src/config/external-urls.test.mjs`。

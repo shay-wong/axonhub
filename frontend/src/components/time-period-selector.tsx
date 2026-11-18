@@ -19,11 +19,14 @@ export function TimePeriodSelector<T extends string>({ value, onChange, periods 
   return (
     <Tabs value={value} onValueChange={(v) => onChange(v as T)}>
       <TabsList className='h-7 p-0.5'>
-        {effectivePeriods.map((period) => (
-          <TabsTrigger key={period} value={period} className='h-6 px-2 text-[10px]'>
-            {t(`dashboard.stats.${period === 'allTime' ? 'all' : period}`)}
-          </TabsTrigger>
-        ))}
+        {effectivePeriods.map((period) => {
+          const labelKey: string = `dashboard.stats.${period === 'allTime' ? 'all' : period}`;
+          return (
+            <TabsTrigger key={period} value={period} className='h-6 px-2 text-[10px]'>
+              {t(labelKey)}
+            </TabsTrigger>
+          );
+        })}
       </TabsList>
     </Tabs>
   );

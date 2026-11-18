@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { TFunction } from 'i18next';
 import { BarChart4 } from 'lucide-react';
 import { IconInfoCircle } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
@@ -28,7 +29,7 @@ function formatLastUpdated(timestamp: string | null, locale: string): string {
 interface LastUpdatedInfoProps {
   lastUpdated: string | null;
   locale: string;
-  t: (key: string, options?: Record<string, string>) => string;
+  t: TFunction;
 }
 
 function LastUpdatedInfo({ lastUpdated, locale, t }: LastUpdatedInfoProps) {
