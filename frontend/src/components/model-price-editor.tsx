@@ -27,7 +27,8 @@ type PriceEditorPricing = {
 
 type PriceEditorItem = {
   itemCode: (typeof priceItemCodes)[number];
-  pricing: PriceEditorPricing;
+  // Cache-write variants may carry all rates without an aggregate mode.
+  pricing: Omit<PriceEditorPricing, 'mode'> & { mode?: PricingMode | '' | null };
   promptWriteCacheVariants?: Array<{
     variantCode: (typeof promptWriteCacheVariantCodes)[number];
     pricing: PriceEditorPricing;

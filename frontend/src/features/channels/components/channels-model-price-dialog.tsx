@@ -55,7 +55,7 @@ const pricePricingFormSchema = z.object({
 
 const priceItemFormSchema = z.object({
   itemCode: z.enum(priceItemCodes),
-  pricing: pricePricingFormSchema,
+  pricing: pricePricingFormSchema.extend({ mode: pricingModeSchema.or(z.literal('')).optional().nullable() }),
   promptWriteCacheVariants: z
     .array(
       z.object({
@@ -636,7 +636,11 @@ export function ChannelsModelPriceDialog() {
     const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
-    const safeName = currentRow.name.trim().replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '') || 'channel';
+    const safeName =
+      currentRow.name
+        .trim()
+        .replace(/[^\p{L}\p{N}._-]+/gu, '-')
+        .replace(/^-+|-+$/g, '') || 'channel';
     anchor.href = url;
     anchor.download = `${safeName}-model-prices.json`;
     document.body.appendChild(anchor);
