@@ -24,7 +24,7 @@ WebSocket 上游仍需支持这种页面上下文格式，或具备相应兼容�
 
 HTTP 和 WebSocket Responses 请求都会保留显式 Fast/Ultrafast 档位，用于转发、请求日志和计费。WebSocket 连接隔离不会替换规范化的 Codex 会话头。输出内容前，上游结构化错误可以进入已配置的重试流程；拒绝内容和工具搜索结果也视为有效输出。响应完成后立即结束，不等待上游连接关闭，并保留最终用量。
 
-使用 `/codex` 兼容入口可通过 Codex personal access token（PAT）认证，并读取实时原生模型目录。已有自定义 provider 配置可继续使用 `/v1`、API Key 和下文介绍的内置目录。这是两种独立配置；`/v1` 不要求开启 `/codex` 开关或选择目录来源。
+使用 `/codex` 兼容入口可通过 Codex personal access token（PAT）认证，并读取实时原生模型目录。已有自定义 provider 配置可继续使用 `/v1` 和 API Key。两种 Codex 模型发现入口共用选定的目录来源；普通 `/v1` 推理请求不要求开启 `/codex` 开关或选择目录来源。
 
 ### PAT 前置要求与 AxonHub 设置
 - 开发机可以访问 AxonHub 实例。
@@ -101,24 +101,24 @@ query_params = {}
 export AXONHUB_API_KEY="<your-axonhub-api-key>"
 ```
 
-#### `/v1` 模型目录刷新
+#### 模型目录刷新
 
-Codex 使用 `GET /v1/models?client_version=0.153.4` 发现模型。AxonHub 将非空的 `client_version` 查询参数视为请求 Codex 的 `{"models":[{"slug":"…",…}]}` 目录格式，无需额外开启 AxonHub 设置。普通 `/v1/models` 请求仍返回 OpenAI 的 `data/id` 格式；单独使用 `include=all` 不会切换到 Codex 格式。
+Codex 使用 `GET /v1/models?client_version=0.169.1` 发现模型。AxonHub 将非空的 `client_version` 查询参数视为请求 Codex 的 `{"models":[{"slug":"…",…}]}` 目录格式，复用 `/codex/models` 的实时处理逻辑。普通 `/v1/models` 请求仍返回 OpenAI 的 `data/id` 格式；单独使用 `include=all` 不会切换到 Codex 格式。
 
-目录只包含当前 API Key 可见的模型，沿用普通列表的项目、配置文件权限和模型列表设置。已启用的模型会显示在 Codex 选择器中，包括上游内置目录原本隐藏的条目。该接口不会把你的 Key 转发给 OpenAI，也不会在每次请求时拉取远端目录。
+使用 Codex 模型发现前，请在**系统设置 > Codex 兼容**中选择一个 Codex 渠道作为目录来源。此前使用 `/v1` 内置目录的实例升级后需要选择来源。`/v1` 入口只要求选定来源，无需开启兼容开关；来源渠道可保持禁用，不参与推理路由。未配置或来源无效时返回 HTTP 503；上游失败或目录格式无效时返回 HTTP 502。
 
-已知模型使用内置的 Codex **0.153.4** 完整描述，保留提示词、推理选项、工具和服务档位；带日期后缀或单级 provider 前缀的名称沿用客户端的最长前缀匹配规则。例如 Astra 的默认 `context_window` 保持 **272000**，`max_context_window` 保持 **872000**，不会把最大容量当作默认容量。此版本化快照与 AxonHub 通用模型/价格目录同步相互独立。
+每次发现请求都使用来源渠道的凭据，携带客户端版本读取原生目录，不转发调用者的 Key 或 Cookie。同一来源和版本的并发请求会合并，没有持久目录缓存或内置回退。默认及支持的推理强度、提示词、上下文限制、服务档位、模型顺序、显示状态和未来扩展字段均按来源原样保留。
 
-无法识别的模型使用该版 Codex 的通用回退提示词和元数据。若已配置模型卡片且上下文限制为正数，则使用该限制；否则采用客户端的 **272000** 默认值，这不代表已验证上游的实际容量。自定义模型请配置真实限制，不会借用其他模型的推理档位或服务档位。
+响应只包含与当前 API Key 可见模型 ID 精确匹配的条目，匹配区分大小写，沿用普通列表的项目、配置文件权限和模型列表设置。来源目录中没有的模型或别名会被省略，不再为未知模型、日期后缀或 provider 前缀名称合成描述。请让暴露的模型 ID 与来源目录一致。来源可用但没有交集时返回 `models: []`。
 
 可使用现有 Key 检查响应：
 
 ```bash
-curl -fsS 'http://127.0.0.1:8090/v1/models?client_version=0.153.4' \
+curl -fsS 'http://127.0.0.1:8090/v1/models?client_version=0.169.1' \
   -H "Authorization: Bearer $AXONHUB_API_KEY"
 ```
 
-此适配修复的是 Codex 发起目录请求后的响应格式，不会强制客户端刷新。Codex 0.153.4 仅在 Codex backend 或 command-auth 配置下尝试远端刷新，普通纯 API Key 自定义 provider 不会自动刷新；手动指定模型后聊天仍是独立路径。目录契约不同的旧版或新版客户端可能需要更新对应快照。
+此变更更新 Codex 发起目录请求后的响应，不会强制客户端刷新。刷新行为取决于客户端版本和 provider 认证方式；已有本地 `model_catalog_json` 配置仍会使用本地目录。手动指定模型后发送聊天请求仍是独立路径。
 
 #### 按对话聚合 Trace（重要）
 开启内置 Codex 追踪提取后，AxonHub 会将 `Session_id` header 作为 trace ID 使用：
@@ -175,7 +175,7 @@ AxonHub 的模型配置文件支持将请求模型映射到具体提供商模型
 - **经过中转后 Codex 看不到工具**：升级到包含 `additional_tools` 转发修复的版本。Responses、Codex 和 Compact 转发均保留此类输入条目，不按域名删除，也无需额外开关；不支持它的目标服务可能拒绝请求。转换到非 Responses 协议时明确返回 HTTP 400，不再静默丢工具，也不会重试或切换渠道。
 - **API Key 自定义 provider 认证失败**：确保在启动 Codex 的同一 shell 会话中设置了 `AXONHUB_API_KEY`。
 - **PAT 认证失败**：确认 `${HOME}/.codex/auth.json` 的 `personal_access_token` 是有效的 AxonHub API Key，并确认 `CODEX_AUTHAPI_BASE_URL`、`openai_base_url` 和 `chatgpt_base_url` 指向同一个 `/codex` 入口。
-- **`/codex` 模型列表为空或不可用**：确认兼容开关已开启、已选择 Codex 渠道，且该渠道的 `/models` 接口通过设置页测试。模型 ID 必须与调用者可见 ID 完全一致。目录过滤不代替推理授权。`/v1` 的内置目录和客户端刷新限制见上文。
+- **Codex 模型列表为空或不可用**：确认已选择 Codex 渠道，且该渠道的 `/models` 接口通过设置页测试；`/codex` 入口还需要开启兼容开关。模型 ID 必须与调用者可见 ID 完全一致。目录过滤不代替推理授权。`/v1` 的目录来源和客户端刷新要求见上文。
 - **模型结果异常**：检查 AxonHub 控制台中当前启用的配置文件映射，必要时禁用或调整规则。
 - **定时任务提示 `function_call_output` 缺少 `call_id`**：升级到包含 Codex 定时任务启动项兼容修复的 AxonHub 版本。
 

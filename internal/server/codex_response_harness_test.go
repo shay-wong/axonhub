@@ -36,6 +36,7 @@ func setupCodexResponseHandlers(t *testing.T, h *codexRouteHarness, models *biz.
 	return &api.OpenAIHandlers{
 		ResponseCompletionHandlers: api.NewChatCompletionHandlers(orch),
 		ModelService:               models,
+		ChannelService:             h.channels,
 		SystemService:              h.system,
 		EntClient:                  h.db,
 	}, requests

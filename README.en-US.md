@@ -324,7 +324,7 @@ Switching to model alias settings confirms before discarding unsaved key aliases
 
 [Analytics](docs/en/guides/cost-tracking.md#analytics-time-ranges) supports bounded timestamp ranges, actual-model statistics, and system-scope isolation for plugins. [Key retries](docs/en/guides/channel-management.md#retry-per-api-key) keep failed keys excluded even when 429 is explicitly configured.
 
-Codex model discovery supports its complete catalog format while preserving OpenAI compatibility; see the [Codex integration guide](docs/en/guides/codex-integration.md#model-catalog-refresh) for refresh conditions and context defaults.
+Codex model discovery shares the live native catalog, preserving complete reasoning metadata and OpenAI compatibility; see the [Codex integration guide](docs/en/guides/codex-integration.md#model-catalog-refresh) for catalog-source setup after upgrading.
 
 Responses forwarding preserves tool-result namespaces in Codex page context so upstream compatibility handlers can recognize them. See [page context](docs/en/guides/codex-integration.md#page-context-and-tool-result-namespaces).
 

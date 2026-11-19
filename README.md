@@ -327,7 +327,7 @@ Fork 还保留[按权限选择登录落点与旧设置链接兼容](docs/zh/gett
 
 [分析页](docs/zh/guides/cost-tracking.md#分析时间范围)支持有界精确时间范围、实际模型统计和插件系统权限隔离；[Key 重试](docs/zh/guides/channel-management.md#按-key-重试)即使显式配置 429，也不会重复失败的 Key。
 
-Codex 模型发现支持完整目录格式，同时保留普通 OpenAI 接口兼容性；刷新条件与上下文默认值见 [Codex 集成指南](docs/zh/guides/codex-integration.md#模型目录刷新)。
+Codex 模型发现共用实时原生目录，保留完整推理强度等元数据与普通 OpenAI 接口兼容性；升级后的目录来源配置见 [Codex 集成指南](docs/zh/guides/codex-integration.md#模型目录刷新)。
 
 Codex 页面上下文中的工具结果命名空间会在 Responses 转发时保留，供上游兼容处理识别，详见[页面上下文](docs/zh/guides/codex-integration.md#页面上下文与工具结果命名空间)。
 

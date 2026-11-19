@@ -854,6 +854,12 @@ func (handlers *OpenAIHandlers) RetrieveModel(c *gin.Context) {
 // This endpoint is compatible with OpenAI's /v1/models API.
 // It uses QueryAllChannelModels setting from system config to determine model source.
 func (handlers *OpenAIHandlers) ListModels(c *gin.Context) {
+	// Codex discovery shares the live, permission-filtered catalog used by /codex/models.
+	if c.Query("client_version") != "" {
+		NewCodexCompatibilityHandlers(handlers.SystemService, handlers.ChannelService, handlers.ModelService).ListModels(c)
+		return
+	}
+
 	ctx := c.Request.Context()
 
 	requestID, _ := contexts.GetRequestID(ctx)
@@ -869,13 +875,6 @@ func (handlers *OpenAIHandlers) ListModels(c *gin.Context) {
 		} else {
 			handlers.writeOpenAIInternalError(c, requestID, err)
 		}
-		return
-	}
-
-	// Codex negotiates its richer ModelInfo catalog with client_version.
-	// Ordinary OpenAI discovery keeps the data/id envelope, including include=all.
-	if c.Query("client_version") != "" {
-		handlers.listCodexModels(c, visibleModels)
 		return
 	}
 

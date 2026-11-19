@@ -24,7 +24,7 @@ The WebSocket upstream still needs to support this page-context format or provid
 
 HTTP and WebSocket Responses requests preserve explicit Fast/Ultrafast tiers for forwarding, request logs, and billing. WebSocket connection isolation does not replace the canonical Codex session header. Before any content is produced, structured upstream failures can enter the configured retry flow; refusals and tool-search results count as content. A completed response ends without waiting for the upstream connection to close, retaining its final usage.
 
-Use the `/codex` compatibility entrypoint for Codex personal access token (PAT) authentication and a live native model catalog. Existing custom-provider configurations can continue using `/v1` with an API key and the bundled catalog described below. These are separate configurations; the `/codex` switch and catalog source are not required for `/v1`.
+Use the `/codex` compatibility entrypoint for Codex personal access token (PAT) authentication and a live native model catalog. Existing custom-provider configurations can continue using `/v1` with an API key. Both Codex model-discovery entrypoints use the same selected catalog source; ordinary `/v1` inference does not require the `/codex` switch or catalog source.
 
 ### PAT prerequisites and AxonHub setup
 - AxonHub instance reachable from your development machine.
@@ -101,24 +101,24 @@ Export the key in the shell that starts Codex, then restart Codex:
 export AXONHUB_API_KEY="<your-axonhub-api-key>"
 ```
 
-#### `/v1` model catalog refresh
+#### Model catalog refresh
 
-Codex discovery requests `GET /v1/models?client_version=0.153.4`. AxonHub treats a non-empty `client_version` query parameter as a request for the Codex `{"models":[{"slug":"…",…}]}` catalog. No extra AxonHub setting is required. Ordinary `/v1/models` requests still return the OpenAI `data/id` format; `include=all` alone does not select Codex format.
+Codex discovery requests `GET /v1/models?client_version=0.169.1`. AxonHub treats a non-empty `client_version` query parameter as a request for the Codex `{"models":[{"slug":"…",…}]}` catalog and uses the same live handler as `/codex/models`. Ordinary `/v1/models` requests still return the OpenAI `data/id` format; `include=all` alone does not select Codex format.
 
-The catalog contains only models visible to the current API key, using the same project/profile and model-list settings as ordinary discovery. Enabled models are shown in the Codex picker, including entries hidden by the bundled upstream catalog. The endpoint does not forward your key to OpenAI or fetch a remote catalog per request.
+Before using Codex discovery, select a Codex channel under **System Settings > Codex Compatibility**. Existing installations using the old bundled `/v1` catalog must select this source after upgrading. The `/v1` entrypoint only requires the selected source, not the compatibility switch. The source channel can remain disabled for inference. A missing or invalid source returns HTTP 503; an upstream failure or invalid catalog returns HTTP 502.
 
-Known models use the complete bundled Codex **0.153.4** descriptors, preserving instructions, reasoning options, tools, and service tiers. The client's longest-prefix and single provider-namespace lookup also applies to dated or prefixed names. For example, Astra retains a default `context_window` of **272000** and a `max_context_window` of **872000**; the maximum is not the default. This versioned snapshot is separate from AxonHub's general model/pricing catalog sync.
+Each discovery fetches the selected channel's native catalog with the requested client version, using that channel's credentials. The caller's key and cookies are not forwarded. Matching concurrent requests share a fetch; there is no persistent catalog cache or bundled fallback. Default and supported reasoning levels, instructions, context limits, service tiers, model order, visibility, and future metadata fields are preserved from the source.
 
-Unrecognized models use that Codex version's generic fallback instructions and metadata. An explicitly configured model card's positive context limit replaces the generic **272000** fallback; otherwise this is a client default, not a verified provider capacity. Configure the actual limit for custom models. Reasoning levels and service tiers are not guessed from other models.
+The response contains only exact, case-sensitive slug matches visible to the current API key, using the same project/profile and model-list permissions as ordinary discovery. A model or alias absent from the source is omitted; AxonHub no longer synthesizes descriptors for unknown, dated, or provider-prefixed names. Configure exposed IDs to match the source catalog. An empty intersection returns `models: []` when the source is available.
 
 To inspect the response with your existing key:
 
 ```bash
-curl -fsS 'http://127.0.0.1:8090/v1/models?client_version=0.153.4' \
+curl -fsS 'http://127.0.0.1:8090/v1/models?client_version=0.169.1' \
   -H "Authorization: Bearer $AXONHUB_API_KEY"
 ```
 
-This fixes the response format when Codex makes a discovery request; it does not force the client to refresh. Codex 0.153.4 only attempts remote refresh for Codex-backend or command-auth configurations, not ordinary custom providers using only an API key. Explicitly selecting a model and sending chat requests remains a separate path. Older or newer clients with different catalog contracts may need a matching snapshot update.
+This updates the response when Codex makes a discovery request; it does not force the client to refresh. Refresh behavior depends on the client version and provider authentication. An existing local `model_catalog_json` override continues to select the local catalog. Explicitly selecting a model and sending chat requests remains a separate path.
 
 #### Trace aggregation by conversation (important)
 Enable the built-in Codex trace extraction to reuse the `Session_id` header as the trace ID:
@@ -175,7 +175,7 @@ AxonHub model profiles remap incoming model names to provider-specific equivalen
 - **Codex cannot see its tools through a relay**: upgrade to a build containing the `additional_tools` forwarding fix. Responses, Codex, and Compact forwarding preserve these input items regardless of hostname, without an extra switch. A target that does not support them may reject the request. Converting such a request to a non-Responses protocol returns HTTP 400 instead of silently dropping tools, and does not retry or switch channels.
 - **API-key custom-provider authentication fails**: ensure `AXONHUB_API_KEY` is exported in the same shell session that launches Codex.
 - **PAT authentication fails**: ensure `${HOME}/.codex/auth.json` contains a valid AxonHub API key in `personal_access_token`, and that `CODEX_AUTHAPI_BASE_URL` points to the same `/codex` base as `openai_base_url` and `chatgpt_base_url`.
-- **The `/codex` model list is empty or unavailable**: confirm that the compatibility switch is enabled, a Codex channel is selected, and the channel's `/models` endpoint passes the settings-page test. Model IDs must exactly match the caller-visible IDs. Catalog filtering is not a substitute for inference authorization. For `/v1`, see the bundled-catalog and client-refresh limits above.
+- **The Codex model list is empty or unavailable**: confirm that a Codex channel is selected and its `/models` endpoint passes the settings-page test. The `/codex` entrypoint also requires the compatibility switch. Model IDs must exactly match the caller-visible IDs. Catalog filtering is not a substitute for inference authorization. For `/v1`, see the catalog-source and client-refresh requirements above.
 - **Unexpected model responses**: review active profile mappings in the AxonHub console; disable or adjust rules if necessary.
 - **Scheduled automation reports that `function_call_output` requires `call_id`**: upgrade AxonHub to a build containing the Codex automation bootstrap compatibility fix.
 

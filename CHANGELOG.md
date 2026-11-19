@@ -52,7 +52,7 @@
 
 - Preserved separate channel/key disable policies, temporary durations, Retry-After, and explicit disabled settings when integrating global auto-disable rules.
 
-- Returned complete, API-key-scoped Codex model catalogs for `/v1/models?client_version=…`, preserving model instructions and context metadata while keeping ordinary OpenAI discovery unchanged.
+- `/v1/models?client_version=…` now shares the live `/codex/models` catalog, preserving complete reasoning metadata, instructions, and source ordering while keeping ordinary OpenAI discovery unchanged. Existing installations must select a Codex catalog source in Codex Compatibility settings; model IDs must exactly match that source.
 - Kept the **Include Beta versions** update-check option enabled while switching between System Settings tabs.
 - Preserved usage and cost records when clients disconnect after a streaming response has already completed, without leaving a stale cancellation error on the completed execution.
 - Allowed Codex scheduled automations to start when the app sends an `automation_update` output without a `call_id`.

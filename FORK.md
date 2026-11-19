@@ -448,13 +448,13 @@ git show --remerge-diff <merge-commit>
 
 - 生命周期：`等待上游吸收`
 - 原始意图：Codex 目录刷新不能因普通 OpenAI `data/id` 格式而解析失败，也不能因不完整元数据覆盖而丢失模型指令、上下文和工具能力。
-- 必须保持：`/v1/models` 的非空 `client_version` 参数选择 `models/slug` 格式；普通请求及单独 `include=all` 保持原格式。先执行既有 `ListEnabledModels` 权限过滤，零可见模型返回 `models: []`；响应不得泄露其他 Key/项目的模型。已知模型使用 Codex `rust-v0.153.4` 原版快照，保留完整 instructions、工具、推理档位及默认/最大上下文含义；按客户端最长前缀与单级 namespace 规则匹配，输出 slug 保持用户可见名称，visibility 按网关可见模型设为 list，不能修改共享快照。未知模型用同版通用回退指令，显式模型卡片上下文优先；不得借用其他模型能力。目录无需逐请求联网或转发调用方凭据。
-- 代码锚点：`internal/server/api/openai.go`、`internal/server/api/codex_models.go`、`internal/server/api/codex_models_test.go`；官方资产、许可证和更新说明在 `internal/server/api/codexmodels/`。
+- 必须保持：`/v1/models` 的非空 `client_version` 参数选择 `models/slug` 格式；普通请求及单独 `include=all` 保持原格式。Codex 请求直接复用上游 `CodexCompatibilityHandlers.ListModels`，通过选定的 Codex 渠道实时获取目录，按调用者可见 ID 精确取交集；来源可用时空交集返回 `models: []`，响应不得泄露其他 Key/项目的模型。完整保留来源的推理默认值和档位、instructions、工具、上下文、扩展字段、顺序及 visibility。不再维护内置快照或合成未知/前缀别名的描述。来源凭据不来自调用者；未配置来源返回 503，上游不可用或目录非法返回 502。`/v1` 发现需要配置目录来源，但不要求开启 `/codex` 兼容开关。
+- 代码锚点：`internal/server/api/openai.go`、`internal/server/api/codex_compatibility.go`、`internal/server/biz/codex_catalog.go`、`internal/server/codex_models_routes_test.go`。
 - 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`，各语言索引及 README；用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：本次修复可用 `git log -S'listCodexModels' -- internal/server/api/openai.go` 定位。
-- 合并审核：`ca3059fe` 新增默认关闭的 PAT `/codex` 入口；其 `/codex/models` 从指定渠道实时拉取，并按精确 slug 取权限交集、保留上游 visibility。它与本地 `/v1/models?client_version=…` 的离线快照、前缀匹配和可见性语义不同，作为并行入口采用，不视为吸收 U22。更新官方快照时同时检查客户端必填字段、模板、工具和 metadata 替换规则，并保留 Apache LICENSE/NOTICE。服务端适配不改变客户端是否发起刷新；纯 API Key 自定义 provider 的刷新限制需在用户文档保留。
+- 合并审核：2026-11-19 按维护者要求采用 `ca3059fe` 的实时目录方案，删除旧静态描述及其前缀/回退行为，仅保留 `/v1` 的格式协商入口。两条路径必须共享处理逻辑，不能重新引入会过期的快照或另一套元数据合成。升级需要选择目录来源，并使用来源中存在的精确模型 ID；服务端不会强制客户端刷新或覆盖本地 `model_catalog_json`。
 - 上游吸收条件：上游具备等价的目录格式协商、权限过滤、完整模型元数据及回归覆盖。
-- 验证：`go test ./internal/server/api -run 'TestOpenAIHandlers_(ListModels|RetrieveModel)|TestCodexCatalog' -count=1`。
+- 验证：`go test ./internal/server ./internal/server/api -run 'TestCodexRoutes_(CallerIntersection|CatalogErrors|InvalidSource|SettingReadFailure|LiveReasoningMetadata|LegacyCatalogRequiresSource)|TestOpenAIHandlers_(ListModels|RetrieveModel)' -count=1`。
 
 
 ## Upstream Merge 审核清单
