@@ -26,7 +26,7 @@ visit(ast);
 function evaluate(node, scope) {
   assert.ok(node);
   const { outputText } = ts.transpileModule(`(${node.getText(ast)})`, {
-    compilerOptions: { target: ts.ScriptTarget.ES2023 },
+    compilerOptions: { target: ts.ScriptTarget.ES2023, alwaysStrict: false },
   });
   return new Function('scope', `with (scope) { return ${outputText} }`)(scope);
 }
