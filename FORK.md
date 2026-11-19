@@ -108,6 +108,8 @@ git show --remerge-diff <merge-commit>
 
 ### F04 Fast/Ultrafast tier 识别、计费、价格表和展示
 
+- 2026-11-19 采用 `4af46665` 的可选端点价格同步；锁内合并必须保留现有 `ServiceTierPrices`，同价同步不能创建冗余版本。缓存写入仅有 5m/1h 变体时，汇总 `Pricing.mode` 在 GraphQL 读写中为 `null`，普通项和变体本身仍必须有有效 mode；表单的档位、上下文和定时价格完整往返。代码/回归：`internal/server/biz/channel_price.go`、`channel_model_sync_test.go`、`internal/server/gql/price.graphql`、`price.resolvers.go`、`price_context_test.go`、`frontend/src/features/channels/data/model-price-form.ts` 及同名测试。当前独立修复定位：`git log -S'TestVariantOnlyPriceGraphQLRoundTrip' -- internal/server/gql/price_context_test.go`；验证：渠道价格同步、GraphQL price roundtrip 和前端 pricing/form tests。用户说明见中英 cost-tracking。
+
 - 2026-11-03 整合 `03ffac6f` 的模型库填价汇率：复用统一价格 helper，以 `multiplier * exchangeRate` 同时缩放基础、服务档位和上下文价格；保留定时价格与缓存写入变体。汇率默认 `7.14`，每次打开重置，与系统显示币种独立；USD 原价应设为 `1`，已有价格不自动改写。回归：`frontend/src/features/channels/data/model-price-exchange-rate.test.mjs`；用户说明见中英 cost-tracking 指南。
 - 交付与计费分离：维护者确认采用 `3dcfa3ce` 至 `a946fca4` 的交付确认和最终用量证据。主 request 的 completed 需要成功写出终态；execution 完成与最终用量落库独立，不因交付失败丢失已确认费用。Chat/Responses/Anthropic 中间 usage 不计费；保留 `UsageLogEligible` 防重复与 requested/applied/override/policy 档位优先级。尾流异常同样保留原始 body、ID、tier 和最终 usage。独立兼容回归：`internal/server/orchestrator/stream_tail_fork_test.go`、`llm/pipeline/delivery_fork_compat_test.go`；定位：`git log --all -- internal/server/orchestrator/stream_tail_fork_test.go`。
 - 原始响应保真整合：上游默认 Responses identity/transport 保真路径不能绕过已开启的 `InjectUsageCost`；JSON/SSE 仅回填本地费用字段，保留原始 ID、未知扩展及数值精度，继续使用实际渠道模型和相同 tier 优先级。显式 PassThroughBody 仍保留其既有原样语义。回归/当前变更定位：`git log -S'TestResponsesIdentityPreservesInjectedCost' -- internal/server/orchestrator/responses_identity_cost_test.go`。

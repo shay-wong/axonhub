@@ -323,7 +323,7 @@ Fork 还保留[按权限选择登录落点与旧设置链接兼容](docs/zh/gett
 
 切换到模型别名设置前会确认未保存的 Key 别名、权重和重试修改，取消后保留编辑，详见[渠道管理](docs/zh/guides/channel-management.md#key-选择策略)。
 
-[流式计费](docs/zh/guides/cost-tracking.md)区分交付状态与最终用量，在尾部断连后保留已确认费用，并保护执行记录中 Key 身份的可见性；[多 Key 管理](docs/zh/guides/channel-management.md)统一密钥与禁用恢复弹窗，保留 Vertex 项目绑定、别名和权重，请求日志优先显示别名，插件恢复事件反映真实渠道状态。
+[流式计费](docs/zh/guides/cost-tracking.md)区分交付状态与最终用量，在尾部断连后保留已确认费用，并保护执行记录中 Key 身份的可见性；端点价格同步保留 Fast/Ultrafast 覆盖，支持独立缓存写入变体价格。[多 Key 管理](docs/zh/guides/channel-management.md)统一密钥与禁用恢复弹窗，保留 Vertex 项目绑定、别名和权重，请求日志优先显示别名，插件恢复事件反映真实渠道状态。
 
 [分析页](docs/zh/guides/cost-tracking.md#分析时间范围)支持有界精确时间范围、实际模型统计和插件系统权限隔离；[Key 重试](docs/zh/guides/channel-management.md#按-key-重试)即使显式配置 429，也不会重复失败的 Key。
 

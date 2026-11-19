@@ -28,6 +28,16 @@ const tieredItem = (itemCode, mode, bounds) => ({
   },
 });
 
+async function loadPricingSchemas() {
+  const schemaSource = readFileSync(new URL('./schema.ts', import.meta.url), 'utf8')
+    .replace("'zod'", JSON.stringify(import.meta.resolve('zod')))
+    .replace("'@/gql/pagination'", JSON.stringify(new URL('../../../gql/pagination.ts', import.meta.url).href));
+  const schemaJS = ts.transpileModule(schemaSource, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2023 },
+  }).outputText;
+  return import(`data:text/javascript;base64,${Buffer.from(schemaJS).toString('base64')}`);
+}
+
 test('preserves service-tier prices through query, form, and mutation mapping', () => {
   const serverPrices = [
     {
@@ -459,15 +469,7 @@ test('rejects non-positive and non-increasing tier bounds in base and service-ti
 
 test('round-trips context prices in base, service tiers, schedules, and cache variants through JSON and form edits', async () => {
   // Exercise the actual API/JSON-import parser, including its pricing-mode enum.
-  const schemaSource = readFileSync(new URL('./schema.ts', import.meta.url), 'utf8')
-    .replace("'zod'", JSON.stringify(import.meta.resolve('zod')))
-    .replace("'@/gql/pagination'", JSON.stringify(new URL('../../../gql/pagination.ts', import.meta.url).href));
-  const schemaJS = ts.transpileModule(schemaSource, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2023 },
-  }).outputText;
-  const { channelModelPriceSchema, saveChannelModelPriceInputSchema } = await import(
-    `data:text/javascript;base64,${Buffer.from(schemaJS).toString('base64')}`
-  );
+  const { channelModelPriceSchema, saveChannelModelPriceInputSchema } = await loadPricingSchemas();
   const contextItem = {
     ...tieredItem('prompt_write_cached_tokens', 'usage_context', [272000]),
     promptWriteCacheVariants: [
@@ -521,6 +523,101 @@ test('round-trips context prices in base, service tiers, schedules, and cache va
     ]);
     assert.equal(item.promptWriteCacheVariants[0].pricing.mode, 'usage_context');
     assert.equal(item.promptWriteCacheVariants[0].pricing.usageTiered.tiers[0].pricePerUnit, '12.5');
+  }
+});
+
+test('round-trips variant-only cache pricing in base, service tiers, and schedules', async () => {
+  const { channelModelPriceSchema, saveChannelModelPriceInputSchema } = await loadPricingSchemas();
+  for (const mode of ['', null, undefined]) {
+    const item = {
+      itemCode: 'prompt_write_cached_tokens',
+      pricing: { mode },
+      promptWriteCacheVariants: [
+        { variantCode: 'five_min', pricing: { mode: 'usage_per_unit', usagePerUnit: 2.5 } },
+        {
+          variantCode: 'one_hour',
+          pricing: { mode: 'usage_context', usageTiered: { tiers: [{ upTo: null, pricePerUnit: 3.5 }] } },
+        },
+      ],
+    };
+    const serverPrice = channelModelPriceSchema.parse({
+      id: 'variant-price',
+      modelID: 'cache-model',
+      price: {
+        items: [item],
+        serviceTierPrices: [{ serviceTier: 'priority', items: [item] }],
+        schedule: {
+          timezone: 'UTC',
+          overrides: [{ name: 'Night', priority: 1, when: { weekdays: [1] }, items: [item] }],
+        },
+      },
+    });
+    const form = mapServerPricesToFormData([serverPrice]);
+    assert.deepEqual(collectPriceFormValidationIssues(form), []);
+    for (const priceItem of [
+      form.prices[0].price.items[0],
+      form.prices[0].price.serviceTierPrices[0].items[0],
+      form.prices[0].price.schedule.overrides[0].items[0],
+    ]) {
+      assert.equal(priceItem.pricing.mode, '');
+      assert.equal(priceItem.promptWriteCacheVariants[0].pricing.usagePerUnit, '2.5');
+      assert.equal(priceItem.promptWriteCacheVariants[1].pricing.mode, 'usage_context');
+    }
+    const saved = mapPriceFormDataToSaveInput(form);
+    for (const priceItem of [
+      saved[0].price.items[0],
+      saved[0].price.serviceTierPrices[0].items[0],
+      saved[0].price.schedule.overrides[0].items[0],
+    ]) {
+      assert.equal(priceItem.pricing.mode, null);
+    }
+    const reimported = mapSaveInputsToFormData(
+      JSON.parse(JSON.stringify(saved)).map((price) => saveChannelModelPriceInputSchema.parse(price))
+    );
+    assert.deepEqual(collectPriceFormValidationIssues(reimported), []);
+    assert.deepEqual(mapPriceFormDataToSaveInput(reimported), saved);
+  }
+});
+
+test('rejects missing modes on ordinary items, cache writes without variants, and variants', () => {
+  for (const mode of ['', null, undefined]) {
+    const form = {
+      prices: [
+        {
+          modelId: 'cache-model',
+          price: {
+            items: [
+              {
+                itemCode: 'prompt_tokens',
+                pricing: { mode },
+                promptWriteCacheVariants: [{ variantCode: 'five_min', pricing: { mode: 'usage_per_unit', usagePerUnit: '1' } }],
+              },
+              { itemCode: 'prompt_write_cached_tokens', pricing: { mode }, promptWriteCacheVariants: [] },
+            ],
+            serviceTierPrices: [
+              {
+                serviceTier: 'priority',
+                items: [
+                  {
+                    itemCode: 'prompt_write_cached_tokens',
+                    pricing: { mode },
+                    promptWriteCacheVariants: [{ variantCode: 'five_min', pricing: { mode } }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    };
+    assert.deepEqual(collectPriceFormValidationIssues(form), [
+      { code: 'priceRequired', path: ['prices', 0, 'price', 'items', 0, 'pricing', 'mode'] },
+      { code: 'priceRequired', path: ['prices', 0, 'price', 'items', 1, 'pricing', 'mode'] },
+      {
+        code: 'priceRequired',
+        path: ['prices', 0, 'price', 'serviceTierPrices', 0, 'items', 0, 'promptWriteCacheVariants', 0, 'pricing', 'mode'],
+      },
+    ]);
   }
 });
 

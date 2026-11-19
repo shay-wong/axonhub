@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Preserved saved Fast/Ultrafast overrides during endpoint model-price synchronization and prevented duplicate versions on unchanged prices. Cache-write variant prices can now be edited and saved without an aggregate rate.
+
 - Kept per-key quota recovery compatible with manual and temporary disables, honored legacy disabled-key identities, preserved the saved channel status in recovery events, and prevented key deletion from reentering its own quota reconciliation lock.
 - Preserved upstream request IDs in WebSocket error frames and their HTTP-adapted responses.
 - Reduced repeated request-history tail data during small Responses appends, avoided request-body payload readback on writes, and reused PostgreSQL upsert-returned chunk IDs.

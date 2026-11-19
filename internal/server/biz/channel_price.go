@@ -95,7 +95,9 @@ func mergeChannelModelPriceItems(base, overlay objects.ModelPrice, replaceExisti
 		schedule = overlay.Schedule
 	}
 
-	return objects.ModelPrice{Items: items, Schedule: schedule}
+	base.Items = items
+	base.Schedule = schedule
+	return base
 }
 
 // endpointChanged reports whether the endpoint overlay plus the library gap

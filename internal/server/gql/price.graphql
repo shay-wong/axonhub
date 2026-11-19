@@ -67,7 +67,7 @@ type DateRange {
 }
 
 type Pricing {
-  mode: PricingMode!
+  mode: PricingMode
   flatFee: Decimal
   usagePerUnit: Decimal
   usageTiered: TieredPricing
@@ -135,7 +135,7 @@ input DateRangeInput {
 }
 
 input PricingInput {
-  mode: PricingMode!
+  mode: PricingMode
   flatFee: Decimal
   usagePerUnit: Decimal
   usageTiered: TieredPricingInput

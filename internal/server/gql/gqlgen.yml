@@ -504,6 +504,9 @@ models:
   Pricing:
     model:
       - github.com/looplj/axonhub/internal/objects.Pricing
+    fields:
+      mode:
+        resolver: true
   PricingInput:
     model:
       - github.com/looplj/axonhub/internal/objects.Pricing

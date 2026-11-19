@@ -17,7 +17,8 @@ export type PriceFormPricing = {
 
 export type PriceFormItem = {
   itemCode: PriceItemCode;
-  pricing: PriceFormPricing;
+  // Cache-write variants can supply all rates without an aggregate mode.
+  pricing: Omit<PriceFormPricing, 'mode'> & { mode?: PricingMode | '' | null };
   promptWriteCacheVariants?: Array<{
     variantCode: PromptWriteCacheVariantCode;
     pricing: PriceFormPricing;
@@ -75,9 +76,9 @@ function trimPriceValue(value: string | null | undefined): string | null {
   return trimmed || null;
 }
 
-function mapPricingToForm(pricing: ModelPriceItem['pricing']): PriceFormPricing {
+function mapPricingToForm(pricing: ModelPriceItem['pricing']): PriceFormItem['pricing'] {
   return {
-    mode: pricing.mode,
+    mode: pricing.mode ?? '',
     flatFee: decimalToFormValue(pricing.flatFee),
     usagePerUnit: decimalToFormValue(pricing.usagePerUnit),
     usageTiered: pricing.usageTiered
@@ -98,14 +99,14 @@ function mapItemToForm(item: ModelPriceItem): PriceFormItem {
     promptWriteCacheVariants:
       item.promptWriteCacheVariants?.map((variant) => ({
         variantCode: variant.variantCode,
-        pricing: mapPricingToForm(variant.pricing),
+        pricing: { ...mapPricingToForm(variant.pricing), mode: variant.pricing.mode },
       })) || [],
   };
 }
 
-function mapPricingToInput(pricing: PriceFormPricing): ModelPriceItem['pricing'] {
+function mapPricingToInput(pricing: PriceFormItem['pricing']): ModelPriceItem['pricing'] {
   return {
-    mode: pricing.mode,
+    mode: pricing.mode || null,
     flatFee: trimPriceValue(pricing.flatFee),
     usagePerUnit: trimPriceValue(pricing.usagePerUnit),
     usageTiered: pricing.usageTiered
@@ -126,7 +127,7 @@ function mapItemToInput(item: PriceFormItem): ModelPriceItem {
     promptWriteCacheVariants:
       item.promptWriteCacheVariants?.map((variant) => ({
         variantCode: variant.variantCode,
-        pricing: mapPricingToInput(variant.pricing),
+        pricing: { ...mapPricingToInput(variant.pricing), mode: variant.pricing.mode },
       })) || [],
   };
 }
@@ -230,11 +231,15 @@ export function replaceCatalogServiceTierPrices(
 }
 
 function collectPricingIssues(
-  pricing: PriceFormPricing | null | undefined,
+  pricing: PriceFormItem['pricing'] | null | undefined,
   pathPrefix: Array<string | number>,
   issues: PriceFormValidationIssue[]
 ) {
   const { mode, flatFee, usagePerUnit, usageTiered } = pricing || {};
+  if (!mode) {
+    issues.push({ code: 'priceRequired', path: [...pathPrefix, 'mode'] });
+    return;
+  }
   if (mode === 'flat_fee' && !flatFee) {
     issues.push({ code: 'priceRequired', path: [...pathPrefix, 'flatFee'] });
   }
@@ -291,7 +296,9 @@ function collectItemIssues(items: PriceFormItem[], itemsPath: Array<string | num
 
   items.forEach((item, itemIndex) => {
     const itemPath = [...itemsPath, itemIndex];
-    collectPricingIssues(item.pricing, [...itemPath, 'pricing'], issues);
+    if (item.pricing.mode || item.itemCode !== 'prompt_write_cached_tokens' || !item.promptWriteCacheVariants?.length) {
+      collectPricingIssues(item.pricing, [...itemPath, 'pricing'], issues);
+    }
 
     const variantIndexesByCode = new Map<string, number[]>();
     (item.promptWriteCacheVariants || []).forEach((variant, variantIndex) => {

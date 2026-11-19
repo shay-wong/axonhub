@@ -80,6 +80,7 @@ type ResolverRoot interface {
 	Model() ModelResolver
 	Mutation() MutationResolver
 	OIDCIdentity() OIDCIdentityResolver
+	Pricing() PricingResolver
 	Project() ProjectResolver
 	Prompt() PromptResolver
 	PromptProtectionRule() PromptProtectionRuleResolver
@@ -2660,6 +2661,9 @@ type OIDCIdentityResolver interface {
 	ID(ctx context.Context, obj *ent.OIDCIdentity) (*objects.GUID, error)
 
 	UserID(ctx context.Context, obj *ent.OIDCIdentity) (*objects.GUID, error)
+}
+type PricingResolver interface {
+	Mode(ctx context.Context, obj *objects.Pricing) (*objects.PricingMode, error)
 }
 type ProjectResolver interface {
 	ID(ctx context.Context, obj *ent.Project) (*objects.GUID, error)
@@ -48130,12 +48134,12 @@ func (ec *executionContext) _Pricing_mode(ctx context.Context, field graphql.Col
 		field,
 		ec.fieldContext_Pricing_mode,
 		func(ctx context.Context) (any, error) {
-			return obj.Mode, nil
+			return ec.resolvers.Pricing().Mode(ctx, obj)
 		},
 		nil,
-		ec.marshalNPricingMode2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐPricingMode,
+		ec.marshalOPricingMode2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐPricingMode,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -48143,8 +48147,8 @@ func (ec *executionContext) fieldContext_Pricing_mode(_ context.Context, field g
 	fc = &graphql.FieldContext{
 		Object:     "Pricing",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type PricingMode does not have child fields")
 		},
@@ -85628,7 +85632,7 @@ func (ec *executionContext) unmarshalInputPricingInput(ctx context.Context, obj 
 		switch k {
 		case "mode":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mode"))
-			data, err := ec.unmarshalNPricingMode2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐPricingMode(ctx, v)
+			data, err := ec.unmarshalOPricingMode2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐPricingMode(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -112979,10 +112983,38 @@ func (ec *executionContext) _Pricing(ctx context.Context, sel ast.SelectionSet, 
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Pricing")
 		case "mode":
-			out.Values[i] = ec._Pricing_mode(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Pricing_mode(ctx, field, obj)
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "flatFee":
 			out.Values[i] = ec._Pricing_flatFee(ctx, field, obj)
 		case "usagePerUnit":
@@ -129417,23 +129449,6 @@ func (ec *executionContext) unmarshalNPricingInput2githubᚗcomᚋloopljᚋaxonh
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNPricingMode2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐPricingMode(ctx context.Context, v any) (objects.PricingMode, error) {
-	tmp, err := graphql.UnmarshalString(v)
-	res := objects.PricingMode(tmp)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNPricingMode2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐPricingMode(ctx context.Context, sel ast.SelectionSet, v objects.PricingMode) graphql.Marshaler {
-	_ = sel
-	res := graphql.MarshalString(string(v))
-	if res == graphql.Null {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-	}
-	return res
-}
-
 func (ec *executionContext) unmarshalNProbeFrequency2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋserverᚋbizᚐProbeFrequency(ctx context.Context, v any) (biz.ProbeFrequency, error) {
 	var res biz.ProbeFrequency
 	err := res.UnmarshalGQL(v)
@@ -136009,6 +136024,38 @@ func (ec *executionContext) unmarshalOPriceScheduleInput2ᚖgithubᚗcomᚋloopl
 	}
 	res, err := ec.unmarshalInputPriceScheduleInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalOPricingMode2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐPricingMode(ctx context.Context, v any) (objects.PricingMode, error) {
+	tmp, err := graphql.UnmarshalString(v)
+	res := objects.PricingMode(tmp)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOPricingMode2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐPricingMode(ctx context.Context, sel ast.SelectionSet, v objects.PricingMode) graphql.Marshaler {
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalString(string(v))
+	return res
+}
+
+func (ec *executionContext) unmarshalOPricingMode2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐPricingMode(ctx context.Context, v any) (*objects.PricingMode, error) {
+	if v == nil {
+		return nil, nil
+	}
+	tmp, err := graphql.UnmarshalString(v)
+	res := objects.PricingMode(tmp)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOPricingMode2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐPricingMode(ctx context.Context, sel ast.SelectionSet, v *objects.PricingMode) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalString(string(*v))
+	return res
 }
 
 func (ec *executionContext) marshalOProject2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐProject(ctx context.Context, sel ast.SelectionSet, v *ent.Project) graphql.Marshaler {

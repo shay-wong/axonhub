@@ -451,7 +451,12 @@ func TestChannelService_SyncChannelModelsSyncsEndpointPrices(t *testing.T) {
 	require.NoError(t, err)
 
 	oldUpdatedPrice := endpointSyncTestPrice("1")
+	oldUpdatedPrice.ServiceTierPrices = []objects.ServiceTierPrice{
+		{ServiceTier: "priority", Items: endpointSyncTestPrice("2").Items},
+		{ServiceTier: "ultrafast", Items: endpointSyncTestPrice("6").Items},
+	}
 	equalPrice := endpointSyncTestPrice("0.3")
+	equalPrice.ServiceTierPrices = oldUpdatedPrice.ServiceTierPrices
 	_, err = svc.SaveChannelModelPrices(ctx, ch.ID, []SaveChannelModelPriceInput{
 		{ModelID: "updated-model", Price: oldUpdatedPrice},
 		{ModelID: "equal-model", Price: equalPrice},
@@ -501,6 +506,7 @@ func TestChannelService_SyncChannelModelsSyncsEndpointPrices(t *testing.T) {
 	).Only(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "0.4", updatedPrice.Price.Items[0].Pricing.UsagePerUnit.String())
+	require.Equal(t, oldUpdatedPrice.ServiceTierPrices, updatedPrice.Price.ServiceTierPrices)
 	updatedVersions, err := updatedPrice.QueryVersions().All(ctx)
 	require.NoError(t, err)
 	require.Len(t, updatedVersions, 2)
@@ -549,6 +555,15 @@ func TestChannelService_SyncChannelModelsSyncsEndpointPrices(t *testing.T) {
 	cachedPrice := cachedChannel.cachedModelPrices["updated-model"]
 	require.NotNil(t, cachedPrice)
 	require.Equal(t, "0.4", cachedPrice.Price.Items[0].Pricing.UsagePerUnit.String())
+	require.Equal(t, oldUpdatedPrice.ServiceTierPrices, cachedPrice.Price.ServiceTierPrices)
+
+	_, err = svc.SyncChannelModels(ctx, ch.ID, nil)
+	require.NoError(t, err)
+	unchangedPrice := client.ChannelModelPrice.GetX(ctx, updatedPrice.ID)
+	require.Equal(t, updatedPrice.ReferenceID, unchangedPrice.ReferenceID)
+	unchangedVersions, err := unchangedPrice.QueryVersions().All(ctx)
+	require.NoError(t, err)
+	require.Len(t, unchangedVersions, 2, "unchanged endpoint prices must not create extra versions")
 }
 
 func TestChannelService_SyncChannelModelsLeavesEndpointPricesDisabledByDefault(t *testing.T) {

@@ -22,3 +22,16 @@ func (r *mutationResolver) SaveChannelModelPrices(ctx context.Context, channelID
 
 	return r.channelService.SaveChannelModelPrices(ctx, channelID.ID, inputs)
 }
+
+// Mode is the resolver for the mode field.
+func (r *pricingResolver) Mode(ctx context.Context, obj *objects.Pricing) (*objects.PricingMode, error) {
+	if obj.Mode == "" {
+		return nil, nil
+	}
+	return lo.ToPtr(obj.Mode), nil
+}
+
+// Pricing returns PricingResolver implementation.
+func (r *Resolver) Pricing() PricingResolver { return &pricingResolver{r} }
+
+type pricingResolver struct{ *Resolver }

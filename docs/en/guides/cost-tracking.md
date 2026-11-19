@@ -109,6 +109,10 @@ Configure pricing for each channel and model in the admin dashboard:
    - Cache read price (`prompt_cached_tokens`)
    - Cache write price (`prompt_write_cached_tokens`)
 
+For supported OpenAI-compatible channels, **Sync model prices** (`settings.syncModelPrices`) opts model synchronization into importing prices reported by the model endpoint. It is off by default. Reported base items are updated; existing Fast/Ultrafast overrides, schedules, and unreported items are preserved. Repeating a sync with identical prices does not create another price version. Codex channels use their separate model catalog and do not use this price import.
+
+Cache-write items can have only **5-minute** and **1-hour** variant rates, without a common aggregate rate. They can be loaded, edited, and saved with `pricing.mode: null` for the aggregate; each variant still requires a valid pricing mode. Ordinary items and cache-write items without variants also require a valid mode. Use matching frontend and backend versions when saving these prices.
+
 #### Service Tier Prices
 
 You can add exact service-tier price overrides such as `priority` and `ultrafast`. OpenAI's `fast` and `priority` names share the `priority` price key. AxonHub records the requested and applied tiers, then uses the applied tier for billing. For Codex responses that omit the applied tier or report `default`, the explicitly requested Fast or Ultrafast tier remains the billing fallback. An explicit tier price takes precedence; omitted items in a partial override still inherit the effective base price.

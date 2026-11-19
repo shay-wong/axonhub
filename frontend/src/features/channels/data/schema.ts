@@ -567,9 +567,8 @@ export const tieredPricingSchema = z.object({
 });
 export type TieredPricing = z.infer<typeof tieredPricingSchema>;
 
-// Pricing.mode on the wire is a non-null enum; the empty string is what the backend
-// emits for a variant-only aggregate pricing (see modelPriceItemSchema). null/undefined
-// are accepted too so hand-built prices still parse.
+// Variant-only cache-write pricing has no aggregate mode. Keep accepting the
+// legacy empty string alongside nullable GraphQL values.
 export const pricingModeValueSchema = z
   .union([pricingModeSchema, z.literal('')])
   .nullable()
@@ -614,9 +613,8 @@ export type PromptWriteCacheVariant = z.infer<typeof promptWriteCacheVariantSche
 
 // An empty mode is only legal on the aggregate pricing of cache-write items whose
 // 5m/1h variants carry the rates: when both TTLs exist, no single aggregate rate is a
-// safe fallback, so the variants are the only source of truth. GQL carries this as the
-// empty string because Pricing.mode is a non-null enum; null/undefined are accepted too
-// so hand-built prices still parse.
+// safe fallback, so the variants are the only source of truth. GraphQL carries
+// the missing aggregate mode as null.
 export const modelPriceItemSchema = z
   .object({
     itemCode: priceItemCodeSchema,
