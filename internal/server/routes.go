@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
@@ -66,7 +67,7 @@ func SetupRoutes(server *Server, handlers Handlers, client *ent.Client, services
 	server.Use(middleware.WithIPAccessControl(ipAccessControl))
 
 	// Serve static frontend files
-	server.NoRoute(static.Handler())
+	server.NoRoute(static.Handler(server.Config.BasePath))
 
 	server.Use(middleware.AccessLog())
 	server.Use(middleware.WithEntClient(client))
@@ -127,9 +128,11 @@ func SetupRoutes(server *Server, handlers Handlers, client *ent.Client, services
 	adminGroup := server.Group(adminGroupPath, middleware.WithJWTAuth(services.AuthService), middleware.WithProjectID())
 	// 管理员路由 - 使用 JWT 认证
 	{
-		adminGroup.GET("/playground", middleware.WithTimeout(server.Config.RequestTimeout), func(c *gin.Context) {
-			handlers.Graphql.Playground.ServeHTTP(c.Writer, c.Request)
-		})
+		adminGroup.GET(
+			"/playground",
+			middleware.WithTimeout(server.Config.RequestTimeout),
+			gin.WrapH(playground.Handler("AxonHub", server.Config.BasePath+adminGroupPath+"/graphql")),
+		)
 		adminGroup.POST("/invitations", handlers.Invitation.Create)
 		adminGroup.POST("/system/update", handlers.System.InstallUpdate)
 		adminGroup.GET("/system/rollback-versions", handlers.System.GetRollbackVersions)
@@ -217,19 +220,22 @@ func SetupRoutes(server *Server, handlers Handlers, client *ent.Client, services
 		openAPIGroup.POST("/v1/graphql", func(c *gin.Context) {
 			handlers.OpenAPIGraphql.Graphql.ServeHTTP(c.Writer, c.Request)
 		})
-		openAPIGroup.GET("/v1/playground", func(c *gin.Context) {
-			handlers.OpenAPIGraphql.Playground.ServeHTTP(c.Writer, c.Request)
-		})
+		openAPIGroup.GET(
+			"/v1/playground",
+			gin.WrapH(playground.Handler("AxonHub", server.Config.BasePath+openAPIGroup.BasePath()+"/v1/graphql")),
+		)
 
 		openAPIGroup.POST("/webhook/echo", handlers.System.WebhookEcho)
 	}
 
 	registerCodexRoutes(server, handlers, services)
 
+	serverPluginMiddleware := middleware.WithServerPluginMiddleware(services.PluginManager)
 	apiMiddlewares := []gin.HandlerFunc{
 		middleware.WithStreamIdleTimeout(server.Config.LLMStreamIdleTimeout),
 		middleware.WithIPBlocklist(services.SystemService),
 		middleware.WithAPIKeyConfig(services.AuthService, nil),
+		serverPluginMiddleware,
 		middleware.WithSource(request.SourceAPI),
 		middleware.WithThread(server.Config.Trace, services.ThreadService),
 		middleware.WithTrace(server.Config.Trace, services.TraceService),
@@ -312,6 +318,7 @@ func SetupRoutes(server *Server, handlers Handlers, client *ent.Client, services
 			middleware.WithStreamIdleTimeout(server.Config.LLMStreamIdleTimeout),
 			middleware.WithIPBlocklist(services.SystemService),
 			middleware.WithGeminiKeyAuth(services.AuthService),
+			serverPluginMiddleware,
 			middleware.WithSource(request.SourceAPI),
 			middleware.WithThread(server.Config.Trace, services.ThreadService),
 			middleware.WithTrace(server.Config.Trace, services.TraceService),
@@ -325,6 +332,7 @@ func SetupRoutes(server *Server, handlers Handlers, client *ent.Client, services
 			middleware.WithStreamIdleTimeout(server.Config.LLMStreamIdleTimeout),
 			middleware.WithIPBlocklist(services.SystemService),
 			middleware.WithGeminiKeyAuth(services.AuthService),
+			serverPluginMiddleware,
 			middleware.WithSource(request.SourceAPI),
 			middleware.WithThread(server.Config.Trace, services.ThreadService),
 			middleware.WithTrace(server.Config.Trace, services.TraceService),

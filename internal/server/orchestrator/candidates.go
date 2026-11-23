@@ -155,7 +155,7 @@ func (s *DefaultSelector) selectChannelCadidates(ctx context.Context, req *llm.R
 		}
 
 		endpoints, forced := applyForcedAPIFormatsForRequest(ctx, ch, []biz.ChannelModelEntry{entry}, req.Model, req.RequestType, ch.ResolveEndpoints())
-		apiFormat := selectEndpointAPIFormat(endpoints, req, forced)
+		apiFormat := selectEndpointAPIFormat(ctx, endpoints, req, forced)
 		if requiresExplicitEndpoint(req.RequestType) && apiFormat == "" {
 			continue
 		}
@@ -802,23 +802,28 @@ func (s *LoadBalancedSelector) Select(ctx context.Context, req *llm.Request) ([]
 		candidates, lastResort = s.quotaGate.Filter(ctx, candidates, req, stickyID)
 	}
 
-	if stickyOK {
-		if stickyCandidate, remainingCandidates := s.pinStickyCandidate(candidates, stickyID); stickyCandidate != nil {
-			stickyCandidate.TraceSticky = true
-
-			fallbackCount := max(requiredCount-1, 0)
-			fallbackCandidates := s.sortCandidates(ctx, loadBalancer, remainingCandidates, req, fallbackCount, requiredCount, false)
-			result := make([]*ChannelModelsCandidate, 0, 1+len(fallbackCandidates))
-			result = append(result, stickyCandidate)
-			result = append(result, fallbackCandidates...)
-			result = append(result, quotaFallbackCandidates(lastResort, result, quotaFallbackLimit(retryPolicy))...)
-
-			if loadBalancer != nil && !shouldSkipHealthStateTracking(ctx) {
-				loadBalancer.TrackSelection(stickyCandidate)
-			}
-
-			return result, nil
+	// Prefer the parent only after quota admission, before load balancing trims
+	// the candidate list to fit the retry budget.
+	pinned, remaining := extractStickyCandidate(candidates, guardianReviewParentChannelID(ctx))
+	if pinned == nil && stickyOK {
+		pinned, remaining = s.pinStickyCandidate(candidates, stickyID)
+		if pinned != nil {
+			pinned.TraceSticky = true
 		}
+	}
+	if pinned != nil {
+		fallbackCount := max(requiredCount-1, 0)
+		fallbackCandidates := s.sortCandidates(ctx, loadBalancer, remaining, req, fallbackCount, requiredCount, false)
+		result := make([]*ChannelModelsCandidate, 0, 1+len(fallbackCandidates))
+		result = append(result, pinned)
+		result = append(result, fallbackCandidates...)
+		result = append(result, quotaFallbackCandidates(lastResort, result, quotaFallbackLimit(retryPolicy))...)
+
+		if loadBalancer != nil && !shouldSkipHealthStateTracking(ctx) {
+			loadBalancer.TrackSelection(pinned)
+		}
+
+		return result, nil
 	}
 
 	preferred := s.sortCandidates(ctx, loadBalancer, candidates, req, requiredCount, requiredCount, true)
@@ -1239,7 +1244,7 @@ func (s *SpecifiedChannelSelector) Select(ctx context.Context, req *llm.Request)
 	}
 
 	endpoints, forced := applyForcedAPIFormatsForRequest(ctx, channel, []biz.ChannelModelEntry{entry}, req.Model, req.RequestType, channel.ResolveEndpoints())
-	apiFormat := selectEndpointAPIFormat(endpoints, req, forced)
+	apiFormat := selectEndpointAPIFormat(ctx, endpoints, req, forced)
 	if requiresExplicitEndpoint(req.RequestType) && apiFormat == "" {
 		return []*ChannelModelsCandidate{}, nil
 	}

@@ -14,11 +14,22 @@ type ContextKey string
 const (
 	// containerContextKey is used to store the context container in the context.
 	containerContextKey ContextKey = "context_container"
+	basePathContextKey  ContextKey = "base_path"
 )
 
-// EnsureContainer returns a context with a shared mutable request container.
-// It is useful for code paths where downstream components can only mutate the
-// existing context value and cannot return a derived context to callers.
+// WithBasePath stores the configured public mount path for this request.
+func WithBasePath(ctx context.Context, basePath string) context.Context {
+	return context.WithValue(ctx, basePathContextKey, basePath)
+}
+
+// GetBasePath returns the public mount path, or an empty string for a root mount.
+func GetBasePath(ctx context.Context) string {
+	basePath, _ := ctx.Value(basePathContextKey).(string)
+	return basePath
+}
+
+// EnsureContainer installs the mutable request-scoped value container when a
+// caller may need to update it through an interface that cannot return context.
 func EnsureContainer(ctx context.Context) context.Context {
 	return withContainer(ctx, getContainer(ctx))
 }

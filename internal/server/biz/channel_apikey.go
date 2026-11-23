@@ -118,8 +118,14 @@ func (svc *ChannelService) ApplyAPIKeyDisableAction(
 	if len(enabledKeys) == 0 && (key == objects.OAuthCredentialRef || allDisabledAPIKeysPermanent(allKeys, newDisabledKeys, now)) {
 		channelDisabled = true
 	}
-	// Do not restamp automatic recovery markers on an operator-disabled channel.
-	autoDisable := channelDisabled && (ch.Status == channel.StatusEnabled || ch.AutoDisabledAt != nil)
+	// Taking over the last key of a channel an operator already disabled must not
+	// restamp the auto-disable markers: they are what allows a later recovery to
+	// enable the channel and report it as enabled. A scheduled disable is owned
+	// by its schedule until the stored re-enable expiry, so it is never taken
+	// over (doing so would clear the planned downtime).
+	autoDisable := channelDisabled &&
+		!isScheduledAutoDisabled(ch) &&
+		(ch.Status == channel.StatusEnabled || ch.AutoDisabledAt != nil)
 	var (
 		autoDisabledAt     time.Time
 		autoDisabledReason string

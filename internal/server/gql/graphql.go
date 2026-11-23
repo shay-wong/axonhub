@@ -13,7 +13,6 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/extension"
 	"github.com/99designs/gqlgen/graphql/handler/lru"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
-	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 	"go.uber.org/fx"
@@ -88,7 +87,6 @@ type Dependencies struct {
 
 type GraphqlHandler struct {
 	Graphql       http.Handler
-	Playground    http.Handler
 	PluginGraphql http.Handler
 	PluginFetch   http.Handler
 
@@ -137,18 +135,11 @@ func NewGraphqlHandlers(deps Dependencies) *GraphqlHandler {
 	})
 	gqlSrv.Use(&loggingTracer{})
 	gqlSrv.AroundOperations(apiKeyReadOnly)
-	gqlSrv.Use(entgql.Transactioner{
-		TxOpener: deps.Ent,
-		// TestChannel performs long-running parallel provider requests whose database
-		// operations do not require one transaction. BulkImportChannels manages one
-		// transaction per row to preserve its partial-success behavior.
-		SkipTxFunc: skipGraphqlTransaction,
-	})
+	gqlSrv.Use(graphqlTransactions(deps.Ent))
 	gqlSrv.SetErrorPresenter(presentGraphqlError)
 
 	return &GraphqlHandler{
 		Graphql:       gqlSrv,
-		Playground:    playground.Handler("AxonHub", "/admin/graphql"),
 		PluginGraphql: newPluginGraphqlHandler(schema, deps.Ent, deps.PluginManager),
 		PluginFetch:   newPluginFetchHandler(deps.PluginManager),
 		executable:    schema,
@@ -191,19 +182,43 @@ func newSchemaFromDeps(deps Dependencies) graphql.ExecutableSchema {
 	)
 }
 
-var (
-	skipTestChannelTransaction = entgql.SkipOperations("TestChannel", "TestChannelAPIKeys")
-	skipBulkImportTransaction  = entgql.SkipIfHasFields("bulkImportChannels")
-	// checkProviderQuotas and resetChannelQuotaNow resolve into the quota
-	// service, whose channel writes go through its own client and would block
-	// on row locks the enclosing transaction holds. The reconciler uses its own
-	// client, so matching the selected fields keeps a client-chosen operation
-	// name from opting unrelated mutations in or out.
-	skipQuotaMutationsTransaction = entgql.SkipIfHasFields("checkProviderQuotas", "resetChannelQuotaNow")
-)
+// entgql's field skipper inspects only direct selections. Both transaction hooks
+// must use the same active root fields, including fragments and variable directives.
+type operationTransactions struct{ entgql.Transactioner }
 
-func skipGraphqlTransaction(op *ast.OperationDefinition) bool {
-	return skipTestChannelTransaction(op) || skipBulkImportTransaction(op) || skipQuotaMutationsTransaction(op)
+func graphqlTransactions(db *ent.Client) operationTransactions {
+	return operationTransactions{entgql.Transactioner{TxOpener: db}}
+}
+
+func skipGraphqlTransaction(oc *graphql.OperationContext) bool {
+	op := oc.Operation
+	if op == nil || op.Operation != ast.Mutation {
+		return true
+	}
+	if op.Name == "TestChannel" || op.Name == "TestChannelAPIKeys" {
+		return true
+	}
+	for _, f := range graphql.CollectFields(oc, op.SelectionSet, []string{"Mutation"}) {
+		switch f.Name {
+		case "bulkImportChannels", "applyCatalogImport", "checkProviderQuotas", "resetChannelQuotaNow":
+			return true
+		}
+	}
+	return false
+}
+
+func (t operationTransactions) MutateOperationContext(ctx context.Context, oc *graphql.OperationContext) *gqlerror.Error {
+	if skipGraphqlTransaction(oc) {
+		return nil
+	}
+	return t.Transactioner.MutateOperationContext(ctx, oc)
+}
+
+func (t operationTransactions) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response {
+	if skipGraphqlTransaction(graphql.GetOperationContext(ctx)) {
+		return next(ctx)
+	}
+	return t.Transactioner.InterceptResponse(ctx, next)
 }
 
 func presentGraphqlError(ctx context.Context, err error) *gqlerror.Error {
@@ -253,10 +268,7 @@ func newPluginGraphqlHandler(schema graphql.ExecutableSchema, client *ent.Client
 	srv.Use(extension.FixedComplexityLimit(pluginGraphqlComplexityLimit))
 	srv.Use(&loggingTracer{})
 	srv.AroundOperations(rejectPluginGraphqlOperation)
-	srv.Use(entgql.Transactioner{
-		TxOpener:   client,
-		SkipTxFunc: skipGraphqlTransaction,
-	})
+	srv.Use(graphqlTransactions(client))
 	srv.SetErrorPresenter(presentGraphqlError)
 	return &pluginGraphqlHTTPHandler{
 		handler: srv,

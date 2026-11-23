@@ -19,10 +19,11 @@
 
 - Fork 分支：`beta`
 - Upstream 默认分支：`unstable`
-- 本次 upstream merge 的 fork parent：`6d918e8fabd2fa2df94503164e420f10d47f750a`
-- 本次 upstream merge 的 upstream parent，也是本文比较基线：`eb020516b67bc7a755a88856d5b57547149e2450`
-- 本次 merge base：`2713462689d87c25a8a6eb73db73e6e5d1031572`
-- 审计范围：`git diff eb020516..HEAD`
+- 本次 upstream merge 的 fork parent：`99faa95e3a851ad1bb072d6ef60405a7420c4287`
+- 本次 upstream merge 的 upstream parent，也是本文比较基线：`022335d36cb11edc9fb6c8b0d7b03cf822221c3b`
+- 本次 merge base：`eb020516b67bc7a755a88856d5b57547149e2450`
+- 审计范围：`git diff 022335d36..HEAD`
+- 2026-11-23 合入 19 个上游提交：模型批量导入及参考价格同步、保存默认汇率、渠道定时禁用/恢复、URL 前缀、插件网关中间件和独立注册表、动态 Codex 客户端版本、Guardian 父请求关联、透传推理强度映射、手工 GC 事务修复、Ollama 工具终态及依赖升级。保留 Key 身份与配额禁用所有权、候选去重/重试预算、档位和上下文价格、实时 Codex 目录及原始响应/费用语义。URL 前缀的 fork 登录/更新兼容修复在合并后独立提交；已删除的快照、风格预设和每日 Docker 构建不恢复。
 - 2026-11-19 合入 5 个上游提交：渠道模型端点价格同步及缓存写入变体价格、折叠配额的多 Key 平均用量、工具参数提示词保护、Gemini 流中错误与 Grok 4.x 参数过滤。保留 fork 的档位/上下文/定时价格、统一 Key 发现及实时 Codex 目录入口；价格同步的 fork 兼容修复在合并后独立提交。每日 unstable Docker 构建及 Codex 风格预设继续保持删除，无整项 fork 能力吸收。
 - 2026-11-18 继续合入 3 个上游提交：Ollama 流按请求选择 NDJSON 解码并透出错误行；新增独立的非流式总时限、流式总时限和上游流空闲时限，支持 HTTP 与 WebSocket。保留 fork 的 transport 错误标记、终态后费用、原始诊断及会话身份；不恢复 Codex 风格预设或每日 unstable Docker 构建。沿用中英 request-processing 的超时迁移说明，无整项 fork 能力吸收。
 - 2026-11-18 合入 8 个上游提交：非流式异常终态优先于工具调用、Copilot 推理签名与 Gemini 回放保真、流分块按推进次数记录、OpenRouter 推理摘要，以及前端/桌面依赖和赞助商文档更新。保留 fork 的终态错误、原始诊断、费用、Lite/session 和工具 namespace；Codex 风格预设及每日 unstable Docker 构建继续保持删除。仅异常终态优先工具调用的子语义与上游等价，无整项 fork 能力吸收。
@@ -60,7 +61,7 @@ git show --remerge-diff <merge-commit>
 - 本次 upstream parent 包含已发布 tag `v1.0.0-rc.4`（`82442778`），但源码中的 `internal/build/VERSION` 仍为 `v1.0.0-beta9`；fork 发布版本必须以 upstream 已发布 tag 为准，不能用源码常量替代发布基线。
 - Fork 发布版本来源：`.github/workflows/stable-fork-release.yml` 创建的 annotated tag；`.github/workflows/docker-publish.yml` 和 `.goreleaser.yml` 使用该完整 tag 构建制品。
 - 所有 fork release 必须使用 `<upstream-version>-fork.<N>`。upstream 版本变化时从 `fork.1` 开始；同一 upstream 版本后续发布递增 `N`。
-- 最近已发布 fork tag 为 `v1.0.0-rc.4-fork.1`；upstream 发布基线仍为 `v1.0.0-rc.4`，因此下一个规范化 fork 版本为 `v1.0.0-rc.4-fork.2`，发布前仍须重新确认该 tag 未被占用。2026-11-18 已核对双方 Release；本次不修改版本文件、不发布。
+- 2026-11-23 核对双方远端 tags，最近 fork tag 为 `v1.0.0-rc.4-fork.3`；upstream 发布基线仍为 `v1.0.0-rc.4`，因此下一个规范化 fork 版本为 `v1.0.0-rc.4-fork.4`，发布前仍须重新确认该 tag 未被占用。本次不修改版本文件、不发布。
 
 ## 长期保留
 
@@ -110,7 +111,7 @@ git show --remerge-diff <merge-commit>
 
 - 2026-11-19 采用 `4af46665` 的可选端点价格同步；锁内合并必须保留现有 `ServiceTierPrices`，同价同步不能创建冗余版本。缓存写入仅有 5m/1h 变体时，汇总 `Pricing.mode` 在 GraphQL 读写中为 `null`，普通项和变体本身仍必须有有效 mode；表单的档位、上下文和定时价格完整往返。代码/回归：`internal/server/biz/channel_price.go`、`channel_model_sync_test.go`、`internal/server/gql/price.graphql`、`price.resolvers.go`、`price_context_test.go`、`frontend/src/features/channels/data/model-price-form.ts` 及同名测试。当前独立修复定位：`git log -S'TestVariantOnlyPriceGraphQLRoundTrip' -- internal/server/gql/price_context_test.go`；验证：渠道价格同步、GraphQL price roundtrip 和前端 pricing/form tests。用户说明见中英 cost-tracking。
 
-- 2026-11-03 整合 `03ffac6f` 的模型库填价汇率：复用统一价格 helper，以 `multiplier * exchangeRate` 同时缩放基础、服务档位和上下文价格；保留定时价格与缓存写入变体。汇率默认 `7.14`，每次打开重置，与系统显示币种独立；USD 原价应设为 `1`，已有价格不自动改写。回归：`frontend/src/features/channels/data/model-price-exchange-rate.test.mjs`；用户说明见中英 cost-tracking 指南。
+- 2026-11-23 采用 `0a08d6451` 保存默认汇率：使用浏览器已保存的有效默认值，未保存时回退 `7.14`，普通输入不自动修改默认值。统一价格 helper 继续以 `multiplier * exchangeRate` 同时缩放基础、服务档位和上下文价格，保留定时价格与缓存写入变体。汇率与系统显示币种独立；USD 原价可保存为 `1`，已有价格不自动改写。回归：`frontend/src/features/channels/data/model-price-exchange-rate.test.mjs`；用户说明见中英 cost-tracking 指南。
 - 交付与计费分离：维护者确认采用 `3dcfa3ce` 至 `a946fca4` 的交付确认和最终用量证据。主 request 的 completed 需要成功写出终态；execution 完成与最终用量落库独立，不因交付失败丢失已确认费用。Chat/Responses/Anthropic 中间 usage 不计费；保留 `UsageLogEligible` 防重复与 requested/applied/override/policy 档位优先级。尾流异常同样保留原始 body、ID、tier 和最终 usage。独立兼容回归：`internal/server/orchestrator/stream_tail_fork_test.go`、`llm/pipeline/delivery_fork_compat_test.go`；定位：`git log --all -- internal/server/orchestrator/stream_tail_fork_test.go`。
 - 原始响应保真整合：上游默认 Responses identity/transport 保真路径不能绕过已开启的 `InjectUsageCost`；JSON/SSE 仅回填本地费用字段，保留原始 ID、未知扩展及数值精度，继续使用实际渠道模型和相同 tier 优先级。显式 PassThroughBody 仍保留其既有原样语义。回归/当前变更定位：`git log -S'TestResponsesIdentityPreservesInjectedCost' -- internal/server/orchestrator/responses_identity_cost_test.go`。
 - 原生 WebSocket 整合：新增 `openai/responses-ws` 必须同时进入 `OpenAIServiceTier` 和 orchestrator 的档位识别分支，保留出站参数、SpeedMode、requested tier 及 Codex override。回归：`TestOpenAIServiceTierWebSocketForkCompatibility`、`TestWebSocketServiceTierTracking`；当前独立变更定位：`git log -S'TestWebSocketServiceTierTracking' -- internal/server/orchestrator/service_tier_test.go`。
@@ -455,7 +456,7 @@ git show --remerge-diff <merge-commit>
 - 代码锚点：`internal/server/api/openai.go`、`internal/server/api/codex_compatibility.go`、`internal/server/biz/codex_catalog.go`、`internal/server/codex_models_routes_test.go`。
 - 用户文档：`docs/en/guides/codex-integration.md`、`docs/zh/guides/codex-integration.md`，各语言索引及 README；用户影响记录在 `CHANGELOG.md` 的 `Unreleased`。
 - 提交锚点：本次修复可用 `git log -S'listCodexModels' -- internal/server/api/openai.go` 定位。
-- 合并审核：2026-11-19 按维护者要求采用 `ca3059fe` 的实时目录方案，删除旧静态描述及其前缀/回退行为，仅保留 `/v1` 的格式协商入口。两条路径必须共享处理逻辑，不能重新引入会过期的快照或另一套元数据合成。升级需要选择目录来源，并使用来源中存在的精确模型 ID；服务端不会强制客户端刷新或覆盖本地 `model_catalog_json`。
+- 合并审核：2026-11-19 按维护者要求采用 `ca3059fe` 的实时目录方案，删除旧静态描述及其前缀/回退行为，仅保留 `/v1` 的格式协商入口。2026-11-23 采用 `daa5d9710` 的 npm 最新稳定客户端版本查询，保留显式 client_version、渠道 Version/UA 覆盖优先级及联网失败回退；这只是查询版本回退，不是旧完整模型快照。两条目录路径必须共享处理逻辑，不能重新引入会过期的模型快照或另一套元数据合成。升级需要选择目录来源，并使用来源中存在的精确模型 ID；服务端不会强制客户端刷新或覆盖本地 `model_catalog_json`。
 - 上游吸收条件：上游具备等价的目录格式协商、权限过滤、完整模型元数据及回归覆盖。
 - 验证：`go test ./internal/server ./internal/server/api -run 'TestCodexRoutes_(CallerIntersection|CatalogErrors|InvalidSource|SettingReadFailure|LiveReasoningMetadata|LegacyCatalogRequiresSource)|TestOpenAIHandlers_(ListModels|RetrieveModel)' -count=1`。
 
