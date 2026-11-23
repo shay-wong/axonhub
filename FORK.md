@@ -348,6 +348,8 @@ git show --remerge-diff <merge-commit>
 
 ### U15 前端交互和权限回归修复
 
+- 2026-11-23 配合上游 `server.base_path`：登录回跳先移除部署前缀进行所选项目的权限匹配，再保留原浏览器 URL 跳转；更新/回滚后的健康探测同样使用部署前缀。回归：`frontend/src/features/auth/data/auth-redirect.test.mjs`、`frontend/src/features/system/data/update-contract.test.mjs`；定位：`git log -S'prefixed login returns preserve' -- frontend/src/features/auth/data/auth-redirect.test.mjs`。用户说明见中英 quick-start。
+
 - 2026-11-10 适配 DayPicker 10：价格计划和模型日期日历使用 `autoFocus`，删除旧通用日历的 `day_selected` 别名并保留 `selected` 样式。仅同步已删除的 API，不改日期含义和选择行为；代码锚点：`frontend/src/components/ui/calendar.tsx`、`frontend/src/components/price-schedule-editor.tsx`、`frontend/src/features/models/components/models-action-dialog.tsx`。完整 TypeScript 检查与合并前基线比较无新增错误，既有错误不在本次范围。
 - 2026-11-07 设置页拆分兼容：旧 `/system?tab=…` 书签和登录回跳转到对应新设置页并保留标签；原来隐藏 `/system` 的偏好只迁移一次，三个新设置入口也保持隐藏，之后仍可独立调整或重置。Beta 选择继续放在 tabs 父层。回归：`frontend/src/routes/_authenticated/system/index.test.mjs`、`frontend/src/stores/sidebarPrefsStore.test.mjs`、`update-contract.test.mjs`；当前独立修复定位：`git log -S'HIDDEN_NAV_ITEMS_MIGRATION_VERSION_KEY' -- frontend/src/stores/sidebarPrefsStore.ts`。用户说明：中英 quick-start。
 - 本次独立整合：`bb4e4aae` 升级 i18next 26 后不再支持旧 `interpolation.format`；初始化前通过 formatter service 注册 currency，保留 USD 默认、窄符号、locale 和小数精度。代码/真实运行回归：`frontend/src/lib/i18n.ts`、`i18n.test.mjs`；定位 `git log -S"instance.services.formatter" -- frontend/src/lib/i18n.ts`。用户说明在中英 cost-tracking 指南。

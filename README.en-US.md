@@ -312,7 +312,7 @@ Release download tables also remain available without desktop signing and link t
 
 Docker images update with releases; daily `unstable` builds have been removed. See [Docker release channels](docs/en/getting-started/quick-start.md#fork-docker-releases).
 
-Fork safeguards also cover [permission-aware login destinations and legacy settings links](docs/en/getting-started/quick-start.md), [unified key strategies and optional per-key retries](docs/en/guides/channel-management.md#key-selection-strategies), and [fixed-key diagnostic isolation and retry counting](docs/en/guides/load-balance.md).
+Fork safeguards also cover [permission-aware login destinations, URL prefixes, and legacy settings links](docs/en/getting-started/quick-start.md), [unified key strategies and optional per-key retries](docs/en/guides/channel-management.md#key-selection-strategies), and [fixed-key diagnostic isolation and retry counting](docs/en/guides/load-balance.md).
 
 [Quota fallback](docs/en/guides/channel-management.md#retry-per-api-key) keeps reserved channels after preferred ones, without retrying the same channel twice or losing its compatible model fallbacks.
 

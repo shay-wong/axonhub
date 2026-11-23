@@ -1,4 +1,5 @@
 import type { AuthUser } from '@/stores/authStore';
+import { appRoutePath } from '../../../lib/app-path.ts';
 import {
   getProjectEffectiveScopes,
   hasRouteAccess,
@@ -37,7 +38,7 @@ export function getAuthenticatedLanding(
   // The caller has already checked URL safety; apply the same route permissions
   // as the fallback without borrowing scopes from a different project.
   if (navigation?.returnPath) {
-    const pathname = navigation.returnPath.split(/[?#]/, 1)[0];
+    const pathname = appRoutePath(navigation.returnPath.split(/[?#]/, 1)[0]) ?? '';
     const route = routeConfigs.flatMap((group) => group.routes)
       .filter((route) => pathname === route.path || (route.path !== '/' && pathname.startsWith(`${route.path}/`)))
       .sort((a, b) => b.path.length - a.path.length)[0];

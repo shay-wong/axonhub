@@ -8,6 +8,8 @@
 
 Release 构建可由拥有 `write_settings` 权限的用户在**系统设置 > 关于**中安装更新，或回滚到最近 3 个兼容的旧版本之一；前提是进程由 systemd 等 supervisor 托管，且运行用户能够写入可执行文件所在目录。前台直接运行的进程不会自动重启；Windows 构建仍需手工替换。**包含 Beta 版本**会在切换系统设置标签时保留，刷新页面后重置。
 
+在 `/axonhub` 等 URL 前缀下部署时，设置 `server.base_path: /axonhub`，并让反向代理保留完整请求路径。密码/OIDC 登录后的返回地址会在权限检查后保留此前缀；更新或回滚后的健康检查也使用 `/axonhub/health`。
+
 设置页拆分后，已有 `/system?tab=…` 书签和登录返回链接会打开对应的新页面。如果升级前隐藏了系统设置，偏好会迁移一次，使新增设置入口也保持隐藏；此后仍可单独显示或隐藏每个入口。
 
 AxonHub 部署在反向代理后时，必须先将代理 IP 或 CIDR 配置到 `server.trusted_proxies`，再依赖转发的客户端 IP 执行访问控制。该配置默认是空列表，此时忽略 `X-Forwarded-For` 和 `X-Real-IP`；配置文件和环境变量语法见 `config.example.yml`。

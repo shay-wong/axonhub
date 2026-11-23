@@ -319,7 +319,7 @@ Fork Release 构建可在**系统设置 > 关于**中安装更新或回滚到最
 
 Docker 镜像随版本发布更新，已取消每日 `unstable` 构建；通道选择见 [Docker 发布说明](docs/zh/getting-started/quick-start.md#fork-docker-发布)。
 
-Fork 还保留[按权限选择登录落点与旧设置链接兼容](docs/zh/getting-started/quick-start.md)、[统一 Key 策略与可选按 Key 重试](docs/zh/guides/channel-management.md#key-选择策略)，以及[指定 Key 诊断隔离与重试计数](docs/zh/guides/load-balance.md)。
+Fork 还保留[按权限选择登录落点、URL 前缀与旧设置链接兼容](docs/zh/getting-started/quick-start.md)、[统一 Key 策略与可选按 Key 重试](docs/zh/guides/channel-management.md#key-选择策略)，以及[指定 Key 诊断隔离与重试计数](docs/zh/guides/load-balance.md)。
 
 [配额备用渠道](docs/zh/guides/channel-management.md#按-key-重试)在首选渠道失败后使用，不重复尝试同一渠道，并保留同协议模型回退。
 

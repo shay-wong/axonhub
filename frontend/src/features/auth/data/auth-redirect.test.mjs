@@ -154,3 +154,21 @@ test('return destination permissions use the selected project and preserve detai
   assert.equal(getAuthenticatedLanding(authUser, 'project-1', { ...navigation, returnPath: '/system' }).path, '/settings/profile');
   assert.equal(getAuthenticatedLanding(authUser, 'project-1', { ...navigation, returnPath: '/unknown' }).path, '/settings/profile');
 });
+
+test('prefixed login returns preserve the browser path while checking project permissions', (t) => {
+  const previousDocument = globalThis.document;
+  globalThis.document = { querySelector: () => ({ content: '/apps/axonhub' }) };
+  t.after(() => { globalThis.document = previousDocument; });
+  const authUser = user({ projects: [
+    { projectID: 'allowed', effectiveScopes: ['read_requests'] },
+    { projectID: 'denied', effectiveScopes: ['read_api_keys'] },
+  ] });
+  const returnPath = '/apps/axonhub/project/requests/request-id?status=error#details';
+  const navigation = { hiddenItems: [], candidates: [], returnPath };
+  assert.deepEqual(getAuthenticatedLanding(authUser, 'allowed', navigation), {
+    path: returnPath, projectID: 'allowed',
+  });
+  assert.deepEqual(getAuthenticatedLanding(authUser, 'denied', navigation), {
+    path: '/settings/profile', projectID: null,
+  });
+});

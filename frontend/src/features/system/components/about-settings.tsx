@@ -6,6 +6,7 @@ import { ExternalLink, RefreshCw, CheckCircle, AlertCircle, Download, Power, Rot
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { systemApi } from '@/lib/api-client';
+import { appPath } from '@/lib/app-path';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   AlertDialog,
@@ -33,7 +34,7 @@ const waitForRestart = async () => {
   await new Promise((resolve) => setTimeout(resolve, 1000));
   for (let attempt = 0; attempt < 30; attempt += 1) {
     try {
-      const response = await fetch('/health', { cache: 'no-store' });
+      const response = await fetch(appPath('/health'), { cache: 'no-store' });
       if (response.ok) {
         window.location.reload();
         return;

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
+import ts from 'typescript';
+import { appPath } from '../../../lib/app-path.ts';
 import { fileURLToPath } from 'node:url';
 
 const directory = dirname(fileURLToPath(import.meta.url));
@@ -18,7 +20,7 @@ test('about settings exposes permission-gated update, rollback, and restart acti
   assert.match(source, /<Select\s/);
   assert.match(source, /<AlertDialogTitle>\{t\('system\.about\.rollback\.confirmTitle'\)\}/);
   assert.match(source, /systemApi\.restart\(\)/);
-  assert.match(source, /fetch\('\/health', \{ cache: 'no-store' \}\)/);
+  assert.match(source, /fetch\(appPath\('\/health'\), \{ cache: 'no-store' \}\)/);
   assert.match(source, /window\.location\.reload\(\)/);
 });
 
@@ -46,4 +48,28 @@ test('update actions have English and Chinese translations', () => {
       assert.notEqual(messages[key].trim(), '', `${locale}: ${key}`);
     }
   }
+});
+
+test('restart health checks use the deployment prefix before reloading', async (t) => {
+  const previousDocument = globalThis.document;
+  globalThis.document = { querySelector: () => ({ content: '/apps/axonhub' }) };
+  t.after(() => { globalThis.document = previousDocument; });
+  const source = read('../components/about-settings.tsx');
+  const start = source.indexOf('const waitForRestart =');
+  const end = source.indexOf('\ninterface AboutSettingsProps', start);
+  assert.ok(start >= 0 && end > start);
+  const { outputText } = ts.transpileModule(source.slice(start, end), {
+    compilerOptions: { target: ts.ScriptTarget.ES2023 },
+  });
+  const requests = [];
+  let reloads = 0;
+  const waitForRestart = new Function('fetch', 'setTimeout', 'window', 'appPath', `${outputText}\nreturn waitForRestart;`)(
+    async (path, options) => { requests.push({ path, options }); return { ok: true }; },
+    (callback) => callback(),
+    { location: { reload() { reloads++; } } },
+    appPath
+  );
+  await waitForRestart();
+  assert.deepEqual(requests, [{ path: '/apps/axonhub/health', options: { cache: 'no-store' } }]);
+  assert.equal(reloads, 1);
 });
